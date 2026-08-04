@@ -1,0 +1,10 @@
+{
+  "name": "宝宝成长工作台",
+  "short_name": "宝宝",
+  "description": "宝宝成长记录 + AI 育儿工作台",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#FFF9FB",
+  "theme_color": "#FFF9FB",
+  "orientation": "portrait"
+}

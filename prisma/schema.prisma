@@ -1,0 +1,133 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model Baby {
+  id        String   @id @default(uuid())
+  nickname  String
+  gender    String   @default("female")
+  birthDate String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model FeedingRecord {
+  id          String   @id @default(uuid())
+  timestamp   String
+  type        String   // breast, formula, mixed
+  amountMl    Int?
+  leftMinutes Int?
+  rightMinutes Int?
+  spitUp      Boolean  @default(false)
+  notes       String?
+  createdAt   DateTime @default(now())
+}
+
+model SleepRecord {
+  id               String   @id @default(uuid())
+  startTime        String
+  endTime          String
+  type             String   // night, day
+  nightWakingCount Int      @default(0)
+  notes            String?
+  createdAt        DateTime @default(now())
+}
+
+model DiaperRecord {
+  id                String   @id @default(uuid())
+  timestamp         String
+  type              String   // pee, poop, both
+  poopColor         String?  // yellow, green, brown, other
+  poopConsistency   String?  // loose, paste, formed
+  notes             String?
+  createdAt         DateTime @default(now())
+}
+
+model GrowthMeasurement {
+  id                String   @id @default(uuid())
+  date              String
+  ageLabel          String
+  weightKg          Float?
+  heightCm          Float?
+  headCircumferenceCm Float?
+  percentile        Int?
+  createdAt         DateTime @default(now())
+}
+
+model FoodItem {
+  id             String   @id @default(uuid())
+  name           String
+  icon           String
+  firstAddedDate String?
+  acceptance     Int      @default(0)
+  status         String   @default("to_try") // tried, to_try
+  category       String?
+  createdAt      DateTime @default(now())
+}
+
+model FoodPlan {
+  id          String   @id @default(uuid())
+  date        String
+  name        String
+  tags        String   // JSON array
+  nutrition   String
+  ingredients String   // JSON array
+  steps       String   // JSON array
+  createdAt   DateTime @default(now())
+}
+
+model FoodLogRecord {
+  id            String   @id @default(uuid())
+  date          String
+  time          String
+  foods         String   // JSON array
+  portion       String   // little, half, most, all
+  acceptance    Int
+  babyState     String   // happy, neutral, rejected
+  hasAbnormal   Boolean  @default(false)
+  abnormalNotes String?
+  createdAt     DateTime @default(now())
+}
+
+model DevelopmentMilestone {
+  id          String   @id @default(uuid())
+  category    String   // gross_motor, cognitive, language, fine_motor
+  month       Int
+  title       String
+  description String
+  status      String   @default("upcoming") // achieved, practicing, upcoming
+}
+
+model ActivityRecommendation {
+  id        String   @id @default(uuid())
+  title     String
+  tag       String
+  materials String   // JSON array
+  steps     String   // JSON array
+}
+
+model Book {
+  id         String   @id @default(uuid())
+  title      String
+  author     String
+  rating     Int      @default(0)
+  readCount  Int      @default(0)
+  isFavorite Boolean  @default(false)
+  coverColor String   @default("#FFD9E6")
+  ageRange   String
+}
+
+model VaccineRecord {
+  id             String   @id @default(uuid())
+  name           String
+  dose           String
+  scheduledDate  String
+  completedDate  String?
+  isCompleted    Boolean  @default(false)
+  countdownDays  Int?
+}

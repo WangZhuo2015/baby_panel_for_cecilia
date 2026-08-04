@@ -1,0 +1,151 @@
+@import "tailwindcss";
+
+@source "../components/**/*.tsx";
+@source "../app/**/*.tsx";
+@source "../data/**/*.ts";
+@source "../stores/**/*.ts";
+
+/* ===== Design Tokens ===== */
+@theme {
+  /* Primary Pinks */
+  --color-primary: #FF6F9F;
+  --color-primary-light: #FFF0F5;
+  --color-primary-soft: #FFD9E6;
+  --color-primary-dark: #E85A8A;
+
+  /* Accent Colors */
+  --color-lavender: #B98AF5;
+  --color-mint: #78DDB5;
+  --color-cream: #FFD76A;
+  --color-peach: #FFB38A;
+  --color-sky: #8DCBFF;
+
+  /* Text Colors */
+  --color-text-primary: #4A252B;
+  --color-text-secondary: #8F7076;
+  --color-text-muted: #B6A0A5;
+
+  /* Backgrounds */
+  --color-bg: #FFF9FB;
+  --color-bg-warm: #FFF5F8;
+  --color-card: #FFFFFF;
+
+  /* Shadows */
+  --shadow-soft: 0 8px 24px rgba(180, 100, 125, 0.08);
+  --shadow-card: 0 4px 16px rgba(180, 100, 125, 0.06);
+  --shadow-elevated: 0 12px 32px rgba(180, 100, 125, 0.12);
+  --shadow-button: 0 4px 12px rgba(255, 111, 159, 0.2);
+
+  /* Border Radius */
+  --radius-card: 24px;
+  --radius-button: 20px;
+  --radius-input: 18px;
+  --radius-chip: 12px;
+  --radius-full: 9999px;
+
+  /* Font */
+  --font-sans: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+}
+
+/* ===== Global Styles ===== */
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html {
+  font-size: 16px;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: var(--font-sans);
+  background: var(--color-bg);
+  color: var(--color-text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+}
+
+.app-wrapper {
+  max-width: 430px;
+  margin: 0 auto;
+  min-height: 100dvh;
+  position: relative;
+  background: var(--color-bg);
+}
+
+@media (min-width: 431px) {
+  body {
+    background: #F5E8ED;
+  }
+  .app-wrapper {
+    box-shadow: 0 0 40px rgba(180, 100, 125, 0.1);
+    min-height: 100dvh;
+  }
+}
+
+/* ===== Safe Area ===== */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .safe-top {
+    padding-top: env(safe-area-inset-top);
+  }
+}
+
+/* ===== Scrollbar ===== */
+::-webkit-scrollbar {
+  display: none;
+}
+
+/* ===== Animations ===== */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes scaleIn {
+  from { transform: scale(0.95); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-out forwards;
+}
+
+.animate-slide-up {
+  animation: slideUp 0.35s ease-out forwards;
+}
+
+.animate-scale-in {
+  animation: scaleIn 0.2s ease-out forwards;
+}
+
+/* ===== Utilities ===== */
+.btn-press {
+  transition: transform 0.1s ease;
+}
+.btn-press:active {
+  transform: scale(0.97);
+}
+
+.card-press {
+  transition: transform 0.15s ease;
+}
+.card-press:active {
+  transform: scale(0.98);
+}
+
+/* ===== Toast ===== */
+.toast-enter {
+  animation: slideUp 0.3s ease-out forwards;
+}
