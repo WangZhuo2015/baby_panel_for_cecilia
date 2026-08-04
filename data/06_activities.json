@@ -1,0 +1,1165 @@
+{
+  "datasetMeta": {
+    "scope": "0–36月龄",
+    "asOf": "2026-08-03",
+    "evidenceStatement": "活动来自国家卫健委分龄养育照护方向的保守结构化转写；不作为医疗治疗或发育迟缓训练处方。"
+  },
+  "activities": [
+    {
+      "id": "act_face_talk",
+      "title": "面对面说话与回应",
+      "categories": [
+        "language",
+        "social_emotional"
+      ],
+      "ageMinMonths": 0,
+      "ageMaxMonths": 3,
+      "developmentGoals": [
+        "建立轮流互动",
+        "促进对人脸和声音的关注"
+      ],
+      "materials": [],
+      "steps": [
+        {
+          "order": 1,
+          "instruction": "在孩子清醒、舒适时把脸保持在其容易看到的位置。"
+        },
+        {
+          "order": 2,
+          "instruction": "用轻柔声音说短句，停顿等待孩子用注视、表情或声音回应。"
+        },
+        {
+          "order": 3,
+          "instruction": "对孩子的声音或表情及时回应。"
+        }
+      ],
+      "durationMinutes": null,
+      "frequency": null,
+      "difficulty": "easy",
+      "supervision": "continuous",
+      "safety": [
+        "不在孩子困倦需要睡眠时持续刺激。"
+      ],
+      "stopConditions": [
+        "孩子明显疲倦、持续哭闹或主动回避时停止。",
+        "出现呼吸困难、发绀、受伤或其他急性不适时立即停止并按需要就医。"
+      ],
+      "evidenceType": "developmentally_appropriate_play",
+      "medicalTreatment": false,
+      "notes": null,
+      "sourceRefs": [
+        "src_nhc_care_2022"
+      ]
+    },
+    {
+      "id": "act_skin_contact_awake",
+      "title": "清醒时拥抱与轻柔触碰",
+      "categories": [
+        "social_emotional",
+        "sensory"
+      ],
+      "ageMinMonths": 0,
+      "ageMaxMonths": 3,
+      "developmentGoals": [
+        "安全感与照护互动",
+        "触觉体验"
+      ],
+      "materials": [],
+      "steps": [
+        {
+          "order": 1,
+          "instruction": "孩子清醒且状态稳定时轻柔抱持。"
+        },
+        {
+          "order": 2,
+          "instruction": "用手掌轻柔触碰手臂、腿或背部，并观察反应。"
+        }
+      ],
+      "durationMinutes": null,
+      "frequency": null,
+      "difficulty": "easy",
+      "supervision": "continuous",
+      "safety": [
+        "始终托稳头颈。",
+        "不得摇晃婴儿。"
+      ],
+      "stopConditions": [
+        "孩子明显疲倦、持续哭闹或主动回避时停止。",
+        "出现呼吸困难、发绀、受伤或其他急性不适时立即停止并按需要就医。"
+      ],
+      "evidenceType": "developmentally_appropriate_play",
+      "medicalTreatment": false,
+      "notes": null,
+      "sourceRefs": [
+        "src_nhc_care_2022"
+      ]
+    },
+    {
+      "id": "act_tummy_time",
+      "title": "清醒俯卧抬头游戏",
+      "categories": [
+        "gross_motor"
+      ],
+      "ageMinMonths": 1,
+      "ageMaxMonths": 6,
+      "developmentGoals": [
+        "练习俯卧抬头和上肢支撑"
+      ],
+      "materials": [
+        "平整、牢固的地面垫"
+      ],
+      "steps": [
+        {
+          "order": 1,
+          "instruction": "仅在孩子清醒且成人全程看护时，将孩子置于平整牢固的垫面俯卧。"
+        },
+        {
+          "order": 2,
+          "instruction": "成人在前方用脸或声音吸引其短暂抬头。"
+        },
+        {
+          "order": 3,
+          "instruction": "孩子累了就改回舒适体位。"
+        }
+      ],
+      "durationMinutes": null,
+      "frequency": null,
+      "difficulty": "easy",
+      "supervision": "continuous",
+      "safety": [
+        "只用于清醒活动，不作为睡眠姿势。",
+        "避免沙发、床等高处或柔软表面。"
+      ],
+      "stopConditions": [
+        "孩子明显疲倦、持续哭闹或主动回避时停止。",
+        "出现呼吸困难、发绀、受伤或其他急性不适时立即停止并按需要就医。"
+      ],
+      "evidenceType": "developmentally_appropriate_play",
+      "medicalTreatment": false,
+      "notes": null,
+      "sourceRefs": [
+        "src_nhc_care_2022"
+      ]
+    },
+    {
+      "id": "act_visual_tracking",
+      "title": "移动玩具追视",
+      "categories": [
+        "cognitive",
+        "sensory"
+      ],
+      "ageMinMonths": 1,
+      "ageMaxMonths": 6,
+      "developmentGoals": [
+        "练习视觉追踪与注意"
+      ],
+      "materials": [
+        "尺寸足够大、无可脱落小零件的高对比或彩色玩具"
+      ],
+      "steps": [
+        {
+          "order": 1,
+          "instruction": "把玩具放在孩子容易看到的位置。"
+        },
+        {
+          "order": 2,
+          "instruction": "缓慢左右移动，观察孩子是否用眼睛或头部跟随。"
+        }
+      ],
+      "durationMinutes": null,
+      "frequency": null,
+      "difficulty": "easy",
+      "supervision": "continuous",
+      "safety": [
+        "玩具保持安全距离，避免快速晃动或碰到面部。"
+      ],
+      "stopConditions": [
+        "孩子明显疲倦、持续哭闹或主动回避时停止。",
+        "出现呼吸困难、发绀、受伤或其他急性不适时立即停止并按需要就医。"
+      ],
+      "evidenceType": "developmentally_appropriate_play",
+      "medicalTreatment": false,
+      "notes": null,
+      "sourceRefs": [
+        "src_nhc_care_2022"
+      ]
+    },
+    {
+      "id": "act_reach_grasp",
+      "title": "伸手抓安全玩具",
+      "categories": [
+        "fine_motor",
+        "cognitive"
+      ],
+      "ageMinMonths": 3,
+      "ageMaxMonths": 9,
+      "developmentGoals": [
+        "练习伸手和抓握"
+      ],
+      "materials": [
+        "大尺寸轻质玩具"
+      ],
+      "steps": [
+        {
+          "order": 1,
+          "instruction": "把玩具放在孩子伸手可及但需要主动够取的位置。"
+        },
+        {
+          "order": 2,
+          "instruction": "允许孩子抓、摸、换手探索。"
+        }
+      ],
+      "durationMinutes": null,
+      "frequency": null,
+      "difficulty": "easy",
+      "supervision": "continuous",
+      "safety": [
+        "玩具不得有小零件、尖角、长绳或可脱落部件。"
+      ],
+      "stopConditions": [
+        "孩子明显疲倦、持续哭闹或主动回避时停止。",
+        "出现呼吸困难、发绀、受伤或其他急性不适时立即停止并按需要就医。"
+      ],
+      "evidenceType": "developmentally_appropriate_play",
+      "medicalTreatment": false,
+      "notes": null,
+      "sourceRefs": [
+        "src_nhc_care_2022"
+      ]
+    },
+    {
+      "id": "act_roll_play",
+      "title": "地面翻身游戏",
+      "categories": [
+        "gross_motor"
+      ],
+      "ageMinMonths": 3,
+      "ageMaxMonths": 6,
+      "developmentGoals": [
+        "鼓励主动翻身"
+      ],
+      "materials": [
+        "平整地垫"
+      ],
+      "steps": [
+        {
+          "order": 1,
+          "instruction": "让孩子在地垫上自由活动。"
+        },
+        {
+          "order": 2,
+          "instruction": "把安全玩具放在侧前方，鼓励孩子主动转身或翻身去看。"
+        },
+        {
+          "order": 3,
+          "instruction": "成人只提供轻微辅助，不拉拽四肢强行完成。"
+        }
+      ],
+      "durationMinutes": null,
+      "frequency": null,
+      "difficulty": "easy",
+      "supervision": "continuous",
+      "safety": [
+        "只在地面进行，远离床沿、台面等高处。"
+      ],
+      "stopConditions": [
+        "孩子明显疲倦、持续哭闹或主动回避时停止。",
+        "出现呼吸困难、发绀、受伤或其他急性不适时立即停止并按需要就医。"
+      ],
+      "evidenceType": "developmentally_appropriate_play",
+      "medicalTreatment": false,
+      "notes": null,
+      "sourceRefs": [
+        "src_nhc_care_2022"
+      ]
+    },
+    {
+      "id": "act_peekaboo",
+      "title": "躲猫猫",
+      "categories": [
+        "social_emotional",
+        "cognitive",
+        "language"
+      ],
+      "ageMinMonths": 6,
+      "ageMaxMonths": 12,
+      "developmentGoals": [
+        "练习互动轮流",
+        "体验物体暂时消失与再次出现"
+      ],
+      "materials": [
+        "成人的手或小毛巾"
+      ],
+      "steps": [
+        {
+          "order": 1,
+          "instruction": "用手遮住自己的脸，再露出并说“在这里”。"
+        },
+        {
+          "order": 2,
+          "instruction": "停顿观察孩子反应，可重复。"
+        }
+      ],
+      "durationMinutes": null,
+      "frequency": null,
+      "difficulty": "easy",
+      "supervision": "continuous",
+      "safety": [
+        "毛巾不得覆盖孩子口鼻或缠绕颈部。"
+      ],
+      "stopConditions": [
+        "孩子明显疲倦、持续哭闹或主动回避时停止。",
+        "出现呼吸困难、发绀、受伤或其他急性不适时立即停止并按需要就医。"
+      ],
+      "evidenceType": "developmentally_appropriate_play",
+      "medicalTreatment": false,
+      "notes": null,
+      "sourceRefs": [
+        "src_nhc_care_2022"
+      ]
+    },
+    {
+      "id": "act_name_objects",
+      "title": "说出日常物品名称",
+      "categories": [
+        "language",
+        "cognitive"
+      ],
+      "ageMinMonths": 6,
+      "ageMaxMonths": 18,
+      "developmentGoals": [
+        "建立词语与物体的联系"
+      ],
+      "materials": [
+        "日常大件安全物品"
+      ],
+      "steps": [
+        {
+          "order": 1,
+          "instruction": "在照护或游戏中指向孩子正在看的物品。"
+        },
+        {
+          "order": 2,
+          "instruction": "用简短、清楚的词说出名称并停顿。"
+        },
+        {
+          "order": 3,
+          "instruction": "孩子发声或指向时给予回应。"
+        }
+      ],
+      "durationMinutes": null,
+      "frequency": null,
+      "difficulty": "easy",
+      "supervision": "continuous",
+      "safety": [
+        "不使用可吞咽小物件作为教学材料。"
+      ],
+      "stopConditions": [
+        "孩子明显疲倦、持续哭闹或主动回避时停止。",
+        "出现呼吸困难、发绀、受伤或其他急性不适时立即停止并按需要就医。"
+      ],
+      "evidenceType": "developmentally_appropriate_play",
+      "medicalTreatment": false,
+      "notes": null,
+      "sourceRefs": [
+        "src_nhc_care_2022"
+      ]
+    },
+    {
+      "id": "act_bang_safe_items",
+      "title": "敲击安全物品",
+      "categories": [
+        "fine_motor",
+        "sensory",
+        "cognitive"
+      ],
+      "ageMinMonths": 6,
+      "ageMaxMonths": 12,
+      "developmentGoals": [
+        "练习双手操作",
+        "探索声音与因果"
+      ],
+      "materials": [
+        "塑料杯",
+        "木勺或软质敲击玩具"
+      ],
+      "steps": [
+        {
+          "order": 1,
+          "instruction": "给孩子两个大尺寸安全物品。"
+        },
+        {
+          "order": 2,
+          "instruction": "示范轻轻相互敲击。"
+        },
+        {
+          "order": 3,
+          "instruction": "允许孩子自行尝试。"
+        }
+      ],
+      "durationMinutes": null,
+      "frequency": null,
+      "difficulty": "easy",
+      "supervision": "continuous",
+      "safety": [
+        "避免玻璃、陶瓷、金属尖锐边缘和可碎物。",
+        "声音不应过大。"
+      ],
+      "stopConditions": [
+        "孩子明显疲倦、持续哭闹或主动回避时停止。",
+        "出现呼吸困难、发绀、受伤或其他急性不适时立即停止并按需要就医。"
+      ],
+      "evidenceType": "developmentally_appropriate_play",
+      "medicalTreatment": false,
+      "notes": null,
+      "sourceRefs": [
+        "src_nhc_care_2022"
+      ]
+    },
+    {
+      "id": "act_supported_sit_play",
+      "title": "坐位取物游戏",
+      "categories": [
+        "gross_motor",
+        "fine_motor"
+      ],
+      "ageMinMonths": 6,
+      "ageMaxMonths": 9,
+      "developmentGoals": [
+        "练习坐位平衡与取物"
+      ],
+      "materials": [
+        "地垫",
+        "大尺寸玩具"
+      ],
+      "steps": [
+        {
+          "order": 1,
+          "instruction": "让孩子在地面安全坐位玩耍，必要时成人在旁提供支撑。"
+        },
+        {
+          "order": 2,
+          "instruction": "把玩具放在前方或侧前方，鼓励伸手取物。"
+        }
+      ],
+      "durationMinutes": null,
+      "frequency": null,
+      "difficulty": "easy",
+      "supervision": "continuous",
+      "safety": [
+        "不把孩子放在桌面、床沿等高处练坐。"
+      ],
+      "stopConditions": [
+        "孩子明显疲倦、持续哭闹或主动回避时停止。",
+        "出现呼吸困难、发绀、受伤或其他急性不适时立即停止并按需要就医。"
+      ],
+      "evidenceType": "developmentally_appropriate_play",
+      "medicalTreatment": false,
+      "notes": null,
+      "sourceRefs": [
+        "src_nhc_care_2022"
+      ]
+    },
+    {
+      "id": "act_crawl_chase",
+      "title": "地面爬行追玩具",
+      "categories": [
+        "gross_motor",
+        "cognitive"
+      ],
+      "ageMinMonths": 9,
+      "ageMaxMonths": 12,
+      "developmentGoals": [
+        "鼓励爬行与目标移动"
+      ],
+      "materials": [
+        "大尺寸滚动缓慢的玩具"
+      ],
+      "steps": [
+        {
+          "order": 1,
+          "instruction": "在安全地面把玩具放到短距离前方。"
+        },
+        {
+          "order": 2,
+          "instruction": "让孩子自行向前移动去拿。"
+        },
+        {
+          "order": 3,
+          "instruction": "成人随时清除前方危险物。"
+        }
+      ],
+      "durationMinutes": null,
+      "frequency": null,
+      "difficulty": "easy",
+      "supervision": "continuous",
+      "safety": [
+        "封闭楼梯口；移除电线、小物件、锐角和热源。"
+      ],
+      "stopConditions": [
+        "孩子明显疲倦、持续哭闹或主动回避时停止。",
+        "出现呼吸困难、发绀、受伤或其他急性不适时立即停止并按需要就医。"
+      ],
+      "evidenceType": "developmentally_appropriate_play",
+      "medicalTreatment": false,
+      "notes": null,
+      "sourceRefs": [
+        "src_nhc_care_2022"
+      ]
+    },
+    {
+      "id": "act_cruise_support",
+      "title": "扶稳固家具侧行",
+      "categories": [
+        "gross_motor"
+      ],
+      "ageMinMonths": 9,
+      "ageMaxMonths": 12,
+      "developmentGoals": [
+        "练习扶站与侧向移动"
+      ],
+      "materials": [
+        "稳固、不可倾倒的低矮家具"
+      ],
+      "steps": [
+        {
+          "order": 1,
+          "instruction": "确认家具稳固后，让孩子扶住站立。"
+        },
+        {
+          "order": 2,
+          "instruction": "成人近距离保护，允许孩子自己侧移。"
+        }
+      ],
+      "durationMinutes": null,
+      "frequency": null,
+      "difficulty": "easy",
+      "supervision": "continuous",
+      "safety": [
+        "不得使用会滑动、翻倒的家具或学步车代替成人保护。",
+        "远离台阶和高处。"
+      ],
+      "stopConditions": [
+        "孩子明显疲倦、持续哭闹或主动回避时停止。",
+        "出现呼吸困难、发绀、受伤或其他急性不适时立即停止并按需要就医。"
+      ],
+      "evidenceType": "developmentally_appropriate_play",
+      "medicalTreatment": false,
+      "notes": null,
+      "sourceRefs": [
+        "src_nhc_care_2022"
+      ]
+    },
+    {
+      "id": "act_put_in_take_out",
+      "title": "放进去、拿出来",
+      "categories": [
+        "fine_motor",
+        "cognitive"
+      ],
+      "ageMinMonths": 12,
+      "ageMaxMonths": 18,
+      "developmentGoals": [
+        "练习手眼协调和容器概念"
+      ],
+      "materials": [
+        "大尺寸积木或杯子",
+        "宽口容器"
+      ],
+      "steps": [
+        {
+          "order": 1,
+          "instruction": "示范把大尺寸物品放进容器。"
+        },
+        {
+          "order": 2,
+          "instruction": "让孩子自己放入、倒出或取出。"
+        }
+      ],
+      "durationMinutes": null,
+      "frequency": null,
+      "difficulty": "easy",
+      "supervision": "continuous",
+      "safety": [
+        "所有物件尺寸必须足够大，不能成为吞咽/噎食风险。"
+      ],
+      "stopConditions": [
+        "孩子明显疲倦、持续哭闹或主动回避时停止。",
+        "出现呼吸困难、发绀、受伤或其他急性不适时立即停止并按需要就医。"
+      ],
+      "evidenceType": "developmentally_appropriate_play",
+      "medicalTreatment": false,
+      "notes": null,
+      "sourceRefs": [
+        "src_nhc_care_2022"
+      ]
+    },
+    {
+      "id": "act_stack_cups",
+      "title": "叠杯游戏",
+      "categories": [
+        "fine_motor",
+        "cognitive"
+      ],
+      "ageMinMonths": 12,
+      "ageMaxMonths": 24,
+      "developmentGoals": [
+        "练习叠放与空间关系"
+      ],
+      "materials": [
+        "大尺寸叠叠杯"
+      ],
+      "steps": [
+        {
+          "order": 1,
+          "instruction": "示范叠两个杯子。"
+        },
+        {
+          "order": 2,
+          "instruction": "让孩子自由尝试叠高、套入或推倒。"
+        }
+      ],
+      "durationMinutes": null,
+      "frequency": null,
+      "difficulty": "easy",
+      "supervision": "continuous",
+      "safety": [
+        "使用无裂口、无小零件的轻质材料。"
+      ],
+      "stopConditions": [
+        "孩子明显疲倦、持续哭闹或主动回避时停止。",
+        "出现呼吸困难、发绀、受伤或其他急性不适时立即停止并按需要就医。"
+      ],
+      "evidenceType": "developmentally_appropriate_play",
+      "medicalTreatment": false,
+      "notes": null,
+      "sourceRefs": [
+        "src_nhc_care_2022"
+      ]
+    },
+    {
+      "id": "act_scribble",
+      "title": "大纸涂画",
+      "categories": [
+        "fine_motor",
+        "cognitive"
+      ],
+      "ageMinMonths": 12,
+      "ageMaxMonths": 36,
+      "developmentGoals": [
+        "练习抓握和留下痕迹"
+      ],
+      "materials": [
+        "大张纸",
+        "粗杆、无毒且不可拆小件的蜡笔"
+      ],
+      "steps": [
+        {
+          "order": 1,
+          "instruction": "把纸固定在低矮平面或地面。"
+        },
+        {
+          "order": 2,
+          "instruction": "成人示范画一两笔。"
+        },
+        {
+          "order": 3,
+          "instruction": "让孩子自由涂画，不要求画出特定形状。"
+        }
+      ],
+      "durationMinutes": null,
+      "frequency": null,
+      "difficulty": "easy",
+      "supervision": "continuous",
+      "safety": [
+        "全程防止把绘画材料放入口中；不用带小帽的笔。"
+      ],
+      "stopConditions": [
+        "孩子明显疲倦、持续哭闹或主动回避时停止。",
+        "出现呼吸困难、发绀、受伤或其他急性不适时立即停止并按需要就医。"
+      ],
+      "evidenceType": "developmentally_appropriate_play",
+      "medicalTreatment": false,
+      "notes": null,
+      "sourceRefs": [
+        "src_nhc_care_2022"
+      ]
+    },
+    {
+      "id": "act_simple_directions",
+      "title": "一步指令游戏",
+      "categories": [
+        "language",
+        "cognitive"
+      ],
+      "ageMinMonths": 12,
+      "ageMaxMonths": 24,
+      "developmentGoals": [
+        "理解简单语言并参与互动"
+      ],
+      "materials": [
+        "熟悉的大尺寸玩具"
+      ],
+      "steps": [
+        {
+          "order": 1,
+          "instruction": "用简短指令，如“把球给我”。"
+        },
+        {
+          "order": 2,
+          "instruction": "必要时先示范一次。"
+        },
+        {
+          "order": 3,
+          "instruction": "孩子没做时不反复施压，可改成描述性语言。"
+        }
+      ],
+      "durationMinutes": null,
+      "frequency": null,
+      "difficulty": "easy",
+      "supervision": "continuous",
+      "safety": [
+        "不把是否完成当作训练成绩或诊断依据。"
+      ],
+      "stopConditions": [
+        "孩子明显疲倦、持续哭闹或主动回避时停止。",
+        "出现呼吸困难、发绀、受伤或其他急性不适时立即停止并按需要就医。"
+      ],
+      "evidenceType": "developmentally_appropriate_play",
+      "medicalTreatment": false,
+      "notes": null,
+      "sourceRefs": [
+        "src_nhc_care_2022"
+      ]
+    },
+    {
+      "id": "act_ball_roll",
+      "title": "滚球来回",
+      "categories": [
+        "gross_motor",
+        "social_emotional"
+      ],
+      "ageMinMonths": 12,
+      "ageMaxMonths": 24,
+      "developmentGoals": [
+        "轮流互动",
+        "练习手臂和躯干协调"
+      ],
+      "materials": [
+        "大号软球"
+      ],
+      "steps": [
+        {
+          "order": 1,
+          "instruction": "成人和孩子坐在地面相对位置。"
+        },
+        {
+          "order": 2,
+          "instruction": "把球缓慢滚向孩子。"
+        },
+        {
+          "order": 3,
+          "instruction": "孩子碰到球后帮助其把球滚回。"
+        }
+      ],
+      "durationMinutes": null,
+      "frequency": null,
+      "difficulty": "easy",
+      "supervision": "continuous",
+      "safety": [
+        "球应足够大，不能入口；活动区远离楼梯。"
+      ],
+      "stopConditions": [
+        "孩子明显疲倦、持续哭闹或主动回避时停止。",
+        "出现呼吸困难、发绀、受伤或其他急性不适时立即停止并按需要就医。"
+      ],
+      "evidenceType": "developmentally_appropriate_play",
+      "medicalTreatment": false,
+      "notes": null,
+      "sourceRefs": [
+        "src_nhc_care_2022"
+      ]
+    },
+    {
+      "id": "act_squat_pick",
+      "title": "蹲下捡玩具再站起",
+      "categories": [
+        "gross_motor"
+      ],
+      "ageMinMonths": 12,
+      "ageMaxMonths": 24,
+      "developmentGoals": [
+        "练习蹲起和平衡"
+      ],
+      "materials": [
+        "大尺寸轻质玩具"
+      ],
+      "steps": [
+        {
+          "order": 1,
+          "instruction": "把玩具放在孩子脚前的地面。"
+        },
+        {
+          "order": 2,
+          "instruction": "鼓励孩子自己蹲下拿起再站起。"
+        },
+        {
+          "order": 3,
+          "instruction": "成人在旁保护但不强拉手臂。"
+        }
+      ],
+      "durationMinutes": null,
+      "frequency": null,
+      "difficulty": "easy",
+      "supervision": "continuous",
+      "safety": [
+        "只在防滑平地进行。"
+      ],
+      "stopConditions": [
+        "孩子明显疲倦、持续哭闹或主动回避时停止。",
+        "出现呼吸困难、发绀、受伤或其他急性不适时立即停止并按需要就医。"
+      ],
+      "evidenceType": "developmentally_appropriate_play",
+      "medicalTreatment": false,
+      "notes": null,
+      "sourceRefs": [
+        "src_nhc_care_2022"
+      ]
+    },
+    {
+      "id": "act_picture_naming",
+      "title": "看图说一说",
+      "categories": [
+        "language",
+        "cognitive"
+      ],
+      "ageMinMonths": 18,
+      "ageMaxMonths": 36,
+      "developmentGoals": [
+        "词汇理解与表达",
+        "共同注意"
+      ],
+      "materials": [
+        "纸板书或耐用绘本"
+      ],
+      "steps": [
+        {
+          "order": 1,
+          "instruction": "跟随孩子正在看的画面，用短句描述。"
+        },
+        {
+          "order": 2,
+          "instruction": "可问一个简单问题后等待；不回答时成人直接说出答案。"
+        },
+        {
+          "order": 3,
+          "instruction": "重复孩子的词并适当扩展一句。"
+        }
+      ],
+      "durationMinutes": null,
+      "frequency": null,
+      "difficulty": "easy",
+      "supervision": "continuous",
+      "safety": [
+        "不以答对数量评价孩子。"
+      ],
+      "stopConditions": [
+        "孩子明显疲倦、持续哭闹或主动回避时停止。",
+        "出现呼吸困难、发绀、受伤或其他急性不适时立即停止并按需要就医。"
+      ],
+      "evidenceType": "developmentally_appropriate_play",
+      "medicalTreatment": false,
+      "notes": null,
+      "sourceRefs": [
+        "src_nhc_care_2022"
+      ]
+    },
+    {
+      "id": "act_pretend_feed_doll",
+      "title": "给玩偶“喂饭”",
+      "categories": [
+        "cognitive",
+        "social_emotional"
+      ],
+      "ageMinMonths": 18,
+      "ageMaxMonths": 36,
+      "developmentGoals": [
+        "假装性游戏",
+        "生活经验再现"
+      ],
+      "materials": [
+        "大尺寸玩偶",
+        "无小零件的玩具碗和勺"
+      ],
+      "steps": [
+        {
+          "order": 1,
+          "instruction": "成人示范给玩偶喂一口。"
+        },
+        {
+          "order": 2,
+          "instruction": "让孩子按自己的方式继续假装游戏。"
+        },
+        {
+          "order": 3,
+          "instruction": "可加入“娃娃饿了/吃饱了”等简单语言。"
+        }
+      ],
+      "durationMinutes": null,
+      "frequency": null,
+      "difficulty": "easy",
+      "supervision": "continuous",
+      "safety": [
+        "道具不能含可吞咽小零件或真实热食。"
+      ],
+      "stopConditions": [
+        "孩子明显疲倦、持续哭闹或主动回避时停止。",
+        "出现呼吸困难、发绀、受伤或其他急性不适时立即停止并按需要就医。"
+      ],
+      "evidenceType": "developmentally_appropriate_play",
+      "medicalTreatment": false,
+      "notes": null,
+      "sourceRefs": [
+        "src_nhc_care_2022"
+      ]
+    },
+    {
+      "id": "act_kick_ball",
+      "title": "踢大软球",
+      "categories": [
+        "gross_motor"
+      ],
+      "ageMinMonths": 18,
+      "ageMaxMonths": 36,
+      "developmentGoals": [
+        "练习踢球和平衡"
+      ],
+      "materials": [
+        "大号软球"
+      ],
+      "steps": [
+        {
+          "order": 1,
+          "instruction": "把球放在平整地面。"
+        },
+        {
+          "order": 2,
+          "instruction": "成人示范轻轻踢球。"
+        },
+        {
+          "order": 3,
+          "instruction": "让孩子自由尝试。"
+        }
+      ],
+      "durationMinutes": null,
+      "frequency": null,
+      "difficulty": "easy",
+      "supervision": "continuous",
+      "safety": [
+        "在开阔平地进行，远离车道、楼梯、玻璃。"
+      ],
+      "stopConditions": [
+        "孩子明显疲倦、持续哭闹或主动回避时停止。",
+        "出现呼吸困难、发绀、受伤或其他急性不适时立即停止并按需要就医。"
+      ],
+      "evidenceType": "developmentally_appropriate_play",
+      "medicalTreatment": false,
+      "notes": null,
+      "sourceRefs": [
+        "src_nhc_care_2022"
+      ]
+    },
+    {
+      "id": "act_two_foot_jump",
+      "title": "双脚小跳",
+      "categories": [
+        "gross_motor"
+      ],
+      "ageMinMonths": 24,
+      "ageMaxMonths": 36,
+      "developmentGoals": [
+        "练习双脚离地和落地平衡"
+      ],
+      "materials": [
+        "防滑地面"
+      ],
+      "steps": [
+        {
+          "order": 1,
+          "instruction": "成人在平地示范轻轻双脚跳。"
+        },
+        {
+          "order": 2,
+          "instruction": "孩子愿意时自行尝试；不牵拉手臂强迫起跳。"
+        }
+      ],
+      "durationMinutes": null,
+      "frequency": null,
+      "difficulty": "easy",
+      "supervision": "continuous",
+      "safety": [
+        "不在床、沙发、台阶或其他高处练习。"
+      ],
+      "stopConditions": [
+        "孩子明显疲倦、持续哭闹或主动回避时停止。",
+        "出现呼吸困难、发绀、受伤或其他急性不适时立即停止并按需要就医。"
+      ],
+      "evidenceType": "developmentally_appropriate_play",
+      "medicalTreatment": false,
+      "notes": null,
+      "sourceRefs": [
+        "src_nhc_care_2022"
+      ]
+    },
+    {
+      "id": "act_handwashing_steps",
+      "title": "一起洗手",
+      "categories": [
+        "self_care",
+        "language"
+      ],
+      "ageMinMonths": 24,
+      "ageMaxMonths": 36,
+      "developmentGoals": [
+        "练习自理流程",
+        "理解顺序"
+      ],
+      "materials": [
+        "流动水",
+        "适量洗手用品"
+      ],
+      "steps": [
+        {
+          "order": 1,
+          "instruction": "成人陪同完成打湿、清洁、冲洗、擦干。"
+        },
+        {
+          "order": 2,
+          "instruction": "用简短词语描述每一步，逐步让孩子参与。"
+        }
+      ],
+      "durationMinutes": null,
+      "frequency": null,
+      "difficulty": "easy",
+      "supervision": "continuous",
+      "safety": [
+        "成人调节水温；全程看护，防滑防烫。"
+      ],
+      "stopConditions": [
+        "孩子明显疲倦、持续哭闹或主动回避时停止。",
+        "出现呼吸困难、发绀、受伤或其他急性不适时立即停止并按需要就医。"
+      ],
+      "evidenceType": "developmentally_appropriate_play",
+      "medicalTreatment": false,
+      "notes": null,
+      "sourceRefs": [
+        "src_nhc_care_2022"
+      ]
+    },
+    {
+      "id": "act_sort_big_objects",
+      "title": "按颜色或形状分大物件",
+      "categories": [
+        "cognitive",
+        "fine_motor"
+      ],
+      "ageMinMonths": 24,
+      "ageMaxMonths": 36,
+      "developmentGoals": [
+        "观察颜色/形状差异",
+        "分类尝试"
+      ],
+      "materials": [
+        "大尺寸积木或杯子"
+      ],
+      "steps": [
+        {
+          "order": 1,
+          "instruction": "先拿两种明显不同的大物件。"
+        },
+        {
+          "order": 2,
+          "instruction": "成人示范把相同颜色或形状放在一起。"
+        },
+        {
+          "order": 3,
+          "instruction": "让孩子自由尝试，不纠错式强迫。"
+        }
+      ],
+      "durationMinutes": null,
+      "frequency": null,
+      "difficulty": "easy",
+      "supervision": "continuous",
+      "safety": [
+        "物件必须足够大且无可脱落小零件。"
+      ],
+      "stopConditions": [
+        "孩子明显疲倦、持续哭闹或主动回避时停止。",
+        "出现呼吸困难、发绀、受伤或其他急性不适时立即停止并按需要就医。"
+      ],
+      "evidenceType": "developmentally_appropriate_play",
+      "medicalTreatment": false,
+      "notes": null,
+      "sourceRefs": [
+        "src_nhc_care_2022"
+      ]
+    },
+    {
+      "id": "act_peer_ball_play",
+      "title": "和同伴轮流滚球",
+      "categories": [
+        "social_emotional",
+        "gross_motor"
+      ],
+      "ageMinMonths": 24,
+      "ageMaxMonths": 36,
+      "developmentGoals": [
+        "简单同伴互动",
+        "轮流"
+      ],
+      "materials": [
+        "大号软球"
+      ],
+      "steps": [
+        {
+          "order": 1,
+          "instruction": "成人帮助两个孩子在平地相对坐或站。"
+        },
+        {
+          "order": 2,
+          "instruction": "示范把球滚给对方并等待。"
+        },
+        {
+          "order": 3,
+          "instruction": "出现抢夺时成人用简短语言帮助轮流。"
+        }
+      ],
+      "durationMinutes": null,
+      "frequency": null,
+      "difficulty": "easy",
+      "supervision": "continuous",
+      "safety": [
+        "成人持续看护，避免推搡、追跑到危险区域。"
+      ],
+      "stopConditions": [
+        "孩子明显疲倦、持续哭闹或主动回避时停止。",
+        "出现呼吸困难、发绀、受伤或其他急性不适时立即停止并按需要就医。"
+      ],
+      "evidenceType": "developmentally_appropriate_play",
+      "medicalTreatment": false,
+      "notes": null,
+      "sourceRefs": [
+        "src_nhc_care_2022"
+      ]
+    }
+  ],
+  "qa": {
+    "recordsWithNoSources": [],
+    "medicalRecordsWithOnlyLowQualitySources": [],
+    "conflictingRecords": [],
+    "fieldsInferredWithoutDirectEvidence": [],
+    "duplicateRecords": [],
+    "outdatedSources": [],
+    "potentiallyUnsafeAdvice": []
+  }
+}

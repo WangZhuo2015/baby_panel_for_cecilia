@@ -11,12 +11,19 @@ import type {
   DailySummary,
   TimelineEntry,
   FoodItem,
+  FeedingGuideline,
   FoodPlan,
   Book,
+  Vaccine,
+  VaccineStrategyGroup,
+  VaccineScheduleEntry,
+  ScheduleEngineRule,
   VaccineRecord,
   DevelopmentMilestone,
+  DevelopmentWarningSign,
   ActivityRecommendation,
   WeatherData,
+  DataRelease,
 } from "@/types";
 
 interface BabyStore {
@@ -31,10 +38,21 @@ interface BabyStore {
   timeline: TimelineEntry[];
   weather: WeatherData | null;
   foodItems: FoodItem[];
+  feedingGuidelines: FeedingGuideline[];
   foodPlans: FoodPlan[];
   books: Book[];
   vaccines: VaccineRecord[];
+  vaccineData: {
+    national: Vaccine[];
+    nonProgram: Vaccine[];
+    provincial: Vaccine[];
+    strategyGroups: VaccineStrategyGroup[];
+    schedule: VaccineScheduleEntry[];
+    engineRules: ScheduleEngineRule[];
+    dataRelease: DataRelease | null;
+  } | null;
   milestones: DevelopmentMilestone[];
+  warningSigns: DevelopmentWarningSign[];
   activities: ActivityRecommendation[];
   aiTips: string[];
 
@@ -47,12 +65,14 @@ interface BabyStore {
   fetchGrowthMeasurements: () => Promise<void>;
   fetchDailySummary: (date?: string) => Promise<void>;
   fetchTimeline: (date?: string) => Promise<void>;
-  fetchWeather: (city?: string) => Promise<void>;
+  fetchWeather: () => Promise<void>;
   fetchFoodItems: (status?: string) => Promise<void>;
+  fetchFeedingGuidelines: () => Promise<void>;
   fetchFoodPlans: (date?: string) => Promise<void>;
   fetchBooks: (tab?: string) => Promise<void>;
-  fetchVaccines: () => Promise<void>;
+  fetchVaccines: (regionCode?: string) => Promise<void>;
   fetchMilestones: (category?: string, month?: number) => Promise<void>;
+  fetchWarningSigns: () => Promise<void>;
   fetchActivities: () => Promise<void>;
   fetchAiTips: () => Promise<void>;
 
@@ -68,7 +88,13 @@ interface BabyStore {
   addGrowthMeasurement: (measurement: Partial<GrowthMeasurement>) => Promise<void>;
 }
 
-export const useBabyStore = create<BabyStore>((set, get) => ({
+async function request<T>(url: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(url, init)
+  if (!res.ok) throw new Error(`Request failed (${res.status})`)
+  return res.json()
+}
+
+export const useBabyStore = create<BabyStore>((set) => ({
   // Initial state
   baby: null,
   feedingRecords: [],
@@ -80,10 +106,13 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
   timeline: [],
   weather: null,
   foodItems: [],
+  feedingGuidelines: [],
   foodPlans: [],
   books: [],
   vaccines: [],
+  vaccineData: null,
   milestones: [],
+  warningSigns: [],
   activities: [],
   aiTips: [],
 
@@ -91,8 +120,7 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
 
   fetchBaby: async () => {
     try {
-      const res = await fetch("/api/baby");
-      const data = await res.json();
+      const data = await request<Baby>("/api/baby");
       if (data) set({ baby: data });
     } catch (e) {
       console.error("Failed to fetch baby:", e);
@@ -102,8 +130,7 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
   fetchFeedingRecords: async (date?: string) => {
     try {
       const params = date ? `?date=${date}` : "";
-      const res = await fetch(`/api/records/feeding${params}`);
-      const data = await res.json();
+      const data = await request<FeedingRecord[]>(`/api/records/feeding${params}`);
       set({ feedingRecords: data || [] });
     } catch (e) {
       console.error("Failed to fetch feeding records:", e);
@@ -112,8 +139,7 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
 
   fetchSleepRecords: async () => {
     try {
-      const res = await fetch("/api/records/sleep");
-      const data = await res.json();
+      const data = await request<SleepRecord[]>("/api/records/sleep");
       set({ sleepRecords: data || [] });
     } catch (e) {
       console.error("Failed to fetch sleep records:", e);
@@ -122,8 +148,7 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
 
   fetchDiaperRecords: async () => {
     try {
-      const res = await fetch("/api/records/diaper");
-      const data = await res.json();
+      const data = await request<DiaperRecord[]>("/api/records/diaper");
       set({ diaperRecords: data || [] });
     } catch (e) {
       console.error("Failed to fetch diaper records:", e);
@@ -133,8 +158,7 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
   fetchFoodLogRecords: async (date?: string) => {
     try {
       const params = date ? `?date=${date}` : "";
-      const res = await fetch(`/api/records/food${params}`);
-      const data = await res.json();
+      const data = await request<FoodLogRecord[]>(`/api/food/logs${params}`);
       set({ foodLogRecords: data || [] });
     } catch (e) {
       console.error("Failed to fetch food log records:", e);
@@ -143,8 +167,7 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
 
   fetchGrowthMeasurements: async () => {
     try {
-      const res = await fetch("/api/growth");
-      const data = await res.json();
+      const data = await request<GrowthMeasurement[]>("/api/growth");
       set({ growthMeasurements: data || [] });
     } catch (e) {
       console.error("Failed to fetch growth measurements:", e);
@@ -154,8 +177,7 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
   fetchDailySummary: async (date?: string) => {
     try {
       const params = date ? `?date=${date}` : "";
-      const res = await fetch(`/api/records/daily-summary${params}`);
-      const data = await res.json();
+      const data = await request<DailySummary>(`/api/records/daily-summary${params}`);
       set({ dailySummary: data });
     } catch (e) {
       console.error("Failed to fetch daily summary:", e);
@@ -165,19 +187,16 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
   fetchTimeline: async (date?: string) => {
     try {
       const params = date ? `?date=${date}` : "";
-      const res = await fetch(`/api/records/timeline${params}`);
-      const data = await res.json();
+      const data = await request<TimelineEntry[]>(`/api/records/timeline${params}`);
       set({ timeline: data || [] });
     } catch (e) {
       console.error("Failed to fetch timeline:", e);
     }
   },
 
-  fetchWeather: async (city?: string) => {
+  fetchWeather: async () => {
     try {
-      const params = city ? `?city=${city}` : "";
-      const res = await fetch(`/api/weather${params}`);
-      const data = await res.json();
+      const data = await request<WeatherData>("/api/weather");
       set({ weather: data });
     } catch (e) {
       console.error("Failed to fetch weather:", e);
@@ -187,19 +206,26 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
   fetchFoodItems: async (status?: string) => {
     try {
       const params = status ? `?status=${status}` : "";
-      const res = await fetch(`/api/food/items${params}`);
-      const data = await res.json();
+      const data = await request<FoodItem[]>(`/api/food/items${params}`);
       set({ foodItems: data || [] });
     } catch (e) {
       console.error("Failed to fetch food items:", e);
     }
   },
 
+  fetchFeedingGuidelines: async () => {
+    try {
+      const data = await request<FeedingGuideline[]>("/api/food/feeding-guidelines");
+      set({ feedingGuidelines: data || [] });
+    } catch (e) {
+      console.error("Failed to fetch feeding guidelines:", e);
+    }
+  },
+
   fetchFoodPlans: async (date?: string) => {
     try {
       const params = date ? `?date=${date}` : "";
-      const res = await fetch(`/api/food/plans${params}`);
-      const data = await res.json();
+      const data = await request<FoodPlan[]>(`/api/food/plans${params}`);
       set({ foodPlans: data || [] });
     } catch (e) {
       console.error("Failed to fetch food plans:", e);
@@ -209,19 +235,18 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
   fetchBooks: async (tab?: string) => {
     try {
       const params = tab ? `?tab=${tab}` : "";
-      const res = await fetch(`/api/books${params}`);
-      const data = await res.json();
+      const data = await request<Book[]>(`/api/books${params}`);
       set({ books: data || [] });
     } catch (e) {
       console.error("Failed to fetch books:", e);
     }
   },
 
-  fetchVaccines: async () => {
+  fetchVaccines: async (regionCode?: string) => {
     try {
-      const res = await fetch("/api/vaccines");
-      const data = await res.json();
-      set({ vaccines: data || [] });
+      const params = regionCode ? `?regionCode=${regionCode}` : "";
+      const data = await request<BabyStore["vaccineData"]>(`/api/vaccines${params}`);
+      set({ vaccineData: data });
     } catch (e) {
       console.error("Failed to fetch vaccines:", e);
     }
@@ -233,18 +258,31 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
       if (category) params.set("category", category);
       if (month) params.set("month", String(month));
       const qs = params.toString();
-      const res = await fetch(`/api/development/milestones${qs ? `?${qs}` : ""}`);
-      const data = await res.json();
-      set({ milestones: data || [] });
+      const data = await request<{ milestones: DevelopmentMilestone[] }>(
+        `/api/development/milestones${qs ? `?${qs}` : ""}`
+      );
+      set({ milestones: data?.milestones || [] });
     } catch (e) {
       console.error("Failed to fetch milestones:", e);
     }
   },
 
+  fetchWarningSigns: async () => {
+    try {
+      const data = await request<DevelopmentWarningSign[]>(
+        "/api/development/warning-signs"
+      );
+      set({ warningSigns: Array.isArray(data) ? data : [] });
+    } catch (e) {
+      console.error("Failed to fetch warning signs:", e);
+    }
+  },
+
   fetchActivities: async () => {
     try {
-      const res = await fetch("/api/development/activities");
-      const data = await res.json();
+      const data = await request<ActivityRecommendation[]>(
+        "/api/development/activities"
+      );
       set({ activities: data || [] });
     } catch (e) {
       console.error("Failed to fetch activities:", e);
@@ -253,9 +291,8 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
 
   fetchAiTips: async () => {
     try {
-      const res = await fetch("/api/ai/tips");
-      const data = await res.json();
-      set({ aiTips: data || [] });
+      const data = await request<string[]>("/api/ai/tips");
+      set({ aiTips: Array.isArray(data) ? data : [] });
     } catch (e) {
       console.error("Failed to fetch AI tips:", e);
     }
@@ -265,12 +302,11 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
 
   updateBook: async (id, data) => {
     try {
-      const res = await fetch("/api/books", {
+      const updated = await request<Book>("/api/books", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id, ...data }),
       });
-      const updated = await res.json();
       set((state) => ({
         books: state.books.map((b) => (b.id === id ? { ...b, ...updated } : b)),
       }));
@@ -281,12 +317,14 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
 
   updateMilestone: async (id, data) => {
     try {
-      const res = await fetch(`/api/development/milestones/${id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      });
-      const updated = await res.json();
+      const updated = await request<Partial<DevelopmentMilestone>>(
+        `/api/development/milestones/${id}`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(data),
+        }
+      );
       set((state) => ({
         milestones: state.milestones.map((m) =>
           m.id === id ? { ...m, ...updated } : m
@@ -301,12 +339,11 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
 
   addFeedingRecord: async (record) => {
     try {
-      const res = await fetch("/api/records/feeding", {
+      const newRecord = await request<FeedingRecord>("/api/records/feeding", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(record),
       });
-      const newRecord = await res.json();
       set((state) => ({
         feedingRecords: [newRecord, ...state.feedingRecords],
       }));
@@ -317,12 +354,11 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
 
   addSleepRecord: async (record) => {
     try {
-      const res = await fetch("/api/records/sleep", {
+      const newRecord = await request<SleepRecord>("/api/records/sleep", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(record),
       });
-      const newRecord = await res.json();
       set((state) => ({
         sleepRecords: [newRecord, ...state.sleepRecords],
       }));
@@ -333,12 +369,11 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
 
   addDiaperRecord: async (record) => {
     try {
-      const res = await fetch("/api/records/diaper", {
+      const newRecord = await request<DiaperRecord>("/api/records/diaper", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(record),
       });
-      const newRecord = await res.json();
       set((state) => ({
         diaperRecords: [newRecord, ...state.diaperRecords],
       }));
@@ -349,12 +384,11 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
 
   addFoodLogRecord: async (record) => {
     try {
-      const res = await fetch("/api/records/food", {
+      const newRecord = await request<FoodLogRecord>("/api/food/logs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(record),
       });
-      const newRecord = await res.json();
       set((state) => ({
         foodLogRecords: [newRecord, ...state.foodLogRecords],
       }));
@@ -365,12 +399,11 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
 
   addGrowthMeasurement: async (measurement) => {
     try {
-      const res = await fetch("/api/growth", {
+      const newMeasurement = await request<GrowthMeasurement>("/api/growth", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(measurement),
       });
-      const newMeasurement = await res.json();
       set((state) => ({
         growthMeasurements: [...state.growthMeasurements, newMeasurement].sort(
           (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()

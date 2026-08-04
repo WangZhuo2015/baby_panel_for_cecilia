@@ -7,6 +7,8 @@ datasource db {
   provider = "sqlite"
 }
 
+// ─── Core Baby Tracking Models ──────────────────────────────────────────────
+
 model Baby {
   id        String   @id @default(uuid())
   nickname  String
@@ -59,28 +61,6 @@ model GrowthMeasurement {
   createdAt         DateTime @default(now())
 }
 
-model FoodItem {
-  id             String   @id @default(uuid())
-  name           String
-  icon           String
-  firstAddedDate String?
-  acceptance     Int      @default(0)
-  status         String   @default("to_try") // tried, to_try
-  category       String?
-  createdAt      DateTime @default(now())
-}
-
-model FoodPlan {
-  id          String   @id @default(uuid())
-  date        String
-  name        String
-  tags        String   // JSON array
-  nutrition   String
-  ingredients String   // JSON array
-  steps       String   // JSON array
-  createdAt   DateTime @default(now())
-}
-
 model FoodLogRecord {
   id            String   @id @default(uuid())
   date          String
@@ -94,33 +74,305 @@ model FoodLogRecord {
   createdAt     DateTime @default(now())
 }
 
-model DevelopmentMilestone {
-  id          String   @id @default(uuid())
-  category    String   // gross_motor, cognitive, language, fine_motor
-  month       Int
-  title       String
-  description String
-  status      String   @default("upcoming") // achieved, practicing, upcoming
+// ─── Data Version / Source Reference ─────────────────────────────────────────
+
+model DataRelease {
+  id              String   @id @default(uuid())
+  title           String
+  asOf            String   // e.g. "2026-08-03"
+  createdAt       DateTime @default(now())
+  sources         SourceRef[]
 }
 
-model ActivityRecommendation {
-  id        String   @id @default(uuid())
-  title     String
-  tag       String
-  materials String   // JSON array
-  steps     String   // JSON array
+model SourceRef {
+  id                String   @id @default(uuid())
+  sourceId          String   // e.g. "src_nip_2026"
+  title             String
+  organization      String
+  year              Int?
+  publicationDate   String?
+  url               String?
+  sourceLevel       String?  // A, B, C, D
+  sourceType        String?
+  accessedDate      String?
+  notes             String?
+  dataReleaseId     String?
+  dataRelease       DataRelease? @relation(fields: [dataReleaseId], references: [id])
+  vaccineSourceRefs VaccineSourceRef[] @relation("vaccineSourceRefs")
+  milestoneSourceRefs MilestoneSourceRef[] @relation("milestoneSourceRefs")
 }
+
+// ─── Vaccine Models ──────────────────────────────────────────────────────────
+
+model Vaccine {
+  id                    String   @id @default(uuid())
+  vaccineId             String   @unique // e.g. "vac_hepb"
+  name                  String
+  shortName             String
+  englishName           String?
+  programType           String   // national_immunization_program, non_program, provincial_immunization_program
+  legacyLabel           String?  // "一类（旧称）" etc.
+  sexRestriction        String   @default("all")
+  chinaNational         Boolean  @default(false)
+  diseases              String   // JSON array
+  targetPopulation      String?
+  policyEffectiveDate   String?
+  policyVersion         String?
+  routineHealthyChildOption Boolean @default(true)
+  manualReviewRequired  Boolean  @default(false)
+  marketStatus          String?  // marketed, etc.
+  productBrandName      String?
+  productManufacturer   String?
+  productApprovalNumber String?
+  jiangsuNotes          String?
+  suzhouNotes           String?
+  catchUpSupported      Boolean  @default(false)
+  catchUpRules          String   // JSON array of strings
+  simultaneousVaccination String?
+  substitutionRules     String   // JSON array of strings
+  contraindications     String   // JSON array of strings
+  precautions           String   // JSON array of strings
+  specialPopulations    String   // JSON array of strings
+  regionalOverrides     String   // JSON array of regional override objects
+  regimenOptions        String   // JSON array
+  sourceRefsJson        String   // JSON array of source IDs
+  createdAt             DateTime @default(now())
+  doses                 VaccineDose[]
+  sourceRefs            VaccineSourceRef[]
+}
+
+model VaccineDose {
+  id                            String   @id @default(uuid())
+  vaccineId                     String
+  vaccine                       Vaccine  @relation(fields: [vaccineId], references: [id])
+  doseNumber                    Int
+  doseLabel                     String
+  recommendedAgeMonths          Int?
+  minimumAgeDays                Int?
+  maximumAgeDays                Int?
+  recommendedAgeMaxMonths       Int?
+  minimumIntervalDaysFromPrevious Int?
+  maximumIntervalDaysFromPrevious Int?
+  route                         String?
+  site                          String?
+  doseVolumeMl                  Float?
+  notes                         String?
+  sourceRefsJson                String   // JSON array
+}
+
+model VaccineSourceRef {
+  id          String   @id @default(uuid())
+  vaccineId   String
+  vaccine     Vaccine  @relation(fields: [vaccineId], references: [id])
+  sourceRefId String
+  sourceRef   SourceRef @relation("vaccineSourceRefs", fields: [sourceRefId], references: [id])
+}
+
+model VaccineStrategyGroup {
+  id              String   @id @default(uuid())
+  strategyId      String   @unique
+  name            String
+  scope           String?
+  baseProgram     String?
+  optionsJson     String   // JSON array of option objects
+  sourceRefsJson  String   // JSON array
+}
+
+model VaccineScheduleEntry {
+  id              String   @id @default(uuid())
+  ageMonths       Int?
+  ageDays         Int?
+  ageLabel        String?
+  vaccineId       String
+  doseNumber      Int
+  priority        String   // routine, optional
+  isOptional      Boolean  @default(false)
+  action          String?
+  selectionGroup  String?
+  notes           String?
+  sourceRefsJson  String   // JSON array
+}
+
+model ScheduleEngineRule {
+  id              String   @id @default(uuid())
+  ruleId          String   @unique
+  type            String
+  vaccineIdsJson  String   // JSON array
+  description     String
+  sourceRefsJson  String   // JSON array
+}
+
+// ─── Development Milestone Models ────────────────────────────────────────────
+
+model DevelopmentMilestone {
+  id                    String   @id @default(uuid())
+  milestoneId           String   @unique // e.g. "mil_so_2m_looks_face"
+  category              String   // social_emotional, language, cognitive, gross_motor, fine_motor
+  originalDomain        String?  // 社交/情绪, 语言/沟通, etc.
+  title                 String
+  description           String
+  assessmentAgeMonths   Int
+  ageRangeEarliestMonth Int?
+  ageRangeMedianMonth   Int?
+  ageRangeLatestMonth   Int?
+  criterionType         String?  // by_age
+  criterionThreshold    String?
+  criterionDescription  String?
+  observationMethod     String?
+  requiresProfessionalAssessment Boolean @default(false)
+  sourceSystem          String?
+  sourceRefsJson        String   // JSON array
+  sourceRefs            MilestoneSourceRef[]
+}
+
+model MilestoneSourceRef {
+  id            String   @id @default(uuid())
+  milestoneId   String
+  milestone     DevelopmentMilestone @relation(fields: [milestoneId], references: [id])
+  sourceRefId   String
+  sourceRef     SourceRef @relation("milestoneSourceRefs", fields: [sourceRefId], references: [id])
+}
+
+model DevelopmentWarningSign {
+  id                String   @id @default(uuid())
+  warningSignId     String   @unique // e.g. "rf_3m_01"
+  ageMonths         Int
+  category          String   // language, social_emotional, cognitive, gross_motor, fine_motor
+  description       String
+  recommendedAction String
+  urgency           String   // routine_evaluation, etc.
+  sourceRefsJson    String   // JSON array
+}
+
+// ─── Feeding Guideline Models ────────────────────────────────────────────────
+
+model FeedingGuideline {
+  id              String   @id @default(uuid())
+  ageMinMonths    Int
+  ageMaxMonths    Int
+  mealFrequency   String?
+  milkGuidance    String?
+  textureJson     String   // JSON array of strings
+  foodDiversityJson String  // JSON array of strings
+  responsiveFeedingJson String // JSON array of strings
+  safetyJson      String   // JSON array of strings
+  sourceRefsJson  String   // JSON array
+}
+
+// ─── Food Item Model ─────────────────────────────────────────────────────────
+
+model FoodItem {
+  id                    String   @id @default(uuid())
+  foodId                String   @unique // e.g. "food_iron_cereal"
+  name                  String
+  icon                  String
+  category              String   // grain, protein, vegetable, fruit, dairy, other
+  foodGroup             String?  // grain, meat, egg, fish, etc.
+  // User tracking fields
+  firstAddedDate        String?
+  acceptance            Int      @default(0)
+  status                String   @default("to_try") // tried, to_try
+  // Introduction data
+  recommendedFromMonth  Int?
+  recommendedToMonth    Int?
+  exactMonthEvidence    Boolean  @default(false)
+  guidance              String?  // main display text
+  // Allergen data
+  isCommonAllergen      Boolean? // null = unconfirmed
+  allergenIntroductionGuidance String?
+  highRiskInfantNeedsMedicalAdvice Boolean?
+  // Choking
+  chokingRisk           Boolean  @default(false)
+  chokingNotes          String?
+  // Preparation
+  preparationJson       String   // JSON array of strings
+  // Avoid before
+  avoidBeforeMonths     Int?
+  // Nutrition
+  nutritionJson         String   // JSON array of strings
+  // Texture by age
+  textureByAgeJson      String   // JSON array
+  // Notes
+  notes                 String?
+  sourceRefsJson        String   // JSON array
+}
+
+// ─── Book Model ──────────────────────────────────────────────────────────────
 
 model Book {
-  id         String   @id @default(uuid())
-  title      String
-  author     String
-  rating     Int      @default(0)
-  readCount  Int      @default(0)
-  isFavorite Boolean  @default(false)
-  coverColor String   @default("#FFD9E6")
-  ageRange   String
+  id                    String   @id @default(uuid())
+  bookId                String   @unique // e.g. "book_beng"
+  title                 String
+  originalTitle         String?
+  authorJson            String   // JSON array
+  illustratorJson       String?  // JSON array
+  translatorJson        String?  // JSON array
+  publisher             String?
+  isbn                  String?
+  editionYear           Int?
+  language              String?
+  origin                String?  // translated, domestic
+  ageMinMonths          Int?
+  ageMaxMonths          Int?
+  categoriesJson        String   // JSON array
+  bookFormat            String?  // picture_book, board_book, etc.
+  description           String?
+  interactionSuggestionsJson String? // JSON array
+  whyAgeAppropriate     String?
+  // User tracking fields
+  readCount             Int      @default(0)
+  isFavorite            Boolean  @default(false)
+  // Rating (nullable)
+  ratingScore           Float?   // null means no data
+  ratingCount           Int?
+  ratingSource          String?
+  ratingRetrievedDate   String?
+  // Cover
+  coverColor            String?  // null means use default
+  sourceRefsJson        String   // JSON array
 }
+
+// ─── Activity Model ──────────────────────────────────────────────────────────
+
+model ActivityRecommendation {
+  id                    String   @id @default(uuid())
+  activityId            String   @unique // e.g. "act_face_talk"
+  title                 String
+  categoriesJson        String   // JSON array
+  ageMinMonths          Int?
+  ageMaxMonths          Int?
+  developmentGoalsJson  String   // JSON array
+  materialsJson         String   // JSON array
+  stepsJson             String   // JSON array of step objects
+  targetMonthMin        Int?
+  targetMonthMax        Int?
+  goal                  String?
+  durationMinutes       Int?
+  frequency             String?
+  difficulty            String?
+  supervision           String?
+  safetyJson            String   // JSON array
+  stopConditionsJson    String   // JSON array
+  evidenceType          String?
+  medicalTreatment      Boolean  @default(false)
+  notes                 String?
+  sourceRefsJson        String   // JSON array
+}
+
+// ─── Legacy Food Plan (kept for existing functionality) ──────────────────────
+
+model FoodPlan {
+  id          String   @id @default(uuid())
+  date        String
+  name        String
+  tags        String   // JSON array
+  nutrition   String
+  ingredients String   // JSON array
+  steps       String   // JSON array
+  createdAt   DateTime @default(now())
+}
+
+// ─── Legacy Vaccine Record (user tracking) ───────────────────────────────────
 
 model VaccineRecord {
   id             String   @id @default(uuid())
@@ -130,4 +382,13 @@ model VaccineRecord {
   completedDate  String?
   isCompleted    Boolean  @default(false)
   countdownDays  Int?
+}
+
+// ─── Web Push Subscriptions ─────────────────────────────────────────────────
+
+model PushSubscription {
+  id        String   @id @default(uuid())
+  endpoint  String   @unique
+  keysJson  String
+  createdAt DateTime @default(now())
 }

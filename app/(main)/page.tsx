@@ -1,13 +1,58 @@
 "use client";
-import { useEffect } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Baby, Droplets, Moon, Wind, UtensilsCrossed, Bell } from "lucide-react";
 import { useBabyStore } from "@/stores/useBabyStore";
-import { calculateAge } from "@/data/mockBaby";
+import { calculateAge } from "@/lib/age";
 import { StatCard } from "@/components/ui/StatCard";
 import { QuickActionCard } from "@/components/ui/QuickActionCard";
 import { Timeline } from "@/components/ui/Timeline";
 import { CuteCard } from "@/components/ui/CuteCard";
+
+function NotificationBell() {
+  const [unreadCount, setUnreadCount] = useState(0);
+  const router = useRouter();
+
+  const fetchCount = useCallback(async () => {
+    try {
+      const res = await fetch("/api/notifications");
+      if (res.ok) {
+        const data = await res.json();
+        const list = Array.isArray(data) ? data : [];
+        const readRaw = localStorage.getItem("notification-read-ids");
+        const readIds = new Set(readRaw ? JSON.parse(readRaw) : []);
+        const unread = list.filter(
+          (n: { id: string }) => !readIds.has(n.id)
+        ).length;
+        setUnreadCount(unread);
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchCount();
+    const handler = () => fetchCount();
+    window.addEventListener("notifications-read", handler);
+    return () => window.removeEventListener("notifications-read", handler);
+  }, [fetchCount]);
+
+  return (
+    <button
+      onClick={() => router.push("/notifications")}
+      aria-label="通知"
+      className="w-10 h-10 rounded-full bg-white shadow-soft flex items-center justify-center btn-press relative"
+    >
+      <Bell size={18} className="text-text-secondary" />
+      {unreadCount > 0 && (
+        <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center px-1 shadow-soft">
+          {unreadCount > 99 ? "99+" : unreadCount}
+        </span>
+      )}
+    </button>
+  );
+}
 
 export default function TodayPage() {
   const router = useRouter();
@@ -30,7 +75,7 @@ export default function TodayPage() {
     fetchTimeline();
     fetchWeather();
     fetchAiTips();
-  }, []);
+  }, [fetchBaby, fetchDailySummary, fetchTimeline, fetchWeather, fetchAiTips]);
 
   const age = baby ? calculateAge(baby.birthDate) : { months: 0, days: 0, label: "0月0天" };
   const hour = new Date().getHours();
@@ -61,12 +106,7 @@ export default function TodayPage() {
             <span className="text-sm text-text-secondary">{age.label}</span>
           </div>
         </div>
-        <button
-          onClick={() => router.push("/notifications")}
-          className="w-10 h-10 rounded-full bg-white shadow-soft flex items-center justify-center btn-press"
-        >
-          <Bell size={18} className="text-text-secondary" />
-        </button>
+        <NotificationBell />
       </div>
 
       {/* Welcome */}

@@ -34,6 +34,13 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { timestamp, type, amountMl, leftMinutes, rightMinutes, spitUp, notes } = body;
 
+    if (!type || !["breast", "formula", "mixed"].includes(type)) {
+      return NextResponse.json(
+        { error: "type 必填且只能为 breast、formula 或 mixed" },
+        { status: 400 }
+      );
+    }
+
     const record = await prisma.feedingRecord.create({
       data: {
         timestamp,

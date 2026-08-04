@@ -1,5 +1,5 @@
 "use client";
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Upload, CheckCircle, Loader2 } from 'lucide-react';
 import { AppHeader } from '@/components/ui/AppHeader';
@@ -10,16 +10,23 @@ import { FormSection } from '@/components/ui/FormSection';
 import { SegmentControl } from '@/components/ui/SegmentControl';
 import { useToast } from '@/components/ui/Toast';
 import { useBabyStore } from '@/stores/useBabyStore';
+import { getLocalDateStr } from '@/lib/date';
 
 type InputMode = 'manual' | 'ocr';
 
 export default function GrowthAddPage() {
   const router = useRouter();
   const { showToast } = useToast();
+  const baby = useBabyStore((s) => s.baby);
+  const fetchBaby = useBabyStore((s) => s.fetchBaby);
   const addGrowthMeasurement = useBabyStore((s) => s.addGrowthMeasurement);
 
+  useEffect(() => {
+    if (!baby) fetchBaby();
+  }, [baby, fetchBaby]);
+
   const [mode, setMode] = useState<InputMode>('manual');
-  const [date, setDate] = useState('2025-07-12');
+  const [date, setDate] = useState(getLocalDateStr());
   const [weight, setWeight] = useState('');
   const [height, setHeight] = useState('');
   const [head, setHead] = useState('');
@@ -34,7 +41,7 @@ export default function GrowthAddPage() {
       setOcrLoading(false);
       setOcrDone(true);
       // Mock OCR results
-      setDate('2025-07-12');
+      setDate(getLocalDateStr());
       setWeight('7.35');
       setHeight('67.2');
       setHead('42.1');
@@ -44,7 +51,12 @@ export default function GrowthAddPage() {
   const handleSave = () => {
     if (!weight && !height && !head) return;
 
-    const birthDate = new Date('2024-12-31');
+    if (!baby?.birthDate) {
+      showToast('请先在个人中心设置宝宝生日');
+      return;
+    }
+
+    const birthDate = new Date(baby.birthDate);
     const measureDate = new Date(date);
     const diffMs = measureDate.getTime() - birthDate.getTime();
     const months = diffMs / (1000 * 60 * 60 * 24 * 30.44);
@@ -57,7 +69,6 @@ export default function GrowthAddPage() {
       weightKg: weight ? parseFloat(weight) : undefined,
       heightCm: height ? parseFloat(height) : undefined,
       headCircumferenceCm: head ? parseFloat(head) : undefined,
-      percentile: 58,
     });
 
     showToast('记录保存成功 ✨');

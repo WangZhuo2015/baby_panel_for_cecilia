@@ -22,6 +22,13 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { timestamp, type, poopColor, poopConsistency, notes } = body;
 
+    if (!type || !["pee", "poop", "both"].includes(type)) {
+      return NextResponse.json(
+        { error: "type 必填且只能为 pee、poop 或 both" },
+        { status: 400 }
+      );
+    }
+
     const record = await prisma.diaperRecord.create({
       data: {
         timestamp,

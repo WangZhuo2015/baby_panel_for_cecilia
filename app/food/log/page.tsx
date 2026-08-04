@@ -9,6 +9,7 @@ import { FormSection } from '@/components/ui/FormSection';
 import { HeartRating } from '@/components/ui/HeartRating';
 import { useToast } from '@/components/ui/Toast';
 import { useBabyStore } from '@/stores/useBabyStore';
+import { getLocalDateStr } from '@/lib/date';
 import type { FoodLogRecord } from '@/types';
 
 export default function FoodLogPage() {
@@ -26,7 +27,7 @@ export default function FoodLogPage() {
   const triedFoods = foodItems.filter((item) => item.status === 'tried');
 
   // Form state
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [date, setDate] = useState(getLocalDateStr());
   const [time, setTime] = useState(
     new Date().toTimeString().slice(0, 5)
   );

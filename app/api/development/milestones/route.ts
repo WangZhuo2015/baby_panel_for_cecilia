@@ -1,27 +1,51 @@
-import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { NextResponse } from 'next/server'
+import { prisma } from '@/lib/prisma'
+
+const safeJsonParse = (str: string | null | undefined, fallback: any = []) => {
+  try { return str ? JSON.parse(str) : fallback } catch { return fallback }
+}
 
 export async function GET(request: Request) {
-  try {
-    const { searchParams } = new URL(request.url);
-    const category = searchParams.get("category");
-    const month = searchParams.get("month");
+  const { searchParams } = new URL(request.url)
+  const category = searchParams.get('category')
+  const month = searchParams.get('month')
 
-    const where: Record<string, unknown> = {};
-    if (category) where.category = category;
-    if (month) where.month = parseInt(month, 10);
+  try {
+    const where: any = {}
+    if (category) {
+      where.category = category
+    }
+    if (month) {
+      const m = Number(month)
+      if (Number.isInteger(m) && m > 0) {
+        where.assessmentAgeMonths = m
+      }
+    }
 
     const milestones = await prisma.developmentMilestone.findMany({
-      where: Object.keys(where).length > 0 ? where : undefined,
-      orderBy: { month: "asc" },
-    });
+      where,
+      orderBy: { assessmentAgeMonths: 'asc' }
+    })
 
-    return NextResponse.json(milestones);
+    const parsed = milestones.map(m => ({
+      ...m,
+      sourceRefs: safeJsonParse(m.sourceRefsJson),
+    }))
+
+    // Get data release info
+    const dataRelease = await prisma.dataRelease.findFirst({
+      include: { sources: true }
+    })
+
+    return NextResponse.json({
+      milestones: parsed,
+      dataRelease
+    })
   } catch (error) {
-    console.error("GET /api/development/milestones error:", error);
+    console.error('Error fetching milestones:', error)
     return NextResponse.json(
-      { error: "Failed to fetch milestones" },
+      { error: 'Failed to fetch development milestones' },
       { status: 500 }
-    );
+    )
   }
 }

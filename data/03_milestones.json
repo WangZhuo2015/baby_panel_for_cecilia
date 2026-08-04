@@ -1,0 +1,3283 @@
+{
+  "datasetMeta": {
+    "scope": "0–36月龄",
+    "asOf": "2026-08-03",
+    "conceptSeparation": {
+      "developmentalMilestone": "CDC家长可观察里程碑，按约75%或更多儿童在该年龄能做到定义。",
+      "developmentalScreening": "WS/T 580—2017为标准化评估量表；不等同于里程碑清单。",
+      "redFlag": "国家卫健委预警征象，提示需进一步复筛/评估，不是诊断结论。"
+    }
+  },
+  "screeningSystems": [
+    {
+      "id": "screen_wst580_2017",
+      "name": "0岁～6岁儿童发育行为评估量表",
+      "standard": "WS/T 580—2017",
+      "domains": [
+        "大运动",
+        "精细运动",
+        "语言",
+        "适应能力",
+        "社会行为"
+      ],
+      "requiresProfessionalAssessment": true,
+      "sourceRefs": [
+        "src_wst580_2017"
+      ]
+    }
+  ],
+  "milestones": [
+    {
+      "id": "mil_so_2m_looks_face",
+      "category": "social_emotional",
+      "originalDomain": "社交/情绪",
+      "title": "看着照护者的脸",
+      "description": "看着照护者的脸",
+      "assessmentAgeMonths": 2,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_2m_2026"
+      ]
+    },
+    {
+      "id": "mil_so_2m_happy_approach",
+      "category": "social_emotional",
+      "originalDomain": "社交/情绪",
+      "title": "照护者走近时表现出高兴",
+      "description": "照护者走近时表现出高兴",
+      "assessmentAgeMonths": 2,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_2m_2026"
+      ]
+    },
+    {
+      "id": "mil_so_2m_smiles_response",
+      "category": "social_emotional",
+      "originalDomain": "社交/情绪",
+      "title": "被说话或微笑时会微笑",
+      "description": "被说话或微笑时会微笑",
+      "assessmentAgeMonths": 2,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_2m_2026"
+      ]
+    },
+    {
+      "id": "mil_la_2m_sounds_not_cry",
+      "category": "language",
+      "originalDomain": "语言/沟通",
+      "title": "会发出哭声以外的声音",
+      "description": "会发出哭声以外的声音",
+      "assessmentAgeMonths": 2,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_2m_2026"
+      ]
+    },
+    {
+      "id": "mil_la_2m_reacts_loud",
+      "category": "language",
+      "originalDomain": "语言/沟通",
+      "title": "会对较大声音作出反应",
+      "description": "会对较大声音作出反应",
+      "assessmentAgeMonths": 2,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_2m_2026"
+      ]
+    },
+    {
+      "id": "mil_co_2m_watches_move",
+      "category": "cognitive",
+      "originalDomain": "认知",
+      "title": "会看着照护者移动",
+      "description": "会看着照护者移动",
+      "assessmentAgeMonths": 2,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_2m_2026"
+      ]
+    },
+    {
+      "id": "mil_co_2m_looks_toy_seconds",
+      "category": "cognitive",
+      "originalDomain": "认知",
+      "title": "会注视玩具数秒",
+      "description": "会注视玩具数秒",
+      "assessmentAgeMonths": 2,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_2m_2026"
+      ]
+    },
+    {
+      "id": "mil_gr_2m_head_up_tummy",
+      "category": "gross_motor",
+      "originalDomain": "大运动",
+      "title": "俯卧时能抬头",
+      "description": "俯卧时能抬头",
+      "assessmentAgeMonths": 2,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_2m_2026"
+      ]
+    },
+    {
+      "id": "mil_gr_2m_moves_both_limbs",
+      "category": "gross_motor",
+      "originalDomain": "大运动",
+      "title": "会活动双臂和双腿",
+      "description": "会活动双臂和双腿",
+      "assessmentAgeMonths": 2,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_2m_2026"
+      ]
+    },
+    {
+      "id": "mil_fi_2m_opens_hands",
+      "category": "fine_motor",
+      "originalDomain": "精细运动",
+      "title": "会短暂张开双手",
+      "description": "会短暂张开双手",
+      "assessmentAgeMonths": 2,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_2m_2026"
+      ]
+    },
+    {
+      "id": "mil_so_4m_smiles_attention",
+      "category": "social_emotional",
+      "originalDomain": "社交/情绪",
+      "title": "会主动微笑以吸引注意",
+      "description": "会主动微笑以吸引注意",
+      "assessmentAgeMonths": 4,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_4m_2026"
+      ]
+    },
+    {
+      "id": "mil_so_4m_chuckles",
+      "category": "social_emotional",
+      "originalDomain": "社交/情绪",
+      "title": "逗笑时会轻声笑",
+      "description": "逗笑时会轻声笑",
+      "assessmentAgeMonths": 4,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_4m_2026"
+      ]
+    },
+    {
+      "id": "mil_so_4m_keeps_attention",
+      "category": "social_emotional",
+      "originalDomain": "社交/情绪",
+      "title": "会用注视、动作或声音维持照护者注意",
+      "description": "会用注视、动作或声音维持照护者注意",
+      "assessmentAgeMonths": 4,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_4m_2026"
+      ]
+    },
+    {
+      "id": "mil_la_4m_coos",
+      "category": "language",
+      "originalDomain": "语言/沟通",
+      "title": "会发“啊/哦”等咿呀声",
+      "description": "会发“啊/哦”等咿呀声",
+      "assessmentAgeMonths": 4,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_4m_2026"
+      ]
+    },
+    {
+      "id": "mil_la_4m_responds_sounds",
+      "category": "language",
+      "originalDomain": "语言/沟通",
+      "title": "照护者说话时会用声音回应",
+      "description": "照护者说话时会用声音回应",
+      "assessmentAgeMonths": 4,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_4m_2026"
+      ]
+    },
+    {
+      "id": "mil_la_4m_turns_voice",
+      "category": "language",
+      "originalDomain": "语言/沟通",
+      "title": "听到声音会转头寻找",
+      "description": "听到声音会转头寻找",
+      "assessmentAgeMonths": 4,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_4m_2026"
+      ]
+    },
+    {
+      "id": "mil_co_4m_opens_mouth_food",
+      "category": "cognitive",
+      "originalDomain": "认知",
+      "title": "看到乳房或奶瓶且饥饿时会张嘴",
+      "description": "看到乳房或奶瓶且饥饿时会张嘴",
+      "assessmentAgeMonths": 4,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_4m_2026"
+      ]
+    },
+    {
+      "id": "mil_co_4m_looks_hands",
+      "category": "cognitive",
+      "originalDomain": "认知",
+      "title": "会看自己的手",
+      "description": "会看自己的手",
+      "assessmentAgeMonths": 4,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_4m_2026"
+      ]
+    },
+    {
+      "id": "mil_gr_4m_head_steady",
+      "category": "gross_motor",
+      "originalDomain": "大运动",
+      "title": "抱起时头部较稳定，无需持续托住",
+      "description": "抱起时头部较稳定，无需持续托住",
+      "assessmentAgeMonths": 4,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_4m_2026"
+      ]
+    },
+    {
+      "id": "mil_gr_4m_push_elbows",
+      "category": "gross_motor",
+      "originalDomain": "大运动",
+      "title": "俯卧时能以前臂/肘支撑抬起上身",
+      "description": "俯卧时能以前臂/肘支撑抬起上身",
+      "assessmentAgeMonths": 4,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_4m_2026"
+      ]
+    },
+    {
+      "id": "mil_fi_4m_holds_toy",
+      "category": "fine_motor",
+      "originalDomain": "精细运动",
+      "title": "能握住放到手里的玩具",
+      "description": "能握住放到手里的玩具",
+      "assessmentAgeMonths": 4,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_4m_2026"
+      ]
+    },
+    {
+      "id": "mil_fi_4m_swings_toys",
+      "category": "fine_motor",
+      "originalDomain": "精细运动",
+      "title": "会挥臂碰玩具",
+      "description": "会挥臂碰玩具",
+      "assessmentAgeMonths": 4,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_4m_2026"
+      ]
+    },
+    {
+      "id": "mil_fi_4m_hands_mouth",
+      "category": "fine_motor",
+      "originalDomain": "精细运动",
+      "title": "会把手放到嘴边",
+      "description": "会把手放到嘴边",
+      "assessmentAgeMonths": 4,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_4m_2026"
+      ]
+    },
+    {
+      "id": "mil_so_6m_knows_familiar",
+      "category": "social_emotional",
+      "originalDomain": "社交/情绪",
+      "title": "能认出熟悉的人",
+      "description": "能认出熟悉的人",
+      "assessmentAgeMonths": 6,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_6m_2026"
+      ]
+    },
+    {
+      "id": "mil_so_6m_mirror",
+      "category": "social_emotional",
+      "originalDomain": "社交/情绪",
+      "title": "会看镜中的自己",
+      "description": "会看镜中的自己",
+      "assessmentAgeMonths": 6,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_6m_2026"
+      ]
+    },
+    {
+      "id": "mil_so_6m_laughs",
+      "category": "social_emotional",
+      "originalDomain": "社交/情绪",
+      "title": "会笑出声",
+      "description": "会笑出声",
+      "assessmentAgeMonths": 6,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_6m_2026"
+      ]
+    },
+    {
+      "id": "mil_la_6m_sound_turns",
+      "category": "language",
+      "originalDomain": "语言/沟通",
+      "title": "会与照护者轮流发声",
+      "description": "会与照护者轮流发声",
+      "assessmentAgeMonths": 6,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_6m_2026"
+      ]
+    },
+    {
+      "id": "mil_la_6m_raspberries",
+      "category": "language",
+      "originalDomain": "语言/沟通",
+      "title": "会用嘴唇发出“噗噗”声",
+      "description": "会用嘴唇发出“噗噗”声",
+      "assessmentAgeMonths": 6,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_6m_2026"
+      ]
+    },
+    {
+      "id": "mil_la_6m_squeals",
+      "category": "language",
+      "originalDomain": "语言/沟通",
+      "title": "会发尖细高兴的声音",
+      "description": "会发尖细高兴的声音",
+      "assessmentAgeMonths": 6,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_6m_2026"
+      ]
+    },
+    {
+      "id": "mil_co_6m_mouth_explore",
+      "category": "cognitive",
+      "originalDomain": "认知",
+      "title": "会把东西放到嘴里探索",
+      "description": "会把东西放到嘴里探索",
+      "assessmentAgeMonths": 6,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_6m_2026"
+      ]
+    },
+    {
+      "id": "mil_co_6m_reaches_toy",
+      "category": "cognitive",
+      "originalDomain": "认知",
+      "title": "会伸手去拿想要的玩具",
+      "description": "会伸手去拿想要的玩具",
+      "assessmentAgeMonths": 6,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_6m_2026"
+      ]
+    },
+    {
+      "id": "mil_co_6m_closes_lips_full",
+      "category": "cognitive",
+      "originalDomain": "认知",
+      "title": "不想再吃时会闭紧嘴唇",
+      "description": "不想再吃时会闭紧嘴唇",
+      "assessmentAgeMonths": 6,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_6m_2026"
+      ]
+    },
+    {
+      "id": "mil_gr_6m_roll_tummy_back",
+      "category": "gross_motor",
+      "originalDomain": "大运动",
+      "title": "会从俯卧翻到仰卧",
+      "description": "会从俯卧翻到仰卧",
+      "assessmentAgeMonths": 6,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_6m_2026"
+      ]
+    },
+    {
+      "id": "mil_gr_6m_push_straight_arms",
+      "category": "gross_motor",
+      "originalDomain": "大运动",
+      "title": "俯卧时能用伸直的手臂撑起上身",
+      "description": "俯卧时能用伸直的手臂撑起上身",
+      "assessmentAgeMonths": 6,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_6m_2026"
+      ]
+    },
+    {
+      "id": "mil_gr_6m_leans_sit",
+      "category": "gross_motor",
+      "originalDomain": "大运动",
+      "title": "坐位时会用手支撑身体",
+      "description": "坐位时会用手支撑身体",
+      "assessmentAgeMonths": 6,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_6m_2026"
+      ]
+    },
+    {
+      "id": "mil_so_9m_stranger_reaction",
+      "category": "social_emotional",
+      "originalDomain": "社交/情绪",
+      "title": "见到陌生人可能害羞、黏人或害怕",
+      "description": "见到陌生人可能害羞、黏人或害怕",
+      "assessmentAgeMonths": 9,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_9m_2026"
+      ]
+    },
+    {
+      "id": "mil_so_9m_facial_expressions",
+      "category": "social_emotional",
+      "originalDomain": "社交/情绪",
+      "title": "会表现多种面部表情",
+      "description": "会表现多种面部表情",
+      "assessmentAgeMonths": 9,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_9m_2026"
+      ]
+    },
+    {
+      "id": "mil_so_9m_looks_name",
+      "category": "social_emotional",
+      "originalDomain": "社交/情绪",
+      "title": "叫名字时会看过来",
+      "description": "叫名字时会看过来",
+      "assessmentAgeMonths": 9,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_9m_2026"
+      ]
+    },
+    {
+      "id": "mil_so_9m_reacts_leave",
+      "category": "social_emotional",
+      "originalDomain": "社交/情绪",
+      "title": "照护者离开时会有反应",
+      "description": "照护者离开时会有反应",
+      "assessmentAgeMonths": 9,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_9m_2026"
+      ]
+    },
+    {
+      "id": "mil_so_9m_peekaboo",
+      "category": "social_emotional",
+      "originalDomain": "社交/情绪",
+      "title": "玩躲猫猫时会微笑或发笑",
+      "description": "玩躲猫猫时会微笑或发笑",
+      "assessmentAgeMonths": 9,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_9m_2026"
+      ]
+    },
+    {
+      "id": "mil_la_9m_babbling",
+      "category": "language",
+      "originalDomain": "语言/沟通",
+      "title": "会发“mamama/bababa”等重复音",
+      "description": "会发“mamama/bababa”等重复音",
+      "assessmentAgeMonths": 9,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_9m_2026"
+      ]
+    },
+    {
+      "id": "mil_la_9m_arms_pickup",
+      "category": "language",
+      "originalDomain": "语言/沟通",
+      "title": "会举起双臂表示想被抱",
+      "description": "会举起双臂表示想被抱",
+      "assessmentAgeMonths": 9,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_9m_2026"
+      ]
+    },
+    {
+      "id": "mil_co_9m_looks_dropped",
+      "category": "cognitive",
+      "originalDomain": "认知",
+      "title": "会寻找掉落并暂时看不见的物品",
+      "description": "会寻找掉落并暂时看不见的物品",
+      "assessmentAgeMonths": 9,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_9m_2026"
+      ]
+    },
+    {
+      "id": "mil_co_9m_bangs_two",
+      "category": "cognitive",
+      "originalDomain": "认知",
+      "title": "会把两个物品相互敲击",
+      "description": "会把两个物品相互敲击",
+      "assessmentAgeMonths": 9,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_9m_2026"
+      ]
+    },
+    {
+      "id": "mil_gr_9m_gets_sitting",
+      "category": "gross_motor",
+      "originalDomain": "大运动",
+      "title": "能自己变换到坐姿",
+      "description": "能自己变换到坐姿",
+      "assessmentAgeMonths": 9,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_9m_2026"
+      ]
+    },
+    {
+      "id": "mil_fi_9m_transfers_hand",
+      "category": "fine_motor",
+      "originalDomain": "精细运动",
+      "title": "会把物品从一只手换到另一只手",
+      "description": "会把物品从一只手换到另一只手",
+      "assessmentAgeMonths": 9,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_9m_2026"
+      ]
+    },
+    {
+      "id": "mil_fi_9m_rakes_food",
+      "category": "fine_motor",
+      "originalDomain": "精细运动",
+      "title": "会用手指拢取食物",
+      "description": "会用手指拢取食物",
+      "assessmentAgeMonths": 9,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_9m_2026"
+      ]
+    },
+    {
+      "id": "mil_so_12m_patacake",
+      "category": "social_emotional",
+      "originalDomain": "社交/情绪",
+      "title": "会和照护者玩拍手歌等互动游戏",
+      "description": "会和照护者玩拍手歌等互动游戏",
+      "assessmentAgeMonths": 12,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_12m_2026"
+      ]
+    },
+    {
+      "id": "mil_la_12m_waves_bye",
+      "category": "language",
+      "originalDomain": "语言/沟通",
+      "title": "会挥手表示再见",
+      "description": "会挥手表示再见",
+      "assessmentAgeMonths": 12,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_12m_2026"
+      ]
+    },
+    {
+      "id": "mil_la_12m_special_parent_name",
+      "category": "language",
+      "originalDomain": "语言/沟通",
+      "title": "会用“妈妈/爸爸”或其他专称称呼家长",
+      "description": "会用“妈妈/爸爸”或其他专称称呼家长",
+      "assessmentAgeMonths": 12,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_12m_2026"
+      ]
+    },
+    {
+      "id": "mil_la_12m_understands_no",
+      "category": "language",
+      "originalDomain": "语言/沟通",
+      "title": "能理解“不/不可以”的意思",
+      "description": "能理解“不/不可以”的意思",
+      "assessmentAgeMonths": 12,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_12m_2026"
+      ]
+    },
+    {
+      "id": "mil_co_12m_container",
+      "category": "cognitive",
+      "originalDomain": "认知",
+      "title": "会把物品放进容器",
+      "description": "会把物品放进容器",
+      "assessmentAgeMonths": 12,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_12m_2026"
+      ]
+    },
+    {
+      "id": "mil_co_12m_finds_hidden",
+      "category": "cognitive",
+      "originalDomain": "认知",
+      "title": "会寻找被藏起来的物品",
+      "description": "会寻找被藏起来的物品",
+      "assessmentAgeMonths": 12,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_12m_2026"
+      ]
+    },
+    {
+      "id": "mil_so_15m_copies_children",
+      "category": "social_emotional",
+      "originalDomain": "社交/情绪",
+      "title": "玩耍时会模仿其他孩子",
+      "description": "玩耍时会模仿其他孩子",
+      "assessmentAgeMonths": 15,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_15m_2026"
+      ]
+    },
+    {
+      "id": "mil_so_15m_shows_object",
+      "category": "social_emotional",
+      "originalDomain": "社交/情绪",
+      "title": "会把喜欢的物品拿给照护者看",
+      "description": "会把喜欢的物品拿给照护者看",
+      "assessmentAgeMonths": 15,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_15m_2026"
+      ]
+    },
+    {
+      "id": "mil_so_15m_claps_excited",
+      "category": "social_emotional",
+      "originalDomain": "社交/情绪",
+      "title": "兴奋时会拍手",
+      "description": "兴奋时会拍手",
+      "assessmentAgeMonths": 15,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_15m_2026"
+      ]
+    },
+    {
+      "id": "mil_so_15m_hugs_toy",
+      "category": "social_emotional",
+      "originalDomain": "社交/情绪",
+      "title": "会抱玩偶或其他玩具",
+      "description": "会抱玩偶或其他玩具",
+      "assessmentAgeMonths": 15,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_15m_2026"
+      ]
+    },
+    {
+      "id": "mil_so_15m_shows_affection",
+      "category": "social_emotional",
+      "originalDomain": "社交/情绪",
+      "title": "会表现对照护者的喜爱",
+      "description": "会表现对照护者的喜爱",
+      "assessmentAgeMonths": 15,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_15m_2026"
+      ]
+    },
+    {
+      "id": "mil_la_15m_one_two_words",
+      "category": "language",
+      "originalDomain": "语言/沟通",
+      "title": "会尝试说1～2个“妈妈/爸爸”之外的词",
+      "description": "会尝试说1～2个“妈妈/爸爸”之外的词",
+      "assessmentAgeMonths": 15,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_15m_2026"
+      ]
+    },
+    {
+      "id": "mil_la_15m_looks_named_object",
+      "category": "language",
+      "originalDomain": "语言/沟通",
+      "title": "说出熟悉物品名称时会看向该物品",
+      "description": "说出熟悉物品名称时会看向该物品",
+      "assessmentAgeMonths": 15,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_15m_2026"
+      ]
+    },
+    {
+      "id": "mil_la_15m_follows_gesture_words",
+      "category": "language",
+      "originalDomain": "语言/沟通",
+      "title": "能理解带手势和语言的简单指令",
+      "description": "能理解带手势和语言的简单指令",
+      "assessmentAgeMonths": 15,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_15m_2026"
+      ]
+    },
+    {
+      "id": "mil_la_15m_points_help",
+      "category": "language",
+      "originalDomain": "语言/沟通",
+      "title": "会用手指表示想要某物或寻求帮助",
+      "description": "会用手指表示想要某物或寻求帮助",
+      "assessmentAgeMonths": 15,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_15m_2026"
+      ]
+    },
+    {
+      "id": "mil_co_15m_uses_objects",
+      "category": "cognitive",
+      "originalDomain": "认知",
+      "title": "会按常见用途使用杯子、电话、书等物品",
+      "description": "会按常见用途使用杯子、电话、书等物品",
+      "assessmentAgeMonths": 15,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_15m_2026"
+      ]
+    },
+    {
+      "id": "mil_co_15m_stacks_two",
+      "category": "cognitive",
+      "originalDomain": "认知",
+      "title": "能叠起至少两个小物件",
+      "description": "能叠起至少两个小物件",
+      "assessmentAgeMonths": 15,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_15m_2026"
+      ]
+    },
+    {
+      "id": "mil_gr_15m_few_steps",
+      "category": "gross_motor",
+      "originalDomain": "大运动",
+      "title": "能独立走几步",
+      "description": "能独立走几步",
+      "assessmentAgeMonths": 15,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_15m_2026"
+      ]
+    },
+    {
+      "id": "mil_fi_15m_finger_feeds",
+      "category": "fine_motor",
+      "originalDomain": "精细运动",
+      "title": "会用手指拿食物自己吃",
+      "description": "会用手指拿食物自己吃",
+      "assessmentAgeMonths": 15,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_15m_2026"
+      ]
+    },
+    {
+      "id": "mil_so_18m_checks_close",
+      "category": "social_emotional",
+      "originalDomain": "社交/情绪",
+      "title": "会离开照护者探索，但会确认照护者仍在附近",
+      "description": "会离开照护者探索，但会确认照护者仍在附近",
+      "assessmentAgeMonths": 18,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_18m_2026"
+      ]
+    },
+    {
+      "id": "mil_so_18m_points_interest",
+      "category": "social_emotional",
+      "originalDomain": "社交/情绪",
+      "title": "会指给照护者看有趣的东西",
+      "description": "会指给照护者看有趣的东西",
+      "assessmentAgeMonths": 18,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_18m_2026"
+      ]
+    },
+    {
+      "id": "mil_so_18m_hands_wash",
+      "category": "social_emotional",
+      "originalDomain": "社交/情绪",
+      "title": "洗手时会伸出手配合",
+      "description": "洗手时会伸出手配合",
+      "assessmentAgeMonths": 18,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_18m_2026"
+      ]
+    },
+    {
+      "id": "mil_so_18m_book_pages",
+      "category": "social_emotional",
+      "originalDomain": "社交/情绪",
+      "title": "会和照护者一起看几页书",
+      "description": "会和照护者一起看几页书",
+      "assessmentAgeMonths": 18,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_18m_2026"
+      ]
+    },
+    {
+      "id": "mil_so_18m_helps_dress",
+      "category": "social_emotional",
+      "originalDomain": "社交/情绪",
+      "title": "穿衣时会伸手进袖子或抬脚配合",
+      "description": "穿衣时会伸手进袖子或抬脚配合",
+      "assessmentAgeMonths": 18,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_18m_2026"
+      ]
+    },
+    {
+      "id": "mil_la_18m_three_words",
+      "category": "language",
+      "originalDomain": "语言/沟通",
+      "title": "会尝试说至少3个“妈妈/爸爸”之外的词",
+      "description": "会尝试说至少3个“妈妈/爸爸”之外的词",
+      "assessmentAgeMonths": 18,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_18m_2026"
+      ]
+    },
+    {
+      "id": "mil_la_18m_one_step_no_gesture",
+      "category": "language",
+      "originalDomain": "语言/沟通",
+      "title": "无需手势提示即可执行一步指令",
+      "description": "无需手势提示即可执行一步指令",
+      "assessmentAgeMonths": 18,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_18m_2026"
+      ]
+    },
+    {
+      "id": "mil_co_18m_copies_chores",
+      "category": "cognitive",
+      "originalDomain": "认知",
+      "title": "会模仿简单家务动作",
+      "description": "会模仿简单家务动作",
+      "assessmentAgeMonths": 18,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_18m_2026"
+      ]
+    },
+    {
+      "id": "mil_co_18m_simple_toy_use",
+      "category": "cognitive",
+      "originalDomain": "认知",
+      "title": "会以简单方式玩玩具，如推小车",
+      "description": "会以简单方式玩玩具，如推小车",
+      "assessmentAgeMonths": 18,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_18m_2026"
+      ]
+    },
+    {
+      "id": "mil_gr_18m_walks_alone",
+      "category": "gross_motor",
+      "originalDomain": "大运动",
+      "title": "能独立行走",
+      "description": "能独立行走",
+      "assessmentAgeMonths": 18,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_18m_2026"
+      ]
+    },
+    {
+      "id": "mil_gr_18m_climbs_furniture",
+      "category": "gross_motor",
+      "originalDomain": "大运动",
+      "title": "能自行爬上或下矮沙发/椅子",
+      "description": "能自行爬上或下矮沙发/椅子",
+      "assessmentAgeMonths": 18,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_18m_2026"
+      ]
+    },
+    {
+      "id": "mil_fi_18m_scribbles",
+      "category": "fine_motor",
+      "originalDomain": "精细运动",
+      "title": "会涂画",
+      "description": "会涂画",
+      "assessmentAgeMonths": 18,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_18m_2026"
+      ]
+    },
+    {
+      "id": "mil_fi_18m_open_cup",
+      "category": "fine_motor",
+      "originalDomain": "精细运动",
+      "title": "会从无盖杯喝水，可能会洒",
+      "description": "会从无盖杯喝水，可能会洒",
+      "assessmentAgeMonths": 18,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_18m_2026"
+      ]
+    },
+    {
+      "id": "mil_fi_18m_tries_spoon",
+      "category": "fine_motor",
+      "originalDomain": "精细运动",
+      "title": "会尝试使用勺子",
+      "description": "会尝试使用勺子",
+      "assessmentAgeMonths": 18,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_18m_2026"
+      ]
+    },
+    {
+      "id": "mil_so_24m_notices_upset",
+      "category": "social_emotional",
+      "originalDomain": "社交/情绪",
+      "title": "会注意到别人受伤或不开心",
+      "description": "会注意到别人受伤或不开心",
+      "assessmentAgeMonths": 24,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_24m_2026"
+      ]
+    },
+    {
+      "id": "mil_so_24m_looks_reaction",
+      "category": "social_emotional",
+      "originalDomain": "社交/情绪",
+      "title": "在新情境中会看照护者脸色判断反应",
+      "description": "在新情境中会看照护者脸色判断反应",
+      "assessmentAgeMonths": 24,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_24m_2026"
+      ]
+    },
+    {
+      "id": "mil_la_24m_points_book",
+      "category": "language",
+      "originalDomain": "语言/沟通",
+      "title": "被问到时能指出书中物品",
+      "description": "被问到时能指出书中物品",
+      "assessmentAgeMonths": 24,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_24m_2026"
+      ]
+    },
+    {
+      "id": "mil_la_24m_two_words",
+      "category": "language",
+      "originalDomain": "语言/沟通",
+      "title": "会把至少两个词组合起来",
+      "description": "会把至少两个词组合起来",
+      "assessmentAgeMonths": 24,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_24m_2026"
+      ]
+    },
+    {
+      "id": "mil_la_24m_body_parts",
+      "category": "language",
+      "originalDomain": "语言/沟通",
+      "title": "能指出至少两个身体部位",
+      "description": "能指出至少两个身体部位",
+      "assessmentAgeMonths": 24,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_24m_2026"
+      ]
+    },
+    {
+      "id": "mil_la_24m_more_gestures",
+      "category": "language",
+      "originalDomain": "语言/沟通",
+      "title": "会使用挥手、指物以外的其他手势",
+      "description": "会使用挥手、指物以外的其他手势",
+      "assessmentAgeMonths": 24,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_24m_2026"
+      ]
+    },
+    {
+      "id": "mil_co_24m_holds_while_uses",
+      "category": "cognitive",
+      "originalDomain": "认知",
+      "title": "会一只手固定物品、另一只手操作",
+      "description": "会一只手固定物品、另一只手操作",
+      "assessmentAgeMonths": 24,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_24m_2026"
+      ]
+    },
+    {
+      "id": "mil_co_24m_switch_knob",
+      "category": "cognitive",
+      "originalDomain": "认知",
+      "title": "会尝试使用开关、旋钮或按钮",
+      "description": "会尝试使用开关、旋钮或按钮",
+      "assessmentAgeMonths": 24,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_24m_2026"
+      ]
+    },
+    {
+      "id": "mil_co_24m_multi_toy",
+      "category": "cognitive",
+      "originalDomain": "认知",
+      "title": "会把两个以上玩具组合起来玩",
+      "description": "会把两个以上玩具组合起来玩",
+      "assessmentAgeMonths": 24,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_24m_2026"
+      ]
+    },
+    {
+      "id": "mil_gr_24m_kicks_ball",
+      "category": "gross_motor",
+      "originalDomain": "大运动",
+      "title": "会踢球",
+      "description": "会踢球",
+      "assessmentAgeMonths": 24,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_24m_2026"
+      ]
+    },
+    {
+      "id": "mil_gr_24m_runs",
+      "category": "gross_motor",
+      "originalDomain": "大运动",
+      "title": "会跑",
+      "description": "会跑",
+      "assessmentAgeMonths": 24,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_24m_2026"
+      ]
+    },
+    {
+      "id": "mil_gr_24m_stairs",
+      "category": "gross_motor",
+      "originalDomain": "大运动",
+      "title": "会上楼梯，可扶物或由成人帮助",
+      "description": "会上楼梯，可扶物或由成人帮助",
+      "assessmentAgeMonths": 24,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_24m_2026"
+      ]
+    },
+    {
+      "id": "mil_fi_24m_spoon_eat",
+      "category": "fine_motor",
+      "originalDomain": "精细运动",
+      "title": "会用勺子吃饭",
+      "description": "会用勺子吃饭",
+      "assessmentAgeMonths": 24,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_24m_2026"
+      ]
+    },
+    {
+      "id": "mil_so_30m_next_to_children",
+      "category": "social_emotional",
+      "originalDomain": "社交/情绪",
+      "title": "会在其他孩子旁边玩，并有时一起玩",
+      "description": "会在其他孩子旁边玩，并有时一起玩",
+      "assessmentAgeMonths": 30,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_30m_2026"
+      ]
+    },
+    {
+      "id": "mil_so_30m_look_at_me",
+      "category": "social_emotional",
+      "originalDomain": "社交/情绪",
+      "title": "会用类似“看我”的表达吸引注意",
+      "description": "会用类似“看我”的表达吸引注意",
+      "assessmentAgeMonths": 30,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_30m_2026"
+      ]
+    },
+    {
+      "id": "mil_so_30m_routine",
+      "category": "social_emotional",
+      "originalDomain": "社交/情绪",
+      "title": "能遵循简单日常流程",
+      "description": "能遵循简单日常流程",
+      "assessmentAgeMonths": 30,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_30m_2026"
+      ]
+    },
+    {
+      "id": "mil_la_30m_about_50_words",
+      "category": "language",
+      "originalDomain": "语言/沟通",
+      "title": "大约会说50个词",
+      "description": "大约会说50个词",
+      "assessmentAgeMonths": 30,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_30m_2026"
+      ]
+    },
+    {
+      "id": "mil_la_30m_two_words_action",
+      "category": "language",
+      "originalDomain": "语言/沟通",
+      "title": "会说两个或更多词的短语，其中包含动作词",
+      "description": "会说两个或更多词的短语，其中包含动作词",
+      "assessmentAgeMonths": 30,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_30m_2026"
+      ]
+    },
+    {
+      "id": "mil_la_30m_names_book",
+      "category": "language",
+      "originalDomain": "语言/沟通",
+      "title": "会说出书中熟悉事物名称",
+      "description": "会说出书中熟悉事物名称",
+      "assessmentAgeMonths": 30,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_30m_2026"
+      ]
+    },
+    {
+      "id": "mil_la_30m_pronouns",
+      "category": "language",
+      "originalDomain": "语言/沟通",
+      "title": "会使用“我/你/我们”等代词",
+      "description": "会使用“我/你/我们”等代词",
+      "assessmentAgeMonths": 30,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_30m_2026"
+      ]
+    },
+    {
+      "id": "mil_co_30m_pretend_objects",
+      "category": "cognitive",
+      "originalDomain": "认知",
+      "title": "会把物品假装成别的东西使用",
+      "description": "会把物品假装成别的东西使用",
+      "assessmentAgeMonths": 30,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_30m_2026"
+      ]
+    },
+    {
+      "id": "mil_co_30m_simple_problem",
+      "category": "cognitive",
+      "originalDomain": "认知",
+      "title": "会解决简单问题",
+      "description": "会解决简单问题",
+      "assessmentAgeMonths": 30,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_30m_2026"
+      ]
+    },
+    {
+      "id": "mil_co_30m_two_step",
+      "category": "cognitive",
+      "originalDomain": "认知",
+      "title": "能执行两步指令",
+      "description": "能执行两步指令",
+      "assessmentAgeMonths": 30,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_30m_2026"
+      ]
+    },
+    {
+      "id": "mil_co_30m_one_color",
+      "category": "cognitive",
+      "originalDomain": "认知",
+      "title": "至少知道一种颜色",
+      "description": "至少知道一种颜色",
+      "assessmentAgeMonths": 30,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_30m_2026"
+      ]
+    },
+    {
+      "id": "mil_gr_30m_jumps_both",
+      "category": "gross_motor",
+      "originalDomain": "大运动",
+      "title": "能双脚同时离地跳",
+      "description": "能双脚同时离地跳",
+      "assessmentAgeMonths": 30,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_30m_2026"
+      ]
+    },
+    {
+      "id": "mil_fi_30m_twists",
+      "category": "fine_motor",
+      "originalDomain": "精细运动",
+      "title": "会旋转门把手或拧开松盖",
+      "description": "会旋转门把手或拧开松盖",
+      "assessmentAgeMonths": 30,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_30m_2026"
+      ]
+    },
+    {
+      "id": "mil_fi_30m_turns_pages",
+      "category": "fine_motor",
+      "originalDomain": "精细运动",
+      "title": "会一页一页翻书",
+      "description": "会一页一页翻书",
+      "assessmentAgeMonths": 30,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_30m_2026"
+      ]
+    },
+    {
+      "id": "mil_so_36m_calms_separation",
+      "category": "social_emotional",
+      "originalDomain": "社交/情绪",
+      "title": "照护者离开后通常能在约10分钟内平静下来",
+      "description": "照护者离开后通常能在约10分钟内平静下来",
+      "assessmentAgeMonths": 36,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_36m_2026"
+      ]
+    },
+    {
+      "id": "mil_so_36m_joins_play",
+      "category": "social_emotional",
+      "originalDomain": "社交/情绪",
+      "title": "会注意其他孩子并加入一起玩",
+      "description": "会注意其他孩子并加入一起玩",
+      "assessmentAgeMonths": 36,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_36m_2026"
+      ]
+    },
+    {
+      "id": "mil_la_36m_back_forth",
+      "category": "language",
+      "originalDomain": "语言/沟通",
+      "title": "能进行至少两轮来回对话",
+      "description": "能进行至少两轮来回对话",
+      "assessmentAgeMonths": 36,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_36m_2026"
+      ]
+    },
+    {
+      "id": "mil_la_36m_asks_questions",
+      "category": "language",
+      "originalDomain": "语言/沟通",
+      "title": "会问谁、什么、哪里、为什么等问题",
+      "description": "会问谁、什么、哪里、为什么等问题",
+      "assessmentAgeMonths": 36,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_36m_2026"
+      ]
+    },
+    {
+      "id": "mil_la_36m_picture_action",
+      "category": "language",
+      "originalDomain": "语言/沟通",
+      "title": "能说出图片中正在发生的动作",
+      "description": "能说出图片中正在发生的动作",
+      "assessmentAgeMonths": 36,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_36m_2026"
+      ]
+    },
+    {
+      "id": "mil_la_36m_first_name",
+      "category": "language",
+      "originalDomain": "语言/沟通",
+      "title": "会说自己的名字",
+      "description": "会说自己的名字",
+      "assessmentAgeMonths": 36,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_36m_2026"
+      ]
+    },
+    {
+      "id": "mil_la_36m_understood",
+      "category": "language",
+      "originalDomain": "语言/沟通",
+      "title": "大多数时候别人能听懂他说的话",
+      "description": "大多数时候别人能听懂他说的话",
+      "assessmentAgeMonths": 36,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_36m_2026"
+      ]
+    },
+    {
+      "id": "mil_co_36m_copies_circle",
+      "category": "cognitive",
+      "originalDomain": "认知",
+      "title": "示范后会画圆",
+      "description": "示范后会画圆",
+      "assessmentAgeMonths": 36,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_36m_2026"
+      ]
+    },
+    {
+      "id": "mil_co_36m_avoids_hot",
+      "category": "cognitive",
+      "originalDomain": "认知",
+      "title": "被提醒后会避开触碰热物",
+      "description": "被提醒后会避开触碰热物",
+      "assessmentAgeMonths": 36,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_36m_2026"
+      ]
+    },
+    {
+      "id": "mil_fi_36m_strings_large",
+      "category": "fine_motor",
+      "originalDomain": "精细运动",
+      "title": "会把大珠子或大号通心面等穿到绳上",
+      "description": "会把大珠子或大号通心面等穿到绳上",
+      "assessmentAgeMonths": 36,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_36m_2026"
+      ]
+    },
+    {
+      "id": "mil_fi_36m_puts_clothes",
+      "category": "fine_motor",
+      "originalDomain": "精细运动",
+      "title": "会穿上部分衣物",
+      "description": "会穿上部分衣物",
+      "assessmentAgeMonths": 36,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_36m_2026"
+      ]
+    },
+    {
+      "id": "mil_fi_36m_uses_fork",
+      "category": "fine_motor",
+      "originalDomain": "精细运动",
+      "title": "会使用叉子",
+      "description": "会使用叉子",
+      "assessmentAgeMonths": 36,
+      "ageRange": {
+        "earliestMonth": null,
+        "medianMonth": null,
+        "latestMonth": null
+      },
+      "criterion": {
+        "type": "by_age",
+        "threshold": "约75%或更多儿童",
+        "description": "CDC将该项列为多数儿童（75%或更多）在该年龄能够做到的里程碑。"
+      },
+      "observationMethod": "在日常互动、游戏或照护场景中直接观察；不替代标准化发育筛查。",
+      "requiresProfessionalAssessment": false,
+      "sourceSystem": "CDC Learn the Signs. Act Early.",
+      "sourceRefs": [
+        "src_cdc_milestone_36m_2026"
+      ]
+    }
+  ],
+  "developmentRedFlags": [
+    {
+      "id": "rf_3m_01",
+      "ageMonths": 3,
+      "category": "language",
+      "description": "对较大声音没有反应",
+      "recommendedAction": "如在对应筛查月龄出现预警征象，建议按国家规范咨询儿童保健/儿科专业人员并接受进一步复筛或评估。",
+      "urgency": "routine_evaluation",
+      "sourceRefs": [
+        "src_nhc_autism_2022",
+        "src_nhc_autism_warning_pdf"
+      ]
+    },
+    {
+      "id": "rf_3m_02",
+      "ageMonths": 3,
+      "category": "social_emotional",
+      "description": "逗引时不发音或不会微笑",
+      "recommendedAction": "如在对应筛查月龄出现预警征象，建议按国家规范咨询儿童保健/儿科专业人员并接受进一步复筛或评估。",
+      "urgency": "routine_evaluation",
+      "sourceRefs": [
+        "src_nhc_autism_2022",
+        "src_nhc_autism_warning_pdf"
+      ]
+    },
+    {
+      "id": "rf_3m_03",
+      "ageMonths": 3,
+      "category": "social_emotional",
+      "description": "不注视人脸，不追视移动的人或物",
+      "recommendedAction": "如在对应筛查月龄出现预警征象，建议按国家规范咨询儿童保健/儿科专业人员并接受进一步复筛或评估。",
+      "urgency": "routine_evaluation",
+      "sourceRefs": [
+        "src_nhc_autism_2022",
+        "src_nhc_autism_warning_pdf"
+      ]
+    },
+    {
+      "id": "rf_3m_04",
+      "ageMonths": 3,
+      "category": "gross_motor",
+      "description": "俯卧时不会抬头",
+      "recommendedAction": "如在对应筛查月龄出现预警征象，建议按国家规范咨询儿童保健/儿科专业人员并接受进一步复筛或评估。",
+      "urgency": "routine_evaluation",
+      "sourceRefs": [
+        "src_nhc_autism_2022",
+        "src_nhc_autism_warning_pdf"
+      ]
+    },
+    {
+      "id": "rf_6m_01",
+      "ageMonths": 6,
+      "category": "language",
+      "description": "发音少，不会笑出声",
+      "recommendedAction": "如在对应筛查月龄出现预警征象，建议按国家规范咨询儿童保健/儿科专业人员并接受进一步复筛或评估。",
+      "urgency": "routine_evaluation",
+      "sourceRefs": [
+        "src_nhc_autism_2022",
+        "src_nhc_autism_warning_pdf"
+      ]
+    },
+    {
+      "id": "rf_6m_02",
+      "ageMonths": 6,
+      "category": "fine_motor",
+      "description": "不会伸手抓物",
+      "recommendedAction": "如在对应筛查月龄出现预警征象，建议按国家规范咨询儿童保健/儿科专业人员并接受进一步复筛或评估。",
+      "urgency": "routine_evaluation",
+      "sourceRefs": [
+        "src_nhc_autism_2022",
+        "src_nhc_autism_warning_pdf"
+      ]
+    },
+    {
+      "id": "rf_6m_03",
+      "ageMonths": 6,
+      "category": "fine_motor",
+      "description": "双手紧握拳，难以张开",
+      "recommendedAction": "如在对应筛查月龄出现预警征象，建议按国家规范咨询儿童保健/儿科专业人员并接受进一步复筛或评估。",
+      "urgency": "routine_evaluation",
+      "sourceRefs": [
+        "src_nhc_autism_2022",
+        "src_nhc_autism_warning_pdf"
+      ]
+    },
+    {
+      "id": "rf_6m_04",
+      "ageMonths": 6,
+      "category": "gross_motor",
+      "description": "扶坐时坐不稳",
+      "recommendedAction": "如在对应筛查月龄出现预警征象，建议按国家规范咨询儿童保健/儿科专业人员并接受进一步复筛或评估。",
+      "urgency": "routine_evaluation",
+      "sourceRefs": [
+        "src_nhc_autism_2022",
+        "src_nhc_autism_warning_pdf"
+      ]
+    },
+    {
+      "id": "rf_8m_01",
+      "ageMonths": 8,
+      "category": "language",
+      "description": "听到声音无应答",
+      "recommendedAction": "如在对应筛查月龄出现预警征象，建议按国家规范咨询儿童保健/儿科专业人员并接受进一步复筛或评估。",
+      "urgency": "routine_evaluation",
+      "sourceRefs": [
+        "src_nhc_autism_2022",
+        "src_nhc_autism_warning_pdf"
+      ]
+    },
+    {
+      "id": "rf_8m_02",
+      "ageMonths": 8,
+      "category": "social_emotional",
+      "description": "不能区分熟人与陌生人",
+      "recommendedAction": "如在对应筛查月龄出现预警征象，建议按国家规范咨询儿童保健/儿科专业人员并接受进一步复筛或评估。",
+      "urgency": "routine_evaluation",
+      "sourceRefs": [
+        "src_nhc_autism_2022",
+        "src_nhc_autism_warning_pdf"
+      ]
+    },
+    {
+      "id": "rf_8m_03",
+      "ageMonths": 8,
+      "category": "fine_motor",
+      "description": "不会双手间传递玩具",
+      "recommendedAction": "如在对应筛查月龄出现预警征象，建议按国家规范咨询儿童保健/儿科专业人员并接受进一步复筛或评估。",
+      "urgency": "routine_evaluation",
+      "sourceRefs": [
+        "src_nhc_autism_2022",
+        "src_nhc_autism_warning_pdf"
+      ]
+    },
+    {
+      "id": "rf_8m_04",
+      "ageMonths": 8,
+      "category": "gross_motor",
+      "description": "不会独坐",
+      "recommendedAction": "如在对应筛查月龄出现预警征象，建议按国家规范咨询儿童保健/儿科专业人员并接受进一步复筛或评估。",
+      "urgency": "routine_evaluation",
+      "sourceRefs": [
+        "src_nhc_autism_2022",
+        "src_nhc_autism_warning_pdf"
+      ]
+    },
+    {
+      "id": "rf_12m_01",
+      "ageMonths": 12,
+      "category": "language",
+      "description": "呼唤名字无反应",
+      "recommendedAction": "如在对应筛查月龄出现预警征象，建议按国家规范咨询儿童保健/儿科专业人员并接受进一步复筛或评估。",
+      "urgency": "routine_evaluation",
+      "sourceRefs": [
+        "src_nhc_autism_2022",
+        "src_nhc_autism_warning_pdf"
+      ]
+    },
+    {
+      "id": "rf_12m_02",
+      "ageMonths": 12,
+      "category": "social_emotional",
+      "description": "不会模仿挥手表示再见等动作",
+      "recommendedAction": "如在对应筛查月龄出现预警征象，建议按国家规范咨询儿童保健/儿科专业人员并接受进一步复筛或评估。",
+      "urgency": "routine_evaluation",
+      "sourceRefs": [
+        "src_nhc_autism_2022",
+        "src_nhc_autism_warning_pdf"
+      ]
+    },
+    {
+      "id": "rf_12m_03",
+      "ageMonths": 12,
+      "category": "fine_motor",
+      "description": "不会用拇指和食指捏取小物品",
+      "recommendedAction": "如在对应筛查月龄出现预警征象，建议按国家规范咨询儿童保健/儿科专业人员并接受进一步复筛或评估。",
+      "urgency": "routine_evaluation",
+      "sourceRefs": [
+        "src_nhc_autism_2022",
+        "src_nhc_autism_warning_pdf"
+      ]
+    },
+    {
+      "id": "rf_12m_04",
+      "ageMonths": 12,
+      "category": "gross_motor",
+      "description": "不会扶物站立",
+      "recommendedAction": "如在对应筛查月龄出现预警征象，建议按国家规范咨询儿童保健/儿科专业人员并接受进一步复筛或评估。",
+      "urgency": "routine_evaluation",
+      "sourceRefs": [
+        "src_nhc_autism_2022",
+        "src_nhc_autism_warning_pdf"
+      ]
+    },
+    {
+      "id": "rf_18m_01",
+      "ageMonths": 18,
+      "category": "language",
+      "description": "不会有意识地叫爸爸或妈妈",
+      "recommendedAction": "如在对应筛查月龄出现预警征象，建议按国家规范咨询儿童保健/儿科专业人员并接受进一步复筛或评估。",
+      "urgency": "routine_evaluation",
+      "sourceRefs": [
+        "src_nhc_autism_2022",
+        "src_nhc_autism_warning_pdf"
+      ]
+    },
+    {
+      "id": "rf_18m_02",
+      "ageMonths": 18,
+      "category": "language",
+      "description": "不会按要求指人或物",
+      "recommendedAction": "如在对应筛查月龄出现预警征象，建议按国家规范咨询儿童保健/儿科专业人员并接受进一步复筛或评估。",
+      "urgency": "routine_evaluation",
+      "sourceRefs": [
+        "src_nhc_autism_2022",
+        "src_nhc_autism_warning_pdf"
+      ]
+    },
+    {
+      "id": "rf_18m_03",
+      "ageMonths": 18,
+      "category": "social_emotional",
+      "description": "与人没有目光对视",
+      "recommendedAction": "如在对应筛查月龄出现预警征象，建议按国家规范咨询儿童保健/儿科专业人员并接受进一步复筛或评估。",
+      "urgency": "routine_evaluation",
+      "sourceRefs": [
+        "src_nhc_autism_2022",
+        "src_nhc_autism_warning_pdf"
+      ]
+    },
+    {
+      "id": "rf_18m_04",
+      "ageMonths": 18,
+      "category": "gross_motor",
+      "description": "不会独走",
+      "recommendedAction": "如在对应筛查月龄出现预警征象，建议按国家规范咨询儿童保健/儿科专业人员并接受进一步复筛或评估。",
+      "urgency": "routine_evaluation",
+      "sourceRefs": [
+        "src_nhc_autism_2022",
+        "src_nhc_autism_warning_pdf"
+      ]
+    },
+    {
+      "id": "rf_24m_01",
+      "ageMonths": 24,
+      "category": "language",
+      "description": "不会说3个物品的名称",
+      "recommendedAction": "如在对应筛查月龄出现预警征象，建议按国家规范咨询儿童保健/儿科专业人员并接受进一步复筛或评估。",
+      "urgency": "routine_evaluation",
+      "sourceRefs": [
+        "src_nhc_autism_2022",
+        "src_nhc_autism_warning_pdf"
+      ]
+    },
+    {
+      "id": "rf_24m_02",
+      "ageMonths": 24,
+      "category": "cognitive",
+      "description": "不会按吩咐做简单事情",
+      "recommendedAction": "如在对应筛查月龄出现预警征象，建议按国家规范咨询儿童保健/儿科专业人员并接受进一步复筛或评估。",
+      "urgency": "routine_evaluation",
+      "sourceRefs": [
+        "src_nhc_autism_2022",
+        "src_nhc_autism_warning_pdf"
+      ]
+    },
+    {
+      "id": "rf_24m_03",
+      "ageMonths": 24,
+      "category": "fine_motor",
+      "description": "不会用勺吃饭",
+      "recommendedAction": "如在对应筛查月龄出现预警征象，建议按国家规范咨询儿童保健/儿科专业人员并接受进一步复筛或评估。",
+      "urgency": "routine_evaluation",
+      "sourceRefs": [
+        "src_nhc_autism_2022",
+        "src_nhc_autism_warning_pdf"
+      ]
+    },
+    {
+      "id": "rf_24m_04",
+      "ageMonths": 24,
+      "category": "gross_motor",
+      "description": "不会扶栏上楼梯或台阶",
+      "recommendedAction": "如在对应筛查月龄出现预警征象，建议按国家规范咨询儿童保健/儿科专业人员并接受进一步复筛或评估。",
+      "urgency": "routine_evaluation",
+      "sourceRefs": [
+        "src_nhc_autism_2022",
+        "src_nhc_autism_warning_pdf"
+      ]
+    },
+    {
+      "id": "rf_30m_01",
+      "ageMonths": 30,
+      "category": "language",
+      "description": "不会说2～3个字的短语",
+      "recommendedAction": "如在对应筛查月龄出现预警征象，建议按国家规范咨询儿童保健/儿科专业人员并接受进一步复筛或评估。",
+      "urgency": "routine_evaluation",
+      "sourceRefs": [
+        "src_nhc_autism_2022",
+        "src_nhc_autism_warning_pdf"
+      ]
+    },
+    {
+      "id": "rf_30m_02",
+      "ageMonths": 30,
+      "category": "social_emotional",
+      "description": "兴趣单一、刻板",
+      "recommendedAction": "如在对应筛查月龄出现预警征象，建议按国家规范咨询儿童保健/儿科专业人员并接受进一步复筛或评估。",
+      "urgency": "routine_evaluation",
+      "sourceRefs": [
+        "src_nhc_autism_2022",
+        "src_nhc_autism_warning_pdf"
+      ]
+    },
+    {
+      "id": "rf_30m_03",
+      "ageMonths": 30,
+      "category": "social_emotional",
+      "description": "不会示意大小便",
+      "recommendedAction": "如在对应筛查月龄出现预警征象，建议按国家规范咨询儿童保健/儿科专业人员并接受进一步复筛或评估。",
+      "urgency": "routine_evaluation",
+      "sourceRefs": [
+        "src_nhc_autism_2022",
+        "src_nhc_autism_warning_pdf"
+      ]
+    },
+    {
+      "id": "rf_30m_04",
+      "ageMonths": 30,
+      "category": "gross_motor",
+      "description": "不会跑",
+      "recommendedAction": "如在对应筛查月龄出现预警征象，建议按国家规范咨询儿童保健/儿科专业人员并接受进一步复筛或评估。",
+      "urgency": "routine_evaluation",
+      "sourceRefs": [
+        "src_nhc_autism_2022",
+        "src_nhc_autism_warning_pdf"
+      ]
+    },
+    {
+      "id": "rf_36m_01",
+      "ageMonths": 36,
+      "category": "language",
+      "description": "不会说自己的名字",
+      "recommendedAction": "如在对应筛查月龄出现预警征象，建议按国家规范咨询儿童保健/儿科专业人员并接受进一步复筛或评估。",
+      "urgency": "routine_evaluation",
+      "sourceRefs": [
+        "src_nhc_autism_2022",
+        "src_nhc_autism_warning_pdf"
+      ]
+    },
+    {
+      "id": "rf_36m_02",
+      "ageMonths": 36,
+      "category": "cognitive",
+      "description": "不会玩假装性游戏，例如用棍子假装骑马",
+      "recommendedAction": "如在对应筛查月龄出现预警征象，建议按国家规范咨询儿童保健/儿科专业人员并接受进一步复筛或评估。",
+      "urgency": "routine_evaluation",
+      "sourceRefs": [
+        "src_nhc_autism_2022",
+        "src_nhc_autism_warning_pdf"
+      ]
+    },
+    {
+      "id": "rf_36m_03",
+      "ageMonths": 36,
+      "category": "fine_motor",
+      "description": "不会模仿画圆",
+      "recommendedAction": "如在对应筛查月龄出现预警征象，建议按国家规范咨询儿童保健/儿科专业人员并接受进一步复筛或评估。",
+      "urgency": "routine_evaluation",
+      "sourceRefs": [
+        "src_nhc_autism_2022",
+        "src_nhc_autism_warning_pdf"
+      ]
+    },
+    {
+      "id": "rf_36m_04",
+      "ageMonths": 36,
+      "category": "gross_motor",
+      "description": "不会双脚跳",
+      "recommendedAction": "如在对应筛查月龄出现预警征象，建议按国家规范咨询儿童保健/儿科专业人员并接受进一步复筛或评估。",
+      "urgency": "routine_evaluation",
+      "sourceRefs": [
+        "src_nhc_autism_2022",
+        "src_nhc_autism_warning_pdf"
+      ]
+    }
+  ],
+  "conflicts": [],
+  "qa": {
+    "recordsWithNoSources": [],
+    "medicalRecordsWithOnlyLowQualitySources": [],
+    "conflictingRecords": [],
+    "fieldsInferredWithoutDirectEvidence": [],
+    "duplicateRecords": [],
+    "outdatedSources": [],
+    "potentiallyUnsafeAdvice": []
+  }
+}

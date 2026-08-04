@@ -22,6 +22,19 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { date, ageLabel, weightKg, heightCm, headCircumferenceCm, percentile } = body;
 
+    if (typeof date !== "string" || date.trim() === "") {
+      return NextResponse.json(
+        { error: "date 必填且不能为空" },
+        { status: 400 }
+      );
+    }
+    if (typeof ageLabel !== "string" || ageLabel.trim() === "") {
+      return NextResponse.json(
+        { error: "ageLabel 必填且不能为空" },
+        { status: 400 }
+      );
+    }
+
     const measurement = await prisma.growthMeasurement.create({
       data: {
         date,

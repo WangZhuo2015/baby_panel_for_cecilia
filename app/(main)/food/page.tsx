@@ -5,7 +5,8 @@ import { CuteCard } from '@/components/ui/CuteCard';
 import { CuteButton } from '@/components/ui/CuteButton';
 import { SegmentControl } from '@/components/ui/SegmentControl';
 import { useBabyStore } from '@/stores/useBabyStore';
-import { calculateAge } from '@/data/mockBaby';
+import { calculateAge } from '@/lib/age';
+import { getLocalDateStr } from '@/lib/date';
 
 function generateWeeklyDates() {
   const weekdays = ['日', '一', '二', '三', '四', '五', '六'];
@@ -13,7 +14,7 @@ function generateWeeklyDates() {
   return Array.from({ length: 7 }, (_, i) => {
     const d = new Date(today);
     d.setDate(today.getDate() - 3 + i);
-    const dateStr = d.toISOString().split('T')[0];
+    const dateStr = getLocalDateStr(d);
     return {
       date: dateStr,
       day: d.getDate(),

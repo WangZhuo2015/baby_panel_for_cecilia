@@ -1,10 +1,10 @@
 "use client";
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus, Baby, TrendingUp } from 'lucide-react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
+import { Plus, Baby } from 'lucide-react';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { useBabyStore } from '@/stores/useBabyStore';
-import { calculateAge } from '@/data/mockBaby';
+import { calculateAge } from '@/lib/age';
 import { SegmentControl } from '@/components/ui/SegmentControl';
 import { CuteCard } from '@/components/ui/CuteCard';
 
@@ -41,39 +41,41 @@ export default function GrowthPage() {
     { value: 'bmi', label: 'BMI' },
   ];
 
+  const tabPercentileKey: Record<GrowthTab, string> = {
+    weight: 'weight',
+    height: 'height',
+    head: 'headCircumference',
+    bmi: 'bmi',
+  };
+
+  const percentiles = whoPercentiles[tabPercentileKey[activeTab]];
+
   // Build chart data with percentile lines
   const chartData = monthLabels.map((month, i) => {
     const point: Record<string, number | string> = { month: `${month}月` };
-    if (i < whoPercentiles.weight.P97.length) {
-      point.P97 = whoPercentiles.weight.P97[i];
-      point.P85 = whoPercentiles.weight.P85[i];
-      point.P50 = whoPercentiles.weight.P50[i];
-      point.P15 = whoPercentiles.weight.P15[i];
-      point.P3 = whoPercentiles.weight.P3[i];
+    if (percentiles?.P97 && i < percentiles.P97.length) {
+      point.P97 = percentiles.P97[i];
+      point.P85 = percentiles.P85[i];
+      point.P50 = percentiles.P50[i];
+      point.P15 = percentiles.P15[i];
+      point.P3 = percentiles.P3[i];
     }
     // Add baby's data point
     const babyData = measurements.find((m) => Math.abs(m.ageInMonths - month) < 0.6);
-    if (babyData && babyData.weightKg !== undefined) {
-      point.baby = babyData.weightKg;
+    if (babyData) {
+      if (activeTab === 'weight' && babyData.weightKg !== undefined) {
+        point.baby = babyData.weightKg;
+      } else if (activeTab === 'height' && babyData.heightCm !== undefined) {
+        point.baby = babyData.heightCm;
+      } else if (activeTab === 'head' && babyData.headCircumferenceCm !== undefined) {
+        point.baby = babyData.headCircumferenceCm;
+      } else if (activeTab === 'bmi' && babyData.weightKg !== undefined && babyData.heightCm !== undefined) {
+        const h = babyData.heightCm / 100;
+        point.baby = Number((babyData.weightKg / (h * h)).toFixed(2));
+      }
     }
     return point;
   });
-
-  const getValue = (tab: GrowthTab) => {
-    if (!latest) return '--';
-    switch (tab) {
-      case 'weight': return `${latest.weightKg ?? '--'} kg`;
-      case 'height': return `${latest.heightCm ?? '--'} cm`;
-      case 'head': return `${latest.headCircumferenceCm ?? '--'} cm`;
-      case 'bmi': {
-        if (latest.weightKg && latest.heightCm) {
-          const h = latest.heightCm / 100;
-          return (latest.weightKg / (h * h)).toFixed(1);
-        }
-        return '--';
-      }
-    }
-  };
 
   return (
     <div className="px-4 pt-12 pb-4">

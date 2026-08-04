@@ -40,10 +40,19 @@ export default function SleepRecordPage() {
   }, [startTime, endTime]);
 
   const onSubmit = (data: SleepFormData) => {
-    const today = new Date().toISOString().split('T')[0];
+    const [sh, sm] = startTime.split(':').map(Number);
+    const [eh, em] = endTime.split(':').map(Number);
+    const startMins = sh * 60 + sm;
+    let endMins = eh * 60 + em;
+    if (endMins < startMins) endMins += 24 * 60; // sleep across midnight
+
+    const now = new Date();
+    const startLocal = new Date(now.getFullYear(), now.getMonth(), now.getDate(), sh, sm);
+    const endLocal = new Date(startLocal.getTime() + (endMins - startMins) * 60000);
+
     addSleepRecord({
-      startTime: `${today}T${startTime}:00`,
-      endTime: `${today}T${endTime}:00`,
+      startTime: startLocal.toISOString(),
+      endTime: endLocal.toISOString(),
       type: sleepType,
       nightWakingCount: nightWaking,
       notes: data.notes || undefined,

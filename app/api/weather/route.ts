@@ -52,8 +52,10 @@ function getAirQualityLevel(aqi: number): string {
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-    const lat = parseFloat(searchParams.get("lat") ?? String(LAT));
-    const lon = parseFloat(searchParams.get("lon") ?? String(LON));
+    const latParam = parseFloat(searchParams.get("lat") ?? "");
+    const lonParam = parseFloat(searchParams.get("lon") ?? "");
+    const lat = Number.isFinite(latParam) ? latParam : LAT;
+    const lon = Number.isFinite(lonParam) ? lonParam : LON;
 
     // Fetch weather from Open-Meteo (free, no API key needed)
     const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,weather_code&hourly=temperature_2m,weather_code&daily=uv_index_max,precipitation_probability_max&timezone=Asia%2FShanghai&forecast_days=1`;
@@ -66,8 +68,15 @@ export async function GET(request: Request) {
       fetch(airUrl, { next: { revalidate: 600 } }),
     ]);
 
+    if (!weatherRes.ok) {
+      throw new Error(`Open-Meteo weather responded with ${weatherRes.status}`);
+    }
+
     const weatherData = await weatherRes.json();
-    const airData = await airRes.json();
+    const airData = airRes.ok ? await airRes.json() : {};
+    if (!weatherData.current || !weatherData.daily || !weatherData.hourly) {
+      throw new Error("Open-Meteo response is missing current/daily/hourly data");
+    }
 
     const current = weatherData.current;
     const daily = weatherData.daily;
@@ -78,8 +87,14 @@ export async function GET(request: Request) {
     const uv = Math.round(daily.uv_index_max?.[0] ?? 0);
     const rainProb = daily.precipitation_probability_max?.[0] ?? 0;
 
-    // Build hourly forecast for next 8 hours
-    const currentHour = new Date().getHours();
+    // Build hourly forecast for next 8 hours (Asia/Shanghai local hour)
+    const hourPart = new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Asia/Shanghai",
+      hour: "2-digit",
+      hour12: false,
+    }).formatToParts(new Date()).find((p) => p.type === "hour")?.value;
+    let currentHour = hourPart ? parseInt(hourPart, 10) : 0;
+    if (currentHour === 24) currentHour = 0; // en-GB renders midnight as "24"
     const hourlyForecast = [];
     for (let i = 0; i < 8; i++) {
       const idx = currentHour + i;
@@ -87,7 +102,7 @@ export async function GET(request: Request) {
         const hourCode = hourly.weather_code[idx];
         const hourInfo = WMO_CODE_MAP[hourCode] ?? { condition: "未知", icon: "❓" };
         hourlyForecast.push({
-          time: `${String(idx).padStart(2, "0")}:00`,
+          time: `${String(idx % 24).padStart(2, "0")}:00`,
           temperature: Math.round(hourly.temperature_2m[idx]),
           condition: hourInfo.icon,
         });

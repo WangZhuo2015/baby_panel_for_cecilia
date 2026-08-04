@@ -5,6 +5,7 @@ export interface Baby {
   gender: 'female' | 'male';
   birthDate: string; // ISO date
   avatarUrl?: string;
+  gestationalAge?: number; // weeks at birth, for preterm correction
 }
 
 // ===== Record Types =====
@@ -18,9 +19,7 @@ export interface FeedingRecord {
   id: string;
   timestamp: string;
   type: FeedingType;
-  // Formula
   amountMl?: number;
-  // Breast
   leftMinutes?: number;
   rightMinutes?: number;
   spitUp: boolean;
@@ -58,17 +57,46 @@ export interface GrowthMeasurement {
 }
 
 // ===== Food Types =====
-export type FoodAcceptance = 'loved' | 'liked' | 'neutral' | 'disliked' | 'rejected';
 export type FoodStatus = 'tried' | 'to_try';
 
 export interface FoodItem {
   id: string;
+  foodId: string;
   name: string;
   icon: string;
+  category: string;
+  foodGroup?: string;
   firstAddedDate?: string;
-  acceptance: number; // 1-5
+  acceptance: number;
   status: FoodStatus;
-  category?: string;
+  recommendedFromMonth?: number | null;
+  recommendedToMonth?: number | null;
+  exactMonthEvidence: boolean;
+  guidance?: string;
+  isCommonAllergen?: boolean | null;
+  allergenIntroductionGuidance?: string | null;
+  highRiskInfantNeedsMedicalAdvice?: boolean | null;
+  chokingRisk: boolean;
+  chokingNotes?: string | null;
+  preparation: string[];
+  avoidBeforeMonths?: number | null;
+  nutrition: string[];
+  textureByAge: Array<{ ageMinMonths: number; ageMaxMonths: number; texture: string }>;
+  notes?: string | null;
+  sourceRefs: string[];
+}
+
+export interface FeedingGuideline {
+  id: string;
+  ageMinMonths: number;
+  ageMaxMonths: number;
+  mealFrequency?: string | null;
+  milkGuidance?: string | null;
+  texture: string[];
+  foodDiversity: string[];
+  responsiveFeeding: string[];
+  safety: string[];
+  sourceRefs: string[];
 }
 
 export interface FoodPlan {
@@ -87,45 +115,203 @@ export interface FoodLogRecord {
   time: string;
   foods: string[];
   portion: 'little' | 'half' | 'most' | 'all';
-  acceptance: number; // 1-5
+  acceptance: number;
   babyState: 'happy' | 'neutral' | 'rejected';
   hasAbnormal: boolean;
   abnormalNotes?: string;
 }
 
 // ===== Development Types =====
-export type DevelopmentCategory = 'gross_motor' | 'cognitive' | 'language' | 'fine_motor';
+export type DevelopmentCategory = 'gross_motor' | 'cognitive' | 'language' | 'fine_motor' | 'social_emotional';
 
 export interface DevelopmentMilestone {
   id: string;
+  milestoneId: string;
   category: DevelopmentCategory;
-  month: number;
+  originalDomain?: string;
   title: string;
   description: string;
-  status: 'achieved' | 'practicing' | 'upcoming';
+  assessmentAgeMonths: number;
+  ageRangeEarliestMonth?: number | null;
+  ageRangeMedianMonth?: number | null;
+  ageRangeLatestMonth?: number | null;
+  criterionType?: string;
+  criterionThreshold?: string;
+  criterionDescription?: string;
+  observationMethod?: string;
+  requiresProfessionalAssessment: boolean;
+  sourceSystem?: string;
+  sourceRefs: string[];
+}
+
+export interface DevelopmentWarningSign {
+  id: string;
+  warningSignId: string;
+  ageMonths: number;
+  category: string;
+  description: string;
+  recommendedAction: string;
+  urgency: string;
+  sourceRefs: string[];
 }
 
 export interface ActivityRecommendation {
   id: string;
+  activityId: string;
   title: string;
-  tag: string;
+  categories: string[];
+  ageMinMonths?: number | null;
+  ageMaxMonths?: number | null;
+  developmentGoals: string[];
   materials: string[];
-  steps: string[];
+  steps: Array<{ order: number; instruction: string }>;
+  targetMonthMin?: number | null;
+  targetMonthMax?: number | null;
+  goal?: string;
+  durationMinutes?: number | null;
+  frequency?: string | null;
+  difficulty?: string;
+  supervision?: string;
+  safety: string[];
+  stopConditions: string[];
+  evidenceType?: string;
+  medicalTreatment: boolean;
+  notes?: string | null;
+  sourceRefs: string[];
 }
 
 // ===== Book Types =====
 export interface Book {
   id: string;
+  bookId: string;
   title: string;
-  author: string;
-  rating: number;
+  originalTitle?: string;
+  author: string[];
+  illustrator?: string[];
+  translator?: string[];
+  publisher?: string;
+  isbn?: string;
+  editionYear?: number;
+  language?: string;
+  origin?: string;
+  ageMinMonths?: number | null;
+  ageMaxMonths?: number | null;
+  categories: string[];
+  bookFormat?: string;
+  description?: string;
+  interactionSuggestions?: string[];
+  whyAgeAppropriate?: string;
   readCount: number;
   isFavorite: boolean;
-  coverColor: string;
-  ageRange: string;
+  ratingScore?: number | null;
+  ratingCount?: number | null;
+  ratingSource?: string | null;
+  ratingRetrievedDate?: string | null;
+  coverColor?: string | null;
+  sourceRefs: string[];
 }
 
 // ===== Vaccine Types =====
+export type ProgramType = 'national_immunization_program' | 'non_program' | 'provincial_immunization_program';
+
+export interface VaccineDose {
+  id: string;
+  doseNumber: number;
+  doseLabel: string;
+  recommendedAgeMonths?: number | null;
+  minimumAgeDays?: number | null;
+  maximumAgeDays?: number | null;
+  recommendedAgeMaxMonths?: number | null;
+  minimumIntervalDaysFromPrevious?: number | null;
+  maximumIntervalDaysFromPrevious?: number | null;
+  route?: string;
+  site?: string;
+  doseVolumeMl?: number;
+  notes?: string;
+  sourceRefs: string[];
+}
+
+export interface Vaccine {
+  id: string;
+  vaccineId: string;
+  name: string;
+  shortName: string;
+  englishName?: string;
+  programType: ProgramType;
+  legacyLabel?: string;
+  sexRestriction: string;
+  chinaNational: boolean;
+  diseases: string[];
+  targetPopulation?: string;
+  policyEffectiveDate?: string;
+  policyVersion?: string;
+  routineHealthyChildOption: boolean;
+  manualReviewRequired: boolean;
+  marketStatus?: string;
+  productBrandName?: string;
+  productManufacturer?: string;
+  productApprovalNumber?: string;
+  jiangsuNotes?: string;
+  suzhouNotes?: string;
+  catchUpSupported: boolean;
+  catchUpRules: string[];
+  simultaneousVaccination?: string;
+  substitutionRules: string[];
+  contraindications: string[];
+  precautions: string[];
+  specialPopulations: string[];
+  regionalOverrides: RegionalOverride[];
+  regimenOptions: any[];
+  sourceRefsJson: string[];
+  doses: VaccineDose[];
+  // Applied after regional override
+  feeType?: string;
+  regionalOverride?: RegionalOverride;
+}
+
+export interface RegionalOverride {
+  regionCode: string;
+  regionName: string;
+  programType: string;
+  feeType: string;
+  effectiveDate: string;
+  sourceRefs: string[];
+}
+
+export interface VaccineStrategyGroup {
+  id: string;
+  strategyId: string;
+  name: string;
+  scope?: string;
+  baseProgram?: string;
+  optionsJson: any[];
+  sourceRefsJson: string[];
+}
+
+export interface VaccineScheduleEntry {
+  id: string;
+  ageMonths?: number;
+  ageDays?: number;
+  ageLabel?: string;
+  vaccineId: string;
+  doseNumber: number;
+  priority: string;
+  isOptional: boolean;
+  action?: string;
+  selectionGroup?: string;
+  notes?: string;
+  sourceRefs: string[];
+}
+
+export interface ScheduleEngineRule {
+  id: string;
+  ruleId: string;
+  type: string;
+  vaccineIds: string[];
+  description: string;
+  sourceRefs: string[];
+}
+
 export interface VaccineRecord {
   id: string;
   name: string;
@@ -134,6 +320,28 @@ export interface VaccineRecord {
   completedDate?: string;
   isCompleted: boolean;
   countdownDays?: number;
+}
+
+// ===== Data Version Types =====
+export interface DataRelease {
+  id: string;
+  title: string;
+  asOf: string;
+  sources: SourceRef[];
+}
+
+export interface SourceRef {
+  id: string;
+  sourceId: string;
+  title: string;
+  organization: string;
+  year?: number;
+  publicationDate?: string;
+  url?: string;
+  sourceLevel?: string;
+  sourceType?: string;
+  accessedDate?: string;
+  notes?: string;
 }
 
 // ===== Weather Types =====

@@ -22,6 +22,19 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { startTime, endTime, type, nightWakingCount, notes } = body;
 
+    if (typeof startTime !== "string" || startTime.trim() === "") {
+      return NextResponse.json(
+        { error: "startTime 必填且不能为空" },
+        { status: 400 }
+      );
+    }
+    if (typeof endTime !== "string" || endTime.trim() === "") {
+      return NextResponse.json(
+        { error: "endTime 必填且不能为空" },
+        { status: 400 }
+      );
+    }
+
     const record = await prisma.sleepRecord.create({
       data: {
         startTime,

@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Sun, Droplets, Wind, Thermometer, CloudSun, TreePine } from 'lucide-react';
 import { AppHeader } from '@/components/ui/AppHeader';
 import { CuteCard } from '@/components/ui/CuteCard';
@@ -25,12 +25,29 @@ const checklistItems = [
 
 export default function WeatherPage() {
   const [checkedItems, setCheckedItems] = useState<Record<string, boolean>>({});
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const weather = useBabyStore((s) => s.weather);
   const fetchWeather = useBabyStore((s) => s.fetchWeather);
 
-  useEffect(() => {
-    fetchWeather();
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      await fetchWeather();
+      if (!useBabyStore.getState().weather) {
+        setError('天气数据加载失败，请稍后重试');
+      }
+    } catch {
+      setError('天气数据加载失败，请稍后重试');
+    } finally {
+      setLoading(false);
+    }
   }, [fetchWeather]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
 
   const toggleItem = (id: string) => {
     setCheckedItems((prev) => ({ ...prev, [id]: !prev[id] }));
@@ -58,7 +75,29 @@ export default function WeatherPage() {
       {/* Header */}
       <AppHeader title="天气详情" showBack />
 
-      {/* Main weather display */}
+      {loading ? (
+        <div className="flex items-center justify-center py-24">
+          <div className="text-center">
+            <div className="w-10 h-10 border-4 border-pink-200 border-t-pink-500 rounded-full animate-spin mx-auto mb-3" />
+            <p className="text-sm text-gray-400">正在加载天气...</p>
+          </div>
+        </div>
+      ) : error || !weather ? (
+        <div className="flex items-center justify-center py-20 px-4">
+          <div className="bg-red-50 border border-red-200 rounded-2xl p-6 text-center max-w-sm w-full">
+            <p className="text-red-600 font-medium mb-2">天气数据加载失败</p>
+            <p className="text-red-400 text-sm mb-4">{error ?? '请稍后重试'}</p>
+            <button
+              onClick={load}
+              className="px-5 py-2 rounded-full bg-primary text-white text-sm font-medium shadow-button btn-press"
+            >
+              重试
+            </button>
+          </div>
+        </div>
+      ) : (
+        <>
+        {/* Main weather display */}
       <div className="mt-4 mb-5 text-center">
         {/* City */}
         <p className="text-sm text-text-muted mb-2">{weatherData.city}</p>
@@ -189,6 +228,8 @@ export default function WeatherPage() {
           </div>
         </CuteCard>
       </div>
+        </>
+      )}
     </div>
   );
 }

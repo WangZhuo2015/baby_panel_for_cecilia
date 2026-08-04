@@ -1,0 +1,1290 @@
+{
+  "datasetMeta": {
+    "scope": "6–24月龄",
+    "asOf": "2026-08-03",
+    "evidenceConflict": true
+  },
+  "foodItems": [
+    {
+      "id": "food_iron_cereal",
+      "name": "强化铁婴儿谷物",
+      "icon": "🥣",
+      "category": "grain",
+      "foodGroup": "grain",
+      "introduction": {
+        "recommendedFromMonth": 6,
+        "recommendedToMonth": null,
+        "exactMonthEvidence": false,
+        "guidance": "约6月龄开始辅食时，可优先选择富铁的泥糊状食物；具体品牌和添加量按产品标签及个体情况。"
+      },
+      "allergen": {
+        "isCommonAllergen": false,
+        "introductionGuidance": null,
+        "highRiskInfantNeedsMedicalAdvice": false
+      },
+      "nutrition": [
+        "铁"
+      ],
+      "textureByAge": [
+        {
+          "ageMinMonths": 6,
+          "ageMaxMonths": 8,
+          "texture": "泥糊/细腻糊状；随吞咽能力逐步增稠。"
+        }
+      ],
+      "chokingRisk": false,
+      "chokingNotes": null,
+      "avoidBeforeMonths": null,
+      "preparation": [
+        "按说明冲调至适合吞咽的细腻质地，逐步增加稠度。"
+      ],
+      "notes": null,
+      "sourceRefs": [
+        "src_nhc_feeding_2022",
+        "src_cdc_food_intro_2026"
+      ]
+    },
+    {
+      "id": "food_egg",
+      "name": "鸡蛋",
+      "icon": "🥚",
+      "category": "protein",
+      "foodGroup": "egg",
+      "introduction": {
+        "recommendedFromMonth": 6,
+        "recommendedToMonth": null,
+        "exactMonthEvidence": false,
+        "guidance": "可在开始辅食后作为多样化食物之一引入；没有可靠依据支持把蛋白统一推迟到1岁以后。"
+      },
+      "allergen": {
+        "isCommonAllergen": true,
+        "introductionGuidance": "作为常见过敏原，可在其他辅食开始时一并按一次一种新食物的方法引入并观察反应。",
+        "highRiskInfantNeedsMedicalAdvice": true
+      },
+      "nutrition": [
+        "蛋白质"
+      ],
+      "textureByAge": [],
+      "chokingRisk": false,
+      "chokingNotes": null,
+      "avoidBeforeMonths": null,
+      "preparation": [
+        "充分加热至全熟；按进食能力压碎、切碎或制成软嫩质地。"
+      ],
+      "notes": "高过敏风险婴儿如既往有严重湿疹、明确食物过敏或其他临床高风险情况，应先咨询专业人员。",
+      "sourceRefs": [
+        "src_cdc_food_intro_2026",
+        "src_nhc_feeding_2022"
+      ]
+    },
+    {
+      "id": "food_pork",
+      "name": "猪肉",
+      "icon": "🥩",
+      "category": "protein",
+      "foodGroup": "meat",
+      "introduction": {
+        "recommendedFromMonth": 6,
+        "recommendedToMonth": null,
+        "exactMonthEvidence": false,
+        "guidance": "开始辅食后应逐步加入富铁动物性食物；肉类可作为铁的重要来源。"
+      },
+      "allergen": {
+        "isCommonAllergen": false,
+        "introductionGuidance": null,
+        "highRiskInfantNeedsMedicalAdvice": false
+      },
+      "nutrition": [
+        "铁",
+        "蛋白质"
+      ],
+      "textureByAge": [
+        {
+          "ageMinMonths": 6,
+          "ageMaxMonths": 8,
+          "texture": "细腻肉泥或充分研碎的肉末"
+        },
+        {
+          "ageMinMonths": 9,
+          "ageMaxMonths": 24,
+          "texture": "逐步过渡为细碎、软嫩、适合咀嚼的小块"
+        }
+      ],
+      "chokingRisk": false,
+      "chokingNotes": null,
+      "avoidBeforeMonths": null,
+      "preparation": [
+        "彻底煮熟，去骨、去筋膜和大块脂肪，按发育水平制成肉泥、肉末或软小块。"
+      ],
+      "notes": null,
+      "sourceRefs": [
+        "src_nhc_feeding_2022",
+        "src_wst678_2020",
+        "src_nhc_feeding_assessment_2025"
+      ]
+    },
+    {
+      "id": "food_beef",
+      "name": "牛肉",
+      "icon": "🥩",
+      "category": "protein",
+      "foodGroup": "meat",
+      "introduction": {
+        "recommendedFromMonth": 6,
+        "recommendedToMonth": null,
+        "exactMonthEvidence": false,
+        "guidance": "开始辅食后可逐步加入富铁动物性食物。"
+      },
+      "allergen": {
+        "isCommonAllergen": false,
+        "introductionGuidance": null,
+        "highRiskInfantNeedsMedicalAdvice": false
+      },
+      "nutrition": [
+        "铁",
+        "蛋白质"
+      ],
+      "textureByAge": [],
+      "chokingRisk": false,
+      "chokingNotes": null,
+      "avoidBeforeMonths": null,
+      "preparation": [
+        "彻底煮熟，去筋后制成细泥/肉末，避免韧而大的肉块。"
+      ],
+      "notes": null,
+      "sourceRefs": [
+        "src_nhc_feeding_2022",
+        "src_wst678_2020",
+        "src_nhc_feeding_assessment_2025"
+      ]
+    },
+    {
+      "id": "food_chicken",
+      "name": "鸡肉",
+      "icon": "🍗",
+      "category": "protein",
+      "foodGroup": "poultry",
+      "introduction": {
+        "recommendedFromMonth": 6,
+        "recommendedToMonth": null,
+        "exactMonthEvidence": false,
+        "guidance": "开始辅食后可作为动物性食物逐步引入。"
+      },
+      "allergen": {
+        "isCommonAllergen": false,
+        "introductionGuidance": null,
+        "highRiskInfantNeedsMedicalAdvice": false
+      },
+      "nutrition": [
+        "蛋白质"
+      ],
+      "textureByAge": [],
+      "chokingRisk": false,
+      "chokingNotes": null,
+      "avoidBeforeMonths": null,
+      "preparation": [
+        "彻底煮熟，去皮去骨，切碎或研磨至适龄质地。"
+      ],
+      "notes": null,
+      "sourceRefs": [
+        "src_nhc_feeding_2022",
+        "src_wst678_2020",
+        "src_nhc_feeding_assessment_2025"
+      ]
+    },
+    {
+      "id": "food_liver",
+      "name": "动物肝脏",
+      "icon": "🫀",
+      "category": "protein",
+      "foodGroup": "organ_meat",
+      "introduction": {
+        "recommendedFromMonth": 6,
+        "recommendedToMonth": null,
+        "exactMonthEvidence": false,
+        "guidance": "国家喂养评估指南强调每天安排富铁动物性食物；动物内脏属于动物性食物来源之一。具体频次和份量本数据库不在缺乏直接依据时推算。"
+      },
+      "allergen": {
+        "isCommonAllergen": false,
+        "introductionGuidance": null,
+        "highRiskInfantNeedsMedicalAdvice": false
+      },
+      "nutrition": [
+        "铁"
+      ],
+      "textureByAge": [],
+      "chokingRisk": false,
+      "chokingNotes": null,
+      "avoidBeforeMonths": null,
+      "preparation": [
+        "彻底煮熟并加工为细腻、易吞咽的质地。"
+      ],
+      "notes": null,
+      "sourceRefs": [
+        "src_nhc_feeding_2022",
+        "src_wst678_2020",
+        "src_nhc_feeding_assessment_2025"
+      ]
+    },
+    {
+      "id": "food_salmon",
+      "name": "三文鱼",
+      "icon": "🐟",
+      "category": "protein",
+      "foodGroup": "fish",
+      "introduction": {
+        "recommendedFromMonth": 6,
+        "recommendedToMonth": null,
+        "exactMonthEvidence": false,
+        "guidance": "鱼类可作为动物性食物逐步引入；选择低汞鱼类更有利于控制汞暴露。"
+      },
+      "allergen": {
+        "isCommonAllergen": true,
+        "introductionGuidance": "鱼类属于常见食物过敏原之一；一次引入一种新食物并观察反应。",
+        "highRiskInfantNeedsMedicalAdvice": true
+      },
+      "nutrition": [
+        "蛋白质"
+      ],
+      "textureByAge": [],
+      "chokingRisk": true,
+      "chokingNotes": "鱼刺可造成窒息/损伤风险；必须彻底去刺。",
+      "avoidBeforeMonths": null,
+      "preparation": [
+        "彻底加热，仔细去除鱼刺、皮和骨，压碎成适龄质地。"
+      ],
+      "notes": null,
+      "sourceRefs": [
+        "src_nhc_feeding_2022",
+        "src_cdc_food_avoid_2026",
+        "src_cdc_choking_2026"
+      ]
+    },
+    {
+      "id": "food_shrimp",
+      "name": "虾",
+      "icon": "🦐",
+      "category": "protein",
+      "foodGroup": "shellfish",
+      "introduction": {
+        "recommendedFromMonth": 6,
+        "recommendedToMonth": null,
+        "exactMonthEvidence": false,
+        "guidance": "可在开始辅食后作为多样化动物性食物之一引入。"
+      },
+      "allergen": {
+        "isCommonAllergen": true,
+        "introductionGuidance": "甲壳类水产属于常见食物过敏原；按一次一种新食物方法引入并观察。",
+        "highRiskInfantNeedsMedicalAdvice": true
+      },
+      "nutrition": [
+        "蛋白质"
+      ],
+      "textureByAge": [],
+      "chokingRisk": false,
+      "chokingNotes": null,
+      "avoidBeforeMonths": null,
+      "preparation": [
+        "彻底加热，去壳去硬质部分，剁碎至适龄质地。"
+      ],
+      "notes": null,
+      "sourceRefs": [
+        "src_cdc_food_intro_2026",
+        "src_nhc_feeding_2022"
+      ]
+    },
+    {
+      "id": "food_tofu",
+      "name": "豆腐",
+      "icon": "◻️",
+      "category": "protein",
+      "foodGroup": "legume",
+      "introduction": {
+        "recommendedFromMonth": 6,
+        "recommendedToMonth": null,
+        "exactMonthEvidence": false,
+        "guidance": "豆类/豆制品可作为食物多样性的一部分逐步引入。"
+      },
+      "allergen": {
+        "isCommonAllergen": null,
+        "introductionGuidance": null,
+        "highRiskInfantNeedsMedicalAdvice": null
+      },
+      "nutrition": [
+        "蛋白质"
+      ],
+      "textureByAge": [],
+      "chokingRisk": false,
+      "chokingNotes": null,
+      "avoidBeforeMonths": null,
+      "preparation": [
+        "选择新鲜、充分加热的软豆腐，压碎或切成适龄软小块。"
+      ],
+      "notes": null,
+      "sourceRefs": [
+        "src_nhc_feeding_2022",
+        "src_wst678_2020",
+        "src_nhc_feeding_assessment_2025"
+      ]
+    },
+    {
+      "id": "food_peanut_butter_thin",
+      "name": "稀释花生酱",
+      "icon": "🥜",
+      "category": "protein",
+      "foodGroup": "nut",
+      "introduction": {
+        "recommendedFromMonth": 6,
+        "recommendedToMonth": null,
+        "exactMonthEvidence": false,
+        "guidance": "坚果类应以不会形成硬块或黏团的安全形式提供；不能给婴幼儿整颗或碎坚果。"
+      },
+      "allergen": {
+        "isCommonAllergen": true,
+        "introductionGuidance": "花生属于常见过敏原；高风险婴儿应先咨询医疗专业人员。",
+        "highRiskInfantNeedsMedicalAdvice": true
+      },
+      "nutrition": [
+        "蛋白质"
+      ],
+      "textureByAge": [],
+      "chokingRisk": false,
+      "chokingNotes": "大勺黏稠坚果酱以及整颗/碎坚果均是噎食风险；应稀释或薄涂。",
+      "avoidBeforeMonths": null,
+      "preparation": [
+        "将无颗粒花生酱稀释成不黏口的薄糊，或薄薄涂在适龄软食物上。"
+      ],
+      "notes": null,
+      "sourceRefs": [
+        "src_cdc_food_intro_2026",
+        "src_cdc_choking_2026"
+      ]
+    },
+    {
+      "id": "food_whole_nuts",
+      "name": "整颗坚果",
+      "icon": "🥜",
+      "category": "protein",
+      "foodGroup": "nut",
+      "introduction": {
+        "recommendedFromMonth": null,
+        "recommendedToMonth": null,
+        "exactMonthEvidence": false,
+        "guidance": "不作为0～24月龄婴幼儿直接食用形式。"
+      },
+      "allergen": {
+        "isCommonAllergen": true,
+        "introductionGuidance": "坚果属于常见过敏原，但应以安全形态引入；整颗或碎坚果不适合婴幼儿。",
+        "highRiskInfantNeedsMedicalAdvice": true
+      },
+      "nutrition": [
+        "蛋白质"
+      ],
+      "textureByAge": [],
+      "chokingRisk": true,
+      "chokingNotes": "整颗或碎坚果、种子为明确噎食风险。",
+      "avoidBeforeMonths": null,
+      "preparation": [
+        "不要以整颗、碎粒或大块形式提供。"
+      ],
+      "notes": "如需引入坚果类，改用稀释的无颗粒坚果酱等安全形态。",
+      "sourceRefs": [
+        "src_nhc_feeding_2022",
+        "src_cdc_choking_2026"
+      ]
+    },
+    {
+      "id": "food_rice_porridge",
+      "name": "大米粥",
+      "icon": "🍚",
+      "category": "grain",
+      "foodGroup": "grain",
+      "introduction": {
+        "recommendedFromMonth": 6,
+        "recommendedToMonth": null,
+        "exactMonthEvidence": false,
+        "guidance": "可作为开始辅食后的食物多样性组成部分逐步引入。"
+      },
+      "allergen": {
+        "isCommonAllergen": false,
+        "introductionGuidance": null,
+        "highRiskInfantNeedsMedicalAdvice": false
+      },
+      "nutrition": [
+        "碳水化合物"
+      ],
+      "textureByAge": [],
+      "chokingRisk": false,
+      "chokingNotes": null,
+      "avoidBeforeMonths": null,
+      "preparation": [
+        "加工至柔软、易吞咽的适龄质地；随咀嚼能力逐步从泥糊向较粗质地过渡。"
+      ],
+      "notes": null,
+      "sourceRefs": [
+        "src_nhc_feeding_2022",
+        "src_cdc_food_intro_2026",
+        "src_cdc_texture_2026"
+      ]
+    },
+    {
+      "id": "food_oats",
+      "name": "燕麦",
+      "icon": "🌾",
+      "category": "grain",
+      "foodGroup": "grain",
+      "introduction": {
+        "recommendedFromMonth": 6,
+        "recommendedToMonth": null,
+        "exactMonthEvidence": false,
+        "guidance": "可作为开始辅食后的食物多样性组成部分逐步引入。"
+      },
+      "allergen": {
+        "isCommonAllergen": false,
+        "introductionGuidance": null,
+        "highRiskInfantNeedsMedicalAdvice": false
+      },
+      "nutrition": [
+        "碳水化合物"
+      ],
+      "textureByAge": [],
+      "chokingRisk": false,
+      "chokingNotes": null,
+      "avoidBeforeMonths": null,
+      "preparation": [
+        "加工至柔软、易吞咽的适龄质地；随咀嚼能力逐步从泥糊向较粗质地过渡。"
+      ],
+      "notes": null,
+      "sourceRefs": [
+        "src_nhc_feeding_2022",
+        "src_cdc_food_intro_2026",
+        "src_cdc_texture_2026"
+      ]
+    },
+    {
+      "id": "food_noodles",
+      "name": "软面条",
+      "icon": "🍜",
+      "category": "grain",
+      "foodGroup": "grain",
+      "introduction": {
+        "recommendedFromMonth": 6,
+        "recommendedToMonth": null,
+        "exactMonthEvidence": false,
+        "guidance": "可作为开始辅食后的食物多样性组成部分逐步引入。"
+      },
+      "allergen": {
+        "isCommonAllergen": false,
+        "introductionGuidance": null,
+        "highRiskInfantNeedsMedicalAdvice": false
+      },
+      "nutrition": [
+        "碳水化合物"
+      ],
+      "textureByAge": [],
+      "chokingRisk": false,
+      "chokingNotes": null,
+      "avoidBeforeMonths": null,
+      "preparation": [
+        "加工至柔软、易吞咽的适龄质地；随咀嚼能力逐步从泥糊向较粗质地过渡。"
+      ],
+      "notes": null,
+      "sourceRefs": [
+        "src_nhc_feeding_2022",
+        "src_cdc_food_intro_2026",
+        "src_cdc_texture_2026"
+      ]
+    },
+    {
+      "id": "food_potato",
+      "name": "土豆",
+      "icon": "🥔",
+      "category": "vegetable",
+      "foodGroup": "tuber",
+      "introduction": {
+        "recommendedFromMonth": 6,
+        "recommendedToMonth": null,
+        "exactMonthEvidence": false,
+        "guidance": "可作为开始辅食后的食物多样性组成部分逐步引入。"
+      },
+      "allergen": {
+        "isCommonAllergen": false,
+        "introductionGuidance": null,
+        "highRiskInfantNeedsMedicalAdvice": false
+      },
+      "nutrition": [
+        "碳水化合物"
+      ],
+      "textureByAge": [],
+      "chokingRisk": false,
+      "chokingNotes": null,
+      "avoidBeforeMonths": null,
+      "preparation": [
+        "加工至柔软、易吞咽的适龄质地；随咀嚼能力逐步从泥糊向较粗质地过渡。"
+      ],
+      "notes": null,
+      "sourceRefs": [
+        "src_nhc_feeding_2022",
+        "src_cdc_food_intro_2026",
+        "src_cdc_texture_2026"
+      ]
+    },
+    {
+      "id": "food_sweet_potato",
+      "name": "红薯",
+      "icon": "🍠",
+      "category": "vegetable",
+      "foodGroup": "tuber",
+      "introduction": {
+        "recommendedFromMonth": 6,
+        "recommendedToMonth": null,
+        "exactMonthEvidence": false,
+        "guidance": "可作为开始辅食后的食物多样性组成部分逐步引入。"
+      },
+      "allergen": {
+        "isCommonAllergen": false,
+        "introductionGuidance": null,
+        "highRiskInfantNeedsMedicalAdvice": false
+      },
+      "nutrition": [
+        "碳水化合物"
+      ],
+      "textureByAge": [],
+      "chokingRisk": false,
+      "chokingNotes": null,
+      "avoidBeforeMonths": null,
+      "preparation": [
+        "加工至柔软、易吞咽的适龄质地；随咀嚼能力逐步从泥糊向较粗质地过渡。"
+      ],
+      "notes": null,
+      "sourceRefs": [
+        "src_nhc_feeding_2022",
+        "src_cdc_food_intro_2026",
+        "src_cdc_texture_2026"
+      ]
+    },
+    {
+      "id": "food_pumpkin",
+      "name": "南瓜",
+      "icon": "🎃",
+      "category": "vegetable",
+      "foodGroup": "vegetable",
+      "introduction": {
+        "recommendedFromMonth": 6,
+        "recommendedToMonth": null,
+        "exactMonthEvidence": false,
+        "guidance": "可作为开始辅食后的食物多样性组成部分逐步引入。"
+      },
+      "allergen": {
+        "isCommonAllergen": false,
+        "introductionGuidance": null,
+        "highRiskInfantNeedsMedicalAdvice": false
+      },
+      "nutrition": [],
+      "textureByAge": [],
+      "chokingRisk": false,
+      "chokingNotes": null,
+      "avoidBeforeMonths": null,
+      "preparation": [
+        "加工至柔软、易吞咽的适龄质地；随咀嚼能力逐步从泥糊向较粗质地过渡。"
+      ],
+      "notes": null,
+      "sourceRefs": [
+        "src_nhc_feeding_2022",
+        "src_cdc_food_intro_2026",
+        "src_cdc_texture_2026"
+      ]
+    },
+    {
+      "id": "food_broccoli",
+      "name": "西兰花",
+      "icon": "🥦",
+      "category": "vegetable",
+      "foodGroup": "vegetable",
+      "introduction": {
+        "recommendedFromMonth": 6,
+        "recommendedToMonth": null,
+        "exactMonthEvidence": false,
+        "guidance": "可作为开始辅食后的食物多样性组成部分逐步引入。"
+      },
+      "allergen": {
+        "isCommonAllergen": false,
+        "introductionGuidance": null,
+        "highRiskInfantNeedsMedicalAdvice": false
+      },
+      "nutrition": [],
+      "textureByAge": [],
+      "chokingRisk": false,
+      "chokingNotes": null,
+      "avoidBeforeMonths": null,
+      "preparation": [
+        "加工至柔软、易吞咽的适龄质地；随咀嚼能力逐步从泥糊向较粗质地过渡。"
+      ],
+      "notes": null,
+      "sourceRefs": [
+        "src_nhc_feeding_2022",
+        "src_cdc_food_intro_2026",
+        "src_cdc_texture_2026"
+      ]
+    },
+    {
+      "id": "food_spinach",
+      "name": "菠菜",
+      "icon": "🥬",
+      "category": "vegetable",
+      "foodGroup": "vegetable",
+      "introduction": {
+        "recommendedFromMonth": 6,
+        "recommendedToMonth": null,
+        "exactMonthEvidence": false,
+        "guidance": "可作为开始辅食后的食物多样性组成部分逐步引入。"
+      },
+      "allergen": {
+        "isCommonAllergen": false,
+        "introductionGuidance": null,
+        "highRiskInfantNeedsMedicalAdvice": false
+      },
+      "nutrition": [],
+      "textureByAge": [],
+      "chokingRisk": false,
+      "chokingNotes": null,
+      "avoidBeforeMonths": null,
+      "preparation": [
+        "加工至柔软、易吞咽的适龄质地；随咀嚼能力逐步从泥糊向较粗质地过渡。"
+      ],
+      "notes": null,
+      "sourceRefs": [
+        "src_nhc_feeding_2022",
+        "src_cdc_food_intro_2026",
+        "src_cdc_texture_2026"
+      ]
+    },
+    {
+      "id": "food_carrot",
+      "name": "胡萝卜",
+      "icon": "🥕",
+      "category": "vegetable",
+      "foodGroup": "vegetable",
+      "introduction": {
+        "recommendedFromMonth": 6,
+        "recommendedToMonth": null,
+        "exactMonthEvidence": false,
+        "guidance": "可作为开始辅食后的食物多样性组成部分逐步引入。"
+      },
+      "allergen": {
+        "isCommonAllergen": false,
+        "introductionGuidance": null,
+        "highRiskInfantNeedsMedicalAdvice": false
+      },
+      "nutrition": [],
+      "textureByAge": [],
+      "chokingRisk": true,
+      "chokingNotes": "生硬状态可构成噎食风险；应充分煮软或按发育水平切制。",
+      "avoidBeforeMonths": null,
+      "preparation": [
+        "加工至柔软、易吞咽的适龄质地；随咀嚼能力逐步从泥糊向较粗质地过渡。"
+      ],
+      "notes": null,
+      "sourceRefs": [
+        "src_nhc_feeding_2022",
+        "src_cdc_food_intro_2026",
+        "src_cdc_texture_2026"
+      ]
+    },
+    {
+      "id": "food_tomato",
+      "name": "番茄",
+      "icon": "🍅",
+      "category": "vegetable",
+      "foodGroup": "vegetable",
+      "introduction": {
+        "recommendedFromMonth": 6,
+        "recommendedToMonth": null,
+        "exactMonthEvidence": false,
+        "guidance": "可作为开始辅食后的食物多样性组成部分逐步引入。"
+      },
+      "allergen": {
+        "isCommonAllergen": false,
+        "introductionGuidance": null,
+        "highRiskInfantNeedsMedicalAdvice": false
+      },
+      "nutrition": [],
+      "textureByAge": [],
+      "chokingRisk": false,
+      "chokingNotes": null,
+      "avoidBeforeMonths": null,
+      "preparation": [
+        "加工至柔软、易吞咽的适龄质地；随咀嚼能力逐步从泥糊向较粗质地过渡。"
+      ],
+      "notes": null,
+      "sourceRefs": [
+        "src_nhc_feeding_2022",
+        "src_cdc_food_intro_2026",
+        "src_cdc_texture_2026"
+      ]
+    },
+    {
+      "id": "food_banana",
+      "name": "香蕉",
+      "icon": "🍌",
+      "category": "fruit",
+      "foodGroup": "fruit",
+      "introduction": {
+        "recommendedFromMonth": 6,
+        "recommendedToMonth": null,
+        "exactMonthEvidence": false,
+        "guidance": "可作为开始辅食后的食物多样性组成部分逐步引入。"
+      },
+      "allergen": {
+        "isCommonAllergen": false,
+        "introductionGuidance": null,
+        "highRiskInfantNeedsMedicalAdvice": false
+      },
+      "nutrition": [],
+      "textureByAge": [],
+      "chokingRisk": false,
+      "chokingNotes": null,
+      "avoidBeforeMonths": null,
+      "preparation": [
+        "加工至柔软、易吞咽的适龄质地；随咀嚼能力逐步从泥糊向较粗质地过渡。"
+      ],
+      "notes": null,
+      "sourceRefs": [
+        "src_nhc_feeding_2022",
+        "src_cdc_food_intro_2026",
+        "src_cdc_texture_2026"
+      ]
+    },
+    {
+      "id": "food_pear",
+      "name": "梨",
+      "icon": "🍐",
+      "category": "fruit",
+      "foodGroup": "fruit",
+      "introduction": {
+        "recommendedFromMonth": 6,
+        "recommendedToMonth": null,
+        "exactMonthEvidence": false,
+        "guidance": "可作为开始辅食后的食物多样性组成部分逐步引入。"
+      },
+      "allergen": {
+        "isCommonAllergen": false,
+        "introductionGuidance": null,
+        "highRiskInfantNeedsMedicalAdvice": false
+      },
+      "nutrition": [],
+      "textureByAge": [],
+      "chokingRisk": false,
+      "chokingNotes": null,
+      "avoidBeforeMonths": null,
+      "preparation": [
+        "加工至柔软、易吞咽的适龄质地；随咀嚼能力逐步从泥糊向较粗质地过渡。"
+      ],
+      "notes": null,
+      "sourceRefs": [
+        "src_nhc_feeding_2022",
+        "src_cdc_food_intro_2026",
+        "src_cdc_texture_2026"
+      ]
+    },
+    {
+      "id": "food_apple",
+      "name": "苹果",
+      "icon": "🍎",
+      "category": "fruit",
+      "foodGroup": "fruit",
+      "introduction": {
+        "recommendedFromMonth": 6,
+        "recommendedToMonth": null,
+        "exactMonthEvidence": false,
+        "guidance": "可作为开始辅食后的食物多样性组成部分逐步引入。"
+      },
+      "allergen": {
+        "isCommonAllergen": false,
+        "introductionGuidance": null,
+        "highRiskInfantNeedsMedicalAdvice": false
+      },
+      "nutrition": [],
+      "textureByAge": [],
+      "chokingRisk": true,
+      "chokingNotes": "生硬状态可构成噎食风险；应充分煮软或按发育水平切制。",
+      "avoidBeforeMonths": null,
+      "preparation": [
+        "加工至柔软、易吞咽的适龄质地；随咀嚼能力逐步从泥糊向较粗质地过渡。"
+      ],
+      "notes": null,
+      "sourceRefs": [
+        "src_nhc_feeding_2022",
+        "src_cdc_food_intro_2026",
+        "src_cdc_texture_2026"
+      ]
+    },
+    {
+      "id": "food_orange",
+      "name": "橙子",
+      "icon": "🍊",
+      "category": "fruit",
+      "foodGroup": "fruit",
+      "introduction": {
+        "recommendedFromMonth": 6,
+        "recommendedToMonth": null,
+        "exactMonthEvidence": false,
+        "guidance": "可作为开始辅食后的食物多样性组成部分逐步引入。"
+      },
+      "allergen": {
+        "isCommonAllergen": false,
+        "introductionGuidance": null,
+        "highRiskInfantNeedsMedicalAdvice": false
+      },
+      "nutrition": [],
+      "textureByAge": [],
+      "chokingRisk": false,
+      "chokingNotes": null,
+      "avoidBeforeMonths": null,
+      "preparation": [
+        "加工至柔软、易吞咽的适龄质地；随咀嚼能力逐步从泥糊向较粗质地过渡。"
+      ],
+      "notes": null,
+      "sourceRefs": [
+        "src_nhc_feeding_2022",
+        "src_cdc_food_intro_2026",
+        "src_cdc_texture_2026"
+      ]
+    },
+    {
+      "id": "food_avocado",
+      "name": "牛油果",
+      "icon": "🥑",
+      "category": "fruit",
+      "foodGroup": "fruit",
+      "introduction": {
+        "recommendedFromMonth": 6,
+        "recommendedToMonth": null,
+        "exactMonthEvidence": false,
+        "guidance": "可作为开始辅食后的食物多样性组成部分逐步引入。"
+      },
+      "allergen": {
+        "isCommonAllergen": false,
+        "introductionGuidance": null,
+        "highRiskInfantNeedsMedicalAdvice": false
+      },
+      "nutrition": [],
+      "textureByAge": [],
+      "chokingRisk": false,
+      "chokingNotes": null,
+      "avoidBeforeMonths": null,
+      "preparation": [
+        "加工至柔软、易吞咽的适龄质地；随咀嚼能力逐步从泥糊向较粗质地过渡。"
+      ],
+      "notes": null,
+      "sourceRefs": [
+        "src_nhc_feeding_2022",
+        "src_cdc_food_intro_2026",
+        "src_cdc_texture_2026"
+      ]
+    },
+    {
+      "id": "food_grape",
+      "name": "葡萄",
+      "icon": "🍇",
+      "category": "fruit",
+      "foodGroup": "fruit",
+      "introduction": {
+        "recommendedFromMonth": 6,
+        "recommendedToMonth": null,
+        "exactMonthEvidence": false,
+        "guidance": "水果可作为多样化饮食的一部分，但整颗葡萄属于明确噎食风险。"
+      },
+      "allergen": {
+        "isCommonAllergen": false,
+        "introductionGuidance": null,
+        "highRiskInfantNeedsMedicalAdvice": false
+      },
+      "nutrition": [],
+      "textureByAge": [],
+      "chokingRisk": true,
+      "chokingNotes": "整颗葡萄是明确噎食风险。",
+      "avoidBeforeMonths": null,
+      "preparation": [
+        "去籽并纵向切成细小、适龄的形状；进食时坐直并持续看护。"
+      ],
+      "notes": null,
+      "sourceRefs": [
+        "src_nhc_feeding_2022",
+        "src_cdc_choking_2026"
+      ]
+    },
+    {
+      "id": "food_yogurt_plain",
+      "name": "原味巴氏杀菌酸奶",
+      "icon": "🥛",
+      "category": "dairy",
+      "foodGroup": "dairy",
+      "introduction": {
+        "recommendedFromMonth": 6,
+        "recommendedToMonth": null,
+        "exactMonthEvidence": false,
+        "guidance": "可作为奶制品的一种在辅食期逐步引入；应选择巴氏杀菌、无添加糖产品。"
+      },
+      "allergen": {
+        "isCommonAllergen": null,
+        "introductionGuidance": null,
+        "highRiskInfantNeedsMedicalAdvice": null
+      },
+      "nutrition": [
+        "蛋白质",
+        "钙"
+      ],
+      "textureByAge": [],
+      "chokingRisk": false,
+      "chokingNotes": null,
+      "avoidBeforeMonths": null,
+      "preparation": [
+        "选择巴氏杀菌、无添加糖产品。"
+      ],
+      "notes": null,
+      "sourceRefs": [
+        "src_cdc_food_intro_2026",
+        "src_cdc_food_avoid_2026"
+      ]
+    },
+    {
+      "id": "food_cow_milk_drink",
+      "name": "牛奶（作为主要饮品）",
+      "icon": "🥛",
+      "category": "dairy",
+      "foodGroup": "milk",
+      "introduction": {
+        "recommendedFromMonth": 12,
+        "recommendedToMonth": null,
+        "exactMonthEvidence": false,
+        "guidance": "12月龄前不应以牛奶作为主要饮品替代母乳或婴儿配方食品。"
+      },
+      "allergen": {
+        "isCommonAllergen": null,
+        "introductionGuidance": null,
+        "highRiskInfantNeedsMedicalAdvice": null
+      },
+      "nutrition": [
+        "蛋白质",
+        "钙"
+      ],
+      "textureByAge": [],
+      "chokingRisk": false,
+      "chokingNotes": null,
+      "avoidBeforeMonths": 12,
+      "preparation": [
+        "12月龄后如提供，选择巴氏杀菌产品；具体奶类摄入结合中国指南和个体情况。"
+      ],
+      "notes": null,
+      "sourceRefs": [
+        "src_cdc_food_avoid_2026"
+      ]
+    },
+    {
+      "id": "food_raw_milk",
+      "name": "未巴氏杀菌乳/乳制品",
+      "icon": "🥛",
+      "category": "dairy",
+      "foodGroup": "milk",
+      "introduction": {
+        "recommendedFromMonth": null,
+        "recommendedToMonth": null,
+        "exactMonthEvidence": false,
+        "guidance": "婴幼儿不应食用未巴氏杀菌乳或乳制品。"
+      },
+      "allergen": {
+        "isCommonAllergen": null,
+        "introductionGuidance": null,
+        "highRiskInfantNeedsMedicalAdvice": null
+      },
+      "nutrition": [],
+      "textureByAge": [],
+      "chokingRisk": false,
+      "chokingNotes": null,
+      "avoidBeforeMonths": null,
+      "preparation": [
+        "不提供未巴氏杀菌乳或乳制品。"
+      ],
+      "notes": "该禁忌不是某个精确月龄阈值，因此avoidBeforeMonths设为null。",
+      "sourceRefs": [
+        "src_cdc_food_avoid_2026"
+      ]
+    },
+    {
+      "id": "food_honey",
+      "name": "蜂蜜",
+      "icon": "🍯",
+      "category": "other",
+      "foodGroup": "sweetener",
+      "introduction": {
+        "recommendedFromMonth": 12,
+        "recommendedToMonth": null,
+        "exactMonthEvidence": false,
+        "guidance": "12月龄前不要给蜂蜜，包括加入食物、饮水、配方奶或安抚奶嘴。"
+      },
+      "allergen": {
+        "isCommonAllergen": false,
+        "introductionGuidance": null,
+        "highRiskInfantNeedsMedicalAdvice": false
+      },
+      "nutrition": [],
+      "textureByAge": [],
+      "chokingRisk": false,
+      "chokingNotes": null,
+      "avoidBeforeMonths": 12,
+      "preparation": [
+        "12月龄前避免。"
+      ],
+      "notes": null,
+      "sourceRefs": [
+        "src_cdc_food_avoid_2026"
+      ]
+    },
+    {
+      "id": "food_added_sugar",
+      "name": "添加糖",
+      "icon": "🍬",
+      "category": "other",
+      "foodGroup": "sweetener",
+      "introduction": {
+        "recommendedFromMonth": null,
+        "recommendedToMonth": null,
+        "exactMonthEvidence": false,
+        "guidance": "婴幼儿饮食不建议添加糖。"
+      },
+      "allergen": {
+        "isCommonAllergen": false,
+        "introductionGuidance": null,
+        "highRiskInfantNeedsMedicalAdvice": false
+      },
+      "nutrition": [],
+      "textureByAge": [],
+      "chokingRisk": false,
+      "chokingNotes": null,
+      "avoidBeforeMonths": null,
+      "preparation": [
+        "选择无添加糖食物和饮品。"
+      ],
+      "notes": "中国指南尤其强调1岁内辅食保持原味，不额外加糖；CDC对婴幼儿总体也不推荐添加糖。",
+      "sourceRefs": [
+        "src_nhc_feeding_2022",
+        "src_cdc_food_avoid_2026"
+      ]
+    },
+    {
+      "id": "food_salt_added",
+      "name": "额外添加盐",
+      "icon": "🧂",
+      "category": "other",
+      "foodGroup": "seasoning",
+      "introduction": {
+        "recommendedFromMonth": null,
+        "recommendedToMonth": null,
+        "exactMonthEvidence": false,
+        "guidance": "1岁内辅食保持原味，不额外添加盐等调味品。"
+      },
+      "allergen": {
+        "isCommonAllergen": false,
+        "introductionGuidance": null,
+        "highRiskInfantNeedsMedicalAdvice": false
+      },
+      "nutrition": [],
+      "textureByAge": [],
+      "chokingRisk": false,
+      "chokingNotes": null,
+      "avoidBeforeMonths": null,
+      "preparation": [
+        "1岁内不额外加盐；1岁后也应保持清淡，具体量不在无直接来源时推算。"
+      ],
+      "notes": null,
+      "sourceRefs": [
+        "src_nhc_feeding_2022"
+      ]
+    },
+    {
+      "id": "food_jelly",
+      "name": "果冻",
+      "icon": "🍮",
+      "category": "other",
+      "foodGroup": "snack",
+      "introduction": {
+        "recommendedFromMonth": null,
+        "recommendedToMonth": null,
+        "exactMonthEvidence": false,
+        "guidance": "婴幼儿不推荐作为常规食物；特定形态可造成噎食风险。"
+      },
+      "allergen": {
+        "isCommonAllergen": false,
+        "introductionGuidance": null,
+        "highRiskInfantNeedsMedicalAdvice": false
+      },
+      "nutrition": [],
+      "textureByAge": [],
+      "chokingRisk": true,
+      "chokingNotes": "果冻/软糖类黏滑或弹性食品可造成噎食风险。",
+      "avoidBeforeMonths": null,
+      "preparation": [
+        "0–24月龄数据库默认不推荐提供。"
+      ],
+      "notes": null,
+      "sourceRefs": [
+        "src_nhc_feeding_2022",
+        "src_cdc_choking_2026"
+      ]
+    },
+    {
+      "id": "food_high_mercury_fish",
+      "name": "高汞鱼类",
+      "icon": "🐟",
+      "category": "protein",
+      "foodGroup": "fish",
+      "introduction": {
+        "recommendedFromMonth": null,
+        "recommendedToMonth": null,
+        "exactMonthEvidence": false,
+        "guidance": "应限制/避免高汞鱼类，优先选择低汞鱼。"
+      },
+      "allergen": {
+        "isCommonAllergen": true,
+        "introductionGuidance": "鱼类可能是食物过敏原；过敏问题与汞风险是不同维度。",
+        "highRiskInfantNeedsMedicalAdvice": true
+      },
+      "nutrition": [
+        "蛋白质"
+      ],
+      "textureByAge": [],
+      "chokingRisk": false,
+      "chokingNotes": null,
+      "avoidBeforeMonths": null,
+      "preparation": [
+        "根据权威汞风险清单选择低汞鱼；本记录不自行列出未经该来源逐项核对的中国市场鱼种。"
+      ],
+      "notes": null,
+      "sourceRefs": [
+        "src_cdc_food_avoid_2026"
+      ]
+    }
+  ],
+  "feedingGuidelines": [
+    {
+      "ageMinMonths": 6,
+      "ageMaxMonths": 8,
+      "mealFrequency": "国家卫健委2025评估表在6月龄、8月龄关键点以每日1～2次辅食作为评估参考；WHO 2023对6～8月龄给出每日2～3次的国际建议，存在数值差异，见conflicts。",
+      "milkGuidance": "国家卫健委2025评估指南：6月龄每日喂奶5～6次、约800～1000 mL；8月龄每日4～5次、约700～800 mL。该数值用于评估参考，需结合母乳喂养和个体生长情况综合判断。",
+      "texture": [
+        "从泥糊、细腻质地开始，随吞咽能力逐步增加稠度和颗粒感。"
+      ],
+      "foodDiversity": [
+        "优先富铁泥糊状食物；逐步增加谷薯、豆类/坚果安全形态、动物性食物、蛋、蔬菜水果、奶制品等多类食物。",
+        "每日食物多样性评估应结合至少4类食物及富铁动物性食物等要求。"
+      ],
+      "responsiveFeeding": [
+        "观察饥饿和饱足信号；鼓励但不强迫进食。"
+      ],
+      "safety": [
+        "一次引入一种新食物并观察呕吐、腹泻、皮疹等反应。",
+        "进食时坐直并持续看护；按发育水平调整形状、大小和质地。"
+      ],
+      "sourceRefs": [
+        "src_nhc_feeding_assessment_2025",
+        "src_nhc_feeding_2022",
+        "src_wst678_2020",
+        "src_who_cf_2023",
+        "src_cdc_choking_2026"
+      ]
+    },
+    {
+      "ageMinMonths": 9,
+      "ageMaxMonths": 11,
+      "mealFrequency": null,
+      "milkGuidance": "以母乳或婴儿配方食品继续作为重要奶类来源；本年龄段精确奶量未从所用中国2025关键月龄表直接外推。",
+      "texture": [
+        "逐步从泥糊过渡到更稠、带小颗粒、细碎或软块状食物。"
+      ],
+      "foodDiversity": [
+        "继续增加食物种类，避免长期只吃单一泥糊。"
+      ],
+      "responsiveFeeding": [
+        "给孩子尝试自主动手抓取适龄软食物的机会，在成人持续看护下进行。"
+      ],
+      "safety": [
+        "避免整颗坚果、整颗葡萄、大块肉、硬生蔬果等噎食风险。"
+      ],
+      "sourceRefs": [
+        "src_nhc_feeding_2022",
+        "src_cdc_texture_2026",
+        "src_cdc_choking_2026"
+      ]
+    },
+    {
+      "ageMinMonths": 12,
+      "ageMaxMonths": 17,
+      "mealFrequency": "国家卫健委2025评估指南在12月龄关键点以每日2～3次辅食作为评估参考。",
+      "milkGuidance": "国家卫健委2025评估指南：12月龄每日喂奶2～3次、约600～700 mL。",
+      "texture": [
+        "逐步采用软饭、碎菜、碎肉等软固体食物，向家庭食物质地过渡。"
+      ],
+      "foodDiversity": [
+        "继续保证多种食物组并包含富铁动物性食物。"
+      ],
+      "responsiveFeeding": [
+        "鼓励自主进食，允许合理的探索和一定洒落，不强迫吃完。"
+      ],
+      "safety": [
+        "12月龄后可开始巴氏杀菌牛奶作为饮品，但仍应结合总体奶类和膳食安排。",
+        "继续避免噎食高风险形态。"
+      ],
+      "sourceRefs": [
+        "src_nhc_feeding_assessment_2025",
+        "src_nhc_feeding_2022",
+        "src_cdc_food_avoid_2026",
+        "src_cdc_choking_2026"
+      ]
+    },
+    {
+      "ageMinMonths": 18,
+      "ageMaxMonths": 24,
+      "mealFrequency": "国家卫健委2025评估指南在18月龄、24月龄关键点以每日3次正餐加2次加餐作为评估参考。",
+      "milkGuidance": "国家卫健委2025评估指南：18月龄和24月龄每日喂奶2～3次、约400～600 mL。",
+      "texture": [
+        "继续向家庭食物过渡，保持软、易咀嚼并避免噎食形态。"
+      ],
+      "foodDiversity": [
+        "每日膳食强调多样化，并包含富铁动物性食物、蔬菜水果和谷薯类。"
+      ],
+      "responsiveFeeding": [
+        "固定但不过度僵化的用餐环境；尊重饥饿/饱足信号。"
+      ],
+      "safety": [
+        "避免整颗坚果、整颗葡萄、果冻等高风险食物形态；进食时坐直并看护。"
+      ],
+      "sourceRefs": [
+        "src_nhc_feeding_assessment_2025",
+        "src_nhc_feeding_2022",
+        "src_cdc_choking_2026"
+      ]
+    }
+  ],
+  "conflicts": [
+    {
+      "topic": "6～8月龄每日辅食进餐频次",
+      "sourceA": "src_nhc_feeding_assessment_2025",
+      "recommendationA": "中国国家卫健委2025评估指南在6月龄、8月龄关键月龄以每日1～2次辅食作为评估参考。",
+      "sourceB": "src_who_cf_2023",
+      "recommendationB": "WHO 2023对6～8月龄婴儿给出每日2～3次辅食的国际建议。",
+      "resolution": "面向中国大陆产品默认展示国家卫健委2025评估口径，并在补充说明中标注WHO国际建议存在差异；不自行融合成新数字。"
+    }
+  ],
+  "qa": {
+    "recordsWithNoSources": [],
+    "medicalRecordsWithOnlyLowQualitySources": [],
+    "conflictingRecords": [
+      "feeding_frequency_6_8m_china_vs_who"
+    ],
+    "fieldsInferredWithoutDirectEvidence": [],
+    "duplicateRecords": [],
+    "outdatedSources": [],
+    "potentiallyUnsafeAdvice": []
+  }
+}

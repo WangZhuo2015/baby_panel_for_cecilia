@@ -1,14 +1,6 @@
-import type { Baby } from '../types';
+// Age utilities shared across pages.
 
-export const mockBaby: Baby = {
-  id: 'baby-001',
-  nickname: '小糖果',
-  gender: 'female',
-  birthDate: '2024-12-31',
-  avatarUrl: undefined,
-};
-
-// Utility: calculate age in months and days
+// Calculate age in months and days from a birth date (YYYY-MM-DD).
 export function calculateAge(birthDate: string): { months: number; days: number; label: string } {
   const birth = new Date(birthDate);
   const now = new Date();

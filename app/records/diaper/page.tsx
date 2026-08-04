@@ -10,6 +10,7 @@ import { SegmentControl } from '@/components/ui/SegmentControl';
 import { FormSection } from '@/components/ui/FormSection';
 import { useToast } from '@/components/ui/Toast';
 import { useBabyStore } from '@/stores/useBabyStore';
+import { localTimeToUtcIso } from '@/lib/date';
 import type { DiaperType, PoopColor, PoopConsistency } from '@/types';
 
 interface DiaperFormData {
@@ -53,7 +54,7 @@ export default function DiaperRecordPage() {
 
   const onSubmit = (data: DiaperFormData) => {
     addDiaperRecord({
-      timestamp: new Date().toISOString(),
+      timestamp: localTimeToUtcIso(time),
       type: diaperType,
       poopColor: showPoopFields ? selectedColor : undefined,
       poopConsistency: showPoopFields ? selectedConsistency : undefined,

@@ -1,22 +1,32 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import {
+  getLocalDateStr,
+  getLocalDayUtcRange,
+  formatIsoToLocalTime,
+} from "@/lib/date";
+
+const safeJsonParse = (str: string | null | undefined, fallback: any = []) => {
+  try { return str ? JSON.parse(str) : fallback } catch { return fallback }
+}
 
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-    const date = searchParams.get("date") ?? new Date().toISOString().split("T")[0];
+    const date = searchParams.get("date") ?? getLocalDateStr();
+    const { start, end } = getLocalDayUtcRange(date);
 
     const [feedingRecords, sleepRecords, diaperRecords, foodLogs] = await Promise.all([
       prisma.feedingRecord.findMany({
-        where: { timestamp: { startsWith: date } },
+        where: { timestamp: { gte: start, lt: end } },
         orderBy: { timestamp: "desc" },
       }),
       prisma.sleepRecord.findMany({
-        where: { startTime: { startsWith: date } },
+        where: { startTime: { lt: end }, endTime: { gt: start } },
         orderBy: { startTime: "desc" },
       }),
       prisma.diaperRecord.findMany({
-        where: { timestamp: { startsWith: date } },
+        where: { timestamp: { gte: start, lt: end } },
         orderBy: { timestamp: "desc" },
       }),
       prisma.foodLogRecord.findMany({
@@ -38,7 +48,7 @@ export async function GET(request: Request) {
 
     const typeIcons: Record<string, string> = {
       breast: "🍼",
-      formula: "",
+      formula: "🍼",
       mixed: "🍼",
       night: "🌙",
       day: "💤",
@@ -51,7 +61,7 @@ export async function GET(request: Request) {
     const timeline: any[] = [];
 
     for (const r of feedingRecords) {
-      const time = r.timestamp.substring(11, 16);
+      const time = formatIsoToLocalTime(r.timestamp);
       timeline.push({
         id: r.id,
         time,
@@ -63,8 +73,8 @@ export async function GET(request: Request) {
     }
 
     for (const r of sleepRecords) {
-      const start = r.startTime.substring(11, 16);
-      const end = r.endTime.substring(11, 16);
+      const start = formatIsoToLocalTime(r.startTime);
+      const end = formatIsoToLocalTime(r.endTime);
       const startMs = new Date(r.startTime).getTime();
       const endMs = new Date(r.endTime).getTime();
       const durationMin = Math.round((endMs - startMs) / 60000);
@@ -75,13 +85,13 @@ export async function GET(request: Request) {
         time: start,
         type: "sleep" as const,
         title: typeLabels[r.type] || "睡觉",
-        detail: `${h}h${m}m`,
+        detail: `${h}h${m}m（${start}–${end}）`,
         icon: typeIcons[r.type] || "🌙",
       });
     }
 
     for (const r of diaperRecords) {
-      const time = r.timestamp.substring(11, 16);
+      const time = formatIsoToLocalTime(r.timestamp);
       timeline.push({
         id: r.id,
         time,
@@ -93,18 +103,18 @@ export async function GET(request: Request) {
     }
 
     for (const r of foodLogs) {
-      const foods = JSON.parse(r.foods || "[]");
+      const foods = safeJsonParse(r.foods);
       timeline.push({
         id: r.id,
         time: r.time,
         type: "food" as const,
         title: "辅食",
         detail: foods.length > 0 ? foods.join("、") : undefined,
-        icon: "️",
+        icon: "🍽️",
       });
     }
 
-    // Sort by time descending
+    // Sort by time descending (HH:MM strings sort correctly)
     timeline.sort((a, b) => b.time.localeCompare(a.time));
 
     return NextResponse.json(timeline);

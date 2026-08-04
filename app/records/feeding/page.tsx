@@ -2,7 +2,6 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
-import { Clock, ChevronRight } from 'lucide-react';
 import { AppHeader } from '@/components/ui/AppHeader';
 import { CuteButton } from '@/components/ui/CuteButton';
 import { CuteInput } from '@/components/ui/CuteInput';
@@ -11,6 +10,7 @@ import { SegmentControl } from '@/components/ui/SegmentControl';
 import { FormSection } from '@/components/ui/FormSection';
 import { useToast } from '@/components/ui/Toast';
 import { useBabyStore } from '@/stores/useBabyStore';
+import { localTimeToUtcIso } from '@/lib/date';
 import type { FeedingType } from '@/types';
 
 interface FeedingFormData {
@@ -39,7 +39,7 @@ export default function FeedingRecordPage() {
 
   const onSubmit = (data: FeedingFormData) => {
     addFeedingRecord({
-      timestamp: new Date().toISOString(),
+      timestamp: isNow ? new Date().toISOString() : localTimeToUtcIso(time),
       type: feedingType,
       amountMl: feedingType === 'formula' || feedingType === 'mixed' ? amount : undefined,
       leftMinutes: feedingType === 'breast' || feedingType === 'mixed' ? leftMin : undefined,

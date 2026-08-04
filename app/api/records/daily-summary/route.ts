@@ -1,19 +1,25 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getLocalDateStr, getLocalDayUtcRange } from "@/lib/date";
 
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-    const date = searchParams.get("date") ?? new Date().toISOString().split("T")[0];
+    const date = searchParams.get("date") ?? getLocalDateStr();
+    const { start, end } = getLocalDayUtcRange(date);
+    const dayStartMs = new Date(start).getTime();
+    const dayEndMs = new Date(end).getTime();
 
     // Fetch all records for the given date in parallel
     const [feedingRecords, sleepRecords, diaperRecords, foodLogs] = await Promise.all([
       prisma.feedingRecord.findMany({
-        where: { timestamp: { startsWith: date } },
+        where: { timestamp: { gte: start, lt: end } },
       }),
-      prisma.sleepRecord.findMany(),
+      prisma.sleepRecord.findMany({
+        where: { startTime: { lt: end }, endTime: { gt: start } },
+      }),
       prisma.diaperRecord.findMany({
-        where: { timestamp: { startsWith: date } },
+        where: { timestamp: { gte: start, lt: end } },
       }),
       prisma.foodLogRecord.findMany({
         where: { date },
@@ -26,21 +32,17 @@ export async function GET(request: Request) {
       0
     );
 
-    // Total sleep minutes: filter sleep records that overlap with the given date,
-    // then calculate duration from startTime/endTime ISO strings
+    // Total sleep minutes: count only the portion of each sleep record that
+    // falls within the target day.
     let totalSleepMinutes = 0;
     for (const record of sleepRecords) {
-      const startDate = record.startTime.substring(0, 10);
-      const endDate = record.endTime.substring(0, 10);
-
-      // Include if either start or end falls on the target date
-      if (startDate === date || endDate === date) {
-        const start = new Date(record.startTime).getTime();
-        const end = new Date(record.endTime).getTime();
-        const durationMs = end - start;
-        if (durationMs > 0) {
-          totalSleepMinutes += Math.round(durationMs / 60000);
-        }
+      const startMs = new Date(record.startTime).getTime();
+      const endMs = new Date(record.endTime).getTime();
+      if (Number.isNaN(startMs) || Number.isNaN(endMs)) continue;
+      const overlapMs =
+        Math.min(endMs, dayEndMs) - Math.max(startMs, dayStartMs);
+      if (overlapMs > 0) {
+        totalSleepMinutes += Math.round(overlapMs / 60000);
       }
     }
 
