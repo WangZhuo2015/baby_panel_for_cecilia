@@ -384,6 +384,19 @@ model VaccineRecord {
   countdownDays  Int?
 }
 
+// ─── User vaccine selection (which optional vaccines the family chooses) ─────
+
+model VaccineSelection {
+  id         String   @id @default(uuid())
+  vaccineId  String
+  doseNumber Int      @default(1)
+  selected   Boolean  @default(true)
+  completed  Boolean  @default(false)
+  updatedAt  DateTime @updatedAt
+
+  @@unique([vaccineId, doseNumber])
+}
+
 // ─── Web Push Subscriptions ─────────────────────────────────────────────────
 
 model PushSubscription {

@@ -1,12 +1,15 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { Syringe, Shield, Info, AlertTriangle, ChevronDown, ChevronUp, MapPin } from 'lucide-react'
-import { AppHeader, CuteCard, SectionTitle } from '@/components/ui'
+import { useState, useEffect, useMemo, useCallback } from 'react'
+import { Syringe, Shield, Info, AlertTriangle, ChevronDown, ChevronUp, MapPin, CalendarDays, CheckCircle2, Circle } from 'lucide-react'
+import { AppHeader, CuteCard, SectionTitle, SegmentControl } from '@/components/ui'
 import DataVersionBadge from '@/components/ui/DataVersionBadge'
+import { useBabyStore } from '@/stores/useBabyStore'
+import { getLocalDateStr } from '@/lib/date'
 
 interface Vaccine {
   id: string
+  vaccineId: string
   name: string
   programType: 'national_immunization_program' | 'non_program' | 'provincial_immunization_program'
   diseases: string[]
@@ -39,6 +42,30 @@ interface Vaccine {
   dataSource?: { organization?: string; asOf?: string }
 }
 
+interface ScheduleEntry {
+  vaccineId: string
+  doseNumber: number
+  ageMonths: number | null
+  ageDays: number | null
+  ageLabel: string | null
+  isOptional: boolean
+  action: string | null
+}
+
+interface ScheduleItem {
+  key: string
+  vaccineId: string
+  doseNumber: number
+  vaccineName: string
+  doseLabel: string
+  date: string
+  diffDays: number
+  isOptional: boolean
+  programType: string
+  action: string | null
+  manualReviewRequired: boolean
+}
+
 const PROGRAM_LABELS: Record<string, string> = {
   national_immunization_program: '国家免疫规划',
   non_program: '非免疫规划（自费）',
@@ -57,6 +84,28 @@ function getAgeLabel(months?: number | null): string {
   if (months < 12) return `${months}月龄`
   if (months % 12 === 0) return `${Math.floor(months / 12)}岁`
   return `${Math.floor(months / 12)}岁${months % 12}个月`
+}
+
+function addMonths(dateStr: string, months: number): string {
+  const d = new Date(`${dateStr}T00:00:00`)
+  d.setMonth(d.getMonth() + months)
+  return getLocalDateStr(d)
+}
+
+function addDays(dateStr: string, days: number): string {
+  const d = new Date(`${dateStr}T00:00:00`)
+  d.setDate(d.getDate() + days)
+  return getLocalDateStr(d)
+}
+
+function diffDaysFromToday(dateStr: string): number {
+  const today = new Date(`${getLocalDateStr()}T00:00:00`).getTime()
+  const target = new Date(`${dateStr}T00:00:00`).getTime()
+  return Math.round((target - today) / (1000 * 60 * 60 * 24))
+}
+
+function weekdayOf(dateStr: string): string {
+  return new Date(`${dateStr}T00:00:00`).toLocaleDateString('zh-CN', { weekday: 'short' })
 }
 
 function VaccineCard({ vaccine }: { vaccine: Vaccine }) {
@@ -142,20 +191,33 @@ function VaccineCard({ vaccine }: { vaccine: Vaccine }) {
   )
 }
 
+const RANGE_OPTIONS = [
+  { value: '7', label: '7天' },
+  { value: '30', label: '30天' },
+  { value: '90', label: '90天' },
+  { value: 'all', label: '全部' },
+]
+
 export default function VaccinesPage() {
   const [vaccines, setVaccines] = useState<Vaccine[]>([])
+  const [schedule, setSchedule] = useState<ScheduleEntry[]>([])
   const [dataRelease, setDataRelease] = useState<{ asOf?: string | null; sources?: { organization?: string }[] } | null>(null)
+  const [selections, setSelections] = useState<Record<string, boolean>>({})
+  const [range, setRange] = useState('30')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const baby = useBabyStore((s) => s.baby)
 
   useEffect(() => {
     async function fetchVaccines() {
       try {
-        const res = await fetch('/api/vaccines')
+        const [res, selRes] = await Promise.all([
+          fetch('/api/vaccines'),
+          fetch('/api/vaccines/selections'),
+        ])
         if (!res.ok) throw new Error('加载失败')
         const data = await res.json()
-        // API returns grouped: {national, nonProgram, provincial, strategyGroups, ...}
-        let list: any[] = []
+        let list: Vaccine[] = []
         if (Array.isArray(data)) {
           list = data
         } else if (data.national || data.nonProgram || data.provincial) {
@@ -168,7 +230,17 @@ export default function VaccinesPage() {
           list = data.data || data.vaccines || []
         }
         setVaccines(list)
+        setSchedule(data.schedule || [])
         setDataRelease(data.dataRelease ?? null)
+
+        if (selRes.ok) {
+          const sels = await selRes.json()
+          const map: Record<string, boolean> = {}
+          for (const s of Array.isArray(sels) ? sels : []) {
+            map[`${s.vaccineId}-${s.doseNumber}`] = s.selected
+          }
+          setSelections(map)
+        }
       } catch (err: any) {
         setError(err.message || '未知错误')
       } finally {
@@ -177,6 +249,83 @@ export default function VaccinesPage() {
     }
     fetchVaccines()
   }, [])
+
+  const vaccineById = useMemo(() => {
+    const map = new Map<string, Vaccine>()
+    for (const v of vaccines) map.set(v.vaccineId, v)
+    return map
+  }, [vaccines])
+
+  const birthDate = baby?.birthDate ?? null
+
+  const scheduleItems = useMemo<ScheduleItem[]>(() => {
+    if (!birthDate) return []
+    const items: ScheduleItem[] = []
+    for (const entry of schedule) {
+      const vaccine = vaccineById.get(entry.vaccineId)
+      if (!vaccine || vaccine.routineHealthyChildOption === false) continue
+
+      let date: string
+      if (entry.ageDays != null) {
+        date = addDays(birthDate, entry.ageDays)
+      } else if (entry.ageMonths != null) {
+        date = addMonths(birthDate, entry.ageMonths)
+      } else {
+        continue
+      }
+
+      const dose = vaccine.doses?.find((d) => d.doseNumber === entry.doseNumber)
+      items.push({
+        key: `${entry.vaccineId}-${entry.doseNumber}`,
+        vaccineId: entry.vaccineId,
+        doseNumber: entry.doseNumber,
+        vaccineName: vaccine.name,
+        doseLabel: dose?.doseLabel ?? `第${entry.doseNumber}剂`,
+        date,
+        diffDays: diffDaysFromToday(date),
+        isOptional: entry.isOptional,
+        programType: vaccine.programType,
+        action: entry.action,
+        manualReviewRequired: vaccine.manualReviewRequired ?? false,
+      })
+    }
+    items.sort((a, b) => a.date.localeCompare(b.date))
+    return items
+  }, [schedule, vaccineById, birthDate])
+
+  const visibleItems = useMemo(() => {
+    if (range === 'all') return scheduleItems
+    const max = Number(range)
+    return scheduleItems.filter((item) => item.diffDays >= 0 && item.diffDays <= max)
+  }, [scheduleItems, range])
+
+  const upcomingCount = scheduleItems.filter((i) => i.diffDays >= 0 && i.diffDays <= 30).length
+  const overdueCount = scheduleItems.filter((i) => i.diffDays < 0).length
+
+  const isSelected = useCallback(
+    (item: ScheduleItem) => selections[item.key] ?? !item.isOptional,
+    [selections]
+  )
+
+  const toggleSelection = async (item: ScheduleItem) => {
+    const current = isSelected(item)
+    const next = !current
+    setSelections((prev) => ({ ...prev, [item.key]: next }))
+    try {
+      const res = await fetch('/api/vaccines/selections', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          vaccineId: item.vaccineId,
+          doseNumber: item.doseNumber,
+          selected: next,
+        }),
+      })
+      if (!res.ok) throw new Error('保存失败')
+    } catch {
+      setSelections((prev) => ({ ...prev, [item.key]: current }))
+    }
+  }
 
   if (loading) {
     return (
@@ -220,7 +369,6 @@ export default function VaccinesPage() {
 
   const groupOrder = ['national_immunization_program', 'provincial_immunization_program', 'non_program']
 
-  // Data source from API dataRelease, fallback to '未知'
   const dataSource = {
     organization: dataRelease?.sources?.[0]?.organization,
     asOf: dataRelease?.asOf,
@@ -237,6 +385,122 @@ export default function VaccinesPage() {
             <Syringe className="w-7 h-7 text-pink-600" />
           </div>
           <p className="text-sm text-gray-400">0–3岁宝宝疫苗时间表</p>
+        </div>
+
+        {/* ── Upcoming schedule ─────────────────────────────── */}
+        <div>
+          <SectionTitle
+            title="近期接种安排"
+            icon={<CalendarDays size={16} className="text-primary" />}
+            action={
+              <span className="text-xs text-gray-400">
+                {upcomingCount > 0 ? `30 天内 ${upcomingCount} 项` : ''}
+                {overdueCount > 0 ? ` · 已过期 ${overdueCount} 项` : ''}
+              </span>
+            }
+          />
+
+          {!birthDate ? (
+            <CuteCard className="mt-2">
+              <p className="text-sm text-gray-500 text-center py-4">
+                请先设置宝宝生日，才能计算接种日期
+              </p>
+            </CuteCard>
+          ) : (
+            <>
+              <div className="mt-2 mb-3">
+                <SegmentControl
+                  options={RANGE_OPTIONS}
+                  value={range}
+                  onChange={(v) => setRange(v)}
+                />
+              </div>
+
+              {visibleItems.length === 0 ? (
+                <CuteCard>
+                  <p className="text-sm text-gray-400 text-center py-6">
+                    {range === 'all' ? '暂无接种安排' : '该时间区间内暂无接种安排'}
+                  </p>
+                </CuteCard>
+              ) : (
+                <div className="space-y-2.5">
+                  {visibleItems.map((item) => {
+                    const selected = isSelected(item)
+                    const overdue = item.diffDays < 0
+                    const dueToday = item.diffDays === 0
+                    const colors = PROGRAM_COLORS[item.programType] || PROGRAM_COLORS.non_program
+
+                    const countdownLabel = overdue
+                      ? `已过期 ${-item.diffDays} 天`
+                      : dueToday
+                        ? '今天'
+                        : item.diffDays === 1
+                          ? '明天'
+                          : `${item.diffDays} 天后`
+
+                    return (
+                      <CuteCard key={item.key} className={overdue || !selected ? 'opacity-60' : ''}>
+                        <div className="flex items-center gap-3">
+                          {/* Date block */}
+                          <div className={`flex-shrink-0 w-14 text-center rounded-xl py-2 ${overdue ? 'bg-gray-100' : dueToday ? 'bg-primary text-white' : 'bg-primary-light/60'}`}>
+                            <p className={`text-[10px] ${overdue ? 'text-gray-400' : dueToday ? 'text-white/80' : 'text-text-muted'}`}>
+                              {weekdayOf(item.date)}
+                            </p>
+                            <p className={`text-lg font-bold leading-tight ${overdue ? 'text-gray-400' : dueToday ? 'text-white' : 'text-primary'}`}>
+                              {Number(item.date.slice(8, 10))}
+                            </p>
+                            <p className={`text-[10px] ${overdue ? 'text-gray-300' : dueToday ? 'text-white/70' : 'text-text-muted'}`}>
+                              {item.date.slice(5, 7)}月
+                            </p>
+                          </div>
+
+                          {/* Info */}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <p className="text-sm font-semibold text-text-primary truncate">
+                                {item.vaccineName}
+                              </p>
+                              <span className="text-[10px] text-text-muted">{item.doseLabel}</span>
+                            </div>
+                            <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium border ${colors.bg} ${colors.text} ${colors.border}`}>
+                                {PROGRAM_LABELS[item.programType] || item.programType}
+                              </span>
+                              <span className={`text-[10px] font-medium ${overdue ? 'text-gray-400' : dueToday ? 'text-primary' : 'text-text-muted'}`}>
+                                {countdownLabel}
+                              </span>
+                              {item.action && (
+                                <span className="text-[10px] text-gray-400">{item.action}</span>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Selection toggle */}
+                          <button
+                            type="button"
+                            onClick={() => toggleSelection(item)}
+                            aria-label={selected ? '取消接种' : '选择接种'}
+                            className={`flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center transition-all cursor-pointer ${
+                              selected
+                                ? 'bg-primary text-white shadow-button'
+                                : 'bg-gray-100 text-gray-300'
+                            }`}
+                          >
+                            {selected ? <CheckCircle2 size={20} /> : <Circle size={20} />}
+                          </button>
+                        </div>
+                      </CuteCard>
+                    )
+                  })}
+                </div>
+              )}
+
+              <p className="text-[10px] text-gray-400 mt-2 flex items-start gap-1 px-1">
+                <Info className="w-3 h-3 shrink-0 mt-0.5" />
+                日期按宝宝出生日期推算，实际接种请以接种门诊安排为准；点击右侧圆钮可自选是否接种
+              </p>
+            </>
+          )}
         </div>
 
         {/* Legend */}

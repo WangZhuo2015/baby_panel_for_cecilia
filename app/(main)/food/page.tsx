@@ -93,13 +93,19 @@ export default function FoodPage() {
             { value: 'library', label: '食材库' },
           ]}
           value={activeTab}
-          onChange={setActiveTab}
+          onChange={(v) => {
+            if (v === 'library') {
+              router.push('/food/library');
+            } else {
+              setActiveTab('today');
+            }
+          }}
         />
       </div>
 
       {/* Content */}
       <div className="px-4">
-        {activeTab === 'today' ? (
+        {activeTab === 'today' && (
           <>
             {/* Today's food card */}
             {todayFoodPlan ? (
@@ -187,14 +193,6 @@ export default function FoodPage() {
               </p>
             </div>
           </>
-        ) : (
-          <div className="text-center py-12">
-            <p className="text-5xl mb-3">🥕</p>
-            <p className="text-sm text-text-secondary mb-4">食材库功能即将上线</p>
-            <CuteButton variant="secondary" onClick={() => setActiveTab('today')}>
-              返回今日辅食
-            </CuteButton>
-          </div>
         )}
       </div>
     </div>

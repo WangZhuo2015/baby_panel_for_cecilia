@@ -58,6 +58,8 @@ export async function POST(request: Request) {
         icon: body.icon || '🍽️',
         category: body.category || 'other',
         foodGroup: body.foodGroup ?? null,
+        status: body.status === 'tried' ? 'tried' : 'to_try',
+        firstAddedDate: body.firstAddedDate ?? null,
         recommendedFromMonth: body.recommendedFromMonth ?? null,
         recommendedToMonth: body.recommendedToMonth ?? null,
         exactMonthEvidence: body.exactMonthEvidence ?? false,

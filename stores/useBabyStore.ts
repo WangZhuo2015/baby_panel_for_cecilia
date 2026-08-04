@@ -78,7 +78,6 @@ interface BabyStore {
 
   // Actions - update
   updateBook: (id: string, data: Partial<Book>) => Promise<void>;
-  updateMilestone: (id: string, data: Partial<DevelopmentMilestone>) => Promise<void>;
 
   // Actions - create records
   addFeedingRecord: (record: Partial<FeedingRecord>) => Promise<void>;
@@ -312,26 +311,6 @@ export const useBabyStore = create<BabyStore>((set) => ({
       }));
     } catch (e) {
       console.error("Failed to update book:", e);
-    }
-  },
-
-  updateMilestone: async (id, data) => {
-    try {
-      const updated = await request<Partial<DevelopmentMilestone>>(
-        `/api/development/milestones/${id}`,
-        {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(data),
-        }
-      );
-      set((state) => ({
-        milestones: state.milestones.map((m) =>
-          m.id === id ? { ...m, ...updated } : m
-        ),
-      }));
-    } catch (e) {
-      console.error("Failed to update milestone:", e);
     }
   },
 

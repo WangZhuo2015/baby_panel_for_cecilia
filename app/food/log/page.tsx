@@ -12,6 +12,8 @@ import { useBabyStore } from '@/stores/useBabyStore';
 import { getLocalDateStr } from '@/lib/date';
 import type { FoodLogRecord } from '@/types';
 
+const FOOD_ICON_OPTIONS = ['🍽️', '🥩', '🐟', '🥚', '🥛', '🍚', '🥕', '🍎', '🥦', '🍠', '🥬', '🌽', '🍌', '🍇', '🍗', '🍤'];
+
 export default function FoodLogPage() {
   const router = useRouter();
   const { showToast } = useToast();
@@ -46,8 +48,44 @@ export default function FoodLogPage() {
     );
   };
 
-  const handleAddCustomFood = () => {
-    showToast('功能开发中');
+  const [showAddFood, setShowAddFood] = useState(false);
+  const [newFoodName, setNewFoodName] = useState('');
+  const [newFoodIcon, setNewFoodIcon] = useState('🍽️');
+  const [addingFood, setAddingFood] = useState(false);
+
+  const handleAddCustomFood = async () => {
+    const name = newFoodName.trim();
+    if (!name) {
+      showToast('请输入食材名称');
+      return;
+    }
+    setAddingFood(true);
+    try {
+      const res = await fetch('/api/food/items', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name,
+          icon: newFoodIcon,
+          category: 'other',
+          status: 'tried',
+          firstAddedDate: getLocalDateStr(),
+        }),
+      });
+      if (!res.ok) throw new Error('创建失败');
+      const created = await res.json();
+      setSelectedFoods((prev) =>
+        prev.includes(created.name) ? prev : [...prev, created.name]
+      );
+      setShowAddFood(false);
+      setNewFoodName('');
+      showToast('已添加到食材库 ✅');
+      fetchFoodItems('tried');
+    } catch {
+      showToast('添加失败，请重试');
+    } finally {
+      setAddingFood(false);
+    }
   };
 
   const handleSubmit = () => {
@@ -131,12 +169,58 @@ export default function FoodLogPage() {
             })}
             <button
               type="button"
-              onClick={handleAddCustomFood}
+              onClick={() => setShowAddFood((v) => !v)}
               className="btn-press px-4 py-2 rounded-full text-sm font-medium bg-primary-light/30 text-primary border-2 border-dashed border-primary/30"
             >
-              + 添加食材
+              {showAddFood ? '收起' : '+ 添加食材'}
             </button>
           </div>
+
+          {showAddFood && (
+            <div className="mt-3 bg-card rounded-2xl border border-primary-soft p-3.5 space-y-3">
+              <p className="text-xs text-text-secondary">
+                食材会加入食材库并立即标记为"已尝试"
+              </p>
+              <CuteInput
+                placeholder="输入食材名称，如：山药、猪肝…"
+                value={newFoodName}
+                onChange={(e) => setNewFoodName(e.target.value)}
+                autoFocus
+              />
+              <div>
+                <p className="text-xs text-text-secondary mb-1.5 pl-1">选择图标</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {FOOD_ICON_OPTIONS.map((icon) => (
+                    <button
+                      key={icon}
+                      type="button"
+                      onClick={() => setNewFoodIcon(icon)}
+                      className={`w-9 h-9 rounded-xl text-lg flex items-center justify-center transition-all ${
+                        newFoodIcon === icon
+                          ? 'bg-primary/15 ring-2 ring-primary'
+                          : 'bg-primary-light/40'
+                      }`}
+                    >
+                      {icon}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <CuteButton size="sm" fullWidth onClick={handleAddCustomFood} disabled={addingFood}>
+                  {addingFood ? '添加中...' : '确认添加'}
+                </CuteButton>
+                <CuteButton
+                  size="sm"
+                  variant="secondary"
+                  fullWidth
+                  onClick={() => setShowAddFood(false)}
+                >
+                  取消
+                </CuteButton>
+              </div>
+            </div>
+          )}
         </FormSection>
 
         {/* Portion */}
