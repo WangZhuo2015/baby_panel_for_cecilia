@@ -361,14 +361,9 @@ async function main() {
   });
 
   // ── 13. Baby ────────────────────────────────────────────────────────
-  console.log('👶 Creating Baby record...');
-  await prisma.baby.create({
-    data: {
-      nickname: '小糖果',
-      gender: 'female',
-      birthDate: '2024-12-31',
-    },
-  });
+  // 宝宝信息由用户在首次使用时通过 /onboarding 自行填写创建,
+  // 这里不再硬编码默认宝宝。
+  console.log('👶 Baby record: 由用户初始化时创建(未创建)');
 
   console.log('✅ Seed complete!');
   await prisma.$disconnect();

@@ -402,9 +402,15 @@ export default function VaccinesPage() {
 
           {!birthDate ? (
             <CuteCard className="mt-2">
-              <p className="text-sm text-gray-500 text-center py-4">
-                请先设置宝宝生日，才能计算接种日期
-              </p>
+              <div className="text-center py-4">
+                <p className="text-sm text-gray-500 mb-3">请先设置宝宝生日，才能计算接种日期</p>
+                <a
+                  href="/onboarding"
+                  className="inline-block px-5 py-2 rounded-full bg-primary text-white text-sm font-medium shadow-button btn-press"
+                >
+                  去设置宝宝信息
+                </a>
+              </div>
             </CuteCard>
           ) : (
             <>

@@ -58,6 +58,7 @@ interface BabyStore {
 
   // Actions - fetch from API
   fetchBaby: () => Promise<void>;
+  saveBaby: (data: { nickname: string; birthDate: string; gender: string }) => Promise<void>;
   fetchFeedingRecords: (date?: string) => Promise<void>;
   fetchSleepRecords: () => Promise<void>;
   fetchDiaperRecords: () => Promise<void>;
@@ -123,6 +124,21 @@ export const useBabyStore = create<BabyStore>((set) => ({
       if (data) set({ baby: data });
     } catch (e) {
       console.error("Failed to fetch baby:", e);
+    }
+  },
+
+  saveBaby: async (data) => {
+    try {
+      const existing = useBabyStore.getState().baby;
+      const updated = await request<Baby>("/api/baby", {
+        method: existing ? "PUT" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      set({ baby: updated });
+    } catch (e) {
+      console.error("Failed to save baby:", e);
+      throw e;
     }
   },
 

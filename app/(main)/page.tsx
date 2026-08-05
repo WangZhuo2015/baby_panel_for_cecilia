@@ -69,13 +69,44 @@ export default function TodayPage() {
     fetchAiTips,
   } = useBabyStore();
 
+  const [initialized, setInitialized] = useState(true);
+
   useEffect(() => {
-    fetchBaby();
+    fetchBaby().then(() => {
+      setInitialized(!!useBabyStore.getState().baby);
+    });
     fetchDailySummary();
     fetchTimeline();
     fetchWeather();
     fetchAiTips();
-  }, [fetchBaby, fetchDailySummary, fetchTimeline, fetchWeather, fetchAiTips]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  if (!initialized) {
+    return (
+      <div className="px-4 pt-12 pb-8">
+        <div className="flex items-center justify-center min-h-[70vh]">
+          <CuteCard variant="gradient" className="w-full max-w-sm">
+            <div className="flex flex-col items-center text-center py-6 px-2">
+              <div className="w-20 h-20 rounded-full bg-white/70 flex items-center justify-center mb-4">
+                <span className="text-4xl">👶</span>
+              </div>
+              <p className="text-lg font-bold text-text-primary mb-1">欢迎使用宝宝成长工作台</p>
+              <p className="text-sm text-text-secondary mb-5">
+                先设置宝宝信息，就能开始记录喂奶、睡眠、成长啦
+              </p>
+              <button
+                onClick={() => router.push("/onboarding")}
+                className="px-6 py-3 rounded-full bg-primary text-white text-sm font-medium shadow-button btn-press"
+              >
+                立即设置宝宝信息
+              </button>
+            </div>
+          </CuteCard>
+        </div>
+      </div>
+    );
+  }
 
   const age = baby ? calculateAge(baby.birthDate) : { months: 0, days: 0, label: "0月0天" };
   const hour = new Date().getHours();

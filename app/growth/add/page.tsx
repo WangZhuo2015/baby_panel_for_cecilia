@@ -74,7 +74,8 @@ export default function GrowthAddPage() {
     if (!weight && !height && !head) return;
 
     if (!baby?.birthDate) {
-      showToast('请先在个人中心设置宝宝生日');
+      showToast('请先设置宝宝生日');
+      router.push('/onboarding');
       return;
     }
 
