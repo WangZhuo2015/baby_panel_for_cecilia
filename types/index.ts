@@ -78,6 +78,7 @@ export interface GrowthMeasurement {
   heightCm?: number;
   headCircumferenceCm?: number;
   percentile?: number;
+  imageUrl?: string | null;
 }
 
 // ===== Food Types =====
@@ -403,4 +404,56 @@ export interface DailySummary {
   totalSleepMinutes: number;
   diaperCount: number;
   foodCount: number;
+}
+
+// ===== Medical & Lab Report Types =====
+export type MedicalReportCategory = "blood" | "growth" | "trace_element" | "allergy" | "general";
+
+export interface MedicalReportItem {
+  id: string;
+  name: string;
+  value: string | number;
+  unit?: string;
+  referenceRange?: string;
+  status: "normal" | "high" | "low" | "abnormal" | "positive" | "negative";
+  interpretation?: string;
+}
+
+export interface MedicalReport {
+  id: string;
+  babyId: string;
+  recordedById?: string | null;
+  title: string;
+  category: MedicalReportCategory;
+  date: string;
+  hospital?: string | null;
+  doctorNotes?: string | null;
+  aiSummary?: string | null;
+  items: MedicalReportItem[];
+  imageUrl?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface MedicalOcrResponse {
+  title: string;
+  category: MedicalReportCategory;
+  date?: string;
+  hospital?: string;
+  doctorNotes?: string;
+  aiSummary?: string;
+  items: Array<{
+    name: string;
+    value: string | number;
+    unit?: string;
+    referenceRange?: string;
+    status: "normal" | "high" | "low" | "abnormal" | "positive" | "negative";
+    interpretation?: string;
+  }>;
+  growthData?: {
+    weightKg?: number;
+    heightCm?: number;
+    headCircumferenceCm?: number;
+  };
+  rawText?: string;
 }

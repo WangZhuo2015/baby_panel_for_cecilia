@@ -66,6 +66,7 @@ model Baby {
   foodPlans          FoodPlan[]
   vaccineRecords     VaccineRecord[]
   vaccineSelections  VaccineSelection[]
+  medicalReports     MedicalReport[]
 }
 
 model FeedingRecord {
@@ -121,7 +122,27 @@ model GrowthMeasurement {
   heightCm            Float?
   headCircumferenceCm Float?
   percentile          Int?
+  imageUrl            String?
   createdAt           DateTime @default(now())
+}
+
+model MedicalReport {
+  id           String   @id @default(uuid())
+  babyId       String
+  baby         Baby     @relation(fields: [babyId], references: [id], onDelete: Cascade)
+  recordedById String?
+  title        String
+  category     String   // "blood" | "growth" | "trace_element" | "allergy" | "general"
+  date         String   // YYYY-MM-DD
+  hospital     String?
+  doctorNotes  String?
+  aiSummary    String?
+  itemsJson    String   // JSON string of MedicalReportItem[]
+  imageUrl     String?  // Archived photo
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([babyId, date])
 }
 
 model FoodLogRecord {

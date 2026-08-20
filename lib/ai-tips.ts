@@ -1,8 +1,8 @@
 import { prisma } from "@/lib/prisma";
 
-const AI_BASE_URL = process.env.AI_BASE_URL || process.env.HERMES_API_URL || "https://api.deepseek.com/v1";
+const AI_BASE_URL = process.env.AI_BASE_URL || process.env.OPENAI_BASE_URL || "https://api.openai.com/v1";
 const AI_API_KEY = process.env.AI_API_KEY || process.env.OPENAI_API_KEY || "";
-const AI_MODEL = process.env.AI_MODEL || process.env.HERMES_MODEL || "deepseek-chat";
+const AI_MODEL = process.env.AI_MODEL || process.env.OPENAI_MODEL || "deepseek-chat";
 
 function getAgeMonths(birthDate: string): number {
   const birth = new Date(birthDate);
@@ -40,9 +40,7 @@ export async function getAiTips(babyId?: string): Promise<string[]> {
 - 适合${ageMonths}个月左右的${genderWord}宝宝
 - 不要涉及医疗诊断
 - 用中文回答
-- 直接返回严格的JSON字符串数组，不要Markdown代码块或其他多余文字
-
-示例格式：["建议1", "建议2", "建议3"]`;
+- 直接返回严格的JSON字符串数组，如：["建议1", "建议2", "建议3"]`;
 
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -63,11 +61,11 @@ export async function getAiTips(babyId?: string): Promise<string[]> {
           content: `请给${ageMonths}个月${genderWord}宝宝${nickname}今天的育儿建议`,
         },
       ],
-      max_tokens: 400,
+      max_tokens: 500,
       temperature: 0.7,
     }),
     cache: "no-store",
-    signal: AbortSignal.timeout(10000), // 10s timeout
+    signal: AbortSignal.timeout(15000),
   });
 
   if (!res.ok) {

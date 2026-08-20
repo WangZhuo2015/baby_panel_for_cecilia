@@ -1,14 +1,18 @@
 import { NextResponse } from "next/server";
+import { writeFile } from "fs/promises";
+import path from "path";
+import crypto from "crypto";
 
-const AI_BASE_URL = process.env.AI_BASE_URL || process.env.HERMES_API_URL || "https://api.openai.com/v1";
+const AI_BASE_URL = process.env.AI_BASE_URL || process.env.OPENAI_BASE_URL || "https://api.openai.com/v1";
 const AI_API_KEY = process.env.AI_API_KEY || process.env.OPENAI_API_KEY || "";
-const AI_VISION_MODEL = process.env.AI_VISION_MODEL || process.env.HERMES_VISION_MODEL || "gpt-4o-mini";
+const AI_VISION_MODEL = process.env.AI_VISION_MODEL || "gpt-4o-mini";
 
 interface OcrResult {
   date?: string;
   weightKg?: number;
   heightCm?: number;
   headCircumferenceCm?: number;
+  imageUrl?: string;
 }
 
 export const maxDuration = 30;
@@ -16,6 +20,7 @@ export const maxDuration = 30;
 export async function POST(request: Request) {
   let imageBase64: string | null = null;
   let mime = "image/jpeg";
+  let savedImageUrl: string | null = null;
 
   const contentType = request.headers.get("content-type") ?? "";
 
@@ -29,15 +34,22 @@ export async function POST(request: Request) {
           { status: 400 }
         );
       }
-      if (file.size > 10 * 1024 * 1024) {
+      if (file.size > 15 * 1024 * 1024) {
         return NextResponse.json(
-          { error: "图片过大，请选择 10MB 以内的照片" },
+          { error: "图片过大，请选择 15MB 以内的照片" },
           { status: 400 }
         );
       }
       mime = file.type || "image/jpeg";
       const buffer = Buffer.from(await file.arrayBuffer());
       imageBase64 = buffer.toString("base64");
+
+      // Archive photo
+      const ext = path.extname(file.name) || ".jpg";
+      const filename = `growth_${Date.now()}_${crypto.randomBytes(4).toString("hex")}${ext}`;
+      const uploadDir = path.join(process.cwd(), "public", "uploads", "medical");
+      await writeFile(path.join(uploadDir, filename), buffer);
+      savedImageUrl = `/uploads/medical/${filename}`;
     } catch {
       return NextResponse.json(
         { error: "图片读取失败，请重试" },
@@ -88,11 +100,11 @@ export async function POST(request: Request) {
             ],
           },
         ],
-        max_tokens: 250,
+        max_tokens: 300,
         temperature: 0,
       }),
       cache: "no-store",
-      signal: AbortSignal.timeout(20000),
+      signal: AbortSignal.timeout(25000),
     });
 
     if (!res.ok) {
@@ -129,6 +141,9 @@ export async function POST(request: Request) {
     }
     if (typeof parsed.headCircumferenceCm === "number" && parsed.headCircumferenceCm > 0) {
       result.headCircumferenceCm = Math.round(parsed.headCircumferenceCm * 10) / 10;
+    }
+    if (savedImageUrl) {
+      result.imageUrl = savedImageUrl;
     }
 
     if (Object.keys(result).length === 0) {

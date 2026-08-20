@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo, useCallback } from 'react'
+import Link from 'next/link'
 import { Syringe, Shield, Info, AlertTriangle, ChevronDown, ChevronUp, MapPin, CalendarDays, CheckCircle2, Circle } from 'lucide-react'
 import { AppHeader, CuteCard, SectionTitle, SegmentControl } from '@/components/ui'
 import DataVersionBadge from '@/components/ui/DataVersionBadge'
@@ -376,9 +377,21 @@ export default function VaccinesPage() {
 
   return (
     <div className="min-h-screen bg-bg pb-8">
-      <AppHeader title="疫苗接种指南" />
+      <AppHeader title="健康与预防管理" />
 
-      <div className="px-4 pt-4 space-y-5">
+      <div className="px-4 pt-2 space-y-4">
+        {/* Top Switcher */}
+        <div className="flex items-center gap-2 bg-primary-light/60 p-1 rounded-2xl">
+          <div className="flex-1 py-2 text-center text-xs font-bold rounded-xl bg-white text-primary shadow-soft">
+            💉 疫苗接种规划
+          </div>
+          <Link
+            href="/health/medical"
+            className="flex-1 py-2 text-center text-xs font-semibold rounded-xl text-text-secondary hover:text-primary transition-all"
+          >
+            📑 化验与体检单
+          </Link>
+        </div>
         {/* Header info */}
         <div className="text-center">
           <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-gradient-to-br from-pink-200 to-purple-200 mb-2">

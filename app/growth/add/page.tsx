@@ -34,6 +34,7 @@ export default function GrowthAddPage() {
   const [ocrDone, setOcrDone] = useState(false);
   const [ocrError, setOcrError] = useState<string | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [uploadedImageUrl, setUploadedImageUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleOcrUpload = async (file: File | null | undefined) => {
@@ -62,6 +63,7 @@ export default function GrowthAddPage() {
       if (data.weightKg != null) setWeight(String(data.weightKg));
       if (data.heightCm != null) setHeight(String(data.heightCm));
       if (data.headCircumferenceCm != null) setHead(String(data.headCircumferenceCm));
+      if (data.imageUrl) setUploadedImageUrl(data.imageUrl);
       setOcrDone(true);
     } catch {
       setOcrError('识别服务连接失败，请手动输入');
@@ -92,6 +94,7 @@ export default function GrowthAddPage() {
       weightKg: weight ? parseFloat(weight) : undefined,
       heightCm: height ? parseFloat(height) : undefined,
       headCircumferenceCm: head ? parseFloat(head) : undefined,
+      imageUrl: uploadedImageUrl || undefined,
     });
 
     showToast('记录保存成功 ✨');

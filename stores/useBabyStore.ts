@@ -27,6 +27,7 @@ import type {
   ActivityRecommendation,
   WeatherData,
   DataRelease,
+  MedicalReport,
 } from "@/types";
 
 interface BabyStore {
@@ -38,6 +39,7 @@ interface BabyStore {
 
   // Data
   baby: Baby | null;
+  medicalReports: MedicalReport[];
   feedingRecords: FeedingRecord[];
   sleepRecords: SleepRecord[];
   diaperRecords: DiaperRecord[];
@@ -100,6 +102,7 @@ interface BabyStore {
   fetchWarningSigns: () => Promise<void>;
   fetchActivities: () => Promise<void>;
   fetchAiTips: () => Promise<void>;
+  fetchMedicalReports: (category?: string) => Promise<void>;
 
   // Actions - update
   updateBook: (id: string, data: Partial<Book>) => Promise<void>;
@@ -110,6 +113,8 @@ interface BabyStore {
   addDiaperRecord: (record: Partial<DiaperRecord>) => Promise<void>;
   addFoodLogRecord: (record: Partial<FoodLogRecord>) => Promise<void>;
   addGrowthMeasurement: (measurement: Partial<GrowthMeasurement>) => Promise<void>;
+  addMedicalReport: (report: Partial<MedicalReport> & { growthData?: any }) => Promise<MedicalReport>;
+  deleteMedicalReport: (id: string) => Promise<void>;
 }
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
@@ -129,6 +134,7 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
   authLoading: true,
 
   baby: null,
+  medicalReports: [],
   feedingRecords: [],
   sleepRecords: [],
   diaperRecords: [],
@@ -560,6 +566,16 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
     }
   },
 
+  fetchMedicalReports: async (category?: string) => {
+    try {
+      const params = category && category !== "all" ? `?category=${category}` : "";
+      const data = await request<MedicalReport[]>(`/api/medical/reports${params}`);
+      set({ medicalReports: data || [] });
+    } catch (e) {
+      console.error("Failed to fetch medical reports:", e);
+    }
+  },
+
   addGrowthMeasurement: async (measurement) => {
     try {
       const newMeasurement = await request<GrowthMeasurement>("/api/growth", {
@@ -574,6 +590,40 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
       }));
     } catch (e) {
       console.error("Failed to add growth measurement:", e);
+      throw e;
+    }
+  },
+
+  addMedicalReport: async (report) => {
+    try {
+      const newReport = await request<MedicalReport>("/api/medical/reports", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(report),
+      });
+      set((state) => ({
+        medicalReports: [newReport, ...state.medicalReports.filter((r) => r.id !== newReport.id)],
+      }));
+      if (report.growthData) {
+        get().fetchGrowthMeasurements();
+      }
+      return newReport;
+    } catch (e) {
+      console.error("Failed to add medical report:", e);
+      throw e;
+    }
+  },
+
+  deleteMedicalReport: async (id: string) => {
+    try {
+      await request<{ success: boolean }>(`/api/medical/reports/${id}`, {
+        method: "DELETE",
+      });
+      set((state) => ({
+        medicalReports: state.medicalReports.filter((r) => r.id !== id),
+      }));
+    } catch (e) {
+      console.error("Failed to delete medical report:", e);
       throw e;
     }
   },
