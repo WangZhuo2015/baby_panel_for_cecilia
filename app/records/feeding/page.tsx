@@ -78,7 +78,7 @@ export default function FeedingRecordPage() {
                 setTime(`${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`);
                 setIsNow(true);
               }}
-              className={`px-4 py-3 rounded-[18px] text-sm font-medium btn-press transition-colors ${
+              className={`px-4 py-3 rounded-[18px] text-sm font-medium btn-press transition-colors whitespace-nowrap ${
                 isNow ? 'bg-primary text-white shadow-button' : 'bg-primary-light text-primary'
               }`}
             >

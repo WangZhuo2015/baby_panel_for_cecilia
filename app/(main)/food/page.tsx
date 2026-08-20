@@ -45,7 +45,7 @@ export default function FoodPage() {
   const todayFoodPlan = foodPlans?.find((plan) => plan.date === selectedDate);
 
   return (
-    <div className="min-h-[100dvh] bg-bg pb-8">
+    <div className="min-h-[100dvh] bg-bg pb-36">
       {/* Baby info header */}
       <div className="safe-top px-4 pt-4 pb-3">
         <div className="flex items-center gap-3">

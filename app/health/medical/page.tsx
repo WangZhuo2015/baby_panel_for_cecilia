@@ -76,12 +76,12 @@ export default function MedicalReportsPage() {
       <div className="flex items-center gap-2 mt-3 mb-4 bg-primary-light/60 p-1 rounded-2xl">
         <Link
           href="/health/vaccines"
-          className="flex-1 py-2 text-center text-xs font-semibold rounded-xl text-text-secondary hover:text-primary transition-all"
+          className="flex-1 py-2 text-center text-xs font-semibold rounded-xl text-text-secondary hover:text-primary transition-all whitespace-nowrap"
         >
-          💉 疫苗接种规划
+          💉 疫苗规划
         </Link>
-        <div className="flex-1 py-2 text-center text-xs font-bold rounded-xl bg-white text-primary shadow-soft">
-          📑 化验与体检单
+        <div className="flex-1 py-2 text-center text-xs font-bold rounded-xl bg-white text-primary shadow-soft whitespace-nowrap">
+          📑 化验与体检
         </div>
       </div>
 
@@ -115,10 +115,10 @@ export default function MedicalReportsPage() {
         <SegmentControl
           options={[
             { value: "all", label: "全部" },
-            { value: "blood", label: "🩸 血常规" },
-            { value: "growth", label: "📏 体检" },
-            { value: "trace_element", label: "🧪 微量元素" },
-            { value: "allergy", label: "🌿 过敏原" },
+            { value: "blood", label: "血常规" },
+            { value: "growth", label: "体检" },
+            { value: "trace_element", label: "微量元素" },
+            { value: "allergy", label: "过敏原" },
           ]}
           value={activeCategory}
           onChange={(v) => setActiveCategory(v)}

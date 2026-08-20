@@ -100,7 +100,7 @@ export default function GrowthPage() {
     : undefined;
 
   return (
-    <div className="px-4 pt-12 pb-24 max-w-md mx-auto">
+    <div className="px-4 pt-12 pb-36 max-w-md mx-auto">
       {/* Baby header */}
       <div className="flex items-center gap-3 mb-5">
         <div className="w-12 h-12 rounded-full bg-gradient-to-br from-primary-soft to-primary/30 flex items-center justify-center shadow-soft">
@@ -205,7 +205,7 @@ export default function GrowthPage() {
       {/* Add button */}
       <button
         onClick={() => router.push('/growth/add')}
-        className="w-full flex items-center justify-center gap-2 py-3.5 rounded-[20px] bg-primary text-white font-medium shadow-button btn-press mb-5"
+        className="w-full flex items-center justify-center gap-2 py-3.5 rounded-[20px] bg-primary text-white font-medium shadow-button btn-press mb-5 whitespace-nowrap text-sm"
       >
         <Plus size={18} />
         添加生长记录（支持拍照识别）

@@ -38,7 +38,7 @@ export const CuteButton: React.FC<CuteButtonProps> = ({
       type={type}
       onClick={onClick}
       disabled={disabled}
-      className={`btn-press rounded-[20px] font-medium transition-all cursor-pointer
+      className={`btn-press inline-flex items-center justify-center whitespace-nowrap select-none rounded-[20px] font-medium transition-all cursor-pointer
         ${sizeStyles[size]}
         ${variantStyles[variant]}
         ${fullWidth ? 'w-full' : ''}

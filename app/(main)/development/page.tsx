@@ -134,7 +134,7 @@ export default function DevelopmentPage() {
   const warningSignDataSource = (warningSigns[0] as any)?.dataSource
 
   return (
-    <div className="min-h-screen bg-bg pb-8">
+    <div className="min-h-screen bg-bg pb-36">
       <AppHeader title="发育里程碑" />
 
       <div className="px-4 pt-4 space-y-5">
@@ -159,9 +159,9 @@ export default function DevelopmentPage() {
                   key={m}
                   type="button"
                   onClick={() => setSelectedMonth(m)}
-                  className={`flex-shrink-0 py-2 px-4 rounded-full text-sm font-medium transition-all cursor-pointer min-h-[36px] ${
+                  className={`flex-shrink-0 whitespace-nowrap py-2 px-4 rounded-full text-sm font-medium transition-all cursor-pointer min-h-[36px] ${
                     selectedMonth === m
-                      ? 'bg-pink-400 text-white shadow-sm'
+                      ? 'bg-pink-400 text-white shadow-sm font-bold'
                       : 'bg-white text-gray-500 shadow-xs border border-gray-100'
                   }`}
                 >

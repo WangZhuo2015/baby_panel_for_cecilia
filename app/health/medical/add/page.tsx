@@ -327,18 +327,18 @@ export default function MedicalAddPage() {
           <FormSection title="单据类型">
             <SegmentControl
               options={[
-                { value: "blood", label: "🩸 血常规" },
-                { value: "growth", label: "📏 体检" },
-                { value: "trace_element", label: "🧪 微量元素" },
-                { value: "allergy", label: "🌿 过敏原" },
-                { value: "general", label: "📑 其他" },
+                { value: "blood", label: "血常规" },
+                { value: "growth", label: "体检" },
+                { value: "trace_element", label: "微量元素" },
+                { value: "allergy", label: "过敏原" },
+                { value: "general", label: "其他" },
               ]}
               value={category}
               onChange={(v) => setCategory(v as MedicalReportCategory)}
             />
           </FormSection>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-3">
             <FormSection title="检验 / 体检日期">
               <CuteInput
                 type="date"

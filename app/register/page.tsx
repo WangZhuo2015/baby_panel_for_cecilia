@@ -115,7 +115,7 @@ export default function RegisterPage() {
                       setRelation(item.id);
                       if (!displayName) setDisplayName(item.label);
                     }}
-                    className={`py-2 text-xs rounded-xl border transition-all ${
+                    className={`py-2 text-xs rounded-xl border transition-all whitespace-nowrap ${
                       relation === item.id
                         ? "bg-primary-soft text-primary border-primary font-bold shadow-soft"
                         : "bg-white text-text-secondary border-divider hover:border-primary/40"

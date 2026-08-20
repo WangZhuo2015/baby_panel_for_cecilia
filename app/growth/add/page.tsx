@@ -172,7 +172,7 @@ export default function GrowthAddPage() {
                         </CuteButton>
                       </div>
                       <p className="text-[10px] text-text-muted mt-3">
-                        照片仅用于识别，不会保存
+                        照片将自动归档，方便日后随时查阅核对
                       </p>
                     </>
                   )
