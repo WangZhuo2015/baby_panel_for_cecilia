@@ -126,6 +126,29 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
   return res.json();
 }
 
+/* ── Fetch caching / deduplication ────────────────────────── */
+const STALE_MS = 30_000; // 30 seconds before data is considered stale
+const _fetchedAt: Record<string, number> = {};
+const _inflight: Record<string, Promise<void> | undefined> = {};
+
+/** Returns true if the key was fetched less than STALE_MS ago */
+function isFresh(key: string): boolean {
+  return Date.now() - (_fetchedAt[key] || 0) < STALE_MS;
+}
+
+/** Mark a key as freshly fetched */
+function markFetched(key: string): void {
+  _fetchedAt[key] = Date.now();
+}
+
+/** Deduplicate: if an identical request is already in-flight, return it */
+function dedup(key: string, fn: () => Promise<void>): Promise<void> {
+  if (_inflight[key]) return _inflight[key]!;
+  const p = fn().finally(() => { _inflight[key] = undefined; });
+  _inflight[key] = p;
+  return p;
+}
+
 export const useBabyStore = create<BabyStore>((set, get) => ({
   // Initial state
   user: null,
@@ -158,6 +181,10 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
   // ===== Auth Actions =====
 
   fetchUser: async () => {
+    if (get().user && isFresh('user')) {
+      set({ authLoading: false });
+      return get().user;
+    }
     try {
       set({ authLoading: true });
       const res = await fetch("/api/auth/me");
@@ -172,6 +199,7 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
         baby: data.baby || get().baby,
         authLoading: false,
       });
+      markFetched('user');
       return data.user;
     } catch {
       set({ user: null, family: null, authLoading: false });
@@ -252,12 +280,16 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
   // ===== Fetch actions =====
 
   fetchBaby: async () => {
-    try {
-      const data = await request<Baby>("/api/baby");
-      if (data) set({ baby: data });
-    } catch (e) {
-      console.error("Failed to fetch baby:", e);
-    }
+    if (get().baby && isFresh('baby')) return;
+    return dedup('baby', async () => {
+      try {
+        const data = await request<Baby>("/api/baby");
+        if (data) set({ baby: data });
+        markFetched('baby');
+      } catch (e) {
+        console.error("Failed to fetch baby:", e);
+      }
+    });
   },
 
   saveBaby: async (data) => {
@@ -276,31 +308,44 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
   },
 
   fetchFeedingRecords: async (date?: string) => {
-    try {
-      const params = date ? `?date=${date}` : "";
-      const data = await request<FeedingRecord[]>(`/api/records/feeding${params}`);
-      set({ feedingRecords: data || [] });
-    } catch (e) {
-      console.error("Failed to fetch feeding records:", e);
-    }
+    const key = `feedingRecords:${date || ''}`;
+    if (get().feedingRecords.length > 0 && isFresh(key)) return;
+    return dedup(key, async () => {
+      try {
+        const params = date ? `?date=${date}` : "";
+        const data = await request<FeedingRecord[]>(`/api/records/feeding${params}`);
+        set({ feedingRecords: data || [] });
+        markFetched(key);
+      } catch (e) {
+        console.error("Failed to fetch feeding records:", e);
+      }
+    });
   },
 
   fetchSleepRecords: async () => {
-    try {
-      const data = await request<SleepRecord[]>("/api/records/sleep");
-      set({ sleepRecords: data || [] });
-    } catch (e) {
-      console.error("Failed to fetch sleep records:", e);
-    }
+    if (get().sleepRecords.length > 0 && isFresh('sleepRecords')) return;
+    return dedup('sleepRecords', async () => {
+      try {
+        const data = await request<SleepRecord[]>("/api/records/sleep");
+        set({ sleepRecords: data || [] });
+        markFetched('sleepRecords');
+      } catch (e) {
+        console.error("Failed to fetch sleep records:", e);
+      }
+    });
   },
 
   fetchDiaperRecords: async () => {
-    try {
-      const data = await request<DiaperRecord[]>("/api/records/diaper");
-      set({ diaperRecords: data || [] });
-    } catch (e) {
-      console.error("Failed to fetch diaper records:", e);
-    }
+    if (get().diaperRecords.length > 0 && isFresh('diaperRecords')) return;
+    return dedup('diaperRecords', async () => {
+      try {
+        const data = await request<DiaperRecord[]>("/api/records/diaper");
+        set({ diaperRecords: data || [] });
+        markFetched('diaperRecords');
+      } catch (e) {
+        console.error("Failed to fetch diaper records:", e);
+      }
+    });
   },
 
   fetchFoodLogRecords: async (date?: string) => {
@@ -314,63 +359,82 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
   },
 
   fetchGrowthMeasurements: async () => {
-    try {
-      const data = await request<GrowthMeasurement[]>("/api/growth");
-      set({ growthMeasurements: data || [] });
-    } catch (e) {
-      console.error("Failed to fetch growth measurements:", e);
-    }
+    if (get().growthMeasurements.length > 0 && isFresh('growthMeasurements')) return;
+    return dedup('growthMeasurements', async () => {
+      try {
+        const data = await request<GrowthMeasurement[]>("/api/growth");
+        set({ growthMeasurements: data || [] });
+        markFetched('growthMeasurements');
+      } catch (e) {
+        console.error("Failed to fetch growth measurements:", e);
+      }
+    });
   },
 
   fetchDailySummary: async (date?: string) => {
-    try {
-      const params = date ? `?date=${date}` : "";
-      const data = await request<DailySummary>(`/api/records/daily-summary${params}`);
-      set({ dailySummary: data });
-    } catch (e) {
-      console.error("Failed to fetch daily summary:", e);
-    }
+    const key = `dailySummary:${date || ''}`;
+    if (get().dailySummary && isFresh(key)) return;
+    return dedup(key, async () => {
+      try {
+        const params = date ? `?date=${date}` : "";
+        const data = await request<DailySummary>(`/api/records/daily-summary${params}`);
+        set({ dailySummary: data });
+        markFetched(key);
+      } catch (e) {
+        console.error("Failed to fetch daily summary:", e);
+      }
+    });
   },
 
   fetchTimeline: async (date?: string) => {
-    try {
-      const params = date ? `?date=${date}` : "";
-      const data = await request<TimelineEntry[]>(`/api/records/timeline${params}`);
-      set({ timeline: data || [] });
-    } catch (e) {
-      console.error("Failed to fetch timeline:", e);
-    }
+    const key = `timeline:${date || ''}`;
+    if (get().timeline.length > 0 && isFresh(key)) return;
+    return dedup(key, async () => {
+      try {
+        const params = date ? `?date=${date}` : "";
+        const data = await request<TimelineEntry[]>(`/api/records/timeline${params}`);
+        set({ timeline: data || [] });
+        markFetched(key);
+      } catch (e) {
+        console.error("Failed to fetch timeline:", e);
+      }
+    });
   },
 
   fetchWeather: async (lat?: number, lon?: number, city?: string) => {
-    try {
-      let finalLat = lat;
-      let finalLon = lon;
+    // Weather changes slowly — cache for 5 minutes
+    if (get().weather && Date.now() - (_fetchedAt['weather'] || 0) < 300_000) return;
+    return dedup('weather', async () => {
+      try {
+        let finalLat = lat;
+        let finalLon = lon;
 
-      // Try browser geolocation if not provided
-      if (finalLat === undefined && typeof window !== "undefined" && "geolocation" in navigator) {
-        try {
-          const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
-            navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 3000 });
-          });
-          finalLat = pos.coords.latitude;
-          finalLon = pos.coords.longitude;
-        } catch {
-          // Geolocation denied or timed out, fallback to defaults
+        // Try browser geolocation if not provided
+        if (finalLat === undefined && typeof window !== "undefined" && "geolocation" in navigator) {
+          try {
+            const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
+              navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 3000 });
+            });
+            finalLat = pos.coords.latitude;
+            finalLon = pos.coords.longitude;
+          } catch {
+            // Geolocation denied or timed out, fallback to defaults
+          }
         }
+
+        const params = new URLSearchParams();
+        if (finalLat !== undefined) params.set("lat", String(finalLat));
+        if (finalLon !== undefined) params.set("lon", String(finalLon));
+        if (city) params.set("city", city);
+
+        const qs = params.toString();
+        const data = await request<WeatherData>(`/api/weather${qs ? `?${qs}` : ""}`);
+        set({ weather: data });
+        markFetched('weather');
+      } catch (e) {
+        console.error("Failed to fetch weather:", e);
       }
-
-      const params = new URLSearchParams();
-      if (finalLat !== undefined) params.set("lat", String(finalLat));
-      if (finalLon !== undefined) params.set("lon", String(finalLon));
-      if (city) params.set("city", city);
-
-      const qs = params.toString();
-      const data = await request<WeatherData>(`/api/weather${qs ? `?${qs}` : ""}`);
-      set({ weather: data });
-    } catch (e) {
-      console.error("Failed to fetch weather:", e);
-    }
+    });
   },
 
   fetchFoodItems: async (status?: string) => {
@@ -460,19 +524,24 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
   },
 
   fetchAiTips: async () => {
-    try {
-      set({ aiError: null });
-      const res = await fetch("/api/ai/tips");
-      const data = await res.json();
-      if (!res.ok) {
-        set({ aiTips: [], aiError: data?.error || "AI 育儿建议服务暂时不可用" });
-        return;
+    // AI tips are expensive — cache for 2 minutes
+    if (get().aiTips.length > 0 && !get().aiError && Date.now() - (_fetchedAt['aiTips'] || 0) < 120_000) return;
+    return dedup('aiTips', async () => {
+      try {
+        set({ aiError: null });
+        const res = await fetch("/api/ai/tips");
+        const data = await res.json();
+        if (!res.ok) {
+          set({ aiTips: [], aiError: data?.error || "AI 育儿建议服务暂时不可用" });
+          return;
+        }
+        set({ aiTips: Array.isArray(data) ? data : [], aiError: null });
+        markFetched('aiTips');
+      } catch (e: any) {
+        console.error("Failed to fetch AI tips:", e);
+        set({ aiTips: [], aiError: e?.message || "AI 育儿建议连接失败" });
       }
-      set({ aiTips: Array.isArray(data) ? data : [], aiError: null });
-    } catch (e: any) {
-      console.error("Failed to fetch AI tips:", e);
-      set({ aiTips: [], aiError: e?.message || "AI 育儿建议连接失败" });
-    }
+    });
   },
 
   // ===== Update actions =====

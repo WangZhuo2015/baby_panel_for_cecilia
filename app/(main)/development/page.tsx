@@ -81,25 +81,21 @@ export default function DevelopmentPage() {
       setLoading(true)
       setError(null)
       try {
-        const msRes = await fetch(`/api/development/milestones?category=${activeTab}&month=${selectedMonth}`)
+        const [msRes, actRes] = await Promise.all([
+          fetch(`/api/development/milestones?category=${activeTab}&month=${selectedMonth}`),
+          fetch(`/api/development/activities?month=${selectedMonth}`).catch(() => null),
+        ])
 
         let msData: Milestone[] = []
         if (msRes.ok) {
           const msJson = await msRes.json()
           msData = Array.isArray(msJson) ? msJson : msJson.milestones || []
         }
-
         setMilestones(msData)
 
-        // Try to load activities
-        try {
-          const actRes = await fetch(`/api/development/activities?month=${selectedMonth}`)
-          if (actRes.ok) {
-            const actJson = await actRes.json()
-            setActivities(Array.isArray(actJson) ? actJson : actJson.activities || [])
-          }
-        } catch {
-          // Activities are optional
+        if (actRes && actRes.ok) {
+          const actJson = await actRes.json()
+          setActivities(Array.isArray(actJson) ? actJson : actJson.activities || [])
         }
       } catch (err: any) {
         setError(err.message || '加载失败')

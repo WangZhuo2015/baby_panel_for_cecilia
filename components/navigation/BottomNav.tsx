@@ -1,6 +1,7 @@
 "use client";
 
-import { usePathname, useRouter } from "next/navigation";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { Home, TrendingUp, UtensilsCrossed, Star, ShieldCheck } from "lucide-react";
 
 const navItems = [
@@ -13,7 +14,6 @@ const navItems = [
 
 export function BottomNav() {
   const pathname = usePathname();
-  const router = useRouter();
 
   const isActive = (path: string) => {
     if (path === "/") return pathname === "/" || pathname === "/today";
@@ -27,9 +27,10 @@ export function BottomNav() {
           const Icon = item.icon;
           const active = isActive(item.path);
           return (
-            <button
+            <Link
               key={item.path}
-              onClick={() => router.push(item.path)}
+              href={item.path}
+              prefetch={true}
               className={`flex flex-col items-center justify-center gap-0.5 px-3 py-1 min-w-[52px] rounded-2xl transition-all duration-200 btn-press cursor-pointer ${
                 active ? "text-primary font-bold" : "text-text-muted hover:text-text-secondary"
               }`}
@@ -40,7 +41,7 @@ export function BottomNav() {
               <span className={`text-[10px] tracking-tight ${active ? "text-primary font-bold" : "text-text-muted"}`}>
                 {item.label}
               </span>
-            </button>
+            </Link>
           );
         })}
       </div>
