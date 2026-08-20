@@ -57,20 +57,24 @@ export async function GET(request: Request) {
     ]);
 
     const typeLabels: Record<string, string> = {
-      breast: "母乳",
+      breast: "母乳亲喂",
       formula: "配方奶",
+      bottle_breast: "瓶喂母乳",
       mixed: "混合喂养",
+      solid: "辅食餐点",
       night: "夜间睡眠",
       day: "白天小睡",
-      pee: "尿",
+      pee: "嘘嘘 (尿)",
       poop: "便便",
-      both: "尿 + 便",
+      both: "嘘嘘 + 便便",
     };
 
     const typeIcons: Record<string, string> = {
-      breast: "🍼",
+      breast: "🤱",
       formula: "🍼",
+      bottle_breast: "🍼",
       mixed: "🍼",
+      solid: "🥣",
       night: "🌙",
       day: "💤",
       pee: "💧",
@@ -83,12 +87,32 @@ export async function GET(request: Request) {
 
     for (const r of feedingRecords) {
       const time = formatIsoToLocalTime(r.timestamp);
+      let detail = "";
+      if (r.type === "breast") {
+        detail = `左侧 ${r.leftMinutes || 0}分 · 右侧 ${r.rightMinutes || 0}分`;
+      } else if (r.type === "formula") {
+        detail = `配方奶 ${r.amountMl || 0}ml`;
+      } else if (r.type === "bottle_breast") {
+        detail = `瓶喂母乳 ${r.amountMl || 0}ml`;
+      } else if (r.type === "mixed") {
+        detail = `亲喂 ${(r.leftMinutes || 0) + (r.rightMinutes || 0)}分 + 奶粉 ${r.amountMl || 0}ml`;
+      } else if (r.type === "solid") {
+        detail = r.notes || "辅食";
+      }
+
+      if (r.spitUp) {
+        detail += detail ? " · 吐奶 ⚠️" : "吐奶 ⚠️";
+      }
+      if (r.notes && r.type !== "solid") {
+        detail += ` (${r.notes})`;
+      }
+
       timeline.push({
         id: r.id,
         time,
         type: "feeding" as const,
         title: typeLabels[r.type] || "喂奶",
-        detail: r.amountMl ? `配方奶 ${r.amountMl}ml` : undefined,
+        detail: detail || undefined,
         icon: typeIcons[r.type] || "🍼",
       });
     }
@@ -101,24 +125,46 @@ export async function GET(request: Request) {
       const durationMin = Math.round((endMs - startMs) / 60000);
       const h = Math.floor(durationMin / 60);
       const m = durationMin % 60;
+      const durationText = h > 0 ? `${h}小时${m > 0 ? `${m}分` : ""}` : `${m}分钟`;
+      let detail = `${durationText}（${start}–${end}）`;
+      if (r.nightWakingCount > 0) {
+        detail += ` · 夜醒 ${r.nightWakingCount}次`;
+      }
+      if (r.notes) {
+        detail += ` · ${r.notes}`;
+      }
+
       timeline.push({
         id: r.id,
         time: start,
         type: "sleep" as const,
         title: typeLabels[r.type] || "睡觉",
-        detail: `${h}h${m}m（${start}–${end}）`,
+        detail,
         icon: typeIcons[r.type] || "🌙",
       });
     }
 
     for (const r of diaperRecords) {
       const time = formatIsoToLocalTime(r.timestamp);
+      let detail = typeLabels[r.type] || "";
+      if (r.poopColor) {
+        const colorMap: Record<string, string> = { yellow: "黄色", green: "绿色", brown: "棕色", other: "其他" };
+        detail += ` · ${colorMap[r.poopColor] || r.poopColor}`;
+      }
+      if (r.poopConsistency) {
+        const consMap: Record<string, string> = { loose: "稀便", paste: "糊状", formed: "成形" };
+        detail += ` · ${consMap[r.poopConsistency] || r.poopConsistency}`;
+      }
+      if (r.notes) {
+        detail += ` · ${r.notes}`;
+      }
+
       timeline.push({
         id: r.id,
         time,
         type: "diaper" as const,
-        title: "尿布",
-        detail: typeLabels[r.type] || undefined,
+        title: "换尿布",
+        detail: detail || undefined,
         icon: typeIcons[r.type] || "💧",
       });
     }
@@ -129,9 +175,9 @@ export async function GET(request: Request) {
         id: r.id,
         time: r.time,
         type: "food" as const,
-        title: "辅食",
+        title: "辅食餐点",
         detail: foods.length > 0 ? foods.join("、") : undefined,
-        icon: "🍽️",
+        icon: "🥣",
       });
     }
 

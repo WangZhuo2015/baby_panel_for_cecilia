@@ -9,16 +9,11 @@ const baseUrl = 'http://127.0.0.1:3088';
 
 const pages = [
   { name: '01-home.png', path: '/' },
-  { name: '02-growth.png', path: '/growth' },
-  { name: '03-growth-add.png', path: '/growth/add' },
-  { name: '04-health-vaccines.png', path: '/health/vaccines' },
-  { name: '05-health-medical.png', path: '/health/medical' },
-  { name: '06-health-medical-add.png', path: '/health/medical/add' },
-  { name: '07-food.png', path: '/food' },
-  { name: '08-development.png', path: '/development' },
-  { name: '09-family.png', path: '/family' },
-  { name: '10-login.png', path: '/login' },
-  { name: '11-register.png', path: '/register' },
+  { name: '02-feeding-record.png', path: '/records/feeding' },
+  { name: '03-sleep-record.png', path: '/records/sleep' },
+  { name: '04-diaper-record.png', path: '/records/diaper' },
+  { name: '05-growth.png', path: '/growth' },
+  { name: '06-food.png', path: '/food' },
 ];
 
 async function run() {
@@ -27,7 +22,6 @@ async function run() {
     args: ['--no-sandbox', '--disable-setuid-sandbox']
   });
 
-  // Mobile viewport: 390x844 (iPhone 14/15)
   const context = await browser.newContext({
     viewport: { width: 390, height: 844 },
     deviceScaleFactor: 2,

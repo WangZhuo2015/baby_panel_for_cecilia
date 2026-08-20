@@ -51,9 +51,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "未找到宝宝档案，请先创建宝宝信息" }, { status: 400 });
     }
 
-    if (!type || !["breast", "formula", "mixed"].includes(type)) {
+    const validTypes = ["breast", "formula", "bottle_breast", "mixed", "solid"];
+    if (!type || !validTypes.includes(type)) {
       return NextResponse.json(
-        { error: "type 必填且只能为 breast、formula 或 mixed" },
+        { error: "type 必填且只能为 breast、formula、bottle_breast、mixed 或 solid" },
         { status: 400 }
       );
     }
@@ -62,13 +63,13 @@ export async function POST(request: Request) {
       data: {
         babyId: finalBabyId,
         recordedById: user?.id ?? null,
-        timestamp,
+        timestamp: timestamp || new Date().toISOString(),
         type,
-        amountMl: amountMl ?? null,
-        leftMinutes: leftMinutes ?? null,
-        rightMinutes: rightMinutes ?? null,
-        spitUp: spitUp ?? false,
-        notes: notes ?? null,
+        amountMl: amountMl ? Number(amountMl) : null,
+        leftMinutes: leftMinutes ? Number(leftMinutes) : null,
+        rightMinutes: rightMinutes ? Number(rightMinutes) : null,
+        spitUp: Boolean(spitUp),
+        notes: notes ? String(notes).trim() : null,
       },
     });
 

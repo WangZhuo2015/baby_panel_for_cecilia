@@ -33,7 +33,7 @@ export interface Baby {
 }
 
 // ===== Record Types =====
-export type FeedingType = 'breast' | 'formula' | 'mixed';
+export type FeedingType = 'breast' | 'formula' | 'bottle_breast' | 'mixed' | 'solid';
 export type SleepType = 'night' | 'day';
 export type DiaperType = 'pee' | 'poop' | 'both';
 export type PoopColor = 'yellow' | 'green' | 'brown' | 'other';
@@ -48,6 +48,8 @@ export interface FeedingRecord {
   rightMinutes?: number;
   spitUp: boolean;
   notes?: string;
+  foodName?: string;
+  foodAmount?: string;
 }
 
 export interface SleepRecord {
@@ -57,6 +59,8 @@ export interface SleepRecord {
   type: SleepType;
   nightWakingCount: number;
   notes?: string;
+  fallingAsleepMethod?: string;
+  wakeUpMood?: string;
 }
 
 export interface DiaperRecord {

@@ -1,216 +1,437 @@
 "use client";
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { useForm } from 'react-hook-form';
-import { AppHeader } from '@/components/ui/AppHeader';
-import { CuteButton } from '@/components/ui/CuteButton';
-import { CuteInput } from '@/components/ui/CuteInput';
-import { CuteTextarea } from '@/components/ui/CuteTextarea';
-import { SegmentControl } from '@/components/ui/SegmentControl';
-import { FormSection } from '@/components/ui/FormSection';
-import { useToast } from '@/components/ui/Toast';
-import { useBabyStore } from '@/stores/useBabyStore';
-import { localTimeToUtcIso } from '@/lib/date';
-import type { FeedingType } from '@/types';
 
-interface FeedingFormData {
-  notes: string;
-}
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import {
+  Play,
+  Pause,
+  RotateCcw,
+  CheckCircle2,
+  Clock,
+  Plus,
+  Minus,
+} from "lucide-react";
+import { AppHeader } from "@/components/ui/AppHeader";
+import { CuteButton } from "@/components/ui/CuteButton";
+import { CuteInput } from "@/components/ui/CuteInput";
+import { CuteCard } from "@/components/ui/CuteCard";
+import { FormSection } from "@/components/ui/FormSection";
+import { SegmentControl } from "@/components/ui/SegmentControl";
+import { useToast } from "@/components/ui/Toast";
+import { useBabyStore } from "@/stores/useBabyStore";
+import { localTimeToUtcIso } from "@/lib/date";
+import type { FeedingType } from "@/types";
 
-const formulaAmounts = [60, 90, 120, 150, 180, 210];
+const FORMULA_PRESETS = [60, 90, 120, 150, 180, 210, 240];
 
 export default function FeedingRecordPage() {
   const router = useRouter();
   const { showToast } = useToast();
   const addFeedingRecord = useBabyStore((s) => s.addFeedingRecord);
 
-  const { register, handleSubmit } = useForm<FeedingFormData>();
-
-  const [feedingType, setFeedingType] = useState<FeedingType>('formula');
+  const [feedingType, setFeedingType] = useState<FeedingType>("formula");
   const [amount, setAmount] = useState(120);
-  const [leftMin, setLeftMin] = useState(10);
-  const [rightMin, setRightMin] = useState(8);
+
+  // Breastfeeding stopwatch & minutes
+  const [leftSeconds, setLeftSeconds] = useState(600); // default 10m
+  const [rightSeconds, setRightSeconds] = useState(480); // default 8m
+  const [activeSide, setActiveSide] = useState<"left" | "right" | null>(null);
+
   const [spitUp, setSpitUp] = useState(false);
+  const [tookVitaminD, setTookVitaminD] = useState(false);
+  const [notes, setNotes] = useState("");
+  const [saving, setSaving] = useState(false);
+
   const [time, setTime] = useState(() => {
     const now = new Date();
-    return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    return `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
   });
   const [isNow, setIsNow] = useState(true);
 
-  const onSubmit = (data: FeedingFormData) => {
-    addFeedingRecord({
-      timestamp: isNow ? new Date().toISOString() : localTimeToUtcIso(time),
-      type: feedingType,
-      amountMl: feedingType === 'formula' || feedingType === 'mixed' ? amount : undefined,
-      leftMinutes: feedingType === 'breast' || feedingType === 'mixed' ? leftMin : undefined,
-      rightMinutes: feedingType === 'breast' || feedingType === 'mixed' ? rightMin : undefined,
-      spitUp,
-      notes: data.notes || undefined,
-    });
+  // Stopwatch timer interval
+  useEffect(() => {
+    if (!activeSide) return;
+    const interval = setInterval(() => {
+      if (activeSide === "left") {
+        setLeftSeconds((prev) => prev + 1);
+      } else if (activeSide === "right") {
+        setRightSeconds((prev) => prev + 1);
+      }
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [activeSide]);
 
-    showToast('记录成功 ✨');
-    setTimeout(() => router.push('/'), 800);
+  const formatTimer = (totalSec: number) => {
+    const m = Math.floor(totalSec / 60);
+    const s = totalSec % 60;
+    return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+  };
+
+  const leftMin = Math.round(leftSeconds / 60);
+  const rightMin = Math.round(rightSeconds / 60);
+  const totalNursingMin = leftMin + rightMin;
+
+  const handleSubmit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    setSaving(true);
+    try {
+      let finalNotes = notes.trim();
+      if (tookVitaminD) {
+        finalNotes = finalNotes ? `${finalNotes} (已补充维生素D)` : "已补充维生素D";
+      }
+
+      await addFeedingRecord({
+        timestamp: isNow ? new Date().toISOString() : localTimeToUtcIso(time),
+        type: feedingType,
+        amountMl:
+          feedingType === "formula" || feedingType === "bottle_breast" || feedingType === "mixed"
+            ? Number(amount)
+            : undefined,
+        leftMinutes: feedingType === "breast" || feedingType === "mixed" ? leftMin : undefined,
+        rightMinutes: feedingType === "breast" || feedingType === "mixed" ? rightMin : undefined,
+        spitUp,
+        notes: finalNotes || undefined,
+      });
+
+      showToast("喂养记录已保存 ✨");
+      setTimeout(() => router.push("/"), 500);
+    } catch (err: any) {
+      showToast(err?.message || "保存失败，请重试");
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
-    <div className="min-h-[100dvh] bg-bg">
-      <AppHeader title="喂奶记录" showBack rightAction={
-        <button onClick={handleSubmit(onSubmit)} className="text-sm font-medium text-primary btn-press px-2">
-          保存
-        </button>
-      } />
+    <div className="min-h-[100dvh] bg-bg max-w-md mx-auto px-4 pt-4 pb-36">
+      <AppHeader
+        title="记录喂养"
+        showBack
+        rightAction={
+          <button
+            onClick={() => handleSubmit()}
+            disabled={saving}
+            className="text-xs font-bold text-primary px-3 py-1.5 rounded-full bg-primary-soft hover:bg-primary/20 btn-press whitespace-nowrap"
+          >
+            {saving ? "保存中" : "保存"}
+          </button>
+        }
+      />
 
-      <form onSubmit={handleSubmit(onSubmit)} className="px-4 pt-4 pb-8">
-        {/* Time */}
-        <FormSection title="时间">
-          <div className="flex items-center gap-3">
-            <div className="flex-1">
-              <CuteInput
-                type="time"
-                value={time}
-                onChange={(e) => { setTime(e.target.value); setIsNow(false); }}
-              />
-            </div>
-            <button
-              type="button"
-              onClick={() => {
-                const now = new Date();
-                setTime(`${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`);
-                setIsNow(true);
-              }}
-              className={`px-4 py-3 rounded-[18px] text-sm font-medium btn-press transition-colors whitespace-nowrap ${
-                isNow ? 'bg-primary text-white shadow-button' : 'bg-primary-light text-primary'
-              }`}
-            >
-              现在
-            </button>
-          </div>
-        </FormSection>
-
-        {/* Type */}
-        <FormSection title="类型">
+      <div className="space-y-4 mt-3">
+        {/* Feeding Type Selector */}
+        <CuteCard className="p-3">
           <SegmentControl
             options={[
-              { value: 'breast', label: '母乳' },
-              { value: 'formula', label: '配方奶' },
-              { value: 'mixed', label: '混合' },
+              { value: "breast", label: "🤱 母乳亲喂" },
+              { value: "formula", label: "🍼 配方奶粉" },
+              { value: "bottle_breast", label: "🍼 瓶喂母乳" },
+              { value: "mixed", label: "🥛 混合喂养" },
             ]}
             value={feedingType}
             onChange={(v) => setFeedingType(v as FeedingType)}
           />
-        </FormSection>
+        </CuteCard>
 
-        {/* Amount (formula) */}
-        {(feedingType === 'formula' || feedingType === 'mixed') && (
-          <FormSection title="奶量">
-            <div className="flex items-center justify-center gap-2 mb-4">
-              <div className="text-5xl font-bold text-primary">{amount}</div>
-              <div className="text-xl text-text-secondary ml-1">ml</div>
+        {/* 🤱 母乳亲喂：双侧实时秒表与时长调整 */}
+        {(feedingType === "breast" || feedingType === "mixed") && (
+          <CuteCard className="p-4 space-y-4 bg-gradient-to-br from-pink-50/70 to-purple-50/40 border border-pink-100">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-xs font-bold text-pink-900 flex items-center gap-1.5">
+                  <Clock size={15} className="text-primary" />
+                  母乳亲喂计时与时长
+                </h3>
+                <p className="text-[10px] text-text-muted mt-0.5">
+                  支持实时秒表计时或直接调节分钟数
+                </p>
+              </div>
+              <div className="text-right">
+                <span className="text-xs text-text-secondary">总计时长</span>
+                <p className="text-base font-extrabold text-primary">{totalNursingMin} 分钟</p>
+              </div>
             </div>
-            <div className="flex flex-wrap justify-center gap-2">
-              {formulaAmounts.map((a) => (
+
+            {/* Left & Right Dual Timer Cards */}
+            <div className="grid grid-cols-2 gap-3">
+              {/* Left Breast */}
+              <div
+                className={`p-3 rounded-2xl border transition-all text-center ${
+                  activeSide === "left"
+                    ? "bg-white border-primary ring-2 ring-primary/20 shadow-soft"
+                    : "bg-white/80 border-divider"
+                }`}
+              >
+                <span className="text-xs font-semibold text-text-secondary">左侧乳房</span>
+                <div className="text-2xl font-mono font-bold text-text-primary my-1.5">
+                  {formatTimer(leftSeconds)}
+                </div>
+
+                <div className="flex items-center justify-center gap-1.5 mb-2">
+                  <button
+                    type="button"
+                    onClick={() => setActiveSide(activeSide === "left" ? null : "left")}
+                    className={`px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1 transition-all ${
+                      activeSide === "left"
+                        ? "bg-primary text-white shadow-button"
+                        : "bg-primary-soft text-primary hover:bg-primary/20"
+                    }`}
+                  >
+                    {activeSide === "left" ? <Pause size={12} /> : <Play size={12} />}
+                    {activeSide === "left" ? "暂停" : "开始"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (activeSide === "left") setActiveSide(null);
+                      setLeftSeconds(0);
+                    }}
+                    className="p-1 rounded-full text-gray-400 hover:text-gray-600"
+                    title="重置"
+                  >
+                    <RotateCcw size={12} />
+                  </button>
+                </div>
+
+                {/* Quick Minute Adjustment */}
+                <div className="flex items-center justify-center gap-1 pt-1 border-t border-divider/50">
+                  <button
+                    type="button"
+                    onClick={() => setLeftSeconds(Math.max(0, leftSeconds - 60))}
+                    className="w-6 h-6 rounded-full bg-gray-100 text-gray-600 text-xs font-bold flex items-center justify-center"
+                  >
+                    -1
+                  </button>
+                  <span className="text-xs font-bold text-text-primary w-8">{leftMin}分</span>
+                  <button
+                    type="button"
+                    onClick={() => setLeftSeconds(leftSeconds + 60)}
+                    className="w-6 h-6 rounded-full bg-gray-100 text-gray-600 text-xs font-bold flex items-center justify-center"
+                  >
+                    +1
+                  </button>
+                </div>
+              </div>
+
+              {/* Right Breast */}
+              <div
+                className={`p-3 rounded-2xl border transition-all text-center ${
+                  activeSide === "right"
+                    ? "bg-white border-primary ring-2 ring-primary/20 shadow-soft"
+                    : "bg-white/80 border-divider"
+                }`}
+              >
+                <span className="text-xs font-semibold text-text-secondary">右侧乳房</span>
+                <div className="text-2xl font-mono font-bold text-text-primary my-1.5">
+                  {formatTimer(rightSeconds)}
+                </div>
+
+                <div className="flex items-center justify-center gap-1.5 mb-2">
+                  <button
+                    type="button"
+                    onClick={() => setActiveSide(activeSide === "right" ? null : "right")}
+                    className={`px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1 transition-all ${
+                      activeSide === "right"
+                        ? "bg-primary text-white shadow-button"
+                        : "bg-primary-soft text-primary hover:bg-primary/20"
+                    }`}
+                  >
+                    {activeSide === "right" ? <Pause size={12} /> : <Play size={12} />}
+                    {activeSide === "right" ? "暂停" : "开始"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (activeSide === "right") setActiveSide(null);
+                      setRightSeconds(0);
+                    }}
+                    className="p-1 rounded-full text-gray-400 hover:text-gray-600"
+                    title="重置"
+                  >
+                    <RotateCcw size={12} />
+                  </button>
+                </div>
+
+                {/* Quick Minute Adjustment */}
+                <div className="flex items-center justify-center gap-1 pt-1 border-t border-divider/50">
+                  <button
+                    type="button"
+                    onClick={() => setRightSeconds(Math.max(0, rightSeconds - 60))}
+                    className="w-6 h-6 rounded-full bg-gray-100 text-gray-600 text-xs font-bold flex items-center justify-center"
+                  >
+                    -1
+                  </button>
+                  <span className="text-xs font-bold text-text-primary w-8">{rightMin}分</span>
+                  <button
+                    type="button"
+                    onClick={() => setRightSeconds(rightSeconds + 60)}
+                    className="w-6 h-6 rounded-full bg-gray-100 text-gray-600 text-xs font-bold flex items-center justify-center"
+                  >
+                    +1
+                  </button>
+                </div>
+              </div>
+            </div>
+          </CuteCard>
+        )}
+
+        {/* 🍼 配方奶 / 瓶喂母乳：刻度预设与微调 */}
+        {(feedingType === "formula" || feedingType === "bottle_breast" || feedingType === "mixed") && (
+          <CuteCard className="p-4 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-bold text-text-secondary uppercase tracking-wider">
+                {feedingType === "bottle_breast" ? "瓶喂母乳量" : "配方奶量"}
+              </h3>
+              <span className="text-xs text-text-muted">点击或微调奶量</span>
+            </div>
+
+            {/* Big Amount Display */}
+            <div className="flex items-center justify-center gap-4 py-2">
+              <button
+                type="button"
+                onClick={() => setAmount(Math.max(10, amount - 10))}
+                className="w-10 h-10 rounded-full bg-primary-light text-primary flex items-center justify-center btn-press font-bold"
+              >
+                <Minus size={18} />
+              </button>
+
+              <div className="text-center">
+                <div className="text-5xl font-black text-primary tracking-tight">
+                  {amount}
+                </div>
+                <span className="text-xs font-semibold text-text-muted">毫升 (ml)</span>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setAmount(amount + 10)}
+                className="w-10 h-10 rounded-full bg-primary-light text-primary flex items-center justify-center btn-press font-bold"
+              >
+                <Plus size={18} />
+              </button>
+            </div>
+
+            {/* Quick Presets */}
+            <div className="flex flex-wrap justify-center gap-2 pt-1">
+              {FORMULA_PRESETS.map((p) => (
                 <button
-                  key={a}
+                  key={p}
                   type="button"
-                  onClick={() => setAmount(a)}
-                  className={`px-4 py-2.5 rounded-2xl text-sm font-medium btn-press transition-all ${
-                    amount === a
-                      ? 'bg-primary text-white shadow-button scale-105'
-                      : 'bg-primary-light text-primary hover:bg-primary-soft'
+                  onClick={() => setAmount(p)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+                    amount === p
+                      ? "bg-primary text-white shadow-button scale-105"
+                      : "bg-gray-100 text-text-secondary hover:bg-primary-soft"
                   }`}
                 >
-                  {a}ml
+                  {p}ml
                 </button>
               ))}
             </div>
-          </FormSection>
+          </CuteCard>
         )}
 
-        {/* Duration (breast) */}
-        {(feedingType === 'breast' || feedingType === 'mixed') && (
-          <FormSection title="哺乳时长">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="text-center">
-                <p className="text-xs text-text-secondary mb-2">左侧</p>
-                <div className="flex items-center justify-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setLeftMin(Math.max(0, leftMin - 1))}
-                    className="w-10 h-10 rounded-full bg-primary-light text-primary font-bold btn-press"
-                  >
-                    −
-                  </button>
-                  <span className="text-2xl font-bold text-text-primary w-12 text-center">{leftMin}</span>
-                  <button
-                    type="button"
-                    onClick={() => setLeftMin(leftMin + 1)}
-                    className="w-10 h-10 rounded-full bg-primary-light text-primary font-bold btn-press"
-                  >
-                    +
-                  </button>
-                  <span className="text-xs text-text-muted">min</span>
-                </div>
+        {/* 🕒 时间选择 */}
+        <CuteCard className="p-4 space-y-3">
+          <FormSection title="记录时间">
+            <div className="flex items-center gap-2">
+              <div className="flex-1">
+                <CuteInput
+                  type="time"
+                  value={time}
+                  onChange={(e) => {
+                    setTime(e.target.value);
+                    setIsNow(false);
+                  }}
+                />
               </div>
-              <div className="text-center">
-                <p className="text-xs text-text-secondary mb-2">右侧</p>
-                <div className="flex items-center justify-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setRightMin(Math.max(0, rightMin - 1))}
-                    className="w-10 h-10 rounded-full bg-primary-light text-primary font-bold btn-press"
-                  >
-                    −
-                  </button>
-                  <span className="text-2xl font-bold text-text-primary w-12 text-center">{rightMin}</span>
-                  <button
-                    type="button"
-                    onClick={() => setRightMin(rightMin + 1)}
-                    className="w-10 h-10 rounded-full bg-primary-light text-primary font-bold btn-press"
-                  >
-                    +
-                  </button>
-                  <span className="text-xs text-text-muted">min</span>
-                </div>
-              </div>
-            </div>
-          </FormSection>
-        )}
-
-        {/* Spit up */}
-        <FormSection title="是否吐奶">
-          <div className="flex gap-3">
-            {[false, true].map((val) => (
               <button
-                key={String(val)}
                 type="button"
-                onClick={() => setSpitUp(val)}
-                className={`flex-1 py-3 rounded-[18px] text-sm font-medium btn-press transition-all ${
-                  spitUp === val
-                    ? 'bg-primary text-white shadow-button'
-                    : 'bg-primary-light text-text-secondary'
+                onClick={() => {
+                  const now = new Date();
+                  setTime(
+                    `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`
+                  );
+                  setIsNow(true);
+                }}
+                className={`px-4 py-2.5 rounded-2xl text-xs font-bold transition-all whitespace-nowrap ${
+                  isNow
+                    ? "bg-primary text-white shadow-button"
+                    : "bg-primary-light text-primary hover:bg-primary-soft"
                 }`}
               >
-                {val ? '是' : '否'}
+                刚刚 / 现在
               </button>
-            ))}
-          </div>
-        </FormSection>
+            </div>
+          </FormSection>
 
-        {/* Notes */}
-        <FormSection title="备注">
-          <CuteTextarea
-            placeholder="记录一下特殊情况..."
-            {...register('notes')}
-          />
-        </FormSection>
+          {/* 吐奶与补充剂开关 */}
+          <div className="pt-2 border-t border-divider/60 space-y-2">
+            <div className="flex items-center justify-between">
+              <div>
+                <span className="text-xs font-semibold text-text-primary block">
+                  ⚠️ 吐奶 / 溢奶情况
+                </span>
+                <span className="text-[10px] text-text-muted">记录是否有大口吐奶或溢奶</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSpitUp(!spitUp)}
+                className={`px-3 py-1 rounded-full text-xs font-bold transition-all whitespace-nowrap ${
+                  spitUp
+                    ? "bg-red-500 text-white shadow-sm"
+                    : "bg-gray-100 text-text-muted"
+                }`}
+              >
+                {spitUp ? "有吐奶 🚨" : "正常无吐奶"}
+              </button>
+            </div>
+
+            <div className="flex items-center justify-between pt-1">
+              <div>
+                <span className="text-xs font-semibold text-text-primary block">
+                  💊 维生素 D3 打卡
+                </span>
+                <span className="text-[10px] text-text-muted">已随本顿喂养补充维生素D</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setTookVitaminD(!tookVitaminD)}
+                className={`px-3 py-1 rounded-full text-xs font-bold transition-all whitespace-nowrap ${
+                  tookVitaminD
+                    ? "bg-mint text-white shadow-sm"
+                    : "bg-gray-100 text-text-muted"
+                }`}
+              >
+                {tookVitaminD ? "已吃 D3 ✨" : "未吃"}
+              </button>
+            </div>
+          </div>
+
+          <FormSection title="备注说明（可选）">
+            <CuteInput
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="如：吃得很香 / 拍嗝顺畅 / 换了新奶嘴"
+            />
+          </FormSection>
+        </CuteCard>
 
         {/* Submit */}
-        <div className="mt-8">
-          <CuteButton type="submit" fullWidth size="lg">
-            保存记录
+        <div className="pt-2">
+          <CuteButton
+            variant="primary"
+            size="lg"
+            fullWidth
+            onClick={() => handleSubmit()}
+            disabled={saving}
+            className="flex items-center justify-center gap-2"
+          >
+            <CheckCircle2 size={18} />
+            {saving ? "保存中..." : "保存喂养记录"}
           </CuteButton>
         </div>
-      </form>
+      </div>
     </div>
   );
 }
