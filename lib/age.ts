@@ -5,10 +5,9 @@ export function calculateAge(birthDate: string): { months: number; days: number;
   const birth = new Date(birthDate);
   const now = new Date();
 
-  let months = now.getFullYear() - birth.getFullYear();
-  const monthDiff = now.getMonth() - birth.getMonth();
+  let months = (now.getFullYear() - birth.getFullYear()) * 12 + (now.getMonth() - birth.getMonth());
 
-  if (monthDiff < 0 || (monthDiff === 0 && now.getDate() < birth.getDate())) {
+  if (now.getDate() < birth.getDate()) {
     months--;
   }
 

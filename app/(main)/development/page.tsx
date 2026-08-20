@@ -30,7 +30,7 @@ interface Activity {
   title: string
   description?: string
   materials?: string[]
-  steps?: string[]
+  steps?: Array<{ order: number; instruction: string }>
   safety?: string | null
   stopConditions?: string[] | null
   durationMinutes?: number | null
@@ -286,17 +286,17 @@ export default function DevelopmentPage() {
                   {/* Stop conditions */}
                   {activity.stopConditions && activity.stopConditions.length > 0 && (
                     <div className="bg-rose-50 border border-rose-100 rounded-xl p-2.5 mb-3">
-                      <p className="text-xs text-rose-600 flex items-start gap-1.5">
+                      <div className="text-xs text-rose-600 flex items-start gap-1.5">
                         <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-                        <span>
+                        <div className="min-w-0">
                           <span className="font-medium">出现以下情况请停止：</span>
                           <ul className="mt-1 ml-2 list-disc space-y-0.5">
                             {activity.stopConditions.map((cond, i) => (
                               <li key={i}>{cond}</li>
                             ))}
                           </ul>
-                        </span>
-                      </p>
+                        </div>
+                      </div>
                     </div>
                   )}
 
@@ -324,7 +324,7 @@ export default function DevelopmentPage() {
                             <span className="flex items-center justify-center w-5 h-5 rounded-full bg-violet-100 text-violet-600 text-[10px] font-bold shrink-0 mt-0.5">
                               {i + 1}
                             </span>
-                            <span className="text-xs text-gray-500 leading-relaxed">{step}</span>
+                            <span className="text-xs text-gray-500 leading-relaxed">{step.instruction}</span>
                           </li>
                         ))}
                       </ol>

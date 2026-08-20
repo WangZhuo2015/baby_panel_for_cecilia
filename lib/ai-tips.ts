@@ -61,6 +61,7 @@ export async function getAiTips(): Promise<string[]> {
         temperature: 0.8,
       }),
       cache: "no-store",
+      signal: AbortSignal.timeout(3000),
     });
 
     if (!res.ok) {
