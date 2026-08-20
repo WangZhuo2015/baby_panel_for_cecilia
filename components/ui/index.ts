@@ -12,3 +12,5 @@ export { Timeline } from './Timeline';
 export { BabyProfileHeader } from './BabyProfileHeader';
 export { FormSection } from './FormSection';
 export { AppHeader } from './AppHeader';
+export { InstallGuideModal } from './InstallGuideModal';
+export { InstallGuideBanner } from './InstallGuideBanner';

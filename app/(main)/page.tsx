@@ -22,6 +22,7 @@ import { QuickActionCard } from "@/components/ui/QuickActionCard";
 import { Timeline } from "@/components/ui/Timeline";
 import { CuteCard } from "@/components/ui/CuteCard";
 import { CuteButton } from "@/components/ui/CuteButton";
+import { InstallGuideBanner } from "@/components/ui/InstallGuideBanner";
 import { formatIsoToLocalTime } from "@/lib/date";
 
 function NotificationBell() {
@@ -272,6 +273,9 @@ export default function HomePage() {
           <NotificationBell />
         </div>
       </div>
+
+      {/* 📱 PWA 保存到桌面引导 Banner */}
+      <InstallGuideBanner />
 
       {/* 🌟 核心功能看板：实时喂养与睡眠即时状态 */}
       <div className="grid grid-cols-2 gap-2.5">

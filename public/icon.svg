@@ -1,0 +1,61 @@
+
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFF0F5"/>
+      <stop offset="50%" stop-color="#FFE4EE"/>
+      <stop offset="100%" stop-color="#FFD1E0"/>
+    </linearGradient>
+    <linearGradient id="primary" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FF75A4"/>
+      <stop offset="100%" stop-color="#FF4D85"/>
+    </linearGradient>
+    <linearGradient id="bow" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FF5C8D"/>
+      <stop offset="100%" stop-color="#E83068"/>
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#FF4D85" flood-opacity="0.25"/>
+    </filter>
+  </defs>
+
+  <!-- Background rounded rect -->
+  <rect width="512" height="512" rx="128" fill="url(#bg)"/>
+  
+  <!-- Outer glowing circle -->
+  <circle cx="256" cy="256" r="180" fill="#FFFFFF" filter="url(#shadow)"/>
+
+  <!-- Baby Face Head -->
+  <g transform="translate(116, 116)">
+    <!-- Baby Face -->
+    <ellipse cx="140" cy="150" rx="110" ry="115" fill="#FFE8E8" stroke="url(#primary)" stroke-width="12"/>
+    
+    <!-- Ears -->
+    <ellipse cx="26" cy="150" rx="20" ry="26" fill="#FFE8E8" stroke="url(#primary)" stroke-width="10"/>
+    <ellipse cx="254" cy="150" rx="20" ry="26" fill="#FFE8E8" stroke="url(#primary)" stroke-width="10"/>
+    
+    <!-- Cheeks (Blush) -->
+    <ellipse cx="75" cy="170" rx="18" ry="12" fill="#FFAEC9" opacity="0.65"/>
+    <ellipse cx="205" cy="170" rx="18" ry="12" fill="#FFAEC9" opacity="0.65"/>
+
+    <!-- Eyes (Cute Curved Arc / Happy Wink) -->
+    <circle cx="90" cy="140" r="12" fill="#4A252B"/>
+    <circle cx="94" cy="136" r="4" fill="#FFFFFF"/>
+    
+    <circle cx="190" cy="140" r="12" fill="#4A252B"/>
+    <circle cx="194" cy="136" r="4" fill="#FFFFFF"/>
+
+    <!-- Cute Smile -->
+    <path d="M 115 178 Q 140 205 165 178" fill="none" stroke="#FF4D85" stroke-width="10" stroke-linecap="round"/>
+
+    <!-- Cute Hair Tuft -->
+    <path d="M 140 38 Q 155 10 170 24 Q 155 35 142 42" fill="url(#primary)" stroke="url(#primary)" stroke-width="4"/>
+
+    <!-- Cute Bow Ribbon on the top-right -->
+    <g transform="translate(195, 45) rotate(15)">
+      <polygon points="0,0 -30,-16 -30,16" fill="url(#bow)"/>
+      <polygon points="0,0 30,-16 30,16" fill="url(#bow)"/>
+      <circle cx="0" cy="0" r="10" fill="#FFE478"/>
+    </g>
+  </g>
+</svg>

@@ -21,8 +21,8 @@ export function BottomNav() {
   };
 
   return (
-    <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px] bg-white/95 backdrop-blur-lg border-t border-primary-soft/50 safe-bottom z-50">
-      <div className="flex items-center justify-around px-2 pt-2 pb-1">
+    <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px] bg-white/95 backdrop-blur-xl border-t border-primary-soft/40 z-50 pb-[max(8px,env(safe-area-inset-bottom,0px))]">
+      <div className="flex items-center justify-around px-2 pt-1.5 pb-0.5">
         {navItems.map((item) => {
           const Icon = item.icon;
           const active = isActive(item.path);
@@ -30,14 +30,14 @@ export function BottomNav() {
             <button
               key={item.path}
               onClick={() => router.push(item.path)}
-              className={`flex flex-col items-center justify-center gap-0.5 px-3 py-1.5 min-w-[52px] rounded-2xl transition-all duration-200 btn-press ${
-                active ? "text-primary" : "text-text-muted"
+              className={`flex flex-col items-center justify-center gap-0.5 px-3 py-1 min-w-[52px] rounded-2xl transition-all duration-200 btn-press cursor-pointer ${
+                active ? "text-primary font-bold" : "text-text-muted hover:text-text-secondary"
               }`}
             >
               <div className={`p-1 rounded-xl transition-colors ${active ? "bg-primary/10" : ""}`}>
-                <Icon size={22} strokeWidth={active ? 2.2 : 1.8} />
+                <Icon size={21} strokeWidth={active ? 2.3 : 1.8} />
               </div>
-              <span className={`text-[10px] font-medium ${active ? "text-primary" : "text-text-muted"}`}>
+              <span className={`text-[10px] tracking-tight ${active ? "text-primary font-bold" : "text-text-muted"}`}>
                 {item.label}
               </span>
             </button>

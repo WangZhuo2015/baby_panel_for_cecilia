@@ -8,7 +8,8 @@ import { CuteButton } from "@/components/ui/CuteButton";
 import { CuteInput } from "@/components/ui/CuteInput";
 import { useToast } from "@/components/ui/Toast";
 import { useBabyStore } from "@/stores/useBabyStore";
-import { Users, Copy, Check, UserPlus, LogOut, ShieldCheck } from "lucide-react";
+import { Users, Copy, Check, UserPlus, LogOut, ShieldCheck, Smartphone, Sparkles, ChevronRight } from "lucide-react";
+import { InstallGuideModal } from "@/components/ui/InstallGuideModal";
 
 export default function FamilyPage() {
   const router = useRouter();
@@ -26,6 +27,7 @@ export default function FamilyPage() {
   const [copied, setCopied] = useState(false);
   const [joinCode, setJoinCode] = useState("");
   const [joining, setJoining] = useState(false);
+  const [isInstallModalOpen, setIsInstallModalOpen] = useState(false);
 
   useEffect(() => {
     fetchUser().then((u) => {
@@ -165,6 +167,31 @@ export default function FamilyPage() {
         </form>
       </CuteCard>
 
+      {/* 📱 PWA / Add to Home Screen Setting Card */}
+      <h3 className="text-sm font-semibold text-text-secondary mb-3 px-1">应用安装与体验</h3>
+      <CuteCard
+        className="p-4 mb-6 bg-gradient-to-r from-primary-light/70 via-pink-50 to-lavender/15 border border-primary/25 cursor-pointer hover:shadow-md transition-all"
+        onClick={() => setIsInstallModalOpen(true)}
+      >
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-primary text-white flex items-center justify-center shadow-button shrink-0">
+              <Smartphone size={20} />
+            </div>
+            <div>
+              <p className="text-xs font-bold text-text-primary flex items-center gap-1">
+                保存为手机桌面 App
+                <Sparkles size={13} className="text-primary" />
+              </p>
+              <p className="text-[11px] text-text-secondary mt-0.5">
+                支持 iOS / Android 一键全屏，查看详细添加图文指引
+              </p>
+            </div>
+          </div>
+          <ChevronRight size={16} className="text-text-muted" />
+        </div>
+      </CuteCard>
+
       {/* Account Settings / Logout */}
       <div className="pt-4 border-t border-divider text-center">
         <CuteButton
@@ -177,6 +204,11 @@ export default function FamilyPage() {
           退出当前账号 ({user?.username})
         </CuteButton>
       </div>
+
+      <InstallGuideModal
+        isOpen={isInstallModalOpen}
+        onClose={() => setIsInstallModalOpen(false)}
+      />
     </div>
   );
 }

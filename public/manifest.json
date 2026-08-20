@@ -1,10 +1,36 @@
 {
   "name": "宝宝成长工作台",
-  "short_name": "宝宝",
-  "description": "宝宝成长记录 + AI 育儿工作台",
+  "short_name": "宝宝成长",
+  "description": "宝宝日常喂养与睡眠记录、WHO成长曲线、智能体检单OCR及AI育儿助手",
   "start_url": "/",
+  "id": "/",
   "display": "standalone",
   "background_color": "#FFF9FB",
-  "theme_color": "#FFF9FB",
-  "orientation": "portrait"
+  "theme_color": "#FF6F9F",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    }
+  ]
 }
