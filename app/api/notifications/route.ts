@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getAiTips } from '@/lib/ai-tips'
 import { getLocalDateStr, getLocalDayUtcRange } from '@/lib/date'
+import { getAuthSession, getActiveBabyForUser } from '@/lib/auth'
 
 export interface NotificationItem {
   id: string
@@ -13,15 +14,28 @@ export interface NotificationItem {
   icon: string
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const user = await getAuthSession(request)
+    let babyId: string | undefined
+    if (user) {
+      const active = await getActiveBabyForUser(user.id)
+      babyId = active?.baby?.id
+    }
+
+    const { searchParams } = new URL(request.url)
+    const targetBabyId = searchParams.get('babyId') || babyId
+
     const notifications: NotificationItem[] = []
     const todayStr = getLocalDateStr()
     const { start, end } = getLocalDayUtcRange(todayStr)
 
     // 1. Vaccine reminders — upcoming within 7 days
+    const vaccineWhere: any = { isCompleted: false }
+    if (targetBabyId) vaccineWhere.babyId = targetBabyId
+
     const vaccines = await prisma.vaccineRecord.findMany({
-      where: { isCompleted: false },
+      where: vaccineWhere,
       orderBy: { scheduledDate: 'asc' }
     })
 
@@ -50,29 +64,39 @@ export async function GET() {
       }
     }
 
-    // 2. AI Tips (fetched directly, no internal HTTP call)
-    const aiTips = await getAiTips()
-    for (let i = 0; i < aiTips.length; i++) {
-      notifications.push({
-        id: `ai-${todayStr}-${i}`,
-        type: 'ai',
-        title: '🤖 AI 育儿建议',
-        detail: aiTips[i],
-        time: '今天',
-        urgent: false,
-        icon: '🤖'
-      })
+    // 2. AI Tips (if AI service is up and responsive)
+    try {
+      const aiTips = await getAiTips(targetBabyId)
+      for (let i = 0; i < aiTips.length; i++) {
+        notifications.push({
+          id: `ai-${todayStr}-${i}`,
+          type: 'ai',
+          title: '🤖 AI 育儿建议',
+          detail: aiTips[i],
+          time: '今天',
+          urgent: false,
+          icon: '🤖'
+        })
+      }
+    } catch {
+      // If AI tips failed or offline, skip without adding fake suggestions
     }
 
     // 3. Daily reminders — check today's records
+    const feedingWhere: any = { timestamp: { gte: start, lt: end } }
+    const sleepWhere: any = {}
+    const foodWhere: any = { date: todayStr }
+
+    if (targetBabyId) {
+      feedingWhere.babyId = targetBabyId
+      sleepWhere.babyId = targetBabyId
+      foodWhere.babyId = targetBabyId
+    }
+
     const [feedingRecords, sleepRecords, foodLogs] = await Promise.all([
-      prisma.feedingRecord.findMany({
-        where: { timestamp: { gte: start, lt: end } }
-      }),
-      prisma.sleepRecord.findMany(),
-      prisma.foodLogRecord.findMany({
-        where: { date: todayStr }
-      })
+      prisma.feedingRecord.findMany({ where: feedingWhere }),
+      prisma.sleepRecord.findMany({ where: sleepWhere }),
+      prisma.foodLogRecord.findMany({ where: foodWhere })
     ])
 
     // Check sleep records for today
@@ -125,7 +149,7 @@ export async function GET() {
     })
 
     if (dataRelease) {
-      const org = dataRelease.sources?.[0]?.organization || '未知来源'
+      const org = dataRelease.sources?.[0]?.organization || '权威机构标准'
       notifications.push({
         id: `data-release-${dataRelease.id}`,
         type: 'data_release',

@@ -2,6 +2,9 @@
 
 import { create } from "zustand";
 import type {
+  User,
+  Family,
+  FamilyMember,
   Baby,
   FeedingRecord,
   SleepRecord,
@@ -27,6 +30,12 @@ import type {
 } from "@/types";
 
 interface BabyStore {
+  // Auth & Family
+  user: User | null;
+  family: Family | null;
+  familyMembers: FamilyMember[];
+  authLoading: boolean;
+
   // Data
   baby: Baby | null;
   feedingRecords: FeedingRecord[];
@@ -55,10 +64,25 @@ interface BabyStore {
   warningSigns: DevelopmentWarningSign[];
   activities: ActivityRecommendation[];
   aiTips: string[];
+  aiError: string | null;
+
+  // Actions - Auth
+  fetchUser: () => Promise<User | null>;
+  login: (data: { username: string; password: string }) => Promise<void>;
+  register: (data: {
+    username: string;
+    password: string;
+    displayName?: string;
+    inviteCode?: string;
+    relation?: string;
+  }) => Promise<void>;
+  logout: () => Promise<void>;
+  joinFamily: (inviteCode: string, relation?: string) => Promise<void>;
+  fetchFamilyMembers: () => Promise<void>;
 
   // Actions - fetch from API
   fetchBaby: () => Promise<void>;
-  saveBaby: (data: { nickname: string; birthDate: string; gender: string }) => Promise<void>;
+  saveBaby: (data: { nickname: string; birthDate: string; gender: string; gestationalAge?: number }) => Promise<void>;
   fetchFeedingRecords: (date?: string) => Promise<void>;
   fetchSleepRecords: () => Promise<void>;
   fetchDiaperRecords: () => Promise<void>;
@@ -66,7 +90,7 @@ interface BabyStore {
   fetchGrowthMeasurements: () => Promise<void>;
   fetchDailySummary: (date?: string) => Promise<void>;
   fetchTimeline: (date?: string) => Promise<void>;
-  fetchWeather: () => Promise<void>;
+  fetchWeather: (lat?: number, lon?: number, city?: string) => Promise<void>;
   fetchFoodItems: (status?: string) => Promise<void>;
   fetchFeedingGuidelines: () => Promise<void>;
   fetchFoodPlans: (date?: string) => Promise<void>;
@@ -89,13 +113,21 @@ interface BabyStore {
 }
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, init)
-  if (!res.ok) throw new Error(`Request failed (${res.status})`)
-  return res.json()
+  const res = await fetch(url, init);
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data?.error || `Request failed (${res.status})`);
+  }
+  return res.json();
 }
 
-export const useBabyStore = create<BabyStore>((set) => ({
+export const useBabyStore = create<BabyStore>((set, get) => ({
   // Initial state
+  user: null,
+  family: null,
+  familyMembers: [],
+  authLoading: true,
+
   baby: null,
   feedingRecords: [],
   sleepRecords: [],
@@ -115,6 +147,101 @@ export const useBabyStore = create<BabyStore>((set) => ({
   warningSigns: [],
   activities: [],
   aiTips: [],
+  aiError: null,
+
+  // ===== Auth Actions =====
+
+  fetchUser: async () => {
+    try {
+      set({ authLoading: true });
+      const res = await fetch("/api/auth/me");
+      if (!res.ok) {
+        set({ user: null, family: null, authLoading: false });
+        return null;
+      }
+      const data = await res.json();
+      set({
+        user: data.user,
+        family: data.family,
+        baby: data.baby || get().baby,
+        authLoading: false,
+      });
+      return data.user;
+    } catch {
+      set({ user: null, family: null, authLoading: false });
+      return null;
+    }
+  },
+
+  login: async (credentials) => {
+    const data = await request<{ user: User; family: Family; baby: Baby | null }>("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(credentials),
+    });
+    set({
+      user: data.user,
+      family: data.family,
+      baby: data.baby,
+    });
+  },
+
+  register: async (registerData) => {
+    const data = await request<{ user: User; family: Family; baby: Baby | null }>("/api/auth/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(registerData),
+    });
+    set({
+      user: data.user,
+      family: data.family,
+      baby: data.baby,
+    });
+  },
+
+  logout: async () => {
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } finally {
+      set({
+        user: null,
+        family: null,
+        familyMembers: [],
+        baby: null,
+        feedingRecords: [],
+        sleepRecords: [],
+        diaperRecords: [],
+        foodLogRecords: [],
+        dailySummary: null,
+        timeline: [],
+      });
+    }
+  },
+
+  joinFamily: async (inviteCode: string, relation?: string) => {
+    const data = await request<{ message: string; family: Family; baby: Baby | null }>("/api/family/join", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ inviteCode, relation }),
+    });
+    set({
+      family: data.family,
+      baby: data.baby,
+    });
+    get().fetchFamilyMembers();
+  },
+
+  fetchFamilyMembers: async () => {
+    try {
+      const data = await request<{ family: Family; members: FamilyMember[] }>("/api/family/members");
+      set({
+        family: data.family,
+        familyMembers: data.members || [],
+      });
+    } catch (e) {
+      console.error("Failed to fetch family members:", e);
+    }
+  },
 
   // ===== Fetch actions =====
 
@@ -129,7 +256,7 @@ export const useBabyStore = create<BabyStore>((set) => ({
 
   saveBaby: async (data) => {
     try {
-      const existing = useBabyStore.getState().baby;
+      const existing = get().baby;
       const updated = await request<Baby>("/api/baby", {
         method: existing ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
@@ -209,9 +336,31 @@ export const useBabyStore = create<BabyStore>((set) => ({
     }
   },
 
-  fetchWeather: async () => {
+  fetchWeather: async (lat?: number, lon?: number, city?: string) => {
     try {
-      const data = await request<WeatherData>("/api/weather");
+      let finalLat = lat;
+      let finalLon = lon;
+
+      // Try browser geolocation if not provided
+      if (finalLat === undefined && typeof window !== "undefined" && "geolocation" in navigator) {
+        try {
+          const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
+            navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 3000 });
+          });
+          finalLat = pos.coords.latitude;
+          finalLon = pos.coords.longitude;
+        } catch {
+          // Geolocation denied or timed out, fallback to defaults
+        }
+      }
+
+      const params = new URLSearchParams();
+      if (finalLat !== undefined) params.set("lat", String(finalLat));
+      if (finalLon !== undefined) params.set("lon", String(finalLon));
+      if (city) params.set("city", city);
+
+      const qs = params.toString();
+      const data = await request<WeatherData>(`/api/weather${qs ? `?${qs}` : ""}`);
       set({ weather: data });
     } catch (e) {
       console.error("Failed to fetch weather:", e);
@@ -306,10 +455,17 @@ export const useBabyStore = create<BabyStore>((set) => ({
 
   fetchAiTips: async () => {
     try {
-      const data = await request<string[]>("/api/ai/tips");
-      set({ aiTips: Array.isArray(data) ? data : [] });
-    } catch (e) {
+      set({ aiError: null });
+      const res = await fetch("/api/ai/tips");
+      const data = await res.json();
+      if (!res.ok) {
+        set({ aiTips: [], aiError: data?.error || "AI 育儿建议服务暂时不可用" });
+        return;
+      }
+      set({ aiTips: Array.isArray(data) ? data : [], aiError: null });
+    } catch (e: any) {
       console.error("Failed to fetch AI tips:", e);
+      set({ aiTips: [], aiError: e?.message || "AI 育儿建议连接失败" });
     }
   },
 
@@ -317,13 +473,13 @@ export const useBabyStore = create<BabyStore>((set) => ({
 
   updateBook: async (id, data) => {
     try {
-      const updated = await request<Book>("/api/books", {
-        method: "PUT",
+      const updated = await request<Book>(`/api/books/${id}`, {
+        method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, ...data }),
+        body: JSON.stringify(data),
       });
       set((state) => ({
-        books: state.books.map((b) => (b.id === id ? { ...b, ...updated } : b)),
+        books: state.books.map((b) => (b.id === id || b.bookId === id ? { ...b, ...updated } : b)),
       }));
     } catch (e) {
       console.error("Failed to update book:", e);
@@ -342,8 +498,11 @@ export const useBabyStore = create<BabyStore>((set) => ({
       set((state) => ({
         feedingRecords: [newRecord, ...state.feedingRecords],
       }));
+      get().fetchDailySummary();
+      get().fetchTimeline();
     } catch (e) {
       console.error("Failed to add feeding record:", e);
+      throw e;
     }
   },
 
@@ -357,8 +516,11 @@ export const useBabyStore = create<BabyStore>((set) => ({
       set((state) => ({
         sleepRecords: [newRecord, ...state.sleepRecords],
       }));
+      get().fetchDailySummary();
+      get().fetchTimeline();
     } catch (e) {
       console.error("Failed to add sleep record:", e);
+      throw e;
     }
   },
 
@@ -372,8 +534,11 @@ export const useBabyStore = create<BabyStore>((set) => ({
       set((state) => ({
         diaperRecords: [newRecord, ...state.diaperRecords],
       }));
+      get().fetchDailySummary();
+      get().fetchTimeline();
     } catch (e) {
       console.error("Failed to add diaper record:", e);
+      throw e;
     }
   },
 
@@ -387,8 +552,11 @@ export const useBabyStore = create<BabyStore>((set) => ({
       set((state) => ({
         foodLogRecords: [newRecord, ...state.foodLogRecords],
       }));
+      get().fetchDailySummary();
+      get().fetchTimeline();
     } catch (e) {
       console.error("Failed to add food log record:", e);
+      throw e;
     }
   },
 
@@ -406,6 +574,7 @@ export const useBabyStore = create<BabyStore>((set) => ({
       }));
     } catch (e) {
       console.error("Failed to add growth measurement:", e);
+      throw e;
     }
   },
 }));

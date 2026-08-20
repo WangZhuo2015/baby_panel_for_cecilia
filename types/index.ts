@@ -1,6 +1,30 @@
+// ===== User & Family Types =====
+export interface User {
+  id: string;
+  username: string;
+  displayName: string;
+}
+
+export interface Family {
+  id: string;
+  name: string;
+  inviteCode: string;
+}
+
+export interface FamilyMember {
+  id: string;
+  userId: string;
+  username: string;
+  displayName: string;
+  role: string;
+  relation: string;
+  joinedAt: string;
+}
+
 // ===== Baby Types =====
 export interface Baby {
   id: string;
+  familyId?: string;
   nickname: string;
   gender: 'female' | 'male';
   birthDate: string; // ISO date

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { getAuthSession, getActiveBabyForUser } from '@/lib/auth'
 
 const safeJsonParse = (str: string | null | undefined, fallback: any = []) => {
   try { return str ? JSON.parse(str) : fallback } catch { return fallback }
@@ -10,27 +11,44 @@ export async function GET(request: Request) {
   const status = searchParams.get('status') // tried, to_try, or all
 
   try {
-    const where: any = {}
-    if (status === 'tried') {
-      where.status = 'tried'
-    } else if (status === 'to_try') {
-      where.status = 'to_try'
+    const user = await getAuthSession(request)
+    let familyId: string | undefined
+    if (user) {
+      const active = await getActiveBabyForUser(user.id)
+      familyId = active?.family?.id
     }
 
     const foodItems = await prisma.foodItem.findMany({
-      where,
       orderBy: { recommendedFromMonth: 'asc' }
     })
 
-    const parsed = foodItems.map(f => ({
-      ...f,
-      preparation: safeJsonParse(f.preparationJson),
-      nutrition: safeJsonParse(f.nutritionJson),
-      textureByAge: safeJsonParse(f.textureByAgeJson),
-      sourceRefs: safeJsonParse(f.sourceRefsJson),
-    }))
+    const familyStatuses = familyId
+      ? await prisma.familyFoodStatus.findMany({
+          where: { familyId }
+        })
+      : []
 
-    return NextResponse.json(parsed)
+    const statusMap = new Map(familyStatuses.map(s => [s.foodId, s]))
+
+    const parsed = foodItems.map(f => {
+      const customStatus = statusMap.get(f.foodId)
+      return {
+        ...f,
+        status: customStatus?.status ?? 'to_try',
+        firstAddedDate: customStatus?.firstAddedDate ?? null,
+        acceptance: customStatus?.acceptance ?? 0,
+        preparation: safeJsonParse(f.preparationJson),
+        nutrition: safeJsonParse(f.nutritionJson),
+        textureByAge: safeJsonParse(f.textureByAgeJson),
+        sourceRefs: safeJsonParse(f.sourceRefsJson),
+      }
+    })
+
+    const filtered = status && status !== 'all'
+      ? parsed.filter(item => item.status === status)
+      : parsed
+
+    return NextResponse.json(filtered)
   } catch (error) {
     console.error('Error fetching food items:', error)
     return NextResponse.json(
@@ -42,6 +60,18 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
+    const user = await getAuthSession(request)
+    let familyId: string | undefined
+    if (user) {
+      const active = await getActiveBabyForUser(user.id)
+      familyId = active?.family?.id
+    }
+
+    if (!familyId) {
+      const defaultFamily = await prisma.family.findFirst()
+      familyId = defaultFamily?.id
+    }
+
     const body = await request.json()
 
     if (typeof body.name !== 'string' || body.name.trim() === '') {
@@ -51,15 +81,18 @@ export async function POST(request: Request) {
       )
     }
 
-    const foodItem = await prisma.foodItem.create({
-      data: {
-        foodId: body.foodId || `user_${Date.now()}`,
+    const foodId = body.foodId || `user_${Date.now()}`
+
+    // Upsert or create food item
+    const foodItem = await prisma.foodItem.upsert({
+      where: { foodId },
+      update: {},
+      create: {
+        foodId,
         name: body.name,
         icon: body.icon || '🍽️',
         category: body.category || 'other',
         foodGroup: body.foodGroup ?? null,
-        status: body.status === 'tried' ? 'tried' : 'to_try',
-        firstAddedDate: body.firstAddedDate ?? null,
         recommendedFromMonth: body.recommendedFromMonth ?? null,
         recommendedToMonth: body.recommendedToMonth ?? null,
         exactMonthEvidence: body.exactMonthEvidence ?? false,
@@ -78,8 +111,34 @@ export async function POST(request: Request) {
       }
     })
 
+    if (familyId) {
+      await prisma.familyFoodStatus.upsert({
+        where: {
+          familyId_foodId: {
+            familyId,
+            foodId,
+          }
+        },
+        update: {
+          status: body.status === 'tried' ? 'tried' : 'to_try',
+          firstAddedDate: body.firstAddedDate ?? null,
+          acceptance: typeof body.acceptance === 'number' ? body.acceptance : 0,
+        },
+        create: {
+          familyId,
+          foodId,
+          status: body.status === 'tried' ? 'tried' : 'to_try',
+          firstAddedDate: body.firstAddedDate ?? null,
+          acceptance: typeof body.acceptance === 'number' ? body.acceptance : 0,
+        }
+      })
+    }
+
     return NextResponse.json({
       ...foodItem,
+      status: body.status === 'tried' ? 'tried' : 'to_try',
+      firstAddedDate: body.firstAddedDate ?? null,
+      acceptance: typeof body.acceptance === 'number' ? body.acceptance : 0,
       preparation: safeJsonParse(foodItem.preparationJson),
       nutrition: safeJsonParse(foodItem.nutritionJson),
       textureByAge: safeJsonParse(foodItem.textureByAgeJson),

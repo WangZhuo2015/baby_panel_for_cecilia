@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 
-const HERMES_URL = process.env.HERMES_API_URL ?? "http://localhost:8642";
-const HERMES_MODEL = process.env.HERMES_VISION_MODEL ?? "hermes-vision";
+const AI_BASE_URL = process.env.AI_BASE_URL || process.env.HERMES_API_URL || "https://api.openai.com/v1";
+const AI_API_KEY = process.env.AI_API_KEY || process.env.OPENAI_API_KEY || "";
+const AI_VISION_MODEL = process.env.AI_VISION_MODEL || process.env.HERMES_VISION_MODEL || "gpt-4o-mini";
 
 interface OcrResult {
   date?: string;
@@ -44,7 +45,6 @@ export async function POST(request: Request) {
       );
     }
   } else {
-    // fallback: raw image body
     const body = await request.arrayBuffer();
     if (body.byteLength === 0) {
       return NextResponse.json(
@@ -56,16 +56,23 @@ export async function POST(request: Request) {
   }
 
   try {
-    const res = await fetch(`${HERMES_URL}/v1/chat/completions`, {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    if (AI_API_KEY) {
+      headers["Authorization"] = `Bearer ${AI_API_KEY}`;
+    }
+
+    const res = await fetch(`${AI_BASE_URL.replace(/\/+$/, "")}/chat/completions`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify({
-        model: HERMES_MODEL,
+        model: AI_VISION_MODEL,
         messages: [
           {
             role: "system",
             content:
-              '你是儿童保健记录识别助手。从照片中识别测量记录，只输出 JSON：{"date":"YYYY-MM-DD","weightKg":数字,"heightCm":数字,"headCircumferenceCm":数字}。无法识别的字段省略。不要输出其他内容。',
+              '你是儿童保健记录识别助手。从照片中识别测量记录，只输出严格的 JSON：{"date":"YYYY-MM-DD","weightKg":数字,"heightCm":数字,"headCircumferenceCm":数字}。无法识别的字段省略。不要输出其他内容。',
           },
           {
             role: "user",
@@ -81,18 +88,19 @@ export async function POST(request: Request) {
             ],
           },
         ],
-        max_tokens: 200,
+        max_tokens: 250,
         temperature: 0,
       }),
       cache: "no-store",
+      signal: AbortSignal.timeout(20000),
     });
 
     if (!res.ok) {
-      console.error(`OCR service error: ${res.status}`);
+      const errBody = await res.text().catch(() => "");
+      console.error(`OCR service error (${res.status}):`, errBody);
       return NextResponse.json(
         {
-          error:
-            "识别服务暂不可用，请手动输入（照片不会被保存，请放心）",
+          error: `识别服务暂时不可用 (${res.status})，请手动输入测量数据`,
         },
         { status: 503 }
       );
@@ -103,7 +111,7 @@ export async function POST(request: Request) {
     const jsonMatch = content.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
       return NextResponse.json(
-        { error: "未从照片中识别到有效数据，请手动输入" },
+        { error: "未从照片中识别到有效生长记录，请手动输入" },
         { status: 422 }
       );
     }
@@ -125,16 +133,16 @@ export async function POST(request: Request) {
 
     if (Object.keys(result).length === 0) {
       return NextResponse.json(
-        { error: "未从照片中识别到有效数据，请手动输入" },
+        { error: "照片中未找到清晰的身高、体重或头围数据，请手动输入" },
         { status: 422 }
       );
     }
 
     return NextResponse.json(result);
-  } catch (error) {
+  } catch (error: any) {
     console.error("POST /api/growth/ocr error:", error);
     return NextResponse.json(
-      { error: "识别服务连接失败，请手动输入（照片不会被保存）" },
+      { error: error?.message || "识别服务连接超时或失败，请手动输入" },
       { status: 503 }
     );
   }

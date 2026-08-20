@@ -21,6 +21,7 @@ export default function OnboardingPage() {
   const [nickname, setNickname] = useState("");
   const [birthDate, setBirthDate] = useState(getLocalDateStr());
   const [gender, setGender] = useState<"female" | "male">("female");
+  const [gestationalAge, setGestationalAge] = useState<string>("");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -28,6 +29,7 @@ export default function OnboardingPage() {
       setNickname(baby.nickname);
       setBirthDate(baby.birthDate || getLocalDateStr());
       setGender(baby.gender === "male" ? "male" : "female");
+      if (baby.gestationalAge) setGestationalAge(String(baby.gestationalAge));
     }
   }, [baby]);
 
@@ -43,18 +45,24 @@ export default function OnboardingPage() {
     }
     setSaving(true);
     try {
-      await saveBaby({ nickname: name, birthDate, gender });
+      const gAge = gestationalAge ? parseInt(gestationalAge, 10) : undefined;
+      await saveBaby({
+        nickname: name,
+        birthDate,
+        gender,
+        gestationalAge: Number.isFinite(gAge) ? gAge : undefined,
+      });
       showToast(baby ? "宝宝信息已更新 ✨" : "欢迎加入，记录从今天开始 ✨");
       router.replace("/");
-    } catch {
-      showToast("保存失败，请重试");
+    } catch (err: any) {
+      showToast(err?.message || "保存失败，请重试");
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <div className="min-h-[100dvh] bg-bg">
+    <div className="min-h-[100dvh] bg-bg max-w-md mx-auto">
       <AppHeader title={baby ? "宝宝信息" : "欢迎使用"} />
 
       <div className="px-4 pt-2 pb-8">
@@ -110,6 +118,21 @@ export default function OnboardingPage() {
             />
           </FormSection>
 
+          {/* Gestational Age (Optional) */}
+          <FormSection title="出生孕周（可选）">
+            <CuteInput
+              type="number"
+              placeholder="足月通常为40周，早产宝宝可填写（如36）"
+              value={gestationalAge}
+              onChange={(e) => setGestationalAge(e.target.value)}
+              min={24}
+              max={44}
+            />
+            <p className="text-[10px] text-text-muted pl-1 mt-1">
+              早产宝宝（&lt;37周）系统会自动计算纠正月龄评估发育里程碑
+            </p>
+          </FormSection>
+
           <div className="pt-4">
             <CuteButton fullWidth size="lg" onClick={handleSave} disabled={saving}>
               {saving ? "保存中..." : baby ? "保存修改" : "开始使用"}
@@ -119,7 +142,7 @@ export default function OnboardingPage() {
           {!baby && (
             <p className="text-[10px] text-text-muted text-center flex items-center justify-center gap-1">
               <Sparkles size={12} />
-              之后随时可以再修改宝宝信息
+              之后随时可以在个人中心修改宝宝信息
             </p>
           )}
         </div>

@@ -1,29 +1,43 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getLocalDateStr, getLocalDayUtcRange } from "@/lib/date";
+import { getAuthSession, getActiveBabyForUser } from "@/lib/auth";
 
 export async function GET(request: Request) {
   try {
+    const user = await getAuthSession(request);
+    let babyId: string | undefined;
+    if (user) {
+      const active = await getActiveBabyForUser(user.id);
+      babyId = active?.baby?.id;
+    }
+
     const { searchParams } = new URL(request.url);
     const date = searchParams.get("date") ?? getLocalDateStr();
+    const targetBabyId = searchParams.get("babyId") || babyId;
+
     const { start, end } = getLocalDayUtcRange(date);
     const dayStartMs = new Date(start).getTime();
     const dayEndMs = new Date(end).getTime();
 
+    const feedingWhere: any = { timestamp: { gte: start, lt: end } };
+    const sleepWhere: any = { startTime: { lt: end }, endTime: { gt: start } };
+    const diaperWhere: any = { timestamp: { gte: start, lt: end } };
+    const foodWhere: any = { date };
+
+    if (targetBabyId) {
+      feedingWhere.babyId = targetBabyId;
+      sleepWhere.babyId = targetBabyId;
+      diaperWhere.babyId = targetBabyId;
+      foodWhere.babyId = targetBabyId;
+    }
+
     // Fetch all records for the given date in parallel
     const [feedingRecords, sleepRecords, diaperRecords, foodLogs] = await Promise.all([
-      prisma.feedingRecord.findMany({
-        where: { timestamp: { gte: start, lt: end } },
-      }),
-      prisma.sleepRecord.findMany({
-        where: { startTime: { lt: end }, endTime: { gt: start } },
-      }),
-      prisma.diaperRecord.findMany({
-        where: { timestamp: { gte: start, lt: end } },
-      }),
-      prisma.foodLogRecord.findMany({
-        where: { date },
-      }),
+      prisma.feedingRecord.findMany({ where: feedingWhere }),
+      prisma.sleepRecord.findMany({ where: sleepWhere }),
+      prisma.diaperRecord.findMany({ where: diaperWhere }),
+      prisma.foodLogRecord.findMany({ where: foodWhere }),
     ]);
 
     // Total feeding ml
@@ -32,8 +46,7 @@ export async function GET(request: Request) {
       0
     );
 
-    // Total sleep minutes: count only the portion of each sleep record that
-    // falls within the target day.
+    // Total sleep minutes
     let totalSleepMinutes = 0;
     for (const record of sleepRecords) {
       const startMs = new Date(record.startTime).getTime();

@@ -5,6 +5,7 @@ import {
   getLocalDayUtcRange,
   formatIsoToLocalTime,
 } from "@/lib/date";
+import { getAuthSession, getActiveBabyForUser } from "@/lib/auth";
 
 const safeJsonParse = (str: string | null | undefined, fallback: any = []) => {
   try { return str ? JSON.parse(str) : fallback } catch { return fallback }
@@ -12,25 +13,45 @@ const safeJsonParse = (str: string | null | undefined, fallback: any = []) => {
 
 export async function GET(request: Request) {
   try {
+    const user = await getAuthSession(request);
+    let babyId: string | undefined;
+    if (user) {
+      const active = await getActiveBabyForUser(user.id);
+      babyId = active?.baby?.id;
+    }
+
     const { searchParams } = new URL(request.url);
     const date = searchParams.get("date") ?? getLocalDateStr();
+    const targetBabyId = searchParams.get("babyId") || babyId;
     const { start, end } = getLocalDayUtcRange(date);
+
+    const feedingWhere: any = { timestamp: { gte: start, lt: end } };
+    const sleepWhere: any = { startTime: { lt: end }, endTime: { gt: start } };
+    const diaperWhere: any = { timestamp: { gte: start, lt: end } };
+    const foodWhere: any = { date };
+
+    if (targetBabyId) {
+      feedingWhere.babyId = targetBabyId;
+      sleepWhere.babyId = targetBabyId;
+      diaperWhere.babyId = targetBabyId;
+      foodWhere.babyId = targetBabyId;
+    }
 
     const [feedingRecords, sleepRecords, diaperRecords, foodLogs] = await Promise.all([
       prisma.feedingRecord.findMany({
-        where: { timestamp: { gte: start, lt: end } },
+        where: feedingWhere,
         orderBy: { timestamp: "desc" },
       }),
       prisma.sleepRecord.findMany({
-        where: { startTime: { lt: end }, endTime: { gt: start } },
+        where: sleepWhere,
         orderBy: { startTime: "desc" },
       }),
       prisma.diaperRecord.findMany({
-        where: { timestamp: { gte: start, lt: end } },
+        where: diaperWhere,
         orderBy: { timestamp: "desc" },
       }),
       prisma.foodLogRecord.findMany({
-        where: { date },
+        where: foodWhere,
         orderBy: { time: "desc" },
       }),
     ]);
@@ -114,9 +135,7 @@ export async function GET(request: Request) {
       });
     }
 
-    // Sort by time descending (HH:MM strings sort correctly)
     timeline.sort((a, b) => b.time.localeCompare(a.time));
-
     return NextResponse.json(timeline);
   } catch (error) {
     console.error("GET /api/records/timeline error:", error);

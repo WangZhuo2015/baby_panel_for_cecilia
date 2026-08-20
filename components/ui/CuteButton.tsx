@@ -8,6 +8,7 @@ interface CuteButtonProps {
   fullWidth?: boolean;
   disabled?: boolean;
   type?: 'button' | 'submit';
+  className?: string;
 }
 
 export const CuteButton: React.FC<CuteButtonProps> = ({
@@ -18,6 +19,7 @@ export const CuteButton: React.FC<CuteButtonProps> = ({
   fullWidth = false,
   disabled = false,
   type = 'button',
+  className = '',
 }) => {
   const sizeStyles = {
     sm: 'py-2 px-4 text-sm min-h-[36px]',
@@ -41,6 +43,7 @@ export const CuteButton: React.FC<CuteButtonProps> = ({
         ${variantStyles[variant]}
         ${fullWidth ? 'w-full' : ''}
         ${disabled ? 'opacity-50 cursor-not-allowed' : ''}
+        ${className}
       `}
     >
       {children}

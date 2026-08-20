@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 
-// Suzhou coordinates
-const LAT = 31.30;
-const LON = 120.62;
-const CITY = "苏州";
+// Default coordinates (Suzhou)
+const DEFAULT_LAT = 31.30;
+const DEFAULT_LON = 120.62;
+const DEFAULT_CITY = "苏州";
 
 const WMO_CODE_MAP: Record<number, { condition: string; icon: string }> = {
   0: { condition: "晴", icon: "☀️" },
@@ -18,15 +18,15 @@ const WMO_CODE_MAP: Record<number, { condition: string; icon: string }> = {
   61: { condition: "小雨", icon: "🌧️" },
   63: { condition: "中雨", icon: "🌧️" },
   65: { condition: "大雨", icon: "🌧️" },
-  71: { condition: "小雪", icon: "️" },
+  71: { condition: "小雪", icon: "🌨️" },
   73: { condition: "中雪", icon: "🌨️" },
   75: { condition: "大雪", icon: "❄️" },
   77: { condition: "雪粒", icon: "❄️" },
   80: { condition: "小阵雨", icon: "🌦️" },
-  81: { condition: "中阵雨", icon: "️" },
+  81: { condition: "中阵雨", icon: "🌦️" },
   82: { condition: "大阵雨", icon: "⛈️" },
   95: { condition: "雷暴", icon: "⛈️" },
-  96: { condition: "雷暴+冰雹", icon: "️" },
+  96: { condition: "雷暴+冰雹", icon: "⛈️" },
   99: { condition: "强雷暴+冰雹", icon: "⛈️" },
 };
 
@@ -37,7 +37,7 @@ function getOutdoorAdvice(weatherCode: number, temp: number, uv: number, rainPro
   if (temp < 5) return "天气寒冷，注意保暖";
   if (uv >= 8) return "紫外线强，做好防晒";
   if (rainProb > 30) return "可能降雨，带伞出行";
-  if (temp >= 15 && temp <= 28 && uv <= 5) return "适合上午外出";
+  if (temp >= 15 && temp <= 28 && uv <= 5) return "适合外出活动";
   return "适合户外活动";
 }
 
@@ -54,13 +54,14 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const latParam = parseFloat(searchParams.get("lat") ?? "");
     const lonParam = parseFloat(searchParams.get("lon") ?? "");
-    const lat = Number.isFinite(latParam) ? latParam : LAT;
-    const lon = Number.isFinite(lonParam) ? lonParam : LON;
+    const cityParam = searchParams.get("city");
 
-    // Fetch weather from Open-Meteo (free, no API key needed)
+    const lat = Number.isFinite(latParam) ? latParam : DEFAULT_LAT;
+    const lon = Number.isFinite(lonParam) ? lonParam : DEFAULT_LON;
+    const city = cityParam || (lat === DEFAULT_LAT && lon === DEFAULT_LON ? DEFAULT_CITY : "当前位置");
+
+    // Fetch weather from Open-Meteo
     const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,weather_code&hourly=temperature_2m,weather_code&daily=uv_index_max,precipitation_probability_max&timezone=Asia%2FShanghai&forecast_days=1`;
-
-    // Fetch air quality from Open-Meteo
     const airUrl = `https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${lat}&longitude=${lon}&current=european_aqi&timezone=Asia%2FShanghai`;
 
     const [weatherRes, airRes] = await Promise.all([
@@ -83,7 +84,7 @@ export async function GET(request: Request) {
     const hourly = weatherData.hourly;
     const airQuality = airData.current?.european_aqi ?? 0;
 
-    const weatherInfo = WMO_CODE_MAP[current.weather_code] ?? { condition: "未知", icon: "❓" };
+    const weatherInfo = WMO_CODE_MAP[current.weather_code] ?? { condition: "多云", icon: "⛅" };
     const uv = Math.round(daily.uv_index_max?.[0] ?? 0);
     const rainProb = daily.precipitation_probability_max?.[0] ?? 0;
 
@@ -94,13 +95,14 @@ export async function GET(request: Request) {
       hour12: false,
     }).formatToParts(new Date()).find((p) => p.type === "hour")?.value;
     let currentHour = hourPart ? parseInt(hourPart, 10) : 0;
-    if (currentHour === 24) currentHour = 0; // en-GB renders midnight as "24"
+    if (currentHour === 24) currentHour = 0;
+
     const hourlyForecast = [];
     for (let i = 0; i < 8; i++) {
       const idx = currentHour + i;
       if (idx < hourly.time?.length) {
         const hourCode = hourly.weather_code[idx];
-        const hourInfo = WMO_CODE_MAP[hourCode] ?? { condition: "未知", icon: "❓" };
+        const hourInfo = WMO_CODE_MAP[hourCode] ?? { condition: "多云", icon: "⛅" };
         hourlyForecast.push({
           time: `${String(idx % 24).padStart(2, "0")}:00`,
           temperature: Math.round(hourly.temperature_2m[idx]),
@@ -110,7 +112,7 @@ export async function GET(request: Request) {
     }
 
     return NextResponse.json({
-      city: CITY,
+      city,
       temperature: Math.round(current.temperature_2m),
       condition: weatherInfo.condition,
       uv,
@@ -123,7 +125,7 @@ export async function GET(request: Request) {
   } catch (error) {
     console.error("GET /api/weather error:", error);
     return NextResponse.json(
-      { error: "Failed to fetch weather data" },
+      { error: "获取天气数据失败" },
       { status: 500 }
     );
   }

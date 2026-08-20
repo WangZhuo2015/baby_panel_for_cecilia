@@ -26,7 +26,9 @@ async function main() {
 
   console.log('🗑️  Cleaning existing data...');
   await prisma.activityRecommendation.deleteMany();
+  await prisma.familyBookStatus.deleteMany();
   await prisma.book.deleteMany();
+  await prisma.familyFoodStatus.deleteMany();
   await prisma.foodItem.deleteMany();
   await prisma.feedingGuideline.deleteMany();
   await prisma.developmentWarningSign.deleteMany();
@@ -39,6 +41,9 @@ async function main() {
   await prisma.sourceRef.deleteMany();
   await prisma.dataRelease.deleteMany();
   await prisma.baby.deleteMany();
+  await prisma.familyMember.deleteMany();
+  await prisma.family.deleteMany();
+  await prisma.user.deleteMany();
 
   // ── Read all JSON files ─────────────────────────────────────────────
   console.log('📖 Reading JSON files...');

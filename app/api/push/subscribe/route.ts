@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getAuthSession } from "@/lib/auth";
 
 export async function POST(request: Request) {
   try {
+    const user = await getAuthSession(request);
     const subscription = await request.json();
 
     if (
@@ -21,10 +23,14 @@ export async function POST(request: Request) {
 
     const record = await prisma.pushSubscription.upsert({
       where: { endpoint: subscription.endpoint },
-      update: { keysJson: JSON.stringify(subscription.keys) },
+      update: {
+        keysJson: JSON.stringify(subscription.keys),
+        userId: user?.id ?? null,
+      },
       create: {
         endpoint: subscription.endpoint,
         keysJson: JSON.stringify(subscription.keys),
+        userId: user?.id ?? null,
       },
     });
 

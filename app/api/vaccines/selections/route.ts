@@ -1,9 +1,24 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { getAuthSession, getActiveBabyForUser } from '@/lib/auth'
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const user = await getAuthSession(request)
+    let babyId: string | undefined
+    if (user) {
+      const active = await getActiveBabyForUser(user.id)
+      babyId = active?.baby?.id
+    }
+
+    const { searchParams } = new URL(request.url)
+    const targetBabyId = searchParams.get('babyId') || babyId
+
+    const where: any = {}
+    if (targetBabyId) where.babyId = targetBabyId
+
     const selections = await prisma.vaccineSelection.findMany({
+      where,
       orderBy: [{ vaccineId: 'asc' }, { doseNumber: 'asc' }]
     })
     return NextResponse.json(selections)
@@ -18,8 +33,20 @@ export async function GET() {
 
 export async function PUT(request: Request) {
   try {
+    const user = await getAuthSession(request)
+    let babyId: string | undefined
+    if (user) {
+      const active = await getActiveBabyForUser(user.id)
+      babyId = active?.baby?.id
+    }
+
     const body = await request.json()
-    const { vaccineId, doseNumber, selected, completed } = body
+    const { babyId: reqBabyId, vaccineId, doseNumber, selected, completed } = body
+
+    const finalBabyId = reqBabyId || babyId || (await prisma.baby.findFirst())?.id
+    if (!finalBabyId) {
+      return NextResponse.json({ error: '未找到宝宝档案，请先创建宝宝信息' }, { status: 400 })
+    }
 
     if (typeof vaccineId !== 'string' || vaccineId.trim() === '') {
       return NextResponse.json(
@@ -35,29 +62,26 @@ export async function PUT(request: Request) {
       )
     }
 
-    const existing = await prisma.vaccineSelection.findUnique({
-      where: { vaccineId_doseNumber: { vaccineId, doseNumber: dose } }
-    })
-
-    let result
-    if (existing) {
-      result = await prisma.vaccineSelection.update({
-        where: { id: existing.id },
-        data: {
-          selected: selected ?? existing.selected,
-          completed: completed ?? existing.completed
-        }
-      })
-    } else {
-      result = await prisma.vaccineSelection.create({
-        data: {
+    const result = await prisma.vaccineSelection.upsert({
+      where: {
+        babyId_vaccineId_doseNumber: {
+          babyId: finalBabyId,
           vaccineId,
           doseNumber: dose,
-          selected: selected ?? true,
-          completed: completed ?? false
         }
-      })
-    }
+      },
+      update: {
+        selected: selected !== undefined ? selected : undefined,
+        completed: completed !== undefined ? completed : undefined,
+      },
+      create: {
+        babyId: finalBabyId,
+        vaccineId,
+        doseNumber: dose,
+        selected: selected ?? true,
+        completed: completed ?? false,
+      }
+    })
 
     return NextResponse.json(result)
   } catch (error) {
