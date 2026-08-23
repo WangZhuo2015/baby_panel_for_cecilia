@@ -12,9 +12,12 @@ import {
   Baby,
   Bot,
   AlertCircle,
+  Image as ImageIcon,
+  Loader2,
 } from "lucide-react";
 import { useBabyStore } from "@/stores/useBabyStore";
 import { calculateAge } from "@/lib/age";
+import { AiActionCard, ActionCardData } from "@/components/ui/AiActionCard";
 
 export type AiContextType =
   | "food"
@@ -40,6 +43,7 @@ interface Message {
   id: string;
   role: "user" | "assistant";
   content: string;
+  image?: string;
   timestamp: string;
   isStreaming?: boolean;
 }
@@ -48,6 +52,17 @@ const CONTEXT_META: Record<
   AiContextType,
   { title: string; emoji: string; chips: string[]; placeholder: string }
 > = {
+  medical: {
+    title: "化验单与体检智能解读",
+    emoji: "📑",
+    chips: [
+      "📷 拍照识别血常规/体检单入库",
+      "如何看懂血常规白细胞与CRP指标？",
+      "微量元素缺铁缺锌怎么科学食补或药补？",
+      "出现哪些紧急症状需要立刻去医院急诊？",
+    ],
+    placeholder: "上传化验单/体检单照片，或输入任何医学疑问...",
+  },
   food: {
     title: "辅食与营养顾问",
     emoji: "🥑",
@@ -92,17 +107,6 @@ const CONTEXT_META: Record<
     ],
     placeholder: "输入关于疫苗规划、禁忌、接种后反应等问题...",
   },
-  medical: {
-    title: "化验单与体检智能解读",
-    emoji: "📑",
-    chips: [
-      "如何看懂血常规白细胞与CRP指标？",
-      "微量元素缺铁缺锌怎么科学食补或药补？",
-      "儿保体检骨密度偏低、肋骨外翻需要补钙吗？",
-      "出现哪些紧急症状需要立刻去医院急诊？",
-    ],
-    placeholder: "输入关于化验单指标、体检疑问等问题...",
-  },
   feeding: {
     title: "喂养与胀气排嗝顾问",
     emoji: "🍼",
@@ -144,9 +148,33 @@ const CONTEXT_META: Record<
       "宝宝体温多少度算发烧？怎么物理降温？",
       "如何建立规律舒适的每日生活作息？",
     ],
-    placeholder: "随时提问任何育儿疑问...",
+    placeholder: "随时提问、发照片或自然语言记录日常...",
   },
 };
+
+/**
+ * Parses out ```json:action ... ``` or ```action ... ``` blocks from assistant messages
+ */
+function extractActionAndCleanMarkdown(content: string): { cleanText: string; action: ActionCardData | null } {
+  const actionRegex = /```(?:json:action|action)\s*([\s\S]*?)\s*```/;
+  const match = content.match(actionRegex);
+
+  if (!match) {
+    return { cleanText: content, action: null };
+  }
+
+  const rawJson = match[1].trim();
+  let action: ActionCardData | null = null;
+  try {
+    action = JSON.parse(rawJson);
+  } catch {
+    // If incomplete JSON during streaming, ignore
+  }
+
+  // Remove the action code block from visible markdown
+  const cleanText = content.replace(actionRegex, "").trim();
+  return { cleanText, action };
+}
 
 export const QuickAiModal: React.FC<QuickAiModalProps> = ({
   isOpen,
@@ -164,11 +192,14 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState("");
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
   const [loading, setLoading] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -181,7 +212,7 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
         const welcome: Message = {
           id: "welcome",
           role: "assistant",
-          content: `你好！我是针对 **${baby?.nickname || "宝宝"}**（${age.label}）的专属 **${displayTitle}** ✨\n\n你可以点击上方的热门问题，或直接在下方输入任何你想了解的育儿疑问：`,
+          content: `你好！我是针对 **${baby?.nickname || "宝宝"}**（${age.label}）的专属 **${displayTitle}** ✨\n\n你可以点击上方的热门问题、拍照上传单据，或直接输入任何你想了解的育儿疑问：`,
           timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
         };
         setMessages([welcome]);
@@ -200,14 +231,47 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
     }
   }, [messages, loading, isOpen]);
 
+  const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 15 * 1024 * 1024) {
+      alert("图片大小不能超过 15MB");
+      return;
+    }
+
+    setUploadingImage(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/medical/upload", {
+        method: "POST",
+        body: formData,
+      });
+      if (!res.ok) throw new Error("上传失败");
+      const data = await res.json();
+      setSelectedImage(data.imageUrl);
+    } catch {
+      // Fallback to local data URL
+      const reader = new FileReader();
+      reader.onload = () => setSelectedImage(reader.result as string);
+      reader.readAsDataURL(file);
+    } finally {
+      setUploadingImage(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
   const handleSend = async (textToSend?: string) => {
     const query = (textToSend || inputText).trim();
-    if (!query || loading) return;
+    const currentImg = selectedImage;
+    if ((!query && !currentImg) || loading) return;
 
     const userMsg: Message = {
       id: `user_${Date.now()}`,
       role: "user",
-      content: query,
+      content: query || (currentImg ? "请帮我结构化识别这张单据并提供儿科解读" : ""),
+      image: currentImg || undefined,
       timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
     };
 
@@ -222,6 +286,7 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
 
     setMessages((prev) => [...prev, userMsg, initialAiMsg]);
     setInputText("");
+    setSelectedImage(null);
     setLoading(true);
 
     try {
@@ -233,10 +298,17 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          messages: [...history, { role: "user", content: query }],
+          messages: [
+            ...history,
+            {
+              role: "user",
+              content: query || "请帮我结构化识别这张单据并提供儿科解读",
+            },
+          ],
           contextType,
           contextDetail,
           babyId: baby?.id,
+          image: currentImg,
         }),
       });
 
@@ -345,7 +417,7 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
                   {displayTitle}
                 </h3>
                 <span className="text-[10px] bg-primary-light text-primary px-2 py-0.5 rounded-full font-semibold">
-                  Hermes AI
+                  Hermes 多模态 AI
                 </span>
               </div>
               <p className="text-[11px] text-text-muted flex items-center gap-1 mt-0.5">
@@ -370,7 +442,13 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
               key={idx}
               type="button"
               disabled={loading}
-              onClick={() => handleSend(chip)}
+              onClick={() => {
+                if (chip.startsWith("📷")) {
+                  fileInputRef.current?.click();
+                } else {
+                  handleSend(chip);
+                }
+              }}
               className="text-xs bg-white text-text-secondary hover:text-primary hover:bg-primary-light/50 border border-primary/15 rounded-full px-3 py-1.5 shrink-0 shadow-xs transition-all active:scale-95 text-left flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
             >
               <Sparkles size={11} className="text-primary shrink-0" />
@@ -380,10 +458,11 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
         </div>
 
         {/* Message History */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gradient-to-b from-transparent to-primary-light/10">
+        <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4 bg-gradient-to-b from-transparent to-primary-light/10">
           {messages.map((m) => {
             const isUser = m.role === "user";
             const isThinking = !isUser && m.isStreaming && !m.content;
+            const { cleanText, action } = !isUser ? extractActionAndCleanMarkdown(m.content) : { cleanText: m.content, action: null };
 
             return (
               <div
@@ -397,7 +476,7 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
                 )}
 
                 <div
-                  className={`relative max-w-[86%] rounded-2xl p-3.5 shadow-sm text-xs sm:text-sm leading-relaxed ${
+                  className={`relative max-w-[88%] rounded-2xl p-3.5 shadow-sm text-xs sm:text-sm leading-relaxed ${
                     isUser
                       ? "bg-gradient-to-r from-primary to-pink-500 text-white rounded-tr-xs shadow-primary/20"
                       : "bg-white text-text-primary rounded-tl-xs border border-primary/10 shadow-slate-200/50"
@@ -411,91 +490,103 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
                         <div className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce [animation-delay:-0.15s]" />
                         <div className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce" />
                       </div>
-                      <span className="text-[11px] text-text-muted">结合宝宝月龄思考生成中...</span>
+                      <span className="text-[11px] text-text-muted">结合宝宝月龄与多模态数据深度解析中...</span>
                     </div>
                   ) : isUser ? (
-                    /* User message */
-                    <div className="whitespace-pre-wrap">{m.content}</div>
-                  ) : (
-                    /* Assistant Rich Markdown Rendering */
-                    <div className="markdown-content space-y-2">
-                      <ReactMarkdown
-                        remarkPlugins={[remarkGfm]}
-                        components={{
-                          h1: ({ children }) => (
-                            <h1 className="text-sm font-bold text-primary-dark mt-2 mb-1 border-l-2 border-primary pl-2">
-                              {children}
-                            </h1>
-                          ),
-                          h2: ({ children }) => (
-                            <h2 className="text-xs sm:text-sm font-bold text-text-primary mt-2 mb-1 flex items-center gap-1.5">
-                              <span className="w-1.5 h-1.5 rounded-full bg-primary inline-block" />
-                              {children}
-                            </h2>
-                          ),
-                          h3: ({ children }) => (
-                            <h3 className="text-xs font-bold text-text-primary mt-1.5 mb-0.5">
-                              {children}
-                            </h3>
-                          ),
-                          p: ({ children }) => (
-                            <p className="my-1 leading-relaxed text-text-primary">{children}</p>
-                          ),
-                          strong: ({ children }) => (
-                            <strong className="font-bold text-primary bg-primary-light/50 px-1 py-0.5 rounded">
-                              {children}
-                            </strong>
-                          ),
-                          ul: ({ children }) => (
-                            <ul className="my-1.5 pl-4 space-y-1 list-disc marker:text-primary/70">
-                              {children}
-                            </ul>
-                          ),
-                          ol: ({ children }) => (
-                            <ol className="my-1.5 pl-4 space-y-1 list-decimal marker:text-primary font-medium">
-                              {children}
-                            </ol>
-                          ),
-                          li: ({ children }) => (
-                            <li className="leading-relaxed pl-0.5">{children}</li>
-                          ),
-                          blockquote: ({ children }) => (
-                            <blockquote className="my-2 p-2.5 bg-primary-light/30 border-l-3 border-primary rounded-r-xl text-xs text-text-secondary">
-                              {children}
-                            </blockquote>
-                          ),
-                          table: ({ children }) => (
-                            <div className="overflow-x-auto my-2 rounded-xl border border-primary/15">
-                              <table className="w-full text-left text-[11px] border-collapse">
-                                {children}
-                              </table>
-                            </div>
-                          ),
-                          thead: ({ children }) => (
-                            <thead className="bg-primary-light/60 text-text-primary font-bold">
-                              {children}
-                            </thead>
-                          ),
-                          th: ({ children }) => (
-                            <th className="p-2 border-b border-primary/15">{children}</th>
-                          ),
-                          td: ({ children }) => (
-                            <td className="p-2 border-b border-primary/10">{children}</td>
-                          ),
-                          code: ({ children }) => (
-                            <code className="bg-primary-light/40 text-primary px-1.5 py-0.5 rounded text-[11px] font-mono">
-                              {children}
-                            </code>
-                          ),
-                        }}
-                      >
-                        {m.content}
-                      </ReactMarkdown>
-
-                      {/* Streaming blinking cursor */}
-                      {m.isStreaming && (
-                        <span className="inline-block w-1.5 h-3.5 bg-primary ml-0.5 animate-pulse align-middle" />
+                    /* User message with optional image thumbnail */
+                    <div className="space-y-2">
+                      {m.image && (
+                        <div className="rounded-xl overflow-hidden max-w-[200px] border border-white/30 shadow-xs">
+                          <img src={m.image} alt="上传单据" className="w-full h-auto max-h-48 object-cover" />
+                        </div>
                       )}
+                      <div className="whitespace-pre-wrap">{m.content}</div>
+                    </div>
+                  ) : (
+                    /* Assistant Rich Markdown Rendering + Action Card */
+                    <div className="space-y-2">
+                      <div className="markdown-content space-y-2">
+                        <ReactMarkdown
+                          remarkPlugins={[remarkGfm]}
+                          components={{
+                            h1: ({ children }) => (
+                              <h1 className="text-sm font-bold text-primary-dark mt-2 mb-1 border-l-2 border-primary pl-2">
+                                {children}
+                              </h1>
+                            ),
+                            h2: ({ children }) => (
+                              <h2 className="text-xs sm:text-sm font-bold text-text-primary mt-2 mb-1 flex items-center gap-1.5">
+                                <span className="w-1.5 h-1.5 rounded-full bg-primary inline-block" />
+                                {children}
+                              </h2>
+                            ),
+                            h3: ({ children }) => (
+                              <h3 className="text-xs font-bold text-text-primary mt-1.5 mb-0.5">
+                                {children}
+                              </h3>
+                            ),
+                            p: ({ children }) => (
+                              <p className="my-1 leading-relaxed text-text-primary">{children}</p>
+                            ),
+                            strong: ({ children }) => (
+                              <strong className="font-bold text-primary bg-primary-light/50 px-1 py-0.5 rounded">
+                                {children}
+                              </strong>
+                            ),
+                            ul: ({ children }) => (
+                              <ul className="my-1.5 pl-4 space-y-1 list-disc marker:text-primary/70">
+                                {children}
+                              </ul>
+                            ),
+                            ol: ({ children }) => (
+                              <ol className="my-1.5 pl-4 space-y-1 list-decimal marker:text-primary font-medium">
+                                {children}
+                              </ol>
+                            ),
+                            li: ({ children }) => (
+                              <li className="leading-relaxed pl-0.5">{children}</li>
+                            ),
+                            blockquote: ({ children }) => (
+                              <blockquote className="my-2 p-2.5 bg-primary-light/30 border-l-3 border-primary rounded-r-xl text-xs text-text-secondary">
+                                {children}
+                              </blockquote>
+                            ),
+                            table: ({ children }) => (
+                              <div className="overflow-x-auto my-2 rounded-xl border border-primary/15">
+                                <table className="w-full text-left text-[11px] border-collapse">
+                                  {children}
+                                </table>
+                              </div>
+                            ),
+                            thead: ({ children }) => (
+                              <thead className="bg-primary-light/60 text-text-primary font-bold">
+                                {children}
+                              </thead>
+                            ),
+                            th: ({ children }) => (
+                              <th className="p-2 border-b border-primary/15">{children}</th>
+                            ),
+                            td: ({ children }) => (
+                              <td className="p-2 border-b border-primary/10">{children}</td>
+                            ),
+                            code: ({ children }) => (
+                              <code className="bg-primary-light/40 text-primary px-1.5 py-0.5 rounded text-[11px] font-mono">
+                                {children}
+                              </code>
+                            ),
+                          }}
+                        >
+                          {cleanText}
+                        </ReactMarkdown>
+
+                        {/* Streaming blinking cursor */}
+                        {m.isStreaming && (
+                          <span className="inline-block w-1.5 h-3.5 bg-primary ml-0.5 animate-pulse align-middle" />
+                        )}
+                      </div>
+
+                      {/* Interactive Action Card if extracted */}
+                      {action && <AiActionCard action={action} />}
                     </div>
                   )}
 
@@ -506,9 +597,9 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
                     }`}
                   >
                     <span>{m.timestamp}</span>
-                    {!isUser && m.id !== "welcome" && !m.isStreaming && m.content && (
+                    {!isUser && m.id !== "welcome" && !m.isStreaming && cleanText && (
                       <button
-                        onClick={() => handleCopy(m.id, m.content)}
+                        onClick={() => handleCopy(m.id, cleanText)}
                         className="hover:text-primary transition-colors flex items-center gap-0.5 cursor-pointer"
                         title="复制建议"
                       >
@@ -544,8 +635,26 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Input Bar - High contrast, sticky with safe bottom */}
-        <div className="p-3 pb-[max(14px,env(safe-area-inset-bottom))] bg-white border-t border-primary/15 flex flex-col gap-1.5 shrink-0 shadow-[0_-4px_16px_rgba(0,0,0,0.04)] z-20">
+        {/* Input Bar - High contrast, sticky with image upload */}
+        <div className="p-3 pb-[max(14px,env(safe-area-inset-bottom))] bg-white border-t border-primary/15 flex flex-col gap-2 shrink-0 shadow-[0_-4px_16px_rgba(0,0,0,0.04)] z-20">
+          
+          {/* Selected image preview chip */}
+          {selectedImage && (
+            <div className="flex items-center gap-2 bg-primary-light/40 p-1.5 px-3 rounded-2xl border border-primary/20 w-fit animate-in fade-in">
+              <div className="w-8 h-8 rounded-lg overflow-hidden border border-primary/30">
+                <img src={selectedImage} alt="预览" className="w-full h-full object-cover" />
+              </div>
+              <span className="text-[11px] text-text-primary font-medium">已附加单据照片</span>
+              <button
+                type="button"
+                onClick={() => setSelectedImage(null)}
+                className="w-5 h-5 rounded-full bg-primary/20 text-primary hover:bg-primary/30 flex items-center justify-center cursor-pointer"
+              >
+                <X size={12} />
+              </button>
+            </div>
+          )}
+
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -553,20 +662,45 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
             }}
             className="flex items-center gap-2"
           >
+            {/* Hidden image input */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleImageSelect}
+            />
+
+            {/* Photo / Image Attachment button */}
+            <button
+              type="button"
+              disabled={loading || uploadingImage}
+              onClick={() => fileInputRef.current?.click()}
+              className="w-10 h-10 rounded-2xl bg-slate-100 hover:bg-primary-light text-text-secondary hover:text-primary flex items-center justify-center border border-primary/15 transition-all shrink-0 active:scale-95 cursor-pointer disabled:opacity-40"
+              title="拍照 / 上传化验单或图片"
+            >
+              {uploadingImage ? (
+                <Loader2 size={16} className="animate-spin text-primary" />
+              ) : (
+                <ImageIcon size={18} />
+              )}
+            </button>
+
             <input
               ref={inputRef}
               type="text"
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
-              placeholder={meta.placeholder}
+              placeholder={selectedImage ? "可补充说明，如'帮我解读并存入档案'..." : meta.placeholder}
               disabled={loading}
               className="flex-1 px-4 py-2.5 bg-slate-50/90 hover:bg-white focus:bg-white rounded-2xl text-xs sm:text-sm text-text-primary font-medium border-2 border-primary/20 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all placeholder:text-text-muted/70 shadow-2xs"
             />
+
             <button
               type="submit"
-              disabled={!inputText.trim() || loading}
+              disabled={(!inputText.trim() && !selectedImage) || loading}
               className="w-10 h-10 rounded-2xl bg-gradient-to-r from-primary to-pink-500 text-white flex items-center justify-center shadow-button hover:opacity-95 disabled:opacity-35 transition-all shrink-0 active:scale-95 cursor-pointer"
-              title="发送提问"
+              title="发送提问或录入"
             >
               <Send size={15} />
             </button>
@@ -575,7 +709,7 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
           {/* Medical disclaimer */}
           <p className="text-[10px] text-text-muted/70 text-center flex items-center justify-center gap-1">
             <AlertCircle size={10} className="text-amber-500/70 shrink-0" />
-            AI 建议仅供育儿参考，涉及宝宝身体异常与用药请务必遵医嘱
+            支持拍照化验单智能录入与自然语言日常记账 · 医疗建议仅供参考
           </p>
         </div>
       </div>
