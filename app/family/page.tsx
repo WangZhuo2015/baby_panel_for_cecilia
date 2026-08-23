@@ -8,7 +8,7 @@ import { CuteButton } from "@/components/ui/CuteButton";
 import { CuteInput } from "@/components/ui/CuteInput";
 import { useToast } from "@/components/ui/Toast";
 import { useBabyStore } from "@/stores/useBabyStore";
-import { Users, Copy, Check, UserPlus, LogOut, ShieldCheck, Smartphone, Sparkles, ChevronRight } from "lucide-react";
+import { Users, Copy, Check, UserPlus, LogOut, ShieldCheck, Smartphone, Sparkles, ChevronRight, Baby, Camera } from "lucide-react";
 import { InstallGuideModal } from "@/components/ui/InstallGuideModal";
 import { APP_VERSION } from "@/lib/version";
 
@@ -19,8 +19,10 @@ export default function FamilyPage() {
     user,
     family,
     familyMembers,
+    baby,
     fetchUser,
     fetchFamilyMembers,
+    fetchBaby,
     joinFamily,
     logout,
   } = useBabyStore();
@@ -31,6 +33,7 @@ export default function FamilyPage() {
   const [isInstallModalOpen, setIsInstallModalOpen] = useState(false);
 
   useEffect(() => {
+    fetchBaby();
     fetchUser().then((u) => {
       if (!u) {
         router.push("/login");
@@ -38,7 +41,7 @@ export default function FamilyPage() {
         fetchFamilyMembers();
       }
     });
-  }, [fetchUser, fetchFamilyMembers, router]);
+  }, [fetchBaby, fetchUser, fetchFamilyMembers, router]);
 
   const handleCopyCode = () => {
     if (!family?.inviteCode) return;
@@ -114,6 +117,42 @@ export default function FamilyPage() {
             {copied ? <Check size={14} className="mr-1" /> : <Copy size={14} className="mr-1" />}
             {copied ? "已复制" : "复制邀请码"}
           </CuteButton>
+        </div>
+      </CuteCard>
+
+      {/* Baby Info & Avatar Card */}
+      <h3 className="text-sm font-semibold text-text-secondary mb-2 px-1">宝宝档案</h3>
+      <CuteCard
+        className="p-3.5 mb-6 bg-gradient-to-r from-primary-light/70 via-pink-50/50 to-lavender/15 border border-primary/25 cursor-pointer hover:shadow-md transition-all"
+        onClick={() => router.push("/onboarding")}
+      >
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="relative">
+              <div className="w-12 h-12 rounded-full bg-primary-soft flex items-center justify-center overflow-hidden shadow-soft">
+                {baby?.avatarUrl ? (
+                  <img src={baby.avatarUrl} alt={baby.nickname} className="w-full h-full object-cover" />
+                ) : (
+                  <Baby size={24} className="text-primary" />
+                )}
+              </div>
+              <div className="absolute -bottom-0.5 -right-0.5 w-5 h-5 rounded-full bg-primary text-white flex items-center justify-center shadow-xs">
+                <Camera size={11} />
+              </div>
+            </div>
+            <div>
+              <p className="text-sm font-bold text-text-primary flex items-center gap-1.5">
+                {baby?.nickname || "未设置宝宝"}
+                <span className="text-xs font-normal text-text-secondary">
+                  {baby?.gender === "male" ? "👦" : "👧"}
+                </span>
+              </p>
+              <p className="text-xs text-primary font-medium mt-0.5 flex items-center gap-0.5">
+                点击更换头像与修改宝宝信息
+              </p>
+            </div>
+          </div>
+          <ChevronRight size={18} className="text-text-muted" />
         </div>
       </CuteCard>
 

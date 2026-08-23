@@ -14,6 +14,7 @@ import {
   AlertCircle,
   Sparkles,
   ChevronRight,
+  Camera,
 } from "lucide-react";
 import { useBabyStore } from "@/stores/useBabyStore";
 import { calculateAge } from "@/lib/age";
@@ -250,20 +251,32 @@ export default function HomePage() {
     <div className="px-4 pt-6 pb-36 max-w-md mx-auto space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-full bg-gradient-to-br from-primary-soft to-primary/30 flex items-center justify-center overflow-hidden shadow-soft">
-            {baby.avatarUrl ? (
-              <img src={baby.avatarUrl} alt={baby.nickname} className="w-full h-full object-cover" />
-            ) : (
-              <Baby size={24} className="text-primary" />
-            )}
+        <div
+          className="flex items-center gap-3 cursor-pointer group"
+          onClick={() => router.push("/onboarding")}
+          title="点击更换头像与修改宝宝资料"
+        >
+          <div className="relative">
+            <div className="w-12 h-12 rounded-full bg-gradient-to-br from-primary-soft to-primary/30 flex items-center justify-center overflow-hidden shadow-soft group-hover:ring-2 group-hover:ring-primary/40 transition-all">
+              {baby.avatarUrl ? (
+                <img src={baby.avatarUrl} alt={baby.nickname} className="w-full h-full object-cover" />
+              ) : (
+                <Baby size={24} className="text-primary" />
+              )}
+            </div>
+            <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full bg-primary text-white flex items-center justify-center shadow-xs">
+              <Camera size={9} />
+            </div>
           </div>
           <div>
             <div className="flex items-center gap-1.5">
-              <span className="text-base font-bold text-text-primary">{baby.nickname}</span>
+              <span className="text-base font-bold text-text-primary group-hover:text-primary transition-colors">{baby.nickname}</span>
               <span className="text-sm">{baby.gender === "male" ? "👦" : "🎀"}</span>
             </div>
-            <span className="text-xs text-text-secondary">{age.label}</span>
+            <span className="text-xs text-text-secondary flex items-center gap-1">
+              {age.label}
+              <span className="text-[10px] text-primary font-medium hover:underline">· 换头像</span>
+            </span>
           </div>
         </div>
         <div className="flex items-center gap-2">

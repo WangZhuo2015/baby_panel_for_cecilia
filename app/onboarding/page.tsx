@@ -94,7 +94,7 @@ export default function OnboardingPage() {
 
   return (
     <div className="min-h-[100dvh] bg-bg max-w-md mx-auto">
-      <AppHeader title={baby ? "宝宝信息" : "欢迎使用"} />
+      <AppHeader title={baby ? "宝宝资料与头像" : "欢迎使用"} showBack={!!baby} />
 
       <div className="px-4 pt-2 pb-8">
         {/* Welcome card */}
