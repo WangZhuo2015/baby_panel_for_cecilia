@@ -39,6 +39,36 @@ const CATEGORY_MAP: Record<string, { label: string; emoji: string }> = {
   general: { label: "综合单据", emoji: "📑" },
 };
 
+function normalizeDate(val?: string): string {
+  if (!val) return new Date().toISOString().split("T")[0];
+  const str = String(val).trim().replace(/\//g, "-").replace(/年|月/g, "-").replace(/日/g, "");
+  const match = str.match(/\d{4}-\d{1,2}-\d{1,2}/);
+  if (match) {
+    const parts = match[0].split("-");
+    const y = parts[0];
+    const m = parts[1].padStart(2, "0");
+    const d = parts[2].padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  }
+  const d = new Date(val);
+  if (!isNaN(d.getTime())) {
+    return d.toISOString().split("T")[0];
+  }
+  return new Date().toISOString().split("T")[0];
+}
+
+function normalizeTime(val?: string): string {
+  if (!val) return "12:00";
+  const str = String(val).trim();
+  const match = str.match(/(\d{1,2})[:：](\d{1,2})/);
+  if (match) {
+    const h = match[1].padStart(2, "0");
+    const m = match[2].padStart(2, "0");
+    return `${h}:${m}`;
+  }
+  return "12:00";
+}
+
 export const AiActionCard: React.FC<AiActionCardProps> = ({ action: initialAction, onSaved }) => {
   const { showToast } = useToast();
   const fetchBaby = useBabyStore((s) => s.fetchBaby);
@@ -46,7 +76,13 @@ export const AiActionCard: React.FC<AiActionCardProps> = ({ action: initialActio
   const fetchDailySummary = useBabyStore((s) => s.fetchDailySummary);
   const fetchTimeline = useBabyStore((s) => s.fetchTimeline);
 
-  const [cardData, setCardData] = useState<any>(initialAction.data || {});
+  const [cardData, setCardData] = useState<any>(() => {
+    const d = { ...(initialAction.data || {}) };
+    if (d.date) d.date = normalizeDate(d.date);
+    if (d.startTime) d.startTime = normalizeTime(d.startTime);
+    if (d.endTime) d.endTime = normalizeTime(d.endTime);
+    return d;
+  });
   const [isEditing, setIsEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);

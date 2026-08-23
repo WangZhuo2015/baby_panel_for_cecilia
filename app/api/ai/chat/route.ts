@@ -45,6 +45,11 @@ const ACTION_PROTOCOL_PROMPT = `
 【Agentic 智能结构化数据录入协议（Action Cards）】
 当且仅当用户上传了化验单据图片、或者在对话中明确希望记录日常数据（化验单、喂养、睡眠、排便、生长测量）时，你必须在给出文字解答与分析之后，在回答末尾追加一个特制的标准 JSON 代码块（语言标识为 \`\`\`json:action ），以便前端为家长渲染“一键确认存入档案卡片”。
 
+【格式规范要求（非常严格）】：
+- 所有的 date 字段必须严格为标准 "YYYY-MM-DD" 格式（如 "2026-08-23"），禁止使用斜杠或中文年月日。
+- 所有的 startTime / endTime 字段必须严格为 24小时制 "HH:mm" 格式（如 "14:30"），禁止附带秒或 AM/PM。
+- 数值类型字段（如 amountMl, weightKg, heightCm）必须为纯数字，不要带单位字符串。
+
 支持的 Action 类型及数据结构如下：
 
 1. 化验单 / 体检报告单据 (medical_report)：
@@ -54,7 +59,7 @@ const ACTION_PROTOCOL_PROMPT = `
   "data": {
     "title": "单据名称，如：末梢血常规化验单 / 6月龄儿保体检记录",
     "category": "blood | growth | trace_element | allergy | general",
-    "date": "YYYY-MM-DD (若单据上有则提取，否则使用今日日期)",
+    "date": "YYYY-MM-DD (严格标准格式)",
     "hospital": "医院/机构名称 (可选)",
     "aiSummary": "简明儿科解读总结",
     "growthData": { "weightKg": 8.2, "heightCm": 68.5, "headCircumferenceCm": 43.0 },
@@ -80,7 +85,7 @@ const ACTION_PROTOCOL_PROMPT = `
     "amountMl": 150,
     "durationMinutes": 20,
     "notes": "备注说明，如：拍嗝顺畅",
-    "timestamp": "ISO 时间字符串"
+    "timestamp": "YYYY-MM-DDTHH:mm:ss.000Z"
   }
 }
 \`\`\`
@@ -90,8 +95,8 @@ const ACTION_PROTOCOL_PROMPT = `
 {
   "type": "sleep",
   "data": {
-    "startTime": "HH:mm",
-    "endTime": "HH:mm",
+    "startTime": "HH:mm (24小时制，如 14:00)",
+    "endTime": "HH:mm (24小时制，如 15:30)",
     "type": "day | night",
     "notes": "入睡/醒来状态备注"
   }
@@ -107,7 +112,7 @@ const ACTION_PROTOCOL_PROMPT = `
     "poopColor": "yellow | green | brown | other",
     "poopConsistency": "soft | watery | hard | seedy",
     "notes": "形态备注",
-    "timestamp": "ISO 时间字符串"
+    "timestamp": "YYYY-MM-DDTHH:mm:ss.000Z"
   }
 }
 \`\`\`
@@ -120,7 +125,7 @@ const ACTION_PROTOCOL_PROMPT = `
     "weightKg": 8.2,
     "heightCm": 68.5,
     "headCircumferenceCm": 43.0,
-    "date": "YYYY-MM-DD",
+    "date": "YYYY-MM-DD (严格标准格式)",
     "notes": "社区体检"
   }
 }

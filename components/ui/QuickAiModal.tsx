@@ -235,8 +235,8 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 15 * 1024 * 1024) {
-      alert("图片大小不能超过 15MB");
+    if (file.size > 8 * 1024 * 1024) {
+      alert("单据照片大小不能超过 8MB，请压缩后重试");
       return;
     }
 
@@ -248,14 +248,15 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
         method: "POST",
         body: formData,
       });
-      if (!res.ok) throw new Error("上传失败");
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "上传图片失败");
+      }
       const data = await res.json();
       setSelectedImage(data.imageUrl);
-    } catch {
-      // Fallback to local data URL
-      const reader = new FileReader();
-      reader.onload = () => setSelectedImage(reader.result as string);
-      reader.readAsDataURL(file);
+    } catch (err: any) {
+      alert(err?.message || "单据图片上传失败，请重新选择或拍照");
+      setSelectedImage(null);
     } finally {
       setUploadingImage(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
