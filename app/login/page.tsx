@@ -9,6 +9,7 @@ import { CuteButton } from "@/components/ui/CuteButton";
 import { useToast } from "@/components/ui/Toast";
 import { useBabyStore } from "@/stores/useBabyStore";
 import { LogIn, Baby } from "lucide-react";
+import { APP_VERSION } from "@/lib/version";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -100,6 +101,10 @@ export default function LoginPage() {
             </Link>
           </div>
         </CuteCard>
+
+        <div className="mt-6 text-center text-[10px] text-text-muted/60">
+          宝宝成长工作台 {APP_VERSION}
+        </div>
       </div>
     </div>
   );

@@ -11,6 +11,7 @@ import { SegmentControl } from "@/components/ui/SegmentControl";
 import { useToast } from "@/components/ui/Toast";
 import { useBabyStore } from "@/stores/useBabyStore";
 import { getLocalDateStr } from "@/lib/date";
+import { APP_VERSION } from "@/lib/version";
 
 export default function OnboardingPage() {
   const router = useRouter();
@@ -206,6 +207,10 @@ export default function OnboardingPage() {
               之后随时可以在个人中心修改宝宝信息
             </p>
           )}
+
+          <div className="pt-4 text-center text-[10px] text-text-muted/60">
+            宝宝成长工作台 {APP_VERSION}
+          </div>
         </div>
       </div>
     </div>

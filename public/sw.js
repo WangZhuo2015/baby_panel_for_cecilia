@@ -1,6 +1,6 @@
 // Service Worker – PWA lifecycle + Push notifications
 // Cache version: bump when deploying a new version
-const CACHE_VERSION = 'v2';
+const CACHE_VERSION = 'v1.1.0';
 const STATIC_CACHE = `static-${CACHE_VERSION}`;
 const OFFLINE_URL = '/offline.html';
 

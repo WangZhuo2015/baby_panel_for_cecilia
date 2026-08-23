@@ -24,6 +24,7 @@ import { CuteCard } from "@/components/ui/CuteCard";
 import { CuteButton } from "@/components/ui/CuteButton";
 import { InstallGuideBanner } from "@/components/ui/InstallGuideBanner";
 import { formatIsoToLocalTime } from "@/lib/date";
+import { APP_VERSION } from "@/lib/version";
 
 function NotificationBell() {
   const [unreadCount, setUnreadCount] = useState(0);
@@ -446,6 +447,13 @@ export default function HomePage() {
           <p className="text-xs text-text-muted">暂无育儿建议，请点击刷新获取</p>
         )}
       </CuteCard>
+
+      {/* App Version Footer */}
+      <div className="text-center pt-2 pb-6">
+        <p className="text-[10px] text-text-muted/60">
+          宝宝成长工作台 {APP_VERSION}
+        </p>
+      </div>
     </div>
   );
 }

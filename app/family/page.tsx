@@ -10,6 +10,7 @@ import { useToast } from "@/components/ui/Toast";
 import { useBabyStore } from "@/stores/useBabyStore";
 import { Users, Copy, Check, UserPlus, LogOut, ShieldCheck, Smartphone, Sparkles, ChevronRight } from "lucide-react";
 import { InstallGuideModal } from "@/components/ui/InstallGuideModal";
+import { APP_VERSION } from "@/lib/version";
 
 export default function FamilyPage() {
   const router = useRouter();
@@ -203,6 +204,16 @@ export default function FamilyPage() {
           <LogOut size={16} className="mr-1.5" />
           退出当前账号 ({user?.username})
         </CuteButton>
+      </div>
+
+      {/* App Version Info */}
+      <div className="mt-8 text-center space-y-0.5">
+        <p className="text-[11px] font-medium text-text-muted">
+          宝宝成长工作台 <span className="px-1.5 py-0.5 rounded-full bg-primary-light text-primary text-[10px] font-bold">{APP_VERSION}</span>
+        </p>
+        <p className="text-[10px] text-text-muted/60">
+          全功能离线支持 · 实时数据同步
+        </p>
       </div>
 
       <InstallGuideModal
