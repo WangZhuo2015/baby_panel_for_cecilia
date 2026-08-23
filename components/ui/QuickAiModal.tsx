@@ -330,8 +330,8 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
         onClick={onClose}
       />
 
-      {/* Sheet / Modal Container - Soft pastel styling */}
-      <div className="relative w-full max-w-lg bg-gradient-to-b from-white via-[#FAF7F5] to-[#F5F0EB] rounded-t-[28px] sm:rounded-[28px] shadow-2xl overflow-hidden flex flex-col max-h-[92vh] sm:max-h-[85vh] h-[85vh] border border-primary/15 animate-in slide-in-from-bottom-6 duration-200 z-10">
+      {/* Sheet / Modal Container - Fixed viewport aware layout */}
+      <div className="relative w-full max-w-lg bg-gradient-to-b from-white via-[#FAF7F5] to-[#F5F0EB] rounded-t-[28px] sm:rounded-[28px] shadow-2xl overflow-hidden flex flex-col h-[82dvh] sm:h-[650px] max-h-[85dvh] sm:max-h-[90vh] border border-primary/15 animate-in slide-in-from-bottom-6 duration-200 z-10">
         
         {/* Header - Frosted pastel navbar */}
         <div className="flex items-center justify-between px-4 py-3 bg-white/90 backdrop-blur-md border-b border-primary/10 shrink-0">
@@ -544,8 +544,8 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Input Bar - Soft capsule design */}
-        <div className="p-3 bg-white/95 backdrop-blur-md border-t border-primary/10 flex flex-col gap-1.5 shrink-0">
+        {/* Input Bar - High contrast, sticky with safe bottom */}
+        <div className="p-3 pb-[max(14px,env(safe-area-inset-bottom))] bg-white border-t border-primary/15 flex flex-col gap-1.5 shrink-0 shadow-[0_-4px_16px_rgba(0,0,0,0.04)] z-20">
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -560,12 +560,13 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
               onChange={(e) => setInputText(e.target.value)}
               placeholder={meta.placeholder}
               disabled={loading}
-              className="flex-1 px-4 py-2.5 bg-primary-light/25 hover:bg-primary-light/40 focus:bg-white rounded-2xl text-xs sm:text-sm border border-primary/15 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all placeholder:text-text-muted/60"
+              className="flex-1 px-4 py-2.5 bg-slate-50/90 hover:bg-white focus:bg-white rounded-2xl text-xs sm:text-sm text-text-primary font-medium border-2 border-primary/20 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all placeholder:text-text-muted/70 shadow-2xs"
             />
             <button
               type="submit"
               disabled={!inputText.trim() || loading}
-              className="w-10 h-10 rounded-2xl bg-gradient-to-r from-primary to-pink-500 text-white flex items-center justify-center shadow-sm shadow-primary/30 hover:opacity-95 disabled:opacity-35 transition-all shrink-0 active:scale-95 cursor-pointer"
+              className="w-10 h-10 rounded-2xl bg-gradient-to-r from-primary to-pink-500 text-white flex items-center justify-center shadow-button hover:opacity-95 disabled:opacity-35 transition-all shrink-0 active:scale-95 cursor-pointer"
+              title="发送提问"
             >
               <Send size={15} />
             </button>
