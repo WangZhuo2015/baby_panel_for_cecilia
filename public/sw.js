@@ -1,6 +1,6 @@
 // Service Worker – PWA lifecycle + Push notifications
 // Cache version: bump when deploying a new version
-const CACHE_VERSION = 'v1';
+const CACHE_VERSION = 'v2';
 const STATIC_CACHE = `static-${CACHE_VERSION}`;
 const OFFLINE_URL = '/offline.html';
 
@@ -13,27 +13,33 @@ const PRECACHE_ASSETS = [
   '/apple-touch-icon.png',
 ];
 
+// Handle direct message to skip waiting
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
+});
+
 // ===== Lifecycle =====
 
 self.addEventListener('install', (event) => {
-  // Pre-cache the offline fallback page and critical assets
+  self.skipWaiting(); // Force active immediately
   event.waitUntil(
     caches
       .open(STATIC_CACHE)
       .then((cache) => cache.addAll(PRECACHE_ASSETS))
-      .then(() => self.skipWaiting())
   );
 });
 
 self.addEventListener('activate', (event) => {
-  // Clean up old caches and take control of all pages immediately
+  // Clean up all old caches completely and take control of all clients immediately
   event.waitUntil(
     caches
       .keys()
       .then((keys) =>
         Promise.all(
           keys
-            .filter((key) => key.startsWith('static-') && key !== STATIC_CACHE)
+            .filter((key) => key !== STATIC_CACHE)
             .map((key) => caches.delete(key))
         )
       )
