@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Baby, Sparkles, Camera } from "lucide-react";
+import { Baby, Sparkles, Camera, Move } from "lucide-react";
 import { AppHeader } from "@/components/ui/AppHeader";
 import { CuteButton } from "@/components/ui/CuteButton";
 import { CuteInput } from "@/components/ui/CuteInput";
@@ -12,6 +12,7 @@ import { useToast } from "@/components/ui/Toast";
 import { useBabyStore } from "@/stores/useBabyStore";
 import { getLocalDateStr } from "@/lib/date";
 import { APP_VERSION } from "@/lib/version";
+import { AvatarCropModal } from "@/components/ui/AvatarCropModal";
 
 export default function OnboardingPage() {
   const router = useRouter();
@@ -29,6 +30,10 @@ export default function OnboardingPage() {
   const [saving, setSaving] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [avatarUploading, setAvatarUploading] = useState(false);
+
+  // Avatar cropping modal state
+  const [cropImageSrc, setCropImageSrc] = useState<string | null>(null);
+  const [isCropModalOpen, setIsCropModalOpen] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -50,31 +55,43 @@ export default function OnboardingPage() {
     }
   }, [baby]);
 
-  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 10 * 1024 * 1024) {
-      showToast("图片大小不能超过 10MB", "error");
+    if (file.size > 25 * 1024 * 1024) {
+      showToast("图片大小不能超过 25MB", "error");
       return;
     }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === "string") {
+        setCropImageSrc(reader.result);
+        setIsCropModalOpen(true);
+      }
+    };
+    reader.readAsDataURL(file);
+    e.target.value = "";
+  };
+
+  const handleCropComplete = async (croppedBlob: Blob) => {
+    setIsCropModalOpen(false);
     setAvatarUploading(true);
     try {
       const formData = new FormData();
-      formData.append("file", file);
+      formData.append("file", croppedBlob, "avatar.jpg");
       const res = await fetch("/api/baby/avatar", { method: "POST", body: formData });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        throw new Error(data.error || "上传失败");
+        throw new Error(data.error || "头像上传失败");
       }
       setAvatarUrl(data.avatarUrl);
       useBabyStore.getState().fetchBaby();
-      showToast("头像上传成功 ✨", "success");
+      showToast("头像已更新并完成裁剪 ✨", "success");
     } catch (err: any) {
-      showToast(err?.message || "头像上传失败，请重试", "error");
+      showToast(err?.message || "头像保存失败，请重试", "error");
     } finally {
       setAvatarUploading(false);
-      // Reset input value so re-selecting same file triggers change
-      e.target.value = "";
     }
   };
 
@@ -159,15 +176,19 @@ export default function OnboardingPage() {
                 </div>
                 <input
                   type="file"
-                  accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
+                  accept="image/*"
                   className="hidden"
-                  onChange={handleAvatarUpload}
+                  onChange={handleFileSelect}
                   disabled={avatarUploading}
                 />
               </label>
               <div className="flex-1">
-                <p className="text-sm font-medium text-text-primary">点击上传头像</p>
-                <p className="text-[10px] text-text-muted mt-0.5">支持 JPG、PNG、WebP，最大 5MB</p>
+                <p className="text-sm font-medium text-text-primary">
+                  {avatarUrl ? "点击头像更换照片" : "点击上传宝宝头像"}
+                </p>
+                <p className="text-[10px] text-text-muted mt-0.5">
+                  支持拖动居中与自由缩放裁剪 · 最大 25MB
+                </p>
               </div>
             </div>
           </FormSection>
@@ -239,6 +260,16 @@ export default function OnboardingPage() {
           </div>
         </div>
       </div>
+
+      <AvatarCropModal
+        isOpen={isCropModalOpen}
+        imageSrc={cropImageSrc}
+        onClose={() => {
+          setIsCropModalOpen(false);
+          setCropImageSrc(null);
+        }}
+        onCropComplete={handleCropComplete}
+      />
     </div>
   );
 }
