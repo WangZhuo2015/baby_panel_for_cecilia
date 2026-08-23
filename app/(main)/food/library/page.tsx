@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { Apple, AlertTriangle, Info, Leaf, Search, X } from 'lucide-react'
-import { AppHeader, CuteCard, SectionTitle } from '@/components/ui'
+import { AppHeader, CuteCard, SectionTitle, QuickAiButton } from '@/components/ui'
 import DataVersionBadge from '@/components/ui/DataVersionBadge'
 
 /* ── Types ────────────────────────────────────────────────── */
@@ -124,12 +124,23 @@ export default function FoodLibraryPage() {
       <AppHeader title="食材图鉴" />
 
       <div className="px-4 pt-4 space-y-5">
-        {/* Header */}
-        <div className="text-center">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-gradient-to-br from-emerald-200 to-pink-200 mb-2">
-            <Apple className="w-7 h-7 text-emerald-600" />
+        {/* Header info */}
+        <div className="flex items-center justify-between bg-white/70 p-3 rounded-2xl border border-primary/20 shadow-soft">
+          <div className="flex items-center gap-3">
+            <div className="inline-flex items-center justify-center w-11 h-11 rounded-full bg-gradient-to-br from-emerald-200 to-teal-200 shadow-xs">
+              <Apple className="w-6 h-6 text-emerald-700" />
+            </div>
+            <div>
+              <p className="text-sm font-bold text-text-primary">宝宝辅食食材库</p>
+              <p className="text-xs text-gray-400">分月龄查询过敏与防噎处理</p>
+            </div>
           </div>
-          <p className="text-sm text-gray-400">宝宝辅食食材参考</p>
+
+          <QuickAiButton
+            contextType="food"
+            label="食材问答"
+            contextTitle="辅食与食材顾问"
+          />
         </div>
 
         {/* Search */}

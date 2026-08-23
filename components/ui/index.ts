@@ -14,3 +14,5 @@ export { FormSection } from './FormSection';
 export { AppHeader } from './AppHeader';
 export { InstallGuideModal } from './InstallGuideModal';
 export { InstallGuideBanner } from './InstallGuideBanner';
+export { QuickAiModal } from './QuickAiModal';
+export { QuickAiButton } from './QuickAiButton';

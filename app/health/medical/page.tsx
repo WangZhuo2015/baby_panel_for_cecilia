@@ -21,6 +21,7 @@ import { AppHeader } from "@/components/ui/AppHeader";
 import { CuteCard } from "@/components/ui/CuteCard";
 import { CuteButton } from "@/components/ui/CuteButton";
 import { SegmentControl } from "@/components/ui/SegmentControl";
+import { QuickAiButton } from "@/components/ui/QuickAiButton";
 import { useToast } from "@/components/ui/Toast";
 import { useBabyStore } from "@/stores/useBabyStore";
 import type { MedicalReport, MedicalReportItem } from "@/types";
@@ -103,10 +104,17 @@ export default function MedicalReportsPage() {
             size="sm"
             fullWidth
             onClick={() => router.push("/health/medical/add")}
-            className="flex items-center justify-center gap-1.5"
+            className="flex items-center justify-center gap-1.5 flex-1"
           >
             <Plus size={16} /> 拍照 / 识别新单据
           </CuteButton>
+          <QuickAiButton
+            contextType="medical"
+            label="报告问答"
+            contextTitle="化验单与体检解读顾问"
+            variant="outline"
+            className="px-3.5 py-2 text-xs"
+          />
         </div>
       </CuteCard>
 

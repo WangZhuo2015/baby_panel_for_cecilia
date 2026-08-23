@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { AlertCircle, TrendingUp, Brain, MessageCircle, Hand, Sparkles, Info, AlertTriangle, Baby, PlayCircle } from 'lucide-react'
-import { AppHeader, CuteCard, SegmentControl, SectionTitle } from '@/components/ui'
+import { AppHeader, CuteCard, SegmentControl, SectionTitle, QuickAiButton } from '@/components/ui'
 import DataVersionBadge from '@/components/ui/DataVersionBadge'
 import { useBabyStore } from '@/stores/useBabyStore'
 import { calculateAge } from '@/lib/age'
@@ -140,26 +140,35 @@ export default function DevelopmentPage() {
 
       <div className="px-4 pt-4 space-y-4">
         {/* Baby profile header */}
-        <div
-          className="flex items-center gap-3 bg-white/70 p-3 rounded-2xl border border-primary/20 shadow-soft cursor-pointer group"
-          onClick={() => router.push("/onboarding")}
-          title="点击修改宝宝资料与头像"
-        >
-          <div className="w-11 h-11 rounded-full bg-gradient-to-br from-primary-soft to-primary/30 flex items-center justify-center overflow-hidden shadow-xs shrink-0 group-hover:ring-2 group-hover:ring-primary/40 transition-all">
-            {baby?.avatarUrl ? (
-              <img src={baby.avatarUrl} alt={baby.nickname} className="w-full h-full object-cover" />
-            ) : (
-              <Baby size={22} className="text-primary" />
-            )}
+        <div className="flex items-center justify-between bg-white/70 p-3 rounded-2xl border border-primary/20 shadow-soft">
+          <div
+            className="flex items-center gap-3 cursor-pointer group flex-1"
+            onClick={() => router.push("/onboarding")}
+            title="点击修改宝宝资料与头像"
+          >
+            <div className="w-11 h-11 rounded-full bg-gradient-to-br from-primary-soft to-primary/30 flex items-center justify-center overflow-hidden shadow-xs shrink-0 group-hover:ring-2 group-hover:ring-primary/40 transition-all">
+              {baby?.avatarUrl ? (
+                <img src={baby.avatarUrl} alt={baby.nickname} className="w-full h-full object-cover" />
+              ) : (
+                <Baby size={22} className="text-primary" />
+              )}
+            </div>
+            <div>
+              <p className="text-sm font-bold text-text-primary group-hover:text-primary transition-colors">
+                {baby?.nickname ?? "宝宝"} 发育评估
+              </p>
+              <p className="text-xs text-text-secondary">
+                当前实际月龄 {age.label} · 评估第 {selectedMonth} 个月标准
+              </p>
+            </div>
           </div>
-          <div>
-            <p className="text-sm font-bold text-text-primary group-hover:text-primary transition-colors">
-              {baby?.nickname ?? "宝宝"} 发育评估
-            </p>
-            <p className="text-xs text-text-secondary">
-              当前实际月龄 {age.label} · 评估第 {selectedMonth} 个月标准
-            </p>
-          </div>
+
+          <QuickAiButton
+            contextType="development"
+            label="发育问答"
+            contextTitle="发育里程碑与早教顾问"
+            contextDetail={`当前评估月龄：${selectedMonth}个月；早产纠正：${isPreterm ? "是" : "否"}`}
+          />
         </div>
 
         {/* Preterm correction note */}

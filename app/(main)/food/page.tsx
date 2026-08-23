@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { CuteCard } from '@/components/ui/CuteCard';
 import { CuteButton } from '@/components/ui/CuteButton';
 import { SegmentControl } from '@/components/ui/SegmentControl';
+import { QuickAiButton } from '@/components/ui/QuickAiButton';
 import { useBabyStore } from '@/stores/useBabyStore';
 import { calculateAge } from '@/lib/age';
 import { getLocalDateStr } from '@/lib/date';
@@ -48,7 +49,7 @@ export default function FoodPage() {
   return (
     <div className="min-h-[100dvh] bg-bg pb-36">
       {/* Baby info header */}
-      <div className="safe-top px-4 pt-4 pb-3">
+      <div className="safe-top px-4 pt-4 pb-3 flex items-center justify-between">
         <div
           className="flex items-center gap-3 cursor-pointer group"
           onClick={() => router.push("/onboarding")}
@@ -66,6 +67,12 @@ export default function FoodPage() {
             <p className="text-sm text-text-secondary">{age.label}</p>
           </div>
         </div>
+
+        <QuickAiButton
+          contextType="food"
+          label="辅食问答"
+          contextTitle="辅食与营养顾问"
+        />
       </div>
 
       {/* 7-day date picker */}

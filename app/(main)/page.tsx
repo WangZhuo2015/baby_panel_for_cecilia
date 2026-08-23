@@ -23,6 +23,7 @@ import { QuickActionCard } from "@/components/ui/QuickActionCard";
 import { Timeline } from "@/components/ui/Timeline";
 import { CuteCard } from "@/components/ui/CuteCard";
 import { CuteButton } from "@/components/ui/CuteButton";
+import { QuickAiButton } from "@/components/ui/QuickAiButton";
 import { InstallGuideBanner } from "@/components/ui/InstallGuideBanner";
 import { formatIsoToLocalTime } from "@/lib/date";
 import { APP_VERSION } from "@/lib/version";
@@ -411,20 +412,28 @@ export default function HomePage() {
 
       {/* AI Assistant Advice */}
       <CuteCard className="bg-gradient-to-br from-primary-light to-lavender/10 border border-lavender/25 p-4">
-        <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center justify-between mb-2.5">
           <div className="flex items-center gap-1.5">
             <Sparkles size={16} className="text-primary" />
             <h4 className="text-xs font-bold text-text-primary">AI 育儿温馨建议</h4>
           </div>
-          <button
-            onClick={handleRefreshAi}
-            disabled={aiLoading}
-            className="text-[11px] text-text-muted hover:text-primary flex items-center gap-1 btn-press disabled:opacity-50"
-            title="刷新 AI 建议"
-          >
-            <RefreshCw size={11} className={aiLoading ? "animate-spin" : ""} />
-            刷新
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleRefreshAi}
+              disabled={aiLoading}
+              className="text-[11px] text-text-muted hover:text-primary flex items-center gap-1 btn-press disabled:opacity-50"
+              title="刷新 AI 建议"
+            >
+              <RefreshCw size={11} className={aiLoading ? "animate-spin" : ""} />
+              刷新
+            </button>
+            <QuickAiButton
+              contextType="general"
+              label="深度问答"
+              contextTitle="AI 育儿专属顾问"
+              variant="compact"
+            />
+          </div>
         </div>
 
         {aiLoading ? (

@@ -8,6 +8,7 @@ import { CuteInput } from '@/components/ui/CuteInput';
 import { CuteTextarea } from '@/components/ui/CuteTextarea';
 import { SegmentControl } from '@/components/ui/SegmentControl';
 import { FormSection } from '@/components/ui/FormSection';
+import { QuickAiButton } from '@/components/ui/QuickAiButton';
 import { useToast } from '@/components/ui/Toast';
 import { useBabyStore } from '@/stores/useBabyStore';
 import { localTimeToUtcIso } from '@/lib/date';
@@ -72,7 +73,21 @@ export default function DiaperRecordPage() {
         </button>
       } />
 
-      <form onSubmit={handleSubmit(onSubmit)} className="px-4 pt-4 pb-8">
+      <form onSubmit={handleSubmit(onSubmit)} className="px-4 pt-3 pb-8 space-y-4">
+        {/* Quick AI Advisor */}
+        <div className="flex items-center justify-between bg-white/70 px-3.5 py-2.5 rounded-2xl border border-primary/20 shadow-2xs">
+          <div className="flex items-center gap-2">
+            <span className="text-base">💩</span>
+            <span className="text-xs font-medium text-text-primary">便便颜色质地或红屁屁疑问？</span>
+          </div>
+          <QuickAiButton
+            contextType="diaper"
+            label="排便顾问"
+            contextTitle="排便与臀部护理顾问"
+            variant="compact"
+          />
+        </div>
+
         {/* Time */}
         <FormSection title="记录时间">
           <CuteInput type="time" value={time} onChange={(e) => setTime(e.target.value)} />

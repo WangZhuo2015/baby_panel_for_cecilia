@@ -15,6 +15,7 @@ import { CuteInput } from "@/components/ui/CuteInput";
 import { CuteCard } from "@/components/ui/CuteCard";
 import { FormSection } from "@/components/ui/FormSection";
 import { SegmentControl } from "@/components/ui/SegmentControl";
+import { QuickAiButton } from "@/components/ui/QuickAiButton";
 import { useToast } from "@/components/ui/Toast";
 import { useBabyStore } from "@/stores/useBabyStore";
 import { getLocalDateStr, formatIsoToLocalTime } from "@/lib/date";
@@ -211,6 +212,20 @@ export default function SleepRecordPage() {
       />
 
       <div className="space-y-4 mt-3">
+        {/* Quick AI Advisor */}
+        <div className="flex items-center justify-between bg-white/70 px-3.5 py-2.5 rounded-2xl border border-primary/20 shadow-2xs">
+          <div className="flex items-center gap-2">
+            <span className="text-base">😴</span>
+            <span className="text-xs font-medium text-text-primary">接觉短睡、落地醒或作息疑问？</span>
+          </div>
+          <QuickAiButton
+            contextType="sleep"
+            label="睡眠顾问"
+            contextTitle="睡眠与作息规律顾问"
+            variant="compact"
+          />
+        </div>
+
         {/* 🌙 实时入睡快捷卡片 (One-Tap Live Stopwatch) */}
         <CuteCard className="p-4 bg-gradient-to-br from-indigo-900 to-purple-900 text-white shadow-xl relative overflow-hidden border-0">
           <div className="absolute -top-10 -right-10 w-36 h-36 rounded-full bg-purple-500/20 blur-2xl" />

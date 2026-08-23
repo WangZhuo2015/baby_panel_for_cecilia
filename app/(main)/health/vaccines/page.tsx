@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Syringe, Shield, Info, AlertTriangle, ChevronDown, ChevronUp, MapPin, CalendarDays, CheckCircle2, Circle, Baby } from 'lucide-react'
-import { AppHeader, CuteCard, SectionTitle, SegmentControl } from '@/components/ui'
+import { AppHeader, CuteCard, SectionTitle, SegmentControl, QuickAiButton } from '@/components/ui'
 import DataVersionBadge from '@/components/ui/DataVersionBadge'
 import { useBabyStore } from '@/stores/useBabyStore'
 import { getLocalDateStr } from '@/lib/date'
@@ -396,26 +396,35 @@ export default function VaccinesPage() {
           </Link>
         </div>
         {/* Header info */}
-        <div
-          className="flex items-center gap-3 bg-white/70 p-3 rounded-2xl border border-primary/20 shadow-soft cursor-pointer group"
-          onClick={() => router.push("/onboarding")}
-          title="点击修改宝宝资料与头像"
-        >
-          <div className="w-11 h-11 rounded-full bg-gradient-to-br from-primary-soft to-primary/30 flex items-center justify-center overflow-hidden shadow-xs shrink-0 group-hover:ring-2 group-hover:ring-primary/40 transition-all">
-            {baby?.avatarUrl ? (
-              <img src={baby.avatarUrl} alt={baby.nickname} className="w-full h-full object-cover" />
-            ) : (
-              <Baby size={22} className="text-primary" />
-            )}
+        <div className="flex items-center justify-between bg-white/70 p-3 rounded-2xl border border-primary/20 shadow-soft">
+          <div
+            className="flex items-center gap-3 cursor-pointer group flex-1"
+            onClick={() => router.push("/onboarding")}
+            title="点击修改宝宝资料与头像"
+          >
+            <div className="w-11 h-11 rounded-full bg-gradient-to-br from-primary-soft to-primary/30 flex items-center justify-center overflow-hidden shadow-xs shrink-0 group-hover:ring-2 group-hover:ring-primary/40 transition-all">
+              {baby?.avatarUrl ? (
+                <img src={baby.avatarUrl} alt={baby.nickname} className="w-full h-full object-cover" />
+              ) : (
+                <Baby size={22} className="text-primary" />
+              )}
+            </div>
+            <div>
+              <p className="text-sm font-bold text-text-primary group-hover:text-primary transition-colors">
+                {baby?.nickname ?? "宝宝"} 疫苗接种规划
+              </p>
+              <p className="text-xs text-text-secondary">
+                当前月龄 {calculateAge(birthDate || getLocalDateStr()).label} · 0–3岁接种时间表
+              </p>
+            </div>
           </div>
-          <div>
-            <p className="text-sm font-bold text-text-primary group-hover:text-primary transition-colors">
-              {baby?.nickname ?? "宝宝"} 疫苗接种规划
-            </p>
-            <p className="text-xs text-text-secondary">
-              当前月龄 {calculateAge(birthDate || getLocalDateStr()).label} · 0–3岁接种时间表
-            </p>
-          </div>
+
+          <QuickAiButton
+            contextType="vaccine"
+            label="疫苗问答"
+            contextTitle="疫苗接种与预防顾问"
+            contextDetail={`近期30天内安排：${upcomingCount}项；已过期：${overdueCount}项`}
+          />
         </div>
 
         {/* ── Upcoming schedule ─────────────────────────────── */}

@@ -17,6 +17,7 @@ import { CuteInput } from "@/components/ui/CuteInput";
 import { CuteCard } from "@/components/ui/CuteCard";
 import { FormSection } from "@/components/ui/FormSection";
 import { SegmentControl } from "@/components/ui/SegmentControl";
+import { QuickAiButton } from "@/components/ui/QuickAiButton";
 import { useToast } from "@/components/ui/Toast";
 import { useBabyStore } from "@/stores/useBabyStore";
 import { localTimeToUtcIso } from "@/lib/date";
@@ -119,6 +120,20 @@ export default function FeedingRecordPage() {
       />
 
       <div className="space-y-4 mt-3">
+        {/* Quick AI Advisor */}
+        <div className="flex items-center justify-between bg-white/70 px-3.5 py-2.5 rounded-2xl border border-primary/20 shadow-2xs">
+          <div className="flex items-center gap-2">
+            <span className="text-base">🍼</span>
+            <span className="text-xs font-medium text-text-primary">遇到吐奶/胀气或奶量疑问？</span>
+          </div>
+          <QuickAiButton
+            contextType="feeding"
+            label="喂养顾问"
+            contextTitle="喂养与胀气拍嗝顾问"
+            variant="compact"
+          />
+        </div>
+
         {/* Feeding Type Selector */}
         <CuteCard className="p-3">
           <SegmentControl
