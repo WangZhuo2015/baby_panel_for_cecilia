@@ -1,17 +1,17 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import {
   X,
   Send,
   Sparkles,
   Copy,
   Check,
-  RefreshCw,
   Baby,
   Bot,
   AlertCircle,
-  MessageSquare,
 } from "lucide-react";
 import { useBabyStore } from "@/stores/useBabyStore";
 import { calculateAge } from "@/lib/age";
@@ -181,7 +181,7 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
         const welcome: Message = {
           id: "welcome",
           role: "assistant",
-          content: `你好！我是针对 **${baby?.nickname || "宝宝"}**（${age.label}）的专属 **${displayTitle}** ✨\n\n你可以点击下方的热门问题，或直接输入任何你想了解的育儿疑问：`,
+          content: `你好！我是针对 **${baby?.nickname || "宝宝"}**（${age.label}）的专属 **${displayTitle}** ✨\n\n你可以点击上方的热门问题，或直接在下方输入任何你想了解的育儿疑问：`,
           timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
         };
         setMessages([welcome]);
@@ -324,18 +324,19 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-200">
-      {/* Backdrop */}
+      {/* Backdrop with soft blur */}
       <div
-        className="absolute inset-0 bg-black/40 backdrop-blur-xs transition-opacity"
+        className="absolute inset-0 bg-slate-900/30 backdrop-blur-xs transition-opacity"
         onClick={onClose}
       />
 
-      {/* Sheet / Modal Container */}
-      <div className="relative w-full max-w-lg bg-card rounded-t-3xl sm:rounded-3xl shadow-modal overflow-hidden flex flex-col max-h-[92vh] sm:max-h-[85vh] h-[85vh] border border-primary/20 animate-in slide-in-from-bottom-6 duration-200 z-10">
-        {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3.5 border-b border-border bg-gradient-to-r from-primary-light/80 via-white to-pink-50/50">
+      {/* Sheet / Modal Container - Soft pastel styling */}
+      <div className="relative w-full max-w-lg bg-gradient-to-b from-white via-[#FAF7F5] to-[#F5F0EB] rounded-t-[28px] sm:rounded-[28px] shadow-2xl overflow-hidden flex flex-col max-h-[92vh] sm:max-h-[85vh] h-[85vh] border border-primary/15 animate-in slide-in-from-bottom-6 duration-200 z-10">
+        
+        {/* Header - Frosted pastel navbar */}
+        <div className="flex items-center justify-between px-4 py-3 bg-white/90 backdrop-blur-md border-b border-primary/10 shrink-0">
           <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-full bg-primary text-white flex items-center justify-center text-lg shadow-button">
+            <div className="w-9 h-9 rounded-2xl bg-gradient-to-br from-primary to-pink-500 text-white flex items-center justify-center text-lg shadow-sm shadow-primary/25">
               {meta.emoji}
             </div>
             <div>
@@ -343,12 +344,12 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
                 <h3 className="font-bold text-text-primary text-sm sm:text-base">
                   {displayTitle}
                 </h3>
-                <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full font-medium">
-                  Hermes 流式 AI
+                <span className="text-[10px] bg-primary-light text-primary px-2 py-0.5 rounded-full font-semibold">
+                  Hermes AI
                 </span>
               </div>
-              <p className="text-[11px] text-text-secondary flex items-center gap-1 mt-0.5">
-                <span>{baby?.nickname || "宝宝"}</span>
+              <p className="text-[11px] text-text-muted flex items-center gap-1 mt-0.5">
+                <span className="font-medium text-text-secondary">{baby?.nickname || "宝宝"}</span>
                 <span>·</span>
                 <span>{age.label}</span>
               </p>
@@ -356,21 +357,21 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
           </div>
           <button
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-bg text-text-muted hover:text-text-primary flex items-center justify-center transition-colors"
+            className="w-8 h-8 rounded-full bg-primary-soft/40 hover:bg-primary-soft text-text-muted hover:text-text-primary flex items-center justify-center transition-colors cursor-pointer"
           >
-            <X size={18} />
+            <X size={16} />
           </button>
         </div>
 
         {/* Quick Suggestion Chips */}
-        <div className="px-3 py-2 bg-bg/60 border-b border-border overflow-x-auto scrollbar-hide flex gap-1.5 shrink-0">
+        <div className="px-3.5 py-2.5 bg-white/60 backdrop-blur-xs border-b border-primary/10 overflow-x-auto scrollbar-hide flex gap-2 shrink-0">
           {meta.chips.map((chip, idx) => (
             <button
               key={idx}
               type="button"
               disabled={loading}
               onClick={() => handleSend(chip)}
-              className="text-xs bg-white text-text-primary hover:text-primary hover:bg-primary-light/50 border border-primary/20 rounded-full px-3 py-1.5 shrink-0 shadow-2xs transition-all active:scale-95 text-left flex items-center gap-1 disabled:opacity-50"
+              className="text-xs bg-white text-text-secondary hover:text-primary hover:bg-primary-light/50 border border-primary/15 rounded-full px-3 py-1.5 shrink-0 shadow-xs transition-all active:scale-95 text-left flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
             >
               <Sparkles size={11} className="text-primary shrink-0" />
               <span>{chip}</span>
@@ -379,35 +380,126 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
         </div>
 
         {/* Message History */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gradient-to-b from-bg/30 to-bg/10">
+        <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gradient-to-b from-transparent to-primary-light/10">
           {messages.map((m) => {
             const isUser = m.role === "user";
+            const isThinking = !isUser && m.isStreaming && !m.content;
+
             return (
               <div
                 key={m.id}
                 className={`flex gap-2.5 ${isUser ? "justify-end" : "justify-start"}`}
               >
                 {!isUser && (
-                  <div className="w-7 h-7 rounded-full bg-primary-soft text-primary flex items-center justify-center shrink-0 mt-0.5 shadow-2xs">
-                    <Bot size={15} />
+                  <div className="w-7 h-7 rounded-full bg-gradient-to-br from-primary-soft to-pink-100 text-primary flex items-center justify-center shrink-0 mt-0.5 shadow-xs border border-primary/10">
+                    <Bot size={14} />
                   </div>
                 )}
 
                 <div
-                  className={`relative max-w-[85%] rounded-2xl p-3.5 shadow-2xs text-xs sm:text-sm leading-relaxed whitespace-pre-wrap ${
+                  className={`relative max-w-[86%] rounded-2xl p-3.5 shadow-sm text-xs sm:text-sm leading-relaxed ${
                     isUser
-                      ? "bg-primary text-white rounded-tr-xs"
-                      : "bg-white text-text-primary rounded-tl-xs border border-border"
+                      ? "bg-gradient-to-r from-primary to-pink-500 text-white rounded-tr-xs shadow-primary/20"
+                      : "bg-white text-text-primary rounded-tl-xs border border-primary/10 shadow-slate-200/50"
                   }`}
                 >
-                  {/* Message content */}
-                  <div>
-                    {m.content}
-                    {m.isStreaming && (
-                      <span className="inline-block w-1.5 h-3.5 bg-primary ml-0.5 animate-pulse align-middle" />
-                    )}
-                  </div>
+                  {/* Thinking status inside the single assistant bubble */}
+                  {isThinking ? (
+                    <div className="flex items-center gap-2 text-xs text-text-secondary py-1">
+                      <div className="flex gap-1">
+                        <div className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce [animation-delay:-0.3s]" />
+                        <div className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce [animation-delay:-0.15s]" />
+                        <div className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce" />
+                      </div>
+                      <span className="text-[11px] text-text-muted">结合宝宝月龄思考生成中...</span>
+                    </div>
+                  ) : isUser ? (
+                    /* User message */
+                    <div className="whitespace-pre-wrap">{m.content}</div>
+                  ) : (
+                    /* Assistant Rich Markdown Rendering */
+                    <div className="markdown-content space-y-2">
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm]}
+                        components={{
+                          h1: ({ children }) => (
+                            <h1 className="text-sm font-bold text-primary-dark mt-2 mb-1 border-l-2 border-primary pl-2">
+                              {children}
+                            </h1>
+                          ),
+                          h2: ({ children }) => (
+                            <h2 className="text-xs sm:text-sm font-bold text-text-primary mt-2 mb-1 flex items-center gap-1.5">
+                              <span className="w-1.5 h-1.5 rounded-full bg-primary inline-block" />
+                              {children}
+                            </h2>
+                          ),
+                          h3: ({ children }) => (
+                            <h3 className="text-xs font-bold text-text-primary mt-1.5 mb-0.5">
+                              {children}
+                            </h3>
+                          ),
+                          p: ({ children }) => (
+                            <p className="my-1 leading-relaxed text-text-primary">{children}</p>
+                          ),
+                          strong: ({ children }) => (
+                            <strong className="font-bold text-primary bg-primary-light/50 px-1 py-0.5 rounded">
+                              {children}
+                            </strong>
+                          ),
+                          ul: ({ children }) => (
+                            <ul className="my-1.5 pl-4 space-y-1 list-disc marker:text-primary/70">
+                              {children}
+                            </ul>
+                          ),
+                          ol: ({ children }) => (
+                            <ol className="my-1.5 pl-4 space-y-1 list-decimal marker:text-primary font-medium">
+                              {children}
+                            </ol>
+                          ),
+                          li: ({ children }) => (
+                            <li className="leading-relaxed pl-0.5">{children}</li>
+                          ),
+                          blockquote: ({ children }) => (
+                            <blockquote className="my-2 p-2.5 bg-primary-light/30 border-l-3 border-primary rounded-r-xl text-xs text-text-secondary">
+                              {children}
+                            </blockquote>
+                          ),
+                          table: ({ children }) => (
+                            <div className="overflow-x-auto my-2 rounded-xl border border-primary/15">
+                              <table className="w-full text-left text-[11px] border-collapse">
+                                {children}
+                              </table>
+                            </div>
+                          ),
+                          thead: ({ children }) => (
+                            <thead className="bg-primary-light/60 text-text-primary font-bold">
+                              {children}
+                            </thead>
+                          ),
+                          th: ({ children }) => (
+                            <th className="p-2 border-b border-primary/15">{children}</th>
+                          ),
+                          td: ({ children }) => (
+                            <td className="p-2 border-b border-primary/10">{children}</td>
+                          ),
+                          code: ({ children }) => (
+                            <code className="bg-primary-light/40 text-primary px-1.5 py-0.5 rounded text-[11px] font-mono">
+                              {children}
+                            </code>
+                          ),
+                        }}
+                      >
+                        {m.content}
+                      </ReactMarkdown>
 
+                      {/* Streaming blinking cursor */}
+                      {m.isStreaming && (
+                        <span className="inline-block w-1.5 h-3.5 bg-primary ml-0.5 animate-pulse align-middle" />
+                      )}
+                    </div>
+                  )}
+
+                  {/* Bubble footer */}
                   <div
                     className={`flex items-center justify-between gap-3 mt-2 text-[10px] ${
                       isUser ? "text-white/75" : "text-text-muted"
@@ -417,13 +509,13 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
                     {!isUser && m.id !== "welcome" && !m.isStreaming && m.content && (
                       <button
                         onClick={() => handleCopy(m.id, m.content)}
-                        className="hover:text-primary transition-colors flex items-center gap-0.5"
+                        className="hover:text-primary transition-colors flex items-center gap-0.5 cursor-pointer"
                         title="复制建议"
                       >
                         {copiedId === m.id ? (
                           <>
-                            <Check size={11} className="text-green-500" />
-                            <span className="text-green-500">已复制</span>
+                            <Check size={11} className="text-emerald-500" />
+                            <span className="text-emerald-500">已复制</span>
                           </>
                         ) : (
                           <>
@@ -437,7 +529,7 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
                 </div>
 
                 {isUser && (
-                  <div className="w-7 h-7 rounded-full bg-primary-light flex items-center justify-center shrink-0 mt-0.5 overflow-hidden shadow-2xs">
+                  <div className="w-7 h-7 rounded-full bg-primary-light flex items-center justify-center shrink-0 mt-0.5 overflow-hidden shadow-xs border border-primary/20">
                     {baby?.avatarUrl ? (
                       <img src={baby.avatarUrl} alt="头像" className="w-full h-full object-cover" />
                     ) : (
@@ -449,27 +541,11 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
             );
           })}
 
-          {loading && messages.length > 0 && !messages[messages.length - 1].content && (
-            <div className="flex gap-2.5 justify-start">
-              <div className="w-7 h-7 rounded-full bg-primary-soft text-primary flex items-center justify-center shrink-0 mt-0.5 shadow-2xs animate-pulse">
-                <Bot size={15} />
-              </div>
-              <div className="bg-white border border-border rounded-2xl rounded-tl-xs p-3 shadow-2xs flex items-center gap-2 text-xs text-text-secondary">
-                <div className="flex gap-1">
-                  <div className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce [animation-delay:-0.3s]" />
-                  <div className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce [animation-delay:-0.15s]" />
-                  <div className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce" />
-                </div>
-                <span>Hermes 正在结合宝宝月龄思考生成中...</span>
-              </div>
-            </div>
-          )}
-
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Input Bar */}
-        <div className="p-3 border-t border-border bg-white flex flex-col gap-1.5 shrink-0">
+        {/* Input Bar - Soft capsule design */}
+        <div className="p-3 bg-white/95 backdrop-blur-md border-t border-primary/10 flex flex-col gap-1.5 shrink-0">
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -484,20 +560,20 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
               onChange={(e) => setInputText(e.target.value)}
               placeholder={meta.placeholder}
               disabled={loading}
-              className="flex-1 px-3.5 py-2.5 bg-bg rounded-2xl text-xs sm:text-sm border border-border focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/40 transition-all"
+              className="flex-1 px-4 py-2.5 bg-primary-light/25 hover:bg-primary-light/40 focus:bg-white rounded-2xl text-xs sm:text-sm border border-primary/15 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all placeholder:text-text-muted/60"
             />
             <button
               type="submit"
               disabled={!inputText.trim() || loading}
-              className="w-10 h-10 rounded-2xl bg-primary text-white flex items-center justify-center shadow-button disabled:opacity-40 transition-all shrink-0 active:scale-95"
+              className="w-10 h-10 rounded-2xl bg-gradient-to-r from-primary to-pink-500 text-white flex items-center justify-center shadow-sm shadow-primary/30 hover:opacity-95 disabled:opacity-35 transition-all shrink-0 active:scale-95 cursor-pointer"
             >
-              <Send size={16} />
+              <Send size={15} />
             </button>
           </form>
 
           {/* Medical disclaimer */}
           <p className="text-[10px] text-text-muted/70 text-center flex items-center justify-center gap-1">
-            <AlertCircle size={10} />
+            <AlertCircle size={10} className="text-amber-500/70 shrink-0" />
             AI 建议仅供育儿参考，涉及宝宝身体异常与用药请务必遵医嘱
           </p>
         </div>
