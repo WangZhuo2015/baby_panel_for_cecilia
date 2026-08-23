@@ -17,8 +17,11 @@ export default function OnboardingPage() {
   const router = useRouter();
   const { showToast } = useToast();
   const baby = useBabyStore((s) => s.baby);
+  const fetchBaby = useBabyStore((s) => s.fetchBaby);
+  const fetchUser = useBabyStore((s) => s.fetchUser);
   const saveBaby = useBabyStore((s) => s.saveBaby);
 
+  const [pageLoading, setPageLoading] = useState(true);
   const [nickname, setNickname] = useState("");
   const [birthDate, setBirthDate] = useState(getLocalDateStr());
   const [gender, setGender] = useState<"female" | "male">("female");
@@ -26,6 +29,16 @@ export default function OnboardingPage() {
   const [saving, setSaving] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [avatarUploading, setAvatarUploading] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+    Promise.all([fetchUser(), fetchBaby()]).finally(() => {
+      if (isMounted) setPageLoading(false);
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, [fetchUser, fetchBaby]);
 
   useEffect(() => {
     if (baby) {
@@ -40,8 +53,8 @@ export default function OnboardingPage() {
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 5 * 1024 * 1024) {
-      showToast("图片不能超过 5MB");
+    if (file.size > 10 * 1024 * 1024) {
+      showToast("图片大小不能超过 10MB", "error");
       return;
     }
     setAvatarUploading(true);
@@ -49,29 +62,30 @@ export default function OnboardingPage() {
       const formData = new FormData();
       formData.append("file", file);
       const res = await fetch("/api/baby/avatar", { method: "POST", body: formData });
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || "上传失败");
+        throw new Error(data.error || "上传失败");
       }
-      const data = await res.json();
       setAvatarUrl(data.avatarUrl);
       useBabyStore.getState().fetchBaby();
-      showToast("头像已更新 ✨");
+      showToast("头像上传成功 ✨", "success");
     } catch (err: any) {
-      showToast(err?.message || "头像上传失败");
+      showToast(err?.message || "头像上传失败，请重试", "error");
     } finally {
       setAvatarUploading(false);
+      // Reset input value so re-selecting same file triggers change
+      e.target.value = "";
     }
   };
 
   const handleSave = async () => {
     const name = nickname.trim();
     if (!name) {
-      showToast("请输入宝宝昵称");
+      showToast("请输入宝宝昵称", "error");
       return;
     }
     if (!/^\d{4}-\d{2}-\d{2}$/.test(birthDate)) {
-      showToast("请选择宝宝生日");
+      showToast("请选择宝宝生日", "error");
       return;
     }
     setSaving(true);
@@ -82,15 +96,27 @@ export default function OnboardingPage() {
         birthDate,
         gender,
         gestationalAge: Number.isFinite(gAge) ? gAge : undefined,
+        avatarUrl: avatarUrl || undefined,
       });
-      showToast(baby ? "宝宝信息已更新 ✨" : "欢迎加入，记录从今天开始 ✨");
+      showToast(baby ? "宝宝信息已更新 ✨" : "欢迎加入，记录从今天开始 ✨", "success");
       router.replace("/");
     } catch (err: any) {
-      showToast(err?.message || "保存失败，请重试");
+      showToast(err?.message || "保存失败，请重试", "error");
     } finally {
       setSaving(false);
     }
   };
+
+  if (pageLoading) {
+    return (
+      <div className="min-h-[100dvh] bg-bg max-w-md mx-auto flex items-center justify-center p-4">
+        <div className="text-center space-y-2 text-xs text-text-muted">
+          <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto" />
+          <p>正在加载宝宝档案...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-[100dvh] bg-bg max-w-md mx-auto">

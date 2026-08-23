@@ -84,7 +84,7 @@ interface BabyStore {
 
   // Actions - fetch from API
   fetchBaby: () => Promise<void>;
-  saveBaby: (data: { nickname: string; birthDate: string; gender: string; gestationalAge?: number }) => Promise<void>;
+  saveBaby: (data: { nickname: string; birthDate: string; gender: string; gestationalAge?: number; avatarUrl?: string }) => Promise<void>;
   fetchFeedingRecords: (date?: string) => Promise<void>;
   fetchSleepRecords: () => Promise<void>;
   fetchDiaperRecords: () => Promise<void>;
