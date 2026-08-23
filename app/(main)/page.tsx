@@ -251,7 +251,11 @@ export default function HomePage() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-12 h-12 rounded-full bg-gradient-to-br from-primary-soft to-primary/30 flex items-center justify-center overflow-hidden shadow-soft">
-            <Baby size={24} className="text-primary" />
+            {baby.avatarUrl ? (
+              <img src={baby.avatarUrl} alt={baby.nickname} className="w-full h-full object-cover" />
+            ) : (
+              <Baby size={24} className="text-primary" />
+            )}
           </div>
           <div>
             <div className="flex items-center gap-1.5">

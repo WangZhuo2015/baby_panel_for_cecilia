@@ -138,6 +138,7 @@ export async function PUT(request: Request) {
         birthDate: validated.birthDate,
         gender: validated.gender,
         gestationalAge: validated.gestationalAge,
+        ...(typeof body.avatarUrl === "string" ? { avatarUrl: body.avatarUrl } : {}),
       },
     });
 

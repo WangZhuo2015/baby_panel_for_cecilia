@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Baby, Sparkles } from "lucide-react";
+import { Baby, Sparkles, Camera } from "lucide-react";
 import { AppHeader } from "@/components/ui/AppHeader";
 import { CuteButton } from "@/components/ui/CuteButton";
 import { CuteInput } from "@/components/ui/CuteInput";
@@ -23,6 +23,8 @@ export default function OnboardingPage() {
   const [gender, setGender] = useState<"female" | "male">("female");
   const [gestationalAge, setGestationalAge] = useState<string>("");
   const [saving, setSaving] = useState(false);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [avatarUploading, setAvatarUploading] = useState(false);
 
   useEffect(() => {
     if (baby) {
@@ -30,8 +32,36 @@ export default function OnboardingPage() {
       setBirthDate(baby.birthDate || getLocalDateStr());
       setGender(baby.gender === "male" ? "male" : "female");
       if (baby.gestationalAge) setGestationalAge(String(baby.gestationalAge));
+      if (baby.avatarUrl) setAvatarUrl(baby.avatarUrl);
     }
   }, [baby]);
+
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      showToast("图片不能超过 5MB");
+      return;
+    }
+    setAvatarUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/baby/avatar", { method: "POST", body: formData });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "上传失败");
+      }
+      const data = await res.json();
+      setAvatarUrl(data.avatarUrl);
+      useBabyStore.getState().fetchBaby();
+      showToast("头像已更新 ✨");
+    } catch (err: any) {
+      showToast(err?.message || "头像上传失败");
+    } finally {
+      setAvatarUploading(false);
+    }
+  };
 
   const handleSave = async () => {
     const name = nickname.trim();
@@ -84,6 +114,37 @@ export default function OnboardingPage() {
         )}
 
         <div className="space-y-4">
+          {/* Avatar */}
+          <FormSection title="宝宝头像（可选）">
+            <div className="flex items-center gap-4">
+              <label className="relative cursor-pointer group">
+                <div className="w-20 h-20 rounded-full bg-gradient-to-br from-primary-soft to-primary/30 flex items-center justify-center overflow-hidden shadow-soft border-2 border-dashed border-primary/30 group-hover:border-primary/60 transition-colors">
+                  {avatarUploading ? (
+                    <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                  ) : avatarUrl ? (
+                    <img src={avatarUrl} alt="宝宝头像" className="w-full h-full object-cover" />
+                  ) : (
+                    <Camera size={24} className="text-primary/50" />
+                  )}
+                </div>
+                <div className="absolute -bottom-0.5 -right-0.5 w-6 h-6 rounded-full bg-primary text-white flex items-center justify-center shadow-button">
+                  <Camera size={12} />
+                </div>
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
+                  className="hidden"
+                  onChange={handleAvatarUpload}
+                  disabled={avatarUploading}
+                />
+              </label>
+              <div className="flex-1">
+                <p className="text-sm font-medium text-text-primary">点击上传头像</p>
+                <p className="text-[10px] text-text-muted mt-0.5">支持 JPG、PNG、WebP，最大 5MB</p>
+              </div>
+            </div>
+          </FormSection>
+
           {/* Nickname */}
           <FormSection title="宝宝昵称">
             <CuteInput

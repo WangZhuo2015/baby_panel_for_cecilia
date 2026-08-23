@@ -40,3 +40,6 @@ dev.db
 .windsurf/
 skills-lock.json
 data/push-subscriptions.json
+public/uploads/**
+!public/uploads/**/
+!public/uploads/**/.gitkeep

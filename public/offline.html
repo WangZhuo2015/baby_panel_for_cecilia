@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#FFF9FB" />
+  <title>宝宝成长工作台 - 离线</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      background: #FFF9FB;
+      color: #4A252B;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      min-height: 100dvh;
+      padding: 24px;
+      -webkit-font-smoothing: antialiased;
+    }
+    .container {
+      text-align: center;
+      max-width: 320px;
+    }
+    .icon {
+      width: 72px;
+      height: 72px;
+      border-radius: 24px;
+      background: linear-gradient(135deg, #FFF0F5, #FFD9E6);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 20px;
+      font-size: 36px;
+    }
+    h1 {
+      font-size: 18px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+    p {
+      font-size: 14px;
+      color: #8F7076;
+      line-height: 1.6;
+      margin-bottom: 24px;
+    }
+    button {
+      background: linear-gradient(135deg, #FF6F9F, #E85A8A);
+      color: white;
+      border: none;
+      border-radius: 20px;
+      padding: 12px 32px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      box-shadow: 0 4px 12px rgba(255, 111, 159, 0.3);
+      -webkit-tap-highlight-color: transparent;
+      transition: transform 0.1s ease;
+    }
+    button:active { transform: scale(0.97); }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="icon">📶</div>
+    <h1>暂时无法连接</h1>
+    <p>当前没有网络连接，请检查网络后重试。<br />数据将在恢复连接后自动同步。</p>
+    <button onclick="location.reload()">重新连接</button>
+  </div>
+</body>
+</html>
