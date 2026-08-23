@@ -323,18 +323,18 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-200">
       {/* Backdrop with soft blur */}
       <div
-        className="absolute inset-0 bg-slate-900/30 backdrop-blur-xs transition-opacity"
+        className="absolute inset-0 bg-slate-900/40 backdrop-blur-xs transition-opacity"
         onClick={onClose}
       />
 
-      {/* Sheet / Modal Container - Fixed viewport aware layout */}
-      <div className="relative w-full max-w-lg bg-gradient-to-b from-white via-[#FAF7F5] to-[#F5F0EB] rounded-t-[28px] sm:rounded-[28px] shadow-2xl overflow-hidden flex flex-col h-[82dvh] sm:h-[650px] max-h-[85dvh] sm:max-h-[90vh] border border-primary/15 animate-in slide-in-from-bottom-6 duration-200 z-10">
+      {/* Sheet / Modal Container - Full screen on mobile, elegant dialog on desktop */}
+      <div className="relative w-full max-w-lg bg-gradient-to-b from-white via-[#FAF7F5] to-[#F5F0EB] h-[100dvh] sm:h-[680px] max-h-[100dvh] sm:max-h-[90vh] rounded-none sm:rounded-[28px] shadow-2xl overflow-hidden flex flex-col border-0 sm:border sm:border-primary/15 animate-in slide-in-from-bottom-6 duration-200 z-10">
         
-        {/* Header - Frosted pastel navbar */}
-        <div className="flex items-center justify-between px-4 py-3 bg-white/90 backdrop-blur-md border-b border-primary/10 shrink-0">
+        {/* Header - Frosted pastel navbar with notch safe area */}
+        <div className="flex items-center justify-between px-4 py-3 pt-[max(12px,env(safe-area-inset-top))] bg-white/95 backdrop-blur-md border-b border-primary/10 shrink-0">
           <div className="flex items-center gap-2.5">
             <div className="w-9 h-9 rounded-2xl bg-gradient-to-br from-primary to-pink-500 text-white flex items-center justify-center text-lg shadow-sm shadow-primary/25">
               {meta.emoji}
