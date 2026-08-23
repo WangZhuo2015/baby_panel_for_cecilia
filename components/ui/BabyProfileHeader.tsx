@@ -56,9 +56,13 @@ export const BabyProfileHeader: React.FC<BabyProfileHeaderProps> = ({
 
   return (
     <div className="flex items-center justify-between px-1 py-2">
-      <div className="flex items-center gap-3">
-        {/* Avatar placeholder */}
-        <div className="w-12 h-12 rounded-full bg-primary-soft flex items-center justify-center overflow-hidden shadow-card">
+      <div
+        className="flex items-center gap-3 cursor-pointer group"
+        onClick={() => router.push("/onboarding")}
+        title="点击修改宝宝资料与头像"
+      >
+        {/* Avatar */}
+        <div className="w-12 h-12 rounded-full bg-primary-soft flex items-center justify-center overflow-hidden shadow-card group-hover:ring-2 group-hover:ring-primary/40 transition-all">
           {baby.avatarUrl ? (
             <img src={baby.avatarUrl} alt={baby.nickname} className="w-full h-full object-cover" />
           ) : (
@@ -66,7 +70,7 @@ export const BabyProfileHeader: React.FC<BabyProfileHeaderProps> = ({
           )}
         </div>
         <div>
-          <h1 className="text-base font-semibold text-text-primary">{baby.nickname}</h1>
+          <h1 className="text-base font-semibold text-text-primary group-hover:text-primary transition-colors">{baby.nickname}</h1>
           <p className="text-xs text-text-secondary">{getAgeLabel(baby.birthDate)}</p>
         </div>
       </div>

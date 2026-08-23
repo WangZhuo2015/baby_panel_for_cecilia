@@ -7,6 +7,7 @@ import { SegmentControl } from '@/components/ui/SegmentControl';
 import { useBabyStore } from '@/stores/useBabyStore';
 import { calculateAge } from '@/lib/age';
 import { getLocalDateStr } from '@/lib/date';
+import { Baby } from 'lucide-react';
 
 function generateWeeklyDates() {
   const weekdays = ['日', '一', '二', '三', '四', '五', '六'];
@@ -48,12 +49,20 @@ export default function FoodPage() {
     <div className="min-h-[100dvh] bg-bg pb-36">
       {/* Baby info header */}
       <div className="safe-top px-4 pt-4 pb-3">
-        <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-full bg-gradient-to-br from-primary-light to-primary-soft flex items-center justify-center text-2xl">
-            👶
+        <div
+          className="flex items-center gap-3 cursor-pointer group"
+          onClick={() => router.push("/onboarding")}
+          title="点击修改宝宝资料与头像"
+        >
+          <div className="w-12 h-12 rounded-full bg-gradient-to-br from-primary-light to-primary-soft flex items-center justify-center overflow-hidden shadow-soft group-hover:ring-2 group-hover:ring-primary/40 transition-all">
+            {baby?.avatarUrl ? (
+              <img src={baby.avatarUrl} alt={baby.nickname} className="w-full h-full object-cover" />
+            ) : (
+              <Baby size={24} className="text-primary" />
+            )}
           </div>
           <div>
-            <h2 className="text-lg font-bold text-text-primary">{baby?.nickname ?? ""}</h2>
+            <h2 className="text-lg font-bold text-text-primary group-hover:text-primary transition-colors">{baby?.nickname ?? "宝宝"}</h2>
             <p className="text-sm text-text-secondary">{age.label}</p>
           </div>
         </div>

@@ -102,12 +102,20 @@ export default function GrowthPage() {
   return (
     <div className="px-4 pt-12 pb-36 max-w-md mx-auto">
       {/* Baby header */}
-      <div className="flex items-center gap-3 mb-5">
-        <div className="w-12 h-12 rounded-full bg-gradient-to-br from-primary-soft to-primary/30 flex items-center justify-center shadow-soft">
-          <Baby size={24} className="text-primary" />
+      <div
+        className="flex items-center gap-3 mb-5 cursor-pointer group"
+        onClick={() => router.push("/onboarding")}
+        title="点击修改宝宝资料与头像"
+      >
+        <div className="w-12 h-12 rounded-full bg-gradient-to-br from-primary-soft to-primary/30 flex items-center justify-center shadow-soft overflow-hidden group-hover:ring-2 group-hover:ring-primary/40 transition-all">
+          {baby?.avatarUrl ? (
+            <img src={baby.avatarUrl} alt={baby.nickname} className="w-full h-full object-cover" />
+          ) : (
+            <Baby size={24} className="text-primary" />
+          )}
         </div>
         <div>
-          <p className="text-lg font-bold text-text-primary">{baby?.nickname ?? "宝宝"}</p>
+          <p className="text-lg font-bold text-text-primary group-hover:text-primary transition-colors">{baby?.nickname ?? "宝宝"}</p>
           <p className="text-sm text-text-secondary">{age.label} · WHO 0-36月生长曲线</p>
         </div>
       </div>

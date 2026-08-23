@@ -2,11 +2,13 @@
 
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import Link from 'next/link'
-import { Syringe, Shield, Info, AlertTriangle, ChevronDown, ChevronUp, MapPin, CalendarDays, CheckCircle2, Circle } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { Syringe, Shield, Info, AlertTriangle, ChevronDown, ChevronUp, MapPin, CalendarDays, CheckCircle2, Circle, Baby } from 'lucide-react'
 import { AppHeader, CuteCard, SectionTitle, SegmentControl } from '@/components/ui'
 import DataVersionBadge from '@/components/ui/DataVersionBadge'
 import { useBabyStore } from '@/stores/useBabyStore'
 import { getLocalDateStr } from '@/lib/date'
+import { calculateAge } from '@/lib/age'
 
 interface Vaccine {
   id: string
@@ -200,6 +202,7 @@ const RANGE_OPTIONS = [
 ]
 
 export default function VaccinesPage() {
+  const router = useRouter()
   const [vaccines, setVaccines] = useState<Vaccine[]>([])
   const [schedule, setSchedule] = useState<ScheduleEntry[]>([])
   const [dataRelease, setDataRelease] = useState<{ asOf?: string | null; sources?: { organization?: string }[] } | null>(null)
@@ -393,11 +396,26 @@ export default function VaccinesPage() {
           </Link>
         </div>
         {/* Header info */}
-        <div className="text-center">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-gradient-to-br from-pink-200 to-purple-200 mb-2">
-            <Syringe className="w-7 h-7 text-pink-600" />
+        <div
+          className="flex items-center gap-3 bg-white/70 p-3 rounded-2xl border border-primary/20 shadow-soft cursor-pointer group"
+          onClick={() => router.push("/onboarding")}
+          title="点击修改宝宝资料与头像"
+        >
+          <div className="w-11 h-11 rounded-full bg-gradient-to-br from-primary-soft to-primary/30 flex items-center justify-center overflow-hidden shadow-xs shrink-0 group-hover:ring-2 group-hover:ring-primary/40 transition-all">
+            {baby?.avatarUrl ? (
+              <img src={baby.avatarUrl} alt={baby.nickname} className="w-full h-full object-cover" />
+            ) : (
+              <Baby size={22} className="text-primary" />
+            )}
           </div>
-          <p className="text-sm text-gray-400">0–3岁宝宝疫苗时间表</p>
+          <div>
+            <p className="text-sm font-bold text-text-primary group-hover:text-primary transition-colors">
+              {baby?.nickname ?? "宝宝"} 疫苗接种规划
+            </p>
+            <p className="text-xs text-text-secondary">
+              当前月龄 {calculateAge(birthDate || getLocalDateStr()).label} · 0–3岁接种时间表
+            </p>
+          </div>
         </div>
 
         {/* ── Upcoming schedule ─────────────────────────────── */}
