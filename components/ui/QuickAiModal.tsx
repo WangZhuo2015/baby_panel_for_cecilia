@@ -41,6 +41,7 @@ interface Message {
   role: "user" | "assistant";
   content: string;
   timestamp: string;
+  isStreaming?: boolean;
 }
 
 const CONTEXT_META: Record<
@@ -210,7 +211,16 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
       timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
     };
 
-    setMessages((prev) => [...prev, userMsg]);
+    const aiMsgId = `ai_${Date.now()}`;
+    const initialAiMsg: Message = {
+      id: aiMsgId,
+      role: "assistant",
+      content: "",
+      timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      isStreaming: true,
+    };
+
+    setMessages((prev) => [...prev, userMsg, initialAiMsg]);
     setInputText("");
     setLoading(true);
 
@@ -230,25 +240,75 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
         }),
       });
 
-      const data = await res.json();
-      const aiReply = data.content || "抱歉，暂时未能获取建议，请稍后再试。";
+      if (!res.body) {
+        throw new Error("No response stream");
+      }
 
-      const aiMsg: Message = {
-        id: `ai_${Date.now()}`,
-        role: "assistant",
-        content: aiReply,
-        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-      };
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let accumulatedText = "";
+      let buffer = "";
 
-      setMessages((prev) => [...prev, aiMsg]);
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed || trimmed.startsWith(":")) continue;
+
+          if (trimmed === "data: [DONE]") {
+            break;
+          }
+
+          if (trimmed.startsWith("data: ")) {
+            try {
+              const data = JSON.parse(trimmed.slice(6));
+              if (data.text) {
+                accumulatedText += data.text;
+                setMessages((prev) =>
+                  prev.map((msg) =>
+                    msg.id === aiMsgId
+                      ? { ...msg, content: accumulatedText, isStreaming: true }
+                      : msg
+                  )
+                );
+              }
+            } catch {
+              // Partial JSON, ignore
+            }
+          }
+        }
+      }
+
+      // Mark streaming finished
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === aiMsgId
+            ? {
+                ...msg,
+                content: accumulatedText || "未能获取有效回复，请重试。",
+                isStreaming: false,
+              }
+            : msg
+        )
+      );
     } catch (e: any) {
-      const errorMsg: Message = {
-        id: `err_${Date.now()}`,
-        role: "assistant",
-        content: "网络连接超时，请检查网络后重试。如有紧急身体不适请及时前往医院就诊。",
-        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-      };
-      setMessages((prev) => [...prev, errorMsg]);
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === aiMsgId
+            ? {
+                ...msg,
+                content: "网络连接暂时超时，请稍后重新提问。若宝宝身体有明显不适，请以专业医生诊断为准。",
+                isStreaming: false,
+              }
+            : msg
+        )
+      );
     } finally {
       setLoading(false);
     }
@@ -284,7 +344,7 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
                   {displayTitle}
                 </h3>
                 <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full font-medium">
-                  Hermes AI
+                  Hermes 流式 AI
                 </span>
               </div>
               <p className="text-[11px] text-text-secondary flex items-center gap-1 mt-0.5">
@@ -340,7 +400,13 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
                       : "bg-white text-text-primary rounded-tl-xs border border-border"
                   }`}
                 >
-                  <div>{m.content}</div>
+                  {/* Message content */}
+                  <div>
+                    {m.content}
+                    {m.isStreaming && (
+                      <span className="inline-block w-1.5 h-3.5 bg-primary ml-0.5 animate-pulse align-middle" />
+                    )}
+                  </div>
 
                   <div
                     className={`flex items-center justify-between gap-3 mt-2 text-[10px] ${
@@ -348,7 +414,7 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
                     }`}
                   >
                     <span>{m.timestamp}</span>
-                    {!isUser && m.id !== "welcome" && (
+                    {!isUser && m.id !== "welcome" && !m.isStreaming && m.content && (
                       <button
                         onClick={() => handleCopy(m.id, m.content)}
                         className="hover:text-primary transition-colors flex items-center gap-0.5"
@@ -383,7 +449,7 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
             );
           })}
 
-          {loading && (
+          {loading && messages.length > 0 && !messages[messages.length - 1].content && (
             <div className="flex gap-2.5 justify-start">
               <div className="w-7 h-7 rounded-full bg-primary-soft text-primary flex items-center justify-center shrink-0 mt-0.5 shadow-2xs animate-pulse">
                 <Bot size={15} />
@@ -394,7 +460,7 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
                   <div className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce [animation-delay:-0.15s]" />
                   <div className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce" />
                 </div>
-                <span>Hermes AI 结合宝宝月龄思考中...</span>
+                <span>Hermes 正在结合宝宝月龄思考生成中...</span>
               </div>
             </div>
           )}

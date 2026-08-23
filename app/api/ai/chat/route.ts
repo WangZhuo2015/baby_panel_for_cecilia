@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthSession, getActiveBabyForUser } from "@/lib/auth";
 
+export const dynamic = "force-dynamic";
+
 const AI_BASE_URL = process.env.AI_BASE_URL || process.env.OPENAI_BASE_URL || "http://127.0.0.1:8642/v1";
 const AI_API_KEY = process.env.AI_API_KEY || process.env.OPENAI_API_KEY || "";
 const AI_MODEL = process.env.AI_MODEL || process.env.OPENAI_MODEL || "hermes-agent";
@@ -107,41 +109,104 @@ ${babyContextPrompt}
       })),
     ];
 
-    const res = await fetch(`${AI_BASE_URL.replace(/\/+$/, "")}/chat/completions`, {
+    // Call Hermes with stream: true and 120s generous timeout
+    const upstreamRes = await fetch(`${AI_BASE_URL.replace(/\/+$/, "")}/chat/completions`, {
       method: "POST",
       headers,
       body: JSON.stringify({
         model: AI_MODEL,
         messages: payloadMessages,
-        max_tokens: 1200,
+        max_tokens: 1500,
         temperature: 0.7,
+        stream: true,
       }),
       cache: "no-store",
-      signal: AbortSignal.timeout(30000),
+      signal: AbortSignal.timeout(120000),
     });
 
-    if (!res.ok) {
-      const errText = await res.text().catch(() => "");
-      console.error(`AI Gateway error (${res.status}):`, errText);
-      return NextResponse.json(
-        {
-          content: `AI 助手服务暂时繁忙 (${res.status})。针对 ${babyName} 当前月龄的疑问，建议先保持规律作息与观察；如有发热或精神不佳等异常情况，请及时前往医院儿科就诊。`,
+    if (!upstreamRes.ok || !upstreamRes.body) {
+      const errText = await upstreamRes.text().catch(() => "");
+      console.error(`AI Gateway error (${upstreamRes.status}):`, errText);
+      const fallbackContent = `AI 助手服务暂时繁忙 (${upstreamRes.status})。针对 ${babyName} 当前月龄的疑问，建议先保持规律作息与观察；如有发热或精神不佳等异常情况，请及时前往医院儿科就诊。`;
+      return new Response(`data: ${JSON.stringify({ text: fallbackContent })}\n\ndata: [DONE]\n\n`, {
+        headers: {
+          "Content-Type": "text/event-stream; charset=utf-8",
+          "Cache-Control": "no-cache",
         },
-        { status: 200 }
-      );
+      });
     }
 
-    const data = await res.json();
-    const content = data.choices?.[0]?.message?.content || "抱歉，我未能生成有效回答，请重试。";
+    // Pipe upstream SSE stream to client
+    const encoder = new TextEncoder();
+    const decoder = new TextDecoder();
 
-    return NextResponse.json({ content });
-  } catch (error: any) {
-    console.error("POST /api/ai/chat error:", error);
-    return NextResponse.json(
-      {
-        content: "网络连接暂时超时，请稍后重新提问。若宝宝身体有明显不适，请以专业医生诊断为准。",
+    const stream = new ReadableStream({
+      async start(controller) {
+        const reader = upstreamRes.body!.getReader();
+        let buffer = "";
+
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split("\n");
+            buffer = lines.pop() || "";
+
+            for (const line of lines) {
+              const trimmed = line.trim();
+              if (!trimmed || trimmed.startsWith(":")) continue;
+
+              if (trimmed === "data: [DONE]") {
+                controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+                continue;
+              }
+
+              if (trimmed.startsWith("data: ")) {
+                try {
+                  const json = JSON.parse(trimmed.slice(6));
+                  const deltaText = json.choices?.[0]?.delta?.content || "";
+                  if (deltaText) {
+                    controller.enqueue(
+                      encoder.encode(`data: ${JSON.stringify({ text: deltaText })}\n\n`)
+                    );
+                  }
+                } catch {
+                  // Partial JSON or unparseable SSE line, ignore
+                }
+              }
+            }
+          }
+        } catch (err) {
+          console.error("Error streaming from Hermes:", err);
+          controller.enqueue(
+            encoder.encode(
+              `data: ${JSON.stringify({ text: "\n\n(网络连接中断，请稍后重试)" })}\n\ndata: [DONE]\n\n`
+            )
+          );
+        } finally {
+          controller.close();
+        }
       },
-      { status: 200 }
-    );
+    });
+
+    return new Response(stream, {
+      headers: {
+        "Content-Type": "text/event-stream; charset=utf-8",
+        "Cache-Control": "no-cache, no-transform",
+        Connection: "keep-alive",
+        "X-Accel-Buffering": "no",
+      },
+    });
+  } catch (error: any) {
+    console.error("POST /api/ai/chat exception:", error);
+    const errText = "网络连接暂时超时，请稍后重新提问。若宝宝身体有明显不适，请以专业医生诊断为准。";
+    return new Response(`data: ${JSON.stringify({ text: errText })}\n\ndata: [DONE]\n\n`, {
+      headers: {
+        "Content-Type": "text/event-stream; charset=utf-8",
+        "Cache-Control": "no-cache",
+      },
+    });
   }
 }
