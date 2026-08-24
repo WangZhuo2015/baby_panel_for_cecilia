@@ -104,6 +104,17 @@ function TimePresetChips({ onPick }: { onPick: (hhmm: string) => void }) {
   );
 }
 
+
+/** 卡片时间显示：兼容 ISO / HH:mm（选项预设）/ 其他，非法时静默为空 */
+function formatCardTime(ts?: string | null): string {
+  if (!ts) return "";
+  const str = String(ts).trim();
+  const m = str.match(/^(\d{1,2}):(\d{2})/);
+  if (m) return `${m[1].padStart(2, "0")}:${m[2]}`;
+  const d = new Date(str);
+  return Number.isNaN(d.getTime()) ? "" : d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
 function hhmmNow(offsetMin = 0): string {
   const d = new Date(Date.now() - offsetMin * 60000);
   return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
@@ -408,7 +419,7 @@ export const AiActionCard: React.FC<AiActionCardProps> = ({ action: initialActio
             <>
               {amountMl && <span>奶量：<strong className="text-sky-700 font-bold">{amountMl} ml</strong></span>}
               {durationMinutes && <span>时长：<strong className="text-sky-700 font-bold">{durationMinutes} 分钟</strong></span>}
-              {timestamp && <span>时间：{new Date(timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>}
+              {timestamp && <span>时间：{formatCardTime(timestamp)}</span>}
             </>
           )}
         </div>
@@ -569,7 +580,7 @@ export const AiActionCard: React.FC<AiActionCardProps> = ({ action: initialActio
         <div className="bg-white/85 p-2 rounded-xl text-text-secondary text-[11px] flex items-center justify-between">
           {poopColor && <span>颜色：{poopColor}</span>}
           {poopConsistency && <span>形态：{poopConsistency}</span>}
-          {timestamp && <span>时间：{new Date(timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>}
+          {timestamp && <span>时间：{formatCardTime(timestamp)}</span>}
         </div>
         {notes && <p className="text-[10px] text-text-muted px-1">备注：{notes}</p>}
 
