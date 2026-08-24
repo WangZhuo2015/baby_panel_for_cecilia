@@ -22,11 +22,12 @@ export const CuteInput: React.FC<CuteInputProps> = ({
       )}
       <input
         id={inputId}
-        className={`rounded-[18px] border border-primary-soft bg-card px-4 py-3 text-sm text-text-primary placeholder:text-text-muted
+        className={`rounded-[18px] border border-primary-soft bg-card px-4 py-3 text-[16px] text-text-primary placeholder:text-text-muted
           focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary
           transition-all ${className}`}
         {...props}
       />
+
     </div>
   );
 };

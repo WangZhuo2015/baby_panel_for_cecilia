@@ -60,6 +60,13 @@ html {
   background: var(--color-bg);
 }
 
+/* Prevent auto-zoom on input focus in iOS Safari */
+input, select, textarea {
+  font-size: 16px !important;
+  touch-action: manipulation;
+}
+
+
 body {
   margin: 0;
   padding: 0;
