@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -9,6 +9,7 @@ import {
   Building2,
   AlertCircle,
   CheckCircle2,
+  Loader2,
   Sparkles,
   ExternalLink,
   Trash2,
@@ -41,7 +42,10 @@ export default function MedicalReportsPage() {
 
   const [activeCategory, setActiveCategory] = useState<string>("all");
   const [selectedReport, setSelectedReport] = useState<MedicalReport | null>(null);
-  const [pendingJobs, setPendingJobs] = useState<{ id: string; imageUrl: string | null }[]>([]);
+  const [aiJobs, setAiJobs] = useState<
+    { id: string; status: string; claimed: boolean; imageUrl: string | null; createdAt: string; errorMessage?: string | null }[]
+  >([]);
+  const [nowTick, setNowTick] = useState(Date.now());
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -70,35 +74,97 @@ export default function MedicalReportsPage() {
     ? medicalReports
     : medicalReports.filter((r) => r.category === activeCategory);
 
-  useEffect(() => {
-    fetch("/api/ai/jobs")
-      .then((r) => r.json())
-      .then((d) => {
-        const done = (d.jobs || []).filter(
-          (j: { status: string; claimed: boolean }) => j.status === "done" && !j.claimed
-        );
-        setPendingJobs(done);
-      })
-      .catch(() => {});
+  const fetchAiJobs = React.useCallback(async () => {
+    try {
+      const d = await fetch("/api/ai/jobs").then((r) => r.json());
+      setAiJobs(d.jobs || []);
+    } catch { /* 离线忽略 */ }
   }, []);
+
+  useEffect(() => {
+    fetchAiJobs();
+  }, [fetchAiJobs]);
+
+  // 存在识别中的任务时：5s 轮询刷新状态 + 每秒更新耗时显示
+  const hasProcessing = aiJobs.some((j) => j.status === "processing" && !j.claimed);
+  useEffect(() => {
+    if (!hasProcessing) return;
+    const poll = setInterval(fetchAiJobs, 5000);
+    const tick = setInterval(() => setNowTick(Date.now()), 1000);
+    return () => {
+      clearInterval(poll);
+      clearInterval(tick);
+    };
+  }, [hasProcessing, fetchAiJobs]);
+
 
   return (
     <div className="min-h-[100dvh] bg-bg px-4 pt-4 pb-28 max-w-md mx-auto">
 
-    {pendingJobs.length > 0 && (
-      <Link
-        href={`/health/medical/add?job=${pendingJobs[0].id}`}
-        className="block mb-3 p-3 rounded-[20px] bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-800 hover:border-emerald-400 transition-colors"
-      >
-        <div className="flex items-center gap-2 text-sm font-bold text-emerald-700 dark:text-emerald-300">
-          <Sparkles size={15} />
-          有 {pendingJobs.length} 份化验单识别完成，点击确认入库 →
-        </div>
-        {pendingJobs[0].imageUrl && (
-          <img src={pendingJobs[0].imageUrl} alt="" className="mt-2 w-full h-24 object-cover rounded-xl opacity-80" />
-        )}
-      </Link>
+    {aiJobs.filter((j) => !j.claimed).length > 0 && (
+      <div className="mb-3 space-y-2">
+        {aiJobs.filter((j) => !j.claimed).map((job) => {
+          const elapsedS = Math.max(0, Math.floor((nowTick - new Date(job.createdAt).getTime()) / 1000));
+          const elapsedText =
+            elapsedS >= 60 ? `${Math.floor(elapsedS / 60)}分${elapsedS % 60}秒` : `${elapsedS}秒`;
+
+          if (job.status === "processing") {
+            return (
+              <div
+                key={job.id}
+                className="p-3 rounded-[20px] bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-200 dark:border-indigo-800 animate-pulse"
+              >
+                <div className="flex items-center gap-2 text-sm font-bold text-indigo-700 dark:text-indigo-300">
+                  <Loader2 size={15} className="animate-spin" />
+                  AI 正在识别化验单… 已 {elapsedText}
+                </div>
+                <p className="text-[11px] text-text-muted mt-1 ml-6">
+                  可以先离开去记录其他内容，完成后这里会变成确认入口
+                </p>
+              </div>
+            );
+          }
+
+          if (job.status === "done") {
+            return (
+              <Link
+                key={job.id}
+                href={`/health/medical/add?job=${job.id}`}
+                className="block p-3 rounded-[20px] bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-800 hover:border-emerald-400 transition-colors"
+              >
+                <div className="flex items-center gap-2 text-sm font-bold text-emerald-700 dark:text-emerald-300">
+                  <Sparkles size={15} />
+                  化验单识别完成，点击核对入库 →
+                </div>
+                {job.imageUrl && (
+                  <img src={job.imageUrl} alt="" className="mt-2 w-full h-24 object-cover rounded-xl opacity-80" />
+                )}
+              </Link>
+            );
+          }
+
+          // failed
+          return (
+            <button
+              key={job.id}
+              type="button"
+              onClick={async () => {
+                await fetch(`/api/ai/jobs/${job.id}`, { method: "PATCH" });
+                fetchAiJobs();
+              }}
+              className="w-full text-left p-3 rounded-[20px] bg-red-50 dark:bg-red-900/25 border border-red-200 dark:border-red-800 cursor-pointer"
+            >
+              <div className="flex items-center justify-between text-sm font-bold text-red-600 dark:text-red-400">
+                <span>⚠️ 识别失败：{job.errorMessage?.slice(0, 60) || "请重试"}</span>
+                <X size={14} />
+              </div>
+              <p className="text-[11px] text-text-muted mt-1">点击关闭此提醒；可重新拍照再试</p>
+            </button>
+          );
+        })}
+      </div>
     )}
+
 
       <AppHeader title="化验与体检档案" showBack />
 

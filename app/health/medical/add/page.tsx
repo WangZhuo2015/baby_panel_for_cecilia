@@ -85,10 +85,10 @@ export default function MedicalAddPage() {
 
       // ===== 异步任务模式：立即拿到 jobId，后台识别（约 1 分钟）=====
       if (res.status === 202 && data.jobId) {
-        setJobId(data.jobId);
         sessionStorage.setItem("pending-ocr-job", data.jobId);
-        startJobPolling(data.jobId);
-        return; // ocrLoading 保持 true，由轮询结束收尾
+        showToast("已提交后台识别，正在返回列表显示进度…");
+        setTimeout(() => router.push("/health/medical"), 600);
+        return;
       }
 
       // 兼容旧同步响应
