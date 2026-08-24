@@ -9,6 +9,7 @@ import {
 import { config, AUTH_CONFIG } from "@/lib/config";
 import { validateCsrfOrigin } from "@/lib/api-helpers";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
+import { normalizeRelation } from "@/lib/constants";
 
 export async function POST(request: Request) {
   try {
@@ -35,9 +36,9 @@ export async function POST(request: Request) {
       );
     }
 
-    if (!password || typeof password !== "string" || password.length < 6) {
+    if (!password || typeof password !== "string" || password.length < 8 || password.length > 72) {
       return NextResponse.json(
-        { error: "密码至少需要 6 位" },
+        { error: "密码至少需要 8 位（最长 72 位）" },
         { status: 400 }
       );
     }
@@ -109,7 +110,7 @@ export async function POST(request: Request) {
           familyId: family.id,
           userId: user.id,
           role: memberRole,
-          relation: (relation && typeof relation === "string") ? relation : "parent",
+          relation: normalizeRelation(relation),
         },
       });
 

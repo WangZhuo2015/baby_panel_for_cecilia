@@ -56,7 +56,8 @@ export async function POST(request: Request) {
           success += 1;
         } catch (error) {
           const statusCode = (error as webPush.WebPushError)?.statusCode;
-          if (statusCode === 404 || statusCode === 410) {
+          // 404/410=订阅过期；401/403=VAPID 密钥不匹配（如密钥轮换后），均属永久性失败，清理
+          if ([401, 403, 404, 410].includes(statusCode)) {
             await prisma.pushSubscription.delete({ where: { id: sub.id } });
           } else {
             console.error("Push send error:", error);
