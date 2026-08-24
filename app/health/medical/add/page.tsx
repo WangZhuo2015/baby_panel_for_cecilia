@@ -97,11 +97,12 @@ export default function MedicalAddPage() {
         return;
       }
       applyOcrResult(data);
+      setOcrLoading(false); // 同步旧路径成功收尾
     } catch (e: any) {
       setOcrError(e?.message || "AI 识别服务连接失败，请手动录入数据");
-    } finally {
-      if (!jobId) setOcrLoading(false);
+      setOcrLoading(false);
     }
+    // 异步任务模式下不在此处关 loading：由 startJobPolling 的 done/failed 收尾
   };
 
   // 将 OCR 结构化结果填入表单
