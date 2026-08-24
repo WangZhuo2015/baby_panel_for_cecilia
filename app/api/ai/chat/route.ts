@@ -4,6 +4,7 @@ import { AI_CONFIG } from "@/lib/config";
 import { calculateAgeDetail } from "@/lib/age";
 import { getLocalDateStr } from "@/lib/date";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
+import { archiveText } from "@/lib/archive";
 
 
 export const dynamic = "force-dynamic";
@@ -242,7 +243,13 @@ ${ACTION_PROTOCOL_PROMPT}
       };
     });
 
-    const payloadMessages = [
+    // 审计存档：用户原始输入（append-only，异步不阻塞）
+  const lastUserText = [...messages].reverse().find((m: any) => m.role === "user");
+  if (lastUserText?.content) {
+    void archiveText("input_text", String(lastUserText.content)).catch(() => {});
+  }
+
+  const payloadMessages = [
       { role: "system", content: systemPrompt },
       ...formattedMessages,
     ];
@@ -292,11 +299,15 @@ ${ACTION_PROTOCOL_PROMPT}
             const lines = buffer.split("\n");
             buffer = lines.pop() || "";
 
+            let assistantFull = "";
             for (const line of lines) {
               const trimmed = line.trim();
               if (!trimmed || trimmed.startsWith(":")) continue;
 
               if (trimmed === "data: [DONE]") {
+                if (assistantFull) {
+                  void archiveText("output_json", assistantFull).catch(() => {});
+                }
                 controller.enqueue(encoder.encode("data: [DONE]\n\n"));
                 continue;
               }
@@ -306,6 +317,7 @@ ${ACTION_PROTOCOL_PROMPT}
                   const json = JSON.parse(trimmed.slice(6));
                   const deltaText = json.choices?.[0]?.delta?.content || "";
                   if (deltaText) {
+                    assistantFull += deltaText;
                     controller.enqueue(
                       encoder.encode(`data: ${JSON.stringify({ text: deltaText })}\n\n`)
                     );

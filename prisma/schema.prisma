@@ -556,3 +556,34 @@ model PushSubscription {
   @@index([userId])
 }
 
+
+// ===== AI 异步任务与不可变审计存档 =====
+model AiJob {
+  id           String    @id @default(uuid())
+  userId       String
+  babyId       String?
+  type         String    // medical_ocr | growth_ocr | ...
+  status       String    @default("processing") // processing | done | failed
+  inputArchiveId String?
+  resultJson   String?
+  imageUrl     String?
+  errorMessage String?
+  claimed      Boolean   @default(false)
+  createdAt    DateTime  @default(now())
+  finishedAt   DateTime?
+
+  @@index([userId, createdAt])
+  @@index([status, claimed])
+}
+
+model AiArchive {
+  id          String   @id @default(uuid())
+  kind        String   // input_image | input_audio | input_text | output_json | output_error
+  filePath    String?
+  content     String?
+  contentHash String   // sha256，只读追溯防篡改
+  byteSize    Int?
+  createdAt   DateTime @default(now())
+
+  @@index([kind, createdAt])
+}

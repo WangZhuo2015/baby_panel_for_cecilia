@@ -6,6 +6,7 @@ import path from "path";
 import os from "os";
 import crypto from "crypto";
 import { execFile } from "child_process";
+import { archiveBuffer, archiveText } from "@/lib/archive";
 
 export const maxDuration = 120;
 
@@ -53,7 +54,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "音频过大（上限 25MB / 约2分钟）" }, { status: 400 });
     }
 
-    // 落临时文件
+    // 落临时文件 + 不可变存档原始音频（追溯要求）
+    const rawBytes = Buffer.from(await audio.arrayBuffer());
+    await archiveBuffer("input_audio", rawBytes, path.extname(audio.name) || ".webm").catch(() => {});
+
     const extByMime: Record<string, string> = {
       "audio/webm": ".webm",
       "audio/ogg": ".ogg",
@@ -64,7 +68,7 @@ export async function POST(request: Request) {
     };
     const ext = extByMime[audio.type] || ".webm";
     const tmpPath = path.join(os.tmpdir(), `asr_${crypto.randomBytes(8).toString("hex")}${ext}`);
-    await writeFile(tmpPath, Buffer.from(await audio.arrayBuffer()));
+    await writeFile(tmpPath, rawBytes);
 
     try {
       const argv = cmdTemplate.split(" ").map((seg) => seg.replace(/\{input\}/g, tmpPath));
@@ -85,7 +89,9 @@ export async function POST(request: Request) {
       if (!text) {
         return NextResponse.json({ error: "未能识别到语音内容，请靠近麦克风重试" }, { status: 422 });
       }
-      return NextResponse.json({ text: text.slice(0, 4000) });
+      const finalText = text.slice(0, 4000);
+      void archiveText("output_json", finalText).catch(() => {});
+      return NextResponse.json({ text: finalText });
     } finally {
       unlink(tmpPath).catch(() => {});
     }

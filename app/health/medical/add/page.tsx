@@ -36,6 +36,8 @@ export default function MedicalAddPage() {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [uploadedImageUrl, setUploadedImageUrl] = useState<string | null>(null);
   const [ocrLoading, setOcrLoading] = useState(false);
+  const [jobId, setJobId] = useState<string | null>(null);
+  const [jobElapsed, setJobElapsed] = useState(0);
   const [ocrError, setOcrError] = useState<string | null>(null);
   const [ocrDone, setOcrDone] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -80,47 +82,102 @@ export default function MedicalAddPage() {
       });
 
       const data = await res.json();
+
+      // ===== 异步任务模式：立即拿到 jobId，后台识别（约 1 分钟）=====
+      if (res.status === 202 && data.jobId) {
+        setJobId(data.jobId);
+        sessionStorage.setItem("pending-ocr-job", data.jobId);
+        startJobPolling(data.jobId);
+        return; // ocrLoading 保持 true，由轮询结束收尾
+      }
+
+      // 兼容旧同步响应
       if (!res.ok) {
         setOcrError(data.error || "识别未能解析出数据，请核对并手动录入");
         return;
       }
-
-      if (data.title) setTitle(data.title);
-      if (data.category) setCategory(data.category);
-      if (data.date) setDate(data.date);
-      if (data.hospital) setHospital(data.hospital);
-      if (data.doctorNotes) setDoctorNotes(data.doctorNotes);
-      if (data.aiSummary) setAiSummary(data.aiSummary);
-      if (data.imageUrl) setUploadedImageUrl(data.imageUrl);
-
-      if (Array.isArray(data.items)) {
-        setItems(
-          data.items.map((it: any, idx: number) => ({
-            id: `item_${Date.now()}_${idx}`,
-            name: it.name || "",
-            value: it.value ?? "",
-            unit: it.unit || "",
-            referenceRange: it.referenceRange || "",
-            status: it.status || "normal",
-            interpretation: it.interpretation || "",
-          }))
-        );
-      }
-
-      if (data.growthData) {
-        if (data.growthData.weightKg) setWeightKg(String(data.growthData.weightKg));
-        if (data.growthData.heightCm) setHeightCm(String(data.growthData.heightCm));
-        if (data.growthData.headCircumferenceCm) setHeadCm(String(data.growthData.headCircumferenceCm));
-      }
-
-      setOcrDone(true);
-      showToast("识别完成！请核对并修改下方各项数据 ✨");
+      applyOcrResult(data);
     } catch (e: any) {
       setOcrError(e?.message || "AI 识别服务连接失败，请手动录入数据");
     } finally {
-      setOcrLoading(false);
+      if (!jobId) setOcrLoading(false);
     }
   };
+
+  // 将 OCR 结构化结果填入表单
+  const applyOcrResult = (data: any) => {
+    if (data.title) setTitle(data.title);
+    if (data.category) setCategory(data.category);
+    if (data.date) setDate(data.date);
+    if (data.hospital) setHospital(data.hospital);
+    if (data.doctorNotes) setDoctorNotes(data.doctorNotes);
+    if (data.aiSummary) setAiSummary(data.aiSummary);
+    if (data.imageUrl) setUploadedImageUrl(data.imageUrl);
+
+    if (Array.isArray(data.items)) {
+      setItems(
+        data.items.map((it: any, idx: number) => ({
+          id: `item_${Date.now()}_${idx}`,
+          name: it.name || "",
+          value: it.value ?? "",
+          unit: it.unit || "",
+          referenceRange: it.referenceRange || "",
+          status: it.status || "normal",
+          interpretation: it.interpretation || "",
+        }))
+      );
+    }
+
+    if (data.growthData) {
+      if (data.growthData.weightKg) setWeightKg(String(data.growthData.weightKg));
+      if (data.growthData.heightCm) setHeightCm(String(data.growthData.heightCm));
+      if (data.growthData.headCm || data.growthData.headCircumferenceCm)
+        setHeadCm(String(data.growthData.headCircumferenceCm ?? data.growthData.headCm));
+    }
+
+    setOcrDone(true);
+    showToast("识别完成！请核对并修改下方各项数据 ✨");
+  };
+
+  // 轮询任务状态直至完成/失败
+  const startJobPolling = (id: string) => {
+    const timer = setInterval(async () => {
+      setJobElapsed((v) => v + 3);
+      try {
+        const res = await fetch(`/api/ai/jobs/${id}`);
+        if (!res.ok) return;
+        const job = await res.json();
+        if (job.status === "done" && job.result) {
+          clearInterval(timer);
+          sessionStorage.removeItem("pending-ocr-job");
+          fetch(`/api/ai/jobs/${id}`, { method: "PATCH" }).catch(() => {});
+          applyOcrResult(job.result);
+          setOcrLoading(false);
+          setJobId(null);
+        } else if (job.status === "failed") {
+          clearInterval(timer);
+          sessionStorage.removeItem("pending-ocr-job");
+          setOcrError(job.errorMessage || "识别失败，请重试或手动录入");
+          setOcrLoading(false);
+          setJobId(null);
+        }
+      } catch {
+        /* 网络抖动，下个周期继续 */
+      }
+    }, 3000);
+  };
+
+  // 刷新/离开后回来：恢复未完成任务轮询；支持 ?job= 直达领取
+  useEffect(() => {
+    const fromUrl = new URLSearchParams(window.location.search).get("job");
+    const stored = sessionStorage.getItem("pending-ocr-job") || fromUrl;
+    if (stored && !ocrDone) {
+      setJobId(stored);
+      setOcrLoading(true);
+      startJobPolling(stored);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleAddItem = () => {
     setItems((prev) => [
@@ -256,10 +313,10 @@ export default function MedicalAddPage() {
           {ocrLoading ? (
             <div className="py-2">
               <p className="text-sm font-bold text-primary animate-pulse">
-                AI 正在结构化识别单据指标...
+                AI 正在结构化识别单据指标{jobId ? `（已 ${jobElapsed}s）` : "..."}
               </p>
               <p className="text-xs text-text-muted mt-1">
-                支持血常规、体检表、微量元素、过敏原等报告
+                通常约需 1 分钟。你可以先离开 ⏳ 完成后会出现在「化验单」页顶部，随时回来确认。
               </p>
             </div>
           ) : (

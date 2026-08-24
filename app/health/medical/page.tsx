@@ -41,6 +41,7 @@ export default function MedicalReportsPage() {
 
   const [activeCategory, setActiveCategory] = useState<string>("all");
   const [selectedReport, setSelectedReport] = useState<MedicalReport | null>(null);
+  const [pendingJobs, setPendingJobs] = useState<{ id: string; imageUrl: string | null }[]>([]);
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -69,8 +70,36 @@ export default function MedicalReportsPage() {
     ? medicalReports
     : medicalReports.filter((r) => r.category === activeCategory);
 
+  useEffect(() => {
+    fetch("/api/ai/jobs")
+      .then((r) => r.json())
+      .then((d) => {
+        const done = (d.jobs || []).filter(
+          (j: { status: string; claimed: boolean }) => j.status === "done" && !j.claimed
+        );
+        setPendingJobs(done);
+      })
+      .catch(() => {});
+  }, []);
+
   return (
     <div className="min-h-[100dvh] bg-bg px-4 pt-4 pb-28 max-w-md mx-auto">
+
+    {pendingJobs.length > 0 && (
+      <Link
+        href={`/health/medical/add?job=${pendingJobs[0].id}`}
+        className="block mb-3 p-3 rounded-[20px] bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-800 hover:border-emerald-400 transition-colors"
+      >
+        <div className="flex items-center gap-2 text-sm font-bold text-emerald-700 dark:text-emerald-300">
+          <Sparkles size={15} />
+          有 {pendingJobs.length} 份化验单识别完成，点击确认入库 →
+        </div>
+        {pendingJobs[0].imageUrl && (
+          <img src={pendingJobs[0].imageUrl} alt="" className="mt-2 w-full h-24 object-cover rounded-xl opacity-80" />
+        )}
+      </Link>
+    )}
+
       <AppHeader title="化验与体检档案" showBack />
 
       {/* Top Switcher with Vaccines */}

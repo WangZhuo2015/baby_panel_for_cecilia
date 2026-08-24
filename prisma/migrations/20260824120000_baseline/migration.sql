@@ -478,6 +478,33 @@ CREATE TABLE "PushSubscription" (
     CONSTRAINT "PushSubscription_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User" ("id") ON DELETE CASCADE ON UPDATE CASCADE
 );
 
+-- CreateTable
+CREATE TABLE "AiJob" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "userId" TEXT NOT NULL,
+    "babyId" TEXT,
+    "type" TEXT NOT NULL,
+    "status" TEXT NOT NULL DEFAULT 'processing',
+    "inputArchiveId" TEXT,
+    "resultJson" TEXT,
+    "imageUrl" TEXT,
+    "errorMessage" TEXT,
+    "claimed" BOOLEAN NOT NULL DEFAULT false,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "finishedAt" DATETIME
+);
+
+-- CreateTable
+CREATE TABLE "AiArchive" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "kind" TEXT NOT NULL,
+    "filePath" TEXT,
+    "content" TEXT,
+    "contentHash" TEXT NOT NULL,
+    "byteSize" INTEGER,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 -- CreateIndex
 CREATE UNIQUE INDEX "User_username_key" ON "User"("username");
 
@@ -579,4 +606,13 @@ CREATE UNIQUE INDEX "PushSubscription_endpoint_key" ON "PushSubscription"("endpo
 
 -- CreateIndex
 CREATE INDEX "PushSubscription_userId_idx" ON "PushSubscription"("userId");
+
+-- CreateIndex
+CREATE INDEX "AiJob_userId_createdAt_idx" ON "AiJob"("userId", "createdAt");
+
+-- CreateIndex
+CREATE INDEX "AiJob_status_claimed_idx" ON "AiJob"("status", "claimed");
+
+-- CreateIndex
+CREATE INDEX "AiArchive_kind_createdAt_idx" ON "AiArchive"("kind", "createdAt");
 
