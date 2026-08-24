@@ -23,6 +23,7 @@ import { StatCard } from "@/components/ui/StatCard";
 import { QuickActionCard } from "@/components/ui/QuickActionCard";
 import { Timeline } from "@/components/ui/Timeline";
 import { RecordEditDialog } from "@/components/ui/RecordEditDialog";
+import { RecordActionSheet } from "@/components/ui/RecordActionSheet";
 import { CuteCard } from "@/components/ui/CuteCard";
 import { CuteButton } from "@/components/ui/CuteButton";
 import { QuickAiButton } from "@/components/ui/QuickAiButton";
@@ -93,6 +94,7 @@ export default function HomePage() {
 
   // 时间轴误操作修正
   const [editingRecord, setEditingRecord] = useState<TimelineEntry | null>(null);
+  const [actionItem, setActionItem] = useState<TimelineEntry | null>(null);
 
   const fetchUser = useBabyStore((s) => s.fetchUser);
   const fetchDailySummary = useBabyStore((s) => s.fetchDailySummary);
@@ -429,18 +431,25 @@ export default function HomePage() {
           <h3 className="text-xs font-bold text-text-secondary uppercase tracking-wider">今日作息时间轴</h3>
           <span className="text-[10px] text-text-muted">按时间倒序</span>
         </div>
-        <Timeline
-          items={timeline}
-          onEdit={(item) => setEditingRecord(item)}
-          onDelete={(item) => {
-            if (window.confirm(`确定删除「${item.title}」这条记录吗？`)) {
-              deleteTimelineRecord(item.type, item.id).catch(() =>
-                window.alert("删除失败，请重试")
-              );
-            }
-          }}
-        />
+        <Timeline items={timeline} onItemTap={(item) => setActionItem(item)} />
       </div>
+
+      <RecordActionSheet
+        item={actionItem}
+        onClose={() => setActionItem(null)}
+        onEdit={(item) => {
+          setActionItem(null);
+          setEditingRecord(item);
+        }}
+        onDelete={(item) => {
+          setActionItem(null);
+          if (window.confirm(`确定删除「${item.title}」这条记录吗？`)) {
+            deleteTimelineRecord(item.type, item.id).catch(() =>
+              window.alert("删除失败，请重试")
+            );
+          }
+        }}
+      />
 
       <RecordEditDialog
         item={editingRecord}

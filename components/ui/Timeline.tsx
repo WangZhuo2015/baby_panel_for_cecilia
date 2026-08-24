@@ -1,12 +1,11 @@
 import React from 'react';
 import type { TimelineEntry } from '@/types';
-import { Baby, Moon, Droplets, UtensilsCrossed, Pencil, Trash2 } from 'lucide-react';
+import { Baby, Moon, Droplets, UtensilsCrossed } from 'lucide-react';
 
 interface TimelineProps {
   items: TimelineEntry[];
-  /** 传入即显示每条的编辑/删除操作（误操作修正入口） */
-  onEdit?: (item: TimelineEntry) => void;
-  onDelete?: (item: TimelineEntry) => void;
+  /** 点击任意一条记录（移动端主入口：弹出 修改/删除 操作面板） */
+  onItemTap?: (item: TimelineEntry) => void;
 }
 
 const iconMap: Record<TimelineEntry['type'], React.FC<{ size?: number; className?: string }>> = {
@@ -23,7 +22,7 @@ const colorMap: Record<TimelineEntry['type'], string> = {
   food: 'bg-mint/20 text-mint',
 };
 
-export const Timeline: React.FC<TimelineProps> = ({ items, onEdit, onDelete }) => {
+export const Timeline: React.FC<TimelineProps> = ({ items, onItemTap }) => {
   if (items.length === 0) return null;
 
   return (
@@ -35,20 +34,16 @@ export const Timeline: React.FC<TimelineProps> = ({ items, onEdit, onDelete }) =
         const Icon = iconMap[item.type] || Baby;
         const color = colorMap[item.type] || colorMap.feeding;
 
-        return (
-          <div
-            key={item.id}
-            className={`relative flex gap-3 pb-5 last:pb-0 animate-fade-in group`}
-            style={{ animationDelay: `${idx * 60}ms` }}
-          >
+        const content = (
+          <>
             {/* Icon dot */}
-            <div className={`absolute -left-6 flex items-center justify-center w-[22px] h-[22px] rounded-full ${color} z-10`}>
+            <div className={`absolute -left-6 flex items-center justify-center w-[22px] h-[22px] rounded-full ${color} z-10 shrink-0`}>
               <Icon size={12} />
             </div>
 
             {/* Content */}
             <div className="flex-1 min-w-0 ml-1">
-              <div className="flex items-baseline gap-2">
+              <div className="flex items-baseline gap-2 flex-wrap">
                 <span className="text-xs text-text-muted font-medium">{item.time}</span>
                 <span className="text-sm font-medium text-text-primary">{item.title}</span>
                 {item.recorderName && (
@@ -58,35 +53,31 @@ export const Timeline: React.FC<TimelineProps> = ({ items, onEdit, onDelete }) =
                 )}
               </div>
               {item.detail && (
-                <p className="text-xs text-text-secondary mt-0.5">{item.detail}</p>
+                <p className="text-xs text-text-secondary mt-0.5 break-words">{item.detail}</p>
               )}
             </div>
+          </>
+        );
 
-            {(onEdit || onDelete) && (
-              <div className="flex items-center gap-1 self-center opacity-0 group-hover:opacity-100 focus-within:opacity-100 max-md:opacity-60 transition-opacity">
-                {onEdit && (
-                  <button
-                    type="button"
-                    aria-label="编辑这条记录"
-                    onClick={() => onEdit(item)}
-                    className="p-1.5 rounded-full text-text-muted hover:text-primary hover:bg-primary-soft/30"
-                  >
-                    <Pencil size={13} />
-                  </button>
-                )}
-                {onDelete && (
-                  <button
-                    type="button"
-                    aria-label="删除这条记录"
-                    onClick={() => onDelete(item)}
-                    className="p-1.5 rounded-full text-text-muted hover:text-red-500 hover:bg-red-50"
-                  >
-                    <Trash2 size={13} />
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
+        if (!onItemTap) {
+          return (
+            <div key={item.id} className="relative flex gap-3 pb-5 last:pb-0 animate-fade-in" style={{ animationDelay: `${idx * 60}ms` }}>
+              {content}
+            </div>
+          );
+        }
+
+        return (
+          <button
+            key={item.id}
+            type="button"
+            onClick={() => onItemTap(item)}
+            aria-label={`查看可对「${item.title}」执行的操作`}
+            className="relative flex gap-3 pb-5 last:pb-0 animate-fade-in w-full text-left active:opacity-70 transition-opacity"
+            style={{ animationDelay: `${idx * 60}ms` }}
+          >
+            {content}
+          </button>
         );
       })}
     </div>
