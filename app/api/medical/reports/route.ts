@@ -65,14 +65,28 @@ export async function POST(request: Request) {
     if (babyResult.errorResponse) return babyResult.errorResponse;
     const baby = babyResult.baby;
 
-    if (!title || !date || typeof date !== "string" || !isValidDateStr(date.trim())) {
+    const cleanTitle = typeof title === "string" ? title.trim() : "";
+    const cleanDate = typeof date === "string" ? date.trim() : "";
+
+    if (!cleanTitle || !cleanDate || !isValidDateStr(cleanDate)) {
       return NextResponse.json(
         { error: "请填写报告标题和有效的日期（YYYY-MM-DD）" },
         { status: 400 }
       );
     }
 
+    if (baby.birthDate && cleanDate < baby.birthDate) {
+      return NextResponse.json(
+        { error: "报告日期不能早于宝宝出生日期" },
+        { status: 400 }
+      );
+    }
+
     const itemsJson = JSON.stringify(Array.isArray(items) ? items : []);
+    const cleanHospital = (hospital && typeof hospital === "string" && hospital.trim()) || null;
+    const cleanDoctorNotes = (doctorNotes && typeof doctorNotes === "string" && doctorNotes.trim()) || null;
+    const cleanAiSummary = (aiSummary && typeof aiSummary === "string" && aiSummary.trim()) || null;
+    const cleanImageUrl = (imageUrl && typeof imageUrl === "string" && imageUrl.trim()) || null;
 
     // 校验必须先于任何写入：越界直接 400，避免孤儿报告
     let weightKg: number | null = null;
@@ -112,37 +126,38 @@ export async function POST(request: Request) {
         data: {
           babyId: baby.id,
           recordedById: user.id,
-          title: String(title).trim(),
+          title: cleanTitle,
           category: category || "general",
-          date: String(date).trim(),
-          hospital: hospital ? String(hospital).trim() : null,
-          doctorNotes: doctorNotes ? String(doctorNotes).trim() : null,
-          aiSummary: aiSummary ? String(aiSummary).trim() : null,
+          date: cleanDate,
+          hospital: cleanHospital,
+          doctorNotes: cleanDoctorNotes,
+          aiSummary: cleanAiSummary,
           itemsJson,
-          imageUrl: imageUrl ? String(imageUrl).trim() : null,
+          imageUrl: cleanImageUrl,
         },
       });
 
       if (weightKg != null || heightCm != null || headCircumferenceCm != null) {
-        const { months, label } = calculateAge(baby.birthDate, date);
+        const { months, label } = calculateAge(baby.birthDate, cleanDate);
 
         await tx.growthMeasurement.create({
           data: {
             babyId: baby.id,
             recordedById: user.id,
-            date: String(date).trim(),
+            date: cleanDate,
             ageInMonths: months,
             ageLabel: label,
             weightKg,
             heightCm,
             headCircumferenceCm,
-            imageUrl: imageUrl ? String(imageUrl).trim() : null,
+            imageUrl: cleanImageUrl,
           },
         });
       }
 
       return report;
     });
+
 
     return NextResponse.json(
       {

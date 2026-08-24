@@ -27,9 +27,9 @@ export async function POST(request: Request) {
     const { username, password } = body;
 
 
-    if (!username || !password) {
+    if (!username || !password || typeof password !== "string" || password.length > 72) {
       return NextResponse.json(
-        { error: "请输入用户名和密码" },
+        { error: "请输入正确的用户名和密码" },
         { status: 400 }
       );
     }
@@ -53,13 +53,6 @@ export async function POST(request: Request) {
       },
     });
 
-    if (!user) {
-      return NextResponse.json(
-        { error: "用户名或密码错误" },
-        { status: 401 }
-      );
-    }
-
     // 时序抹平：用户不存在时也执行一次同代价的 bcrypt 比较，防止按响应时间枚举用户名
     const DUMMY_HASH = "$2b$10$CwTycUXWue0Thq9StjUM0uJ8.PxHqXn5rJQWvFPGf1PVLfZGmOB7a";
     const isValid = await verifyPassword(password, user?.passwordHash ?? DUMMY_HASH);
@@ -69,6 +62,7 @@ export async function POST(request: Request) {
         { status: 401 }
       );
     }
+
 
     const token = await signAuthToken({
       userId: user.id,
