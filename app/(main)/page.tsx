@@ -16,11 +16,13 @@ import {
   ChevronRight,
   Camera,
 } from "lucide-react";
+import type { TimelineEntry } from "@/types";
 import { useBabyStore } from "@/stores/useBabyStore";
 import { calculateAge } from "@/lib/age";
 import { StatCard } from "@/components/ui/StatCard";
 import { QuickActionCard } from "@/components/ui/QuickActionCard";
 import { Timeline } from "@/components/ui/Timeline";
+import { RecordEditDialog } from "@/components/ui/RecordEditDialog";
 import { CuteCard } from "@/components/ui/CuteCard";
 import { CuteButton } from "@/components/ui/CuteButton";
 import { QuickAiButton } from "@/components/ui/QuickAiButton";
@@ -86,6 +88,11 @@ export default function HomePage() {
   const aiTips = useBabyStore((s) => s.aiTips);
   const aiError = useBabyStore((s) => s.aiError);
   const authLoading = useBabyStore((s) => s.authLoading);
+  const updateTimelineRecord = useBabyStore((s) => s.updateTimelineRecord);
+  const deleteTimelineRecord = useBabyStore((s) => s.deleteTimelineRecord);
+
+  // 时间轴误操作修正
+  const [editingRecord, setEditingRecord] = useState<TimelineEntry | null>(null);
 
   const fetchUser = useBabyStore((s) => s.fetchUser);
   const fetchDailySummary = useBabyStore((s) => s.fetchDailySummary);
@@ -422,8 +429,27 @@ export default function HomePage() {
           <h3 className="text-xs font-bold text-text-secondary uppercase tracking-wider">今日作息时间轴</h3>
           <span className="text-[10px] text-text-muted">按时间倒序</span>
         </div>
-        <Timeline items={timeline} />
+        <Timeline
+          items={timeline}
+          onEdit={(item) => setEditingRecord(item)}
+          onDelete={(item) => {
+            if (window.confirm(`确定删除「${item.title}」这条记录吗？`)) {
+              deleteTimelineRecord(item.type, item.id).catch(() =>
+                window.alert("删除失败，请重试")
+              );
+            }
+          }}
+        />
       </div>
+
+      <RecordEditDialog
+        item={editingRecord}
+        onClose={() => setEditingRecord(null)}
+        onSubmit={async (patch) => {
+          if (!editingRecord) return;
+          await updateTimelineRecord(editingRecord.type, editingRecord.id, patch);
+        }}
+      />
 
       {/* AI Assistant Advice */}
       <CuteCard className="bg-gradient-to-br from-primary-light to-lavender/10 border border-lavender/25 p-4">

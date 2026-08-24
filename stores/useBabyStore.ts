@@ -115,6 +115,9 @@ interface BabyStore {
   addGrowthMeasurement: (measurement: Partial<GrowthMeasurement>) => Promise<void>;
   addMedicalReport: (report: Partial<MedicalReport> & { growthData?: any }) => Promise<MedicalReport>;
   deleteMedicalReport: (id: string) => Promise<void>;
+  /** 记录修正：更新/删除时间轴四类记录（feeding/sleep/diaper/food） */
+  updateTimelineRecord: (type: TimelineEntry['type'], id: string, patch: Record<string, unknown>) => Promise<void>;
+  deleteTimelineRecord: (type: TimelineEntry['type'], id: string) => Promise<void>;
 }
 
 type UnauthorizedHandler = () => void;
@@ -785,6 +788,59 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
       }));
     } catch (e) {
       console.error("Failed to delete medical report:", e);
+      throw e;
+    }
+  },
+
+  updateTimelineRecord: async (type, id, patch) => {
+    const endpoint =
+      type === "food" ? "/api/food/logs" : `/api/records/${type}`;
+    try {
+      const updated = await request<Record<string, unknown>>(endpoint, {
+        method: "PUT",
+        body: JSON.stringify({ id, ...patch }),
+      });
+      // 更新本地对应数组
+      const listKey =
+        type === "feeding" ? "feedingRecords"
+        : type === "sleep" ? "sleepRecords"
+        : type === "diaper" ? "diaperRecords"
+        : "foodLogRecords";
+      set((state) => ({
+        [listKey]: (state as any)[listKey].map((r: { id: string }) =>
+          r.id === id ? { ...r, ...(updated as object) } : r
+        ),
+      } as any));
+      invalidateCache("dailySummary");
+      invalidateCache("timeline");
+      await Promise.all([get().fetchDailySummary(), get().fetchTimeline()]);
+    } catch (e) {
+      console.error("Failed to update timeline record:", e);
+      throw e;
+    }
+  },
+
+  deleteTimelineRecord: async (type, id) => {
+    const endpoint =
+      type === "food" ? "/api/food/logs" : `/api/records/${type}`;
+    try {
+      await request<{ success: boolean }>(endpoint, {
+        method: "DELETE",
+        body: JSON.stringify({ id }),
+      });
+      const listKey =
+        type === "feeding" ? "feedingRecords"
+        : type === "sleep" ? "sleepRecords"
+        : type === "diaper" ? "diaperRecords"
+        : "foodLogRecords";
+      set((state) => ({
+        [listKey]: (state as any)[listKey].filter((r: { id: string }) => r.id !== id),
+      } as any));
+      invalidateCache("dailySummary");
+      invalidateCache("timeline");
+      await Promise.all([get().fetchDailySummary(), get().fetchTimeline()]);
+    } catch (e) {
+      console.error("Failed to delete timeline record:", e);
       throw e;
     }
   },

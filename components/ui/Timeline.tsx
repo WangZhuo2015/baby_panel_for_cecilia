@@ -1,9 +1,12 @@
 import React from 'react';
 import type { TimelineEntry } from '@/types';
-import { Baby, Moon, Droplets, UtensilsCrossed } from 'lucide-react';
+import { Baby, Moon, Droplets, UtensilsCrossed, Pencil, Trash2 } from 'lucide-react';
 
 interface TimelineProps {
   items: TimelineEntry[];
+  /** 传入即显示每条的编辑/删除操作（误操作修正入口） */
+  onEdit?: (item: TimelineEntry) => void;
+  onDelete?: (item: TimelineEntry) => void;
 }
 
 const iconMap: Record<TimelineEntry['type'], React.FC<{ size?: number; className?: string }>> = {
@@ -20,7 +23,7 @@ const colorMap: Record<TimelineEntry['type'], string> = {
   food: 'bg-mint/20 text-mint',
 };
 
-export const Timeline: React.FC<TimelineProps> = ({ items }) => {
+export const Timeline: React.FC<TimelineProps> = ({ items, onEdit, onDelete }) => {
   if (items.length === 0) return null;
 
   return (
@@ -35,7 +38,7 @@ export const Timeline: React.FC<TimelineProps> = ({ items }) => {
         return (
           <div
             key={item.id}
-            className={`relative flex gap-3 pb-5 last:pb-0 animate-fade-in`}
+            className={`relative flex gap-3 pb-5 last:pb-0 animate-fade-in group`}
             style={{ animationDelay: `${idx * 60}ms` }}
           >
             {/* Icon dot */}
@@ -48,11 +51,41 @@ export const Timeline: React.FC<TimelineProps> = ({ items }) => {
               <div className="flex items-baseline gap-2">
                 <span className="text-xs text-text-muted font-medium">{item.time}</span>
                 <span className="text-sm font-medium text-text-primary">{item.title}</span>
+                {item.recorderName && (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary-soft/40 text-text-secondary whitespace-nowrap">
+                    {item.recorderName}
+                  </span>
+                )}
               </div>
               {item.detail && (
                 <p className="text-xs text-text-secondary mt-0.5">{item.detail}</p>
               )}
             </div>
+
+            {(onEdit || onDelete) && (
+              <div className="flex items-center gap-1 self-center opacity-0 group-hover:opacity-100 focus-within:opacity-100 max-md:opacity-60 transition-opacity">
+                {onEdit && (
+                  <button
+                    type="button"
+                    aria-label="编辑这条记录"
+                    onClick={() => onEdit(item)}
+                    className="p-1.5 rounded-full text-text-muted hover:text-primary hover:bg-primary-soft/30"
+                  >
+                    <Pencil size={13} />
+                  </button>
+                )}
+                {onDelete && (
+                  <button
+                    type="button"
+                    aria-label="删除这条记录"
+                    onClick={() => onDelete(item)}
+                    className="p-1.5 rounded-full text-text-muted hover:text-red-500 hover:bg-red-50"
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         );
       })}

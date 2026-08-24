@@ -400,6 +400,8 @@ export interface TimelineEntry {
   title: string;
   detail?: string;
   icon: string;
+  /** 记录人显示名（家庭成员），旧数据可能为 null */
+  recorderName?: string | null;
 }
 
 // ===== Daily Summary =====
