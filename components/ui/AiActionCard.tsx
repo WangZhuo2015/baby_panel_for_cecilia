@@ -62,6 +62,53 @@ function normalizeTime(val?: string): string {
   return "12:00";
 }
 
+
+// ===== 选项式确认组件（Claude Code 风格点选）=====
+function Chip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`px-2.5 py-1 rounded-full text-[11px] font-medium border transition-all cursor-pointer ${
+        active
+          ? "bg-primary text-white border-primary shadow-xs"
+          : "bg-white/70 dark:bg-card border-divider text-text-secondary hover:border-primary/50"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+/** 相对时间快捷项（分钟前） */
+const TIME_PRESETS: [string, number][] = [
+  ["刚刚", 0], ["10分钟前", 10], ["30分钟前", 30], ["1小时前", 60],
+];
+
+function TimePresetChips({ onPick }: { onPick: (hhmm: string) => void }) {
+  return (
+    <div className="flex flex-wrap gap-1">
+      {TIME_PRESETS.map(([label, mins]) => (
+        <Chip
+          key={label}
+          active={false}
+          onClick={() => {
+            const d = new Date(Date.now() - mins * 60000);
+            onPick(`${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`);
+          }}
+        >
+          {label}
+        </Chip>
+      ))}
+    </div>
+  );
+}
+
+function hhmmNow(offsetMin = 0): string {
+  const d = new Date(Date.now() - offsetMin * 60000);
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+
 export const AiActionCard: React.FC<AiActionCardProps> = ({ action: initialAction, onSaved }) => {
   const { showToast } = useToast();
   const addFeedingRecord = useBabyStore((s) => s.addFeedingRecord);
@@ -296,8 +343,12 @@ export const AiActionCard: React.FC<AiActionCardProps> = ({ action: initialActio
   // Render Feeding Action Card
   if (initialAction.type === "feeding") {
     const { type, amountMl, durationMinutes, notes, timestamp } = cardData;
+    const typeOptions: [string, string][] = [
+      ["breast", "🤱 母乳"], ["formula", "🍼 配方"], ["bottle_breast", "🍼 瓶喂母乳"], ["mixed", "🔀 混合"],
+    ];
     const typeLabel =
-      type === "breast" ? "母乳亲喂" : type === "formula" ? "配方奶粉" : type === "bottle_breast" ? "瓶喂母乳" : "混合喂养";
+      type === "breast" ? "母乳亲喂" : type === "formula" ? "配方奶粉" : type === "bottle_breast" ? "瓶喂母乳" : type === "solid" ? "辅食" : "混合喂养";
+    const ready = Boolean(type) && (amountMl || durationMinutes);
 
     return (
       <div className="my-2.5 p-3 bg-gradient-to-br from-sky-50/90 to-blue-50/40 rounded-2xl border border-sky-200/70 shadow-xs text-xs space-y-2">
@@ -319,6 +370,27 @@ export const AiActionCard: React.FC<AiActionCardProps> = ({ action: initialActio
               {typeLabel}
             </span>
           </div>
+        </div>
+
+        <div className="flex flex-wrap gap-1.5">
+          {typeOptions.map(([v, l]) => (
+            <Chip key={v} active={type === v} onClick={() => setCardData({ ...cardData, type: v })}>{l}</Chip>
+          ))}
+        </div>
+
+        <div className="flex flex-wrap gap-1.5 items-center">
+          <span className="text-[10px] text-text-muted">奶量:</span>
+          {[60, 120, 150, 210].map((v) => (
+            <Chip key={v} active={Number(amountMl) === v} onClick={() => setCardData({ ...cardData, amountMl: v })}>
+              {v}ml
+            </Chip>
+          ))}
+          {!amountMl && <span className="text-[10px] text-text-muted">（或在下方微调输入）</span>}
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <span className="text-[10px] text-text-muted">时间：</span>
+          <TimePresetChips onPick={(hhmm) => setCardData({ ...cardData, timestamp: hhmm })} />
         </div>
 
         <div className="flex items-center justify-between bg-white/85 p-2 rounded-xl text-text-secondary text-[11px]">
@@ -344,15 +416,18 @@ export const AiActionCard: React.FC<AiActionCardProps> = ({ action: initialActio
 
         <button
           onClick={handleConfirmSave}
-          disabled={saved || saving}
-          className={`w-full py-2 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1 transition-all cursor-pointer ${
+          disabled={saved || saving || !ready}
+          title={!ready ? "请先选择喂养方式和奶量" : undefined}
+          className={`w-full py-2 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1 transition-all ${
             saved
               ? "bg-emerald-500 text-white cursor-default"
-              : "bg-sky-500 text-white hover:bg-sky-600 shadow-xs"
+              : !ready
+                ? "bg-slate-300 dark:bg-slate-700 text-slate-500 dark:text-slate-400 cursor-not-allowed"
+                : "bg-sky-500 text-white hover:bg-sky-600 shadow-xs cursor-pointer"
           }`}
         >
           {saved ? <CheckCircle2 size={13} /> : <Sparkles size={13} />}
-          <span>{saved ? "已存入喂养记录 ✨" : "确认保存喂养记录"}</span>
+          <span>{saved ? "已存入喂养记录 ✨" : !ready ? "选择上方选项后确认" : "确认保存喂养记录"}</span>
         </button>
       </div>
     );
@@ -360,7 +435,18 @@ export const AiActionCard: React.FC<AiActionCardProps> = ({ action: initialActio
 
   // Render Sleep Action Card
   if (initialAction.type === "sleep") {
-    const { startTime, endTime, type, notes } = cardData;
+    // 时间缺失时给合理默认（入睡=30分钟前，醒来=现在）
+    const startT = cardData.startTime || hhmmNow(30);
+    const endT = cardData.endTime || hhmmNow(0);
+    const durMin = (() => {
+      const [sh, sm] = String(startT).split(":").map(Number);
+      const [eh, em] = String(endT).split(":").map(Number);
+      let d = eh * 60 + em - (sh * 60 + sm);
+      if (d <= 0) d += 24 * 60; // 跨夜
+      return d;
+    })();
+    const ready = Boolean(startT && endT) && durMin > 0 && durMin <= 20 * 60;
+    const { type, notes } = cardData;
     return (
       <div className="my-2.5 p-3 bg-gradient-to-br from-indigo-50/90 to-purple-50/40 rounded-2xl border border-indigo-200/70 shadow-xs text-xs space-y-2">
         <div className="flex items-center justify-between">
@@ -383,44 +469,84 @@ export const AiActionCard: React.FC<AiActionCardProps> = ({ action: initialActio
           </div>
         </div>
 
+        <div className="flex flex-wrap gap-1.5 items-center">
+          <span className="text-[10px] text-text-muted">时长：</span>
+          <span className="px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 text-[10px] font-bold">
+            {Math.floor(durMin / 60)}小时{durMin % 60}分
+          </span>
+          <div className="flex gap-1.5 ml-auto">
+            {[["day", "☀️ 白天小睡"], ["night", "🌙 夜间睡眠"]].map(([v, l]) => (
+              <Chip key={v} active={(type || "day") === v} onClick={() => setCardData({ ...cardData, type: v })}>{l}</Chip>
+            ))}
+          </div>
+        </div>
+
+        {/* 常驻时间修正（AI 没给/给错都能直接改） */}
+        <div className="grid grid-cols-2 gap-2">
+          <label className="flex items-center gap-1.5 bg-white/85 rounded-xl px-2 py-1.5 text-[11px] text-text-secondary">
+            <span className="shrink-0">入睡</span>
+            <input
+              type="time"
+              value={startT}
+              onChange={(e) => setCardData({ ...cardData, startTime: e.target.value })}
+              className="flex-1 min-w-0 bg-transparent font-bold text-text-primary focus:outline-none"
+            />
+          </label>
+          <label className="flex items-center gap-1.5 bg-white/85 rounded-xl px-2 py-1.5 text-[11px] text-text-secondary">
+            <span className="shrink-0">醒来</span>
+            <input
+              type="time"
+              value={endT}
+              onChange={(e) => setCardData({ ...cardData, endTime: e.target.value })}
+              className="flex-1 min-w-0 bg-transparent font-bold text-text-primary focus:outline-none"
+            />
+          </label>
+        </div>
+
         <div className="bg-white/85 p-2 rounded-xl text-text-secondary text-[11px] flex items-center justify-between">
           {isEditing ? (
             <div className="flex items-center gap-1 w-full justify-around">
               <input
                 type="time"
-                value={startTime || "12:00"}
+                value={startT}
                 onChange={(e) => setCardData({ ...cardData, startTime: e.target.value })}
                 className="px-1.5 py-0.5 bg-slate-50 border border-indigo-300 rounded font-bold"
               />
               <ArrowRight size={12} className="text-indigo-400" />
               <input
                 type="time"
-                value={endTime || "13:30"}
+                value={endT}
                 onChange={(e) => setCardData({ ...cardData, endTime: e.target.value })}
                 className="px-1.5 py-0.5 bg-slate-50 border border-indigo-300 rounded font-bold"
               />
             </div>
           ) : (
             <>
-              <span>入睡：{startTime}</span>
+              <span>入睡：{startT}</span>
               <ArrowRight size={12} className="text-indigo-400" />
-              <span>醒来：{endTime}</span>
+              <span>醒来：{endT}</span>
             </>
           )}
         </div>
         {notes && <p className="text-[10px] text-text-muted px-1">备注：{notes}</p>}
 
         <button
-          onClick={handleConfirmSave}
-          disabled={saved || saving}
-          className={`w-full py-2 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1 transition-all cursor-pointer ${
+          onClick={() => {
+            setCardData((prev: any) => ({ ...prev, startTime: prev.startTime || startT, endTime: prev.endTime || endT }));
+            handleConfirmSave();
+          }}
+          disabled={saved || saving || !ready}
+          title={!ready ? "请检查入睡/醒来时间" : undefined}
+          className={`w-full py-2 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1 transition-all ${
             saved
               ? "bg-emerald-500 text-white cursor-default"
-              : "bg-indigo-500 text-white hover:bg-indigo-600 shadow-xs"
+              : !ready
+                ? "bg-slate-300 dark:bg-slate-700 text-slate-500 dark:text-slate-400 cursor-not-allowed"
+                : "bg-indigo-500 text-white hover:bg-indigo-600 shadow-xs cursor-pointer"
           }`}
         >
           {saved ? <CheckCircle2 size={13} /> : <Sparkles size={13} />}
-          <span>{saved ? "已存入睡眠记录 ✨" : "确认保存睡眠记录"}</span>
+          <span>{saved ? "已存入睡眠记录 ✨" : !ready ? "检查时间后再确认" : "确认保存睡眠记录"}</span>
         </button>
       </div>
     );

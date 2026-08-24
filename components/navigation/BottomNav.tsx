@@ -2,14 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, TrendingUp, UtensilsCrossed, Star, ShieldCheck, Sparkles } from "lucide-react";
+import { Home, TrendingUp, UtensilsCrossed, ShieldCheck, Sparkles } from "lucide-react";
 import { openQuickAI } from "@/lib/quickai-bus";
 
 const navItems = [
   { path: "/", label: "今日", icon: Home },
   { path: "/growth", label: "成长", icon: TrendingUp },
   { path: "/food", label: "辅食", icon: UtensilsCrossed },
-  { path: "/development", label: "发展", icon: Star },
   { path: "/health/vaccines", label: "健康", icon: ShieldCheck },
 ];
 

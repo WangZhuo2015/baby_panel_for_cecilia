@@ -277,3 +277,29 @@ html.dark {
 .dark .bg-white\/20 { background-color: rgba(33, 26, 33, 0.2); }
 .dark .bg-white\/15 { background-color: rgba(33, 26, 33, 0.15); }
 .dark .bg-white\/10 { background-color: rgba(33, 26, 33, 0.1); }
+
+/* 聊天卡片粉彩系（AiActionCard）暗色映射 */
+.dark .bg-sky-50\/90 { background-color: rgba(30, 39, 50, 0.9); }
+.dark .to-blue-50\/40 { --tw-gradient-to: rgba(30, 34, 50, 0.4); }
+.dark .border-sky-200\/70 { border-color: rgba(80, 120, 165, 0.5); }
+.dark .text-sky-900 { color: #DCEBF7; }
+.dark .text-sky-700 { color: #8FC7F5; }
+.dark .bg-sky-100\/60 { background-color: rgba(38, 52, 66, 0.6); }
+.dark .hover\:bg-sky-100:hover { background-color: #263442; }
+.dark .bg-sky-100 { background-color: #263442; }
+.dark .bg-sky-500 { background-color: #3B82C4; }
+.dark .hover\:bg-sky-600:hover { background-color: #2E6BA8; }
+
+.dark .from-indigo-50\/90 { --tw-gradient-from: rgba(35, 34, 54, 0.9); }
+.dark .to-purple-50\/40 { --tw-gradient-to: rgba(42, 32, 54, 0.4); }
+.dark .border-indigo-200\/70 { border-color: rgba(110, 105, 175, 0.5); }
+.dark .text-indigo-900 { color: #E4E1FA; }
+.dark .text-indigo-700 { color: #A5A0F0; }
+.dark .bg-indigo-100\/60 { background-color: rgba(44, 43, 69, 0.6); }
+.dark .hover\:bg-indigo-100:hover { background-color: #2C2B45; }
+.dark .bg-indigo-100 { background-color: #2C2B45; }
+
+.dark .bg-emerald-50 { background-color: #16281F; }
+.dark .text-emerald-900 { color: #D5F5E5; }
+.dark .text-emerald-700 { color: #7BE3AE; }
+.dark .bg-emerald-400 { background-color: #2FA974; }

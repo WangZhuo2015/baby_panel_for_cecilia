@@ -13,6 +13,7 @@ import {
   RefreshCw,
   AlertCircle,
   Sparkles,
+  Star,
   ChevronRight,
   Camera,
 } from "lucide-react";
@@ -422,6 +423,7 @@ export default function HomePage() {
           <QuickActionCard icon={<Moon size={22} />} label="记睡眠" color="#B98AF5" onClick={() => router.push("/records/sleep")} />
           <QuickActionCard icon={<Wind size={22} />} label="换尿布" color="#78DDB5" onClick={() => router.push("/records/diaper")} />
           <QuickActionCard icon={<UtensilsCrossed size={22} />} label="吃辅食" color="#FFB38A" onClick={() => router.push("/food/log")} />
+          <QuickActionCard icon={<Star size={22} />} label="发育里程" color="#B98AF5" onClick={() => router.push("/development")} />
         </div>
       </div>
 

@@ -257,8 +257,9 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
           const res = await fetch("/api/asr/transcribe", { method: "POST", body: fd });
           const data = await res.json().catch(() => ({}));
           if (!res.ok) throw new Error(data?.error || "识别失败");
-          setInputText((prev) => (prev ? `${prev} ${data.text}` : data.text));
-          showToast(`已转写：${String(data.text).slice(0, 40)}${data.text.length > 40 ? "…" : ""}`);
+          showToast(`已识别：${String(data.text).slice(0, 30)}${data.text.length > 30 ? "…" : ""}`);
+          // 语音模式：识别即发送，直接在对话里出结果卡片
+          handleSend(String(data.text));
         } catch (err: unknown) {
           showToast(err instanceof Error ? err.message : "语音识别失败");
         } finally {
@@ -532,7 +533,7 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
       />
 
       {/* Sheet / Modal Container - Full screen on mobile, elegant dialog on desktop */}
-      <div className="relative w-full max-w-lg bg-gradient-to-b from-white via-[#FAF7F5] to-[#F5F0EB] h-[100dvh] sm:h-[680px] max-h-[100dvh] sm:max-h-[90vh] rounded-none sm:rounded-[28px] shadow-2xl overflow-hidden flex flex-col border-0 sm:border sm:border-primary/15 animate-in slide-in-from-bottom-6 duration-200 z-10">
+      <div className="relative w-full max-w-lg bg-card h-[100dvh] sm:h-[680px] max-h-[100dvh] sm:max-h-[90vh] rounded-none sm:rounded-[28px] shadow-2xl overflow-hidden flex flex-col border-0 sm:border sm:border-primary/15 animate-in slide-in-from-bottom-6 duration-200 z-10">
         
         {/* Header - Frosted pastel navbar with notch safe area */}
         <div className="flex items-center justify-between px-4 py-3 pt-[max(12px,env(safe-area-inset-top))] bg-white/95 backdrop-blur-md border-b border-primary/10 shrink-0">
@@ -578,7 +579,7 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
                   handleSend(chip);
                 }
               }}
-              className="text-xs bg-white text-text-secondary hover:text-primary hover:bg-primary-light/50 border border-primary/15 rounded-full px-3 py-1.5 shrink-0 shadow-xs transition-all active:scale-95 text-left flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+              className="text-xs bg-card text-text-secondary hover:text-primary hover:bg-primary-light/50 border border-primary/15 rounded-full px-3 py-1.5 shrink-0 shadow-xs transition-all active:scale-95 text-left flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
             >
               <Sparkles size={11} className="text-primary shrink-0" />
               <span>{chip}</span>
@@ -609,8 +610,8 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
                 <div
                   className={`relative max-w-[88%] rounded-2xl p-3.5 shadow-sm text-xs sm:text-sm leading-relaxed ${
                     isUser
-                      ? "bg-gradient-to-r from-primary to-pink-500 text-white rounded-tr-xs shadow-primary/20"
-                      : "bg-white text-text-primary rounded-tl-xs border border-primary/10 shadow-slate-200/50"
+                      ? "bg-gradient-to-r from-primary to-pink-500 text-white shadow-primary/20"
+                      : "bg-card text-text-primary border border-primary/10 shadow-none"
                   }`}
                 >
                   {/* Thinking status inside the single assistant bubble */}
