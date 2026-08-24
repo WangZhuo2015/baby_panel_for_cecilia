@@ -8,7 +8,7 @@ import { getLocalDateStr } from "@/lib/date";
 import { validateUploadedImage, validateImageMagicBytes, ALLOWED_IMAGE_MIMES } from "@/lib/upload";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 
-export const maxDuration = 45;
+export const maxDuration = 120;
 
 const SYSTEM_PROMPT = `
 你是一位专业的儿科医生与医学化验单智能识别专家。
@@ -152,7 +152,7 @@ export async function POST(request: Request) {
         max_tokens: 2500,
         response_format: { type: "json_object" },
       }),
-      signal: AbortSignal.timeout(35000),
+      signal: AbortSignal.timeout(100000),
     });
 
     if (!response.ok) {
@@ -166,7 +166,7 @@ export async function POST(request: Request) {
           temperature: 0.1,
           max_tokens: 2500,
         }),
-        signal: AbortSignal.timeout(35000),
+        signal: AbortSignal.timeout(100000),
       });
 
       if (!retryResponse.ok) {

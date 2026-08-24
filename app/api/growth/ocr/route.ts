@@ -15,7 +15,7 @@ interface OcrResult {
   imageUrl?: string;
 }
 
-export const maxDuration = 30;
+export const maxDuration = 120;
 
 export async function POST(request: Request) {
   const auth = await requireAuth(request);
@@ -112,7 +112,7 @@ export async function POST(request: Request) {
         temperature: 0,
       }),
       cache: "no-store",
-      signal: AbortSignal.timeout(25000),
+      signal: AbortSignal.timeout(100000),
     });
 
     if (!res.ok) {
