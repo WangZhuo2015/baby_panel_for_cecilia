@@ -117,19 +117,28 @@ export async function POST(request: Request) {
       recordTimestamp = parsedTime.toISOString();
     }
 
-    const record = await prisma.feedingRecord.create({
-      data: {
-        babyId: babyResult.baby.id,
-        recordedById: user.id,
-        timestamp: recordTimestamp,
-        type,
-        amountMl: parsedAmountMl,
-        leftMinutes: parsedLeft,
-        rightMinutes: parsedRight,
-        spitUp: spitUp === true || spitUp === "true" || spitUp === 1,
-        notes: notes ? String(notes).trim() : null,
-      },
-    });
+    // 离线 outbox 幂等：携带 clientId 的重放请求不会产生第二条记录
+    const clientId =
+      typeof body.clientId === "string" && body.clientId.length > 0 && body.clientId.length <= 64
+        ? body.clientId
+        : null;
+    const data = {
+      recordedById: user.id,
+      timestamp: recordTimestamp,
+      type,
+      amountMl: parsedAmountMl,
+      leftMinutes: parsedLeft,
+      rightMinutes: parsedRight,
+      spitUp: spitUp === true || spitUp === "true" || spitUp === 1,
+      notes: notes ? String(notes).trim() : null,
+    };
+    const record = clientId
+      ? await prisma.feedingRecord.upsert({
+          where: { babyId_clientId: { babyId: babyResult.baby.id, clientId } },
+          create: { ...data, babyId: babyResult.baby.id, clientId },
+          update: {},
+        })
+      : await prisma.feedingRecord.create({ data: { ...data, babyId: babyResult.baby.id } });
 
 
     return NextResponse.json(record, { status: 201 });

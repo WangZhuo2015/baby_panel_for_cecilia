@@ -1,6 +1,7 @@
 "use client";
 
 import { create } from "zustand";
+import { enqueueOutbox, isRetryableSubmitError } from "@/lib/outbox";
 import type {
   User,
   Family,
@@ -256,7 +257,18 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
         });
         markFetched("user");
       } catch {
-        set({ user: null, family: null, baby: null, authLoading: false });
+        // 网络失败（离线）时保留/恢复快照会话，避免离线冷启动被"假登出"
+        if (typeof navigator !== "undefined" && !navigator.onLine) {
+          const snap = loadSnapshot();
+          set({
+            user: (snap?.user as User | null) ?? null,
+            family: (snap?.family as Family | null) ?? null,
+            baby: (snap?.baby as Baby | null) ?? null,
+            authLoading: false,
+          });
+        } else {
+          set({ user: null, family: null, baby: null, authLoading: false });
+        }
         markFetched("user");
       }
     }).then(() => get().user);
@@ -648,12 +660,14 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
   // ===== Create actions =====
 
   addFeedingRecord: async (record) => {
+    const clientId = crypto.randomUUID();
+    const payload = { ...record, clientId };
     try {
-      const newRecord = await request<FeedingRecord>("/api/records/feeding", {
+      const newRecord = (await request<FeedingRecord>("/api/records/feeding", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(record),
-      });
+        body: JSON.stringify(payload),
+      })) as FeedingRecord;
       invalidateCache("dailySummary");
       invalidateCache("timeline");
       set((state) => ({
@@ -662,18 +676,24 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
       get().fetchDailySummary();
       get().fetchTimeline();
     } catch (e) {
+      if (isRetryableSubmitError(e)) {
+        await enqueueOutbox({ clientId, url: "/api/records/feeding", body: payload, createdAt: Date.now() });
+        throw new Error("当前离线，记录已保存，联网后自动同步 ⏳");
+      }
       console.error("Failed to add feeding record:", e);
       throw e;
     }
   },
 
   addSleepRecord: async (record) => {
+    const clientId = crypto.randomUUID();
+    const payload = { ...record, clientId };
     try {
-      const newRecord = await request<SleepRecord>("/api/records/sleep", {
+      const newRecord = (await request<SleepRecord>("/api/records/sleep", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(record),
-      });
+        body: JSON.stringify(payload),
+      })) as SleepRecord;
       invalidateCache("dailySummary");
       invalidateCache("timeline");
       set((state) => ({
@@ -682,18 +702,24 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
       get().fetchDailySummary();
       get().fetchTimeline();
     } catch (e) {
+      if (isRetryableSubmitError(e)) {
+        await enqueueOutbox({ clientId, url: "/api/records/sleep", body: payload, createdAt: Date.now() });
+        throw new Error("当前离线，记录已保存，联网后自动同步 ⏳");
+      }
       console.error("Failed to add sleep record:", e);
       throw e;
     }
   },
 
   addDiaperRecord: async (record) => {
+    const clientId = crypto.randomUUID();
+    const payload = { ...record, clientId };
     try {
-      const newRecord = await request<DiaperRecord>("/api/records/diaper", {
+      const newRecord = (await request<DiaperRecord>("/api/records/diaper", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(record),
-      });
+        body: JSON.stringify(payload),
+      })) as DiaperRecord;
       invalidateCache("dailySummary");
       invalidateCache("timeline");
       set((state) => ({
@@ -702,18 +728,24 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
       get().fetchDailySummary();
       get().fetchTimeline();
     } catch (e) {
+      if (isRetryableSubmitError(e)) {
+        await enqueueOutbox({ clientId, url: "/api/records/diaper", body: payload, createdAt: Date.now() });
+        throw new Error("当前离线，记录已保存，联网后自动同步 ⏳");
+      }
       console.error("Failed to add diaper record:", e);
       throw e;
     }
   },
 
   addFoodLogRecord: async (record) => {
+    const clientId = crypto.randomUUID();
+    const payload = { ...record, clientId };
     try {
-      const newRecord = await request<FoodLogRecord>("/api/food/logs", {
+      const newRecord = (await request<FoodLogRecord>("/api/food/logs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(record),
-      });
+        body: JSON.stringify(payload),
+      })) as FoodLogRecord;
       invalidateCache("dailySummary");
       invalidateCache("timeline");
       set((state) => ({
@@ -722,6 +754,11 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
       get().fetchDailySummary();
       get().fetchTimeline();
     } catch (e) {
+      if (isRetryableSubmitError(e)) {
+        // 离线/服务不可用：入 outbox，联网后自动同步
+        await enqueueOutbox({ clientId, url: "/api/food/logs", body: payload, createdAt: Date.now() });
+        throw new Error("当前离线，记录已保存，联网后自动同步 ⏳");
+      }
       console.error("Failed to add food log record:", e);
       throw e;
     }
@@ -845,6 +882,57 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
     }
   },
 }));
+
+
+// ===== 离线快照：登录态与当日核心数据落 localStorage，冷启动断网可恢复 =====
+const SNAPSHOT_KEY = "baby-panel-snapshot-v1";
+
+interface StoreSnapshot {
+  user?: unknown;
+  family?: unknown;
+  baby?: unknown;
+  dailySummary?: unknown;
+  timeline?: unknown;
+  savedAt?: number;
+}
+
+function saveSnapshot(state: {
+  user: unknown; family: unknown; baby: unknown;
+  dailySummary: unknown; timeline: unknown;
+}): void {
+  try {
+    const payload: StoreSnapshot = {
+      user: state.user, family: state.family, baby: state.baby,
+      dailySummary: state.dailySummary, timeline: state.timeline,
+      savedAt: Date.now(),
+    };
+    localStorage.setItem(SNAPSHOT_KEY, JSON.stringify(payload));
+  } catch { /* 隐私模式/配额忽略 */ }
+}
+
+function loadSnapshot(): StoreSnapshot | null {
+  try {
+    const raw = localStorage.getItem(SNAPSHOT_KEY);
+    return raw ? (JSON.parse(raw) as StoreSnapshot) : null;
+  } catch {
+    return null;
+  }
+}
+
+if (typeof window !== "undefined") {
+  let snapshotTimer: ReturnType<typeof setTimeout> | undefined;
+  useBabyStore.subscribe((state) => {
+    if (snapshotTimer) clearTimeout(snapshotTimer);
+    snapshotTimer = setTimeout(() => {
+      if (state.user) {
+        saveSnapshot({
+          user: state.user, family: state.family, baby: state.baby,
+          dailySummary: state.dailySummary, timeline: state.timeline,
+        });
+      }
+    }, 500);
+  });
+}
 
 setOnUnauthorized(() => {
   // Only reset state if we had a logged-in user (session expired).

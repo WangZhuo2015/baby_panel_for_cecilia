@@ -78,6 +78,7 @@ model FeedingRecord {
   id           String   @id @default(uuid())
   babyId       String
   baby         Baby     @relation(fields: [babyId], references: [id], onDelete: Cascade)
+  clientId       String? // 离线提交幂等键（outbox 重放防重）
   recordedById String?
   timestamp    String
   type         String   // breast, formula, mixed
@@ -89,12 +90,14 @@ model FeedingRecord {
   createdAt    DateTime @default(now())
 
   @@index([babyId, timestamp])
+  @@unique([babyId, clientId])
 }
 
 model SleepRecord {
   id               String   @id @default(uuid())
   babyId           String
   baby             Baby     @relation(fields: [babyId], references: [id], onDelete: Cascade)
+  clientId       String? // 离线提交幂等键（outbox 重放防重）
   recordedById     String?
   startTime        String
   endTime          String
@@ -104,12 +107,14 @@ model SleepRecord {
   createdAt        DateTime @default(now())
 
   @@index([babyId, startTime])
+  @@unique([babyId, clientId])
 }
 
 model DiaperRecord {
   id              String   @id @default(uuid())
   babyId          String
   baby            Baby     @relation(fields: [babyId], references: [id], onDelete: Cascade)
+  clientId       String? // 离线提交幂等键（outbox 重放防重）
   recordedById    String?
   timestamp       String
   type            String   // pee, poop, both
@@ -119,6 +124,7 @@ model DiaperRecord {
   createdAt       DateTime @default(now())
 
   @@index([babyId, timestamp])
+  @@unique([babyId, clientId])
 }
 
 model GrowthMeasurement {
@@ -164,6 +170,7 @@ model FoodLogRecord {
   id            String   @id @default(uuid())
   babyId        String
   baby          Baby     @relation(fields: [babyId], references: [id], onDelete: Cascade)
+  clientId       String? // 离线提交幂等键（outbox 重放防重）
   recordedById  String?
   date          String
   time          String
@@ -176,6 +183,7 @@ model FoodLogRecord {
   createdAt     DateTime @default(now())
 
   @@index([babyId, date])
+  @@unique([babyId, clientId])
 }
 
 // ─── Family Status for Shared Knowledge (Foods & Books) ─────────────────────

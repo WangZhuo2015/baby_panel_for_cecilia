@@ -47,6 +47,7 @@ CREATE TABLE "Baby" (
 CREATE TABLE "FeedingRecord" (
     "id" TEXT NOT NULL PRIMARY KEY,
     "babyId" TEXT NOT NULL,
+    "clientId" TEXT,
     "recordedById" TEXT,
     "timestamp" TEXT NOT NULL,
     "type" TEXT NOT NULL,
@@ -63,6 +64,7 @@ CREATE TABLE "FeedingRecord" (
 CREATE TABLE "SleepRecord" (
     "id" TEXT NOT NULL PRIMARY KEY,
     "babyId" TEXT NOT NULL,
+    "clientId" TEXT,
     "recordedById" TEXT,
     "startTime" TEXT NOT NULL,
     "endTime" TEXT NOT NULL,
@@ -77,6 +79,7 @@ CREATE TABLE "SleepRecord" (
 CREATE TABLE "DiaperRecord" (
     "id" TEXT NOT NULL PRIMARY KEY,
     "babyId" TEXT NOT NULL,
+    "clientId" TEXT,
     "recordedById" TEXT,
     "timestamp" TEXT NOT NULL,
     "type" TEXT NOT NULL,
@@ -126,6 +129,7 @@ CREATE TABLE "MedicalReport" (
 CREATE TABLE "FoodLogRecord" (
     "id" TEXT NOT NULL PRIMARY KEY,
     "babyId" TEXT NOT NULL,
+    "clientId" TEXT,
     "recordedById" TEXT,
     "date" TEXT NOT NULL,
     "time" TEXT NOT NULL,
@@ -496,10 +500,19 @@ CREATE INDEX "Baby_familyId_idx" ON "Baby"("familyId");
 CREATE INDEX "FeedingRecord_babyId_timestamp_idx" ON "FeedingRecord"("babyId", "timestamp");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "FeedingRecord_babyId_clientId_key" ON "FeedingRecord"("babyId", "clientId");
+
+-- CreateIndex
 CREATE INDEX "SleepRecord_babyId_startTime_idx" ON "SleepRecord"("babyId", "startTime");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "SleepRecord_babyId_clientId_key" ON "SleepRecord"("babyId", "clientId");
+
+-- CreateIndex
 CREATE INDEX "DiaperRecord_babyId_timestamp_idx" ON "DiaperRecord"("babyId", "timestamp");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "DiaperRecord_babyId_clientId_key" ON "DiaperRecord"("babyId", "clientId");
 
 -- CreateIndex
 CREATE INDEX "GrowthMeasurement_babyId_date_idx" ON "GrowthMeasurement"("babyId", "date");
@@ -512,6 +525,9 @@ CREATE INDEX "MedicalReport_babyId_category_date_idx" ON "MedicalReport"("babyId
 
 -- CreateIndex
 CREATE INDEX "FoodLogRecord_babyId_date_idx" ON "FoodLogRecord"("babyId", "date");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "FoodLogRecord_babyId_clientId_key" ON "FoodLogRecord"("babyId", "clientId");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "FamilyFoodStatus_familyId_foodId_key" ON "FamilyFoodStatus"("familyId", "foodId");

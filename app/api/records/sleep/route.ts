@@ -121,17 +121,26 @@ export async function POST(request: Request) {
       ? Math.floor(nightWakingCount)
       : 0;
 
-    const record = await prisma.sleepRecord.create({
-      data: {
+    const clientId =
+      typeof body.clientId === "string" && body.clientId.length > 0 && body.clientId.length <= 64
+        ? body.clientId
+        : null;
+    const data = {
         babyId: babyResult.baby.id,
-        recordedById: user.id,
         startTime: finalStartIso,
         endTime: finalEndIso,
         type: sleepType,
         nightWakingCount: wakingCount,
         notes: notes ? String(notes).trim() : null,
-      },
-    });
+      recordedById: user.id,
+    };
+    const record = clientId
+      ? await prisma.sleepRecord.upsert({
+          where: { babyId_clientId: { babyId: babyResult.baby.id, clientId } },
+          create: { ...data, babyId: babyResult.baby.id, clientId },
+          update: {},
+        })
+      : await prisma.sleepRecord.create({ data: { ...data, babyId: babyResult.baby.id } });
 
     return NextResponse.json(record, { status: 201 });
   } catch (error) {

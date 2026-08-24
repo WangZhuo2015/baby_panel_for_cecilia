@@ -3,6 +3,7 @@
 import { usePathname } from "next/navigation";
 import { useEffect } from "react";
 import { BottomNav } from "@/components/navigation/BottomNav";
+import { OfflineBanner } from "@/components/ui/OfflineBanner";
 import { useBabyStore } from "@/stores/useBabyStore";
 
 const hideNavRoutes = [
@@ -29,6 +30,7 @@ export default function MainLayout({
 
   return (
     <div className="flex flex-col min-h-[100dvh]">
+      <OfflineBanner />
       <main
         className={`flex-1 ${hideNav ? "pb-4" : "pb-24"}`}
       >

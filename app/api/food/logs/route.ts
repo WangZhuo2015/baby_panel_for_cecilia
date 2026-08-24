@@ -70,20 +70,28 @@ export async function POST(request: Request) {
     if (babyResult.errorResponse) return babyResult.errorResponse;
     const babyId = babyResult.baby.id;
 
-    const record = await prisma.foodLogRecord.create({
-      data: {
-        babyId,
-        recordedById: user.id,
-        date: date || new Date().toISOString().slice(0, 10),
-        time: time || new Date().toTimeString().slice(0, 5),
-        foods: Array.isArray(foods) ? JSON.stringify(foods) : String(foods || "[]"),
-        portion: portion || "most",
-        acceptance: typeof acceptance === "number" ? acceptance : 3,
-        babyState: babyState || "happy",
-        hasAbnormal: hasAbnormal ?? false,
-        abnormalNotes: abnormalNotes ?? null,
-      },
-    });
+    const clientId =
+      typeof body.clientId === "string" && body.clientId.length > 0 && body.clientId.length <= 64
+        ? body.clientId
+        : null;
+    const data = {
+      recordedById: user.id,
+      date: date || new Date().toISOString().slice(0, 10),
+      time: time || new Date().toTimeString().slice(0, 5),
+      foods: Array.isArray(foods) ? JSON.stringify(foods) : String(foods || "[]"),
+      portion: portion || "most",
+      acceptance: typeof acceptance === "number" ? acceptance : 3,
+      babyState: babyState || "happy",
+      hasAbnormal: hasAbnormal ?? false,
+      abnormalNotes: abnormalNotes ?? null,
+    };
+    const record = clientId
+      ? await prisma.foodLogRecord.upsert({
+          where: { babyId_clientId: { babyId, clientId } },
+          create: { ...data, babyId, clientId },
+          update: {},
+        })
+      : await prisma.foodLogRecord.create({ data: { ...data, babyId } });
 
     return NextResponse.json(
       {
