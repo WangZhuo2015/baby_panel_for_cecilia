@@ -35,5 +35,24 @@ jobs:
       - name: Run TypeScript typecheck
         run: npm run typecheck
 
+      - name: Check migration drift (migrations vs schema)
+        run: |
+          npx prisma migrate diff --from-migrations prisma/migrations --to-schema prisma/schema.prisma --script > /tmp/drift.sql
+          # 空差异时 Prisma 仍会输出 "-- This is an empty migration." 注释，过滤后再判断
+          if grep -qvE '^\s*(--|$)' /tmp/drift.sql; then
+            echo "::error::prisma/migrations 与 schema.prisma 存在漂移，请生成增量迁移"
+            cat /tmp/drift.sql
+            exit 1
+          fi
+
+      - name: Verify baseline migration applies to a fresh database
+        run: |
+          rm -f /tmp/ci-fresh.db*
+          DATABASE_URL="file:/tmp/ci-fresh.db" npx prisma migrate deploy
+          rm -f /tmp/ci-fresh.db*
+
+      - name: Dependency audit (critical)
+        run: npm audit --audit-level=critical
+
       - name: Run Next.js build
         run: npm run build

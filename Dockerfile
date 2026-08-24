@@ -3,6 +3,8 @@ WORKDIR /app
 RUN apk add --no-cache libc6-compat openssl
 
 # 1. Install dependencies
+# ⚠️ 必须安装 devDependencies：prisma CLI 与 dotenv（prisma.config.ts 依赖）均为 devDep，
+#    若改成 npm ci --omit=dev，prisma generate 将直接失败。
 FROM base AS deps
 COPY package.json package-lock.json ./
 RUN npm ci

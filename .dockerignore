@@ -10,3 +10,5 @@ scratch/
 docs/
 dev.db
 dev.db-journal
+backups/
+database_backup_full.*

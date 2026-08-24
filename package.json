@@ -10,16 +10,17 @@
     "lint": "oxlint",
     "typecheck": "tsc --noEmit",
     "db:seed": "npx tsx prisma/seed.ts",
-    "db:studio": "npx prisma studio"
+    "db:studio": "npx prisma studio",
+    "db:backup": "bash scripts/backup-db.sh",
+    "db:push": "prisma db push",
+    "db:deploy": "prisma migrate deploy"
   },
   "dependencies": {
     "@libsql/client": "0.17.4",
-    "@modelcontextprotocol/sdk": "^1.30.0",
     "@prisma/adapter-libsql": "7.9.1",
     "@prisma/client": "7.9.1",
     "@tailwindcss/postcss": "4.3.3",
     "bcryptjs": "^3.0.3",
-    "dotenv": "^17.2.3",
     "jose": "^6.2.9",
     "lucide-react": "1.28.0",
     "next": "^16.3.2",
@@ -34,15 +35,21 @@
     "zustand": "5.0.14"
   },
   "devDependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "@types/bcryptjs": "^2.4.6",
     "@types/node": "^24.13.3",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@types/web-push": "3.6.4",
+    "dotenv": "^17.2.3",
     "oxlint": "1.77.0",
     "playwright": "^1.62.1",
     "prisma": "7.9.1",
     "tsx": "^4.21.0",
     "typescript": "~6.0.2"
-  }
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "MIT"
 }
