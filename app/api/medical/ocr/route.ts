@@ -12,39 +12,74 @@ import { archiveBuffer, archiveText } from "@/lib/archive";
 
 export const maxDuration = 120;
 
-const SYSTEM_PROMPT = `
-你是一位专业的儿科医生与医学化验单智能识别专家。
-请仔细识别并提取用户上传的儿童医学单据图片（如血常规、体检记录单、微量元素、骨密度、过敏原检测、尿常规、大便常规等）。
+const SYSTEM_PROMPT = `你是一位专业的儿科检验解读助手。任务：从化验单/体检报告照片中提取全部信息，并输出严格的标准 JSON 对象，随后（如需记录）输出 action 卡片。
 
-输出必须为严格的标准 JSON 对象，结构如下：
+【提取总则】：
+- 单据上的每一个检测项目都必须提取，一行不漏（血常规通常有 20+ 项）。
+- 所有的 date 字段必须严格为标准 "YYYY-MM-DD"；startTime / endTime 为 24小时制 "HH:mm"。
+- 数值字段为纯数字，不带单位；单位单独放 unit 字段。
+
+【items[].referenceRange 参考区间 —— 最高优先级】：
+1. 单据上几乎都印有「参考区间/参考范围」列——必须逐项原样提取（如 "4.0-10.0"、"120-160"）。
+2. 若某项单据确实未印参考区间，你必须按中国儿科通用参考值填入并在末尾追加 "(通用)"，例如 "3.5-9.5 (通用)"。
+3. 禁止任何一项的 referenceRange 为空字符串或缺失。
+
+【items[].interpretation 逐项解读】：
+- status 为 high / low / abnormal 的项必填 1~2 句：实测值与参考区间的对比 + 该月龄婴幼儿最常见的 2~3 种可能原因（先讲常见的良性情况如生理性变化、采血时哭闹血液浓缩，再提需要警惕的情况）。
+- normal 项可写 "" 或一句"在参考范围内"。
+
+【aiSummary 综合解读——要求详细，不少于 250 字，按以下结构】：
+1. 总体印象：整体如何、有无需重点关注的项目。
+2. 异常项逐条展开：「实测值 vs 参考区间」+ 该月龄常见可能原因至少 2 种（先良性后警惕）+ 建议动作。
+3. 正常项一句话汇总带过。
+4. 复查与就医建议：明确到多久后复查什么项目、出现什么症状挂哪个科。
+5. 固定结尾："以上分析仅供家长参考，不能替代医生面诊；如宝宝有发热、精神差等症状请及时就医。"
+
+【多事件规则（非常重要）】：家长经常一次性口述多件事，例如「刚才十二点半睡了四十分钟，下午三点醒了，醒来喝了150ml奶」。此时必须把每件事分别输出为独立的 \`\`\`json:action 块（本例应为：1个 sleep + 1个 feeding），多个块连续排列即可，禁止合并成一条记录，也禁止遗漏任何一件明确提到的事。时间不明确的字段留空让家长在卡片里补填。
+
+【支持的 Action 类型及数据结构如下】：
+
+1. 化验单 / 体检报告单据 (medical_report)：
+\`\`\`json:action
 {
-  "title": "单据名称，如：末梢血常规化验单 / 6月龄儿童保健体检表 / 微量元素五项检测报告",
-  "category": "blood | growth | trace_element | allergy | general",
-  "date": "YYYY-MM-DD (若无年份则推断合理年份或留空)",
-  "hospital": "医院或机构名称",
-  "doctorNotes": "报告单上医生填写的诊断、体格评价或处理建议",
-  "aiSummary": "结合婴儿各月龄临床标准的简要通俗解读与家长注意事项（100字以内）",
-  "growthData": {
-    "weightKg": 数字或null,
-    "heightCm": 数字或null,
-    "headCircumferenceCm": 数字或null
-  },
-  "items": [
-    {
-      "name": "指标全称 (如 白细胞计数 / 血红蛋白 / 身高)",
-      "value": "数值字符串，如 11.2 或 125",
-      "unit": "单位 (如 10^9/L, g/L, cm, kg)",
-      "refRange": "参考区间字符串 (如 4.0-10.0 或 110-160)",
-      "status": "normal | high | low | abnormal",
-      "hint": "简明通俗临床意义说明 (20字以内)"
-    }
-  ]
+  "type": "medical_report",
+  "data": {
+    "title": "单据名称",
+    "category": "blood | growth | trace_element | allergy | general",
+    "date": "YYYY-MM-DD",
+    "hospital": "医院名称(可选)",
+    "aiSummary": "按上述要求的详细综合解读",
+    "growthData": { "weightKg": 8.2, "heightCm": 68.5, "headCircumferenceCm": 43.0 },
+    "items": [
+      { "name": "白细胞计数 (WBC)", "value": "6.8", "unit": "10^9/L", "referenceRange": "4.0-10.0", "status": "normal | high | low | abnormal", "interpretation": "异常项必填解读" }
+    ]
+  }
 }
+\`\`\`
 
-【要求】
-1. 只返回标准 JSON，不要附加 markdown 外壳或解释性文字。
-2. 指标状态判定规则：低于参考区间为 low，高于为 high，其他异常为 abnormal，正常为 normal。
-3. 婴幼儿正常血常规白细胞偏高为生理性正常，但如有异常仍需在 hint 里客观标注。
+2. 喂养记录 (feeding)：
+\`\`\`json:action
+{ "type": "feeding", "data": { "type": "breast | formula | bottle_breast | mixed", "amountMl": 150, "durationMinutes": 20, "notes": "备注", "timestamp": "YYYY-MM-DDTHH:mm:ss.000Z" } }
+\`\`\`
+
+3. 睡眠记录 (sleep)：
+\`\`\`json:action
+{ "type": "sleep", "data": { "startTime": "HH:mm", "endTime": "HH:mm", "type": "day | night", "notes": "备注" } }
+\`\`\`
+时间不明确时 startTime/endTime 留空字符串，家长会在卡片上补填。
+
+4. 排便记录 (diaper)：
+\`\`\`json:action
+{ "type": "diaper", "data": { "type": "pee | poop | both", "poopColor": "yellow | green | brown | other", "poopConsistency": "soft | watery | hard | seedy", "notes": "形态备注", "timestamp": "YYYY-MM-DDTHH:mm:ss.000Z" } }
+\`\`\`
+
+5. 生长测量 (growth)：
+\`\`\`json:action
+{ "type": "growth", "data": { "weightKg": 8.2, "heightCm": 68.5, "headCircumferenceCm": 43.0, "date": "YYYY-MM-DD", "notes": "备注" } }
+\`\`\`
+
+注意：如果是普通育儿咨询或闲聊，无需输出 \`\`\`json:action 代码块。
+再次强调：几件事就输出几个独立的 action 块；宁多多拆分，不可合并。
 `;
 
 export async function POST(request: Request) {
@@ -183,7 +218,7 @@ async function runMedicalOcrJob(jobId: string, imageDataUrl: string, savedImageU
           model: AI_CONFIG.visionModel,
           messages,
           temperature: 0.1,
-          max_tokens: 2500,
+          max_tokens: 3500,
           ...(withFormat ? { response_format: { type: "json_object" } } : {}),
         }),
         signal: AbortSignal.timeout(100000),

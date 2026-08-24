@@ -320,3 +320,21 @@ html.dark {
 .dark .text-purple-700 { color: #B9A8EC; }
 .dark .text-purple-600 { color: #A78BE8; }
 .dark .bg-purple-100\/70 { background-color: rgba(90, 70, 140, 0.5); }
+
+/* 化验单指标明细与详情弹窗（blue/red/amber 状态族 + divider 基值） */
+:root { --color-divider: #F0DEE6; }
+.dark .bg-blue-50\/60 { background-color: rgba(27, 39, 64, 0.6); }
+.dark .border-blue-100 { border-color: #2C3A55; }
+.dark .text-blue-800 { color: #B9D4FF; }
+.dark .text-blue-900 { color: #DCEAFF; }
+.dark .bg-red-100 { background-color: #4A232B; }
+.dark .text-red-700 { color: #FFB4B4; }
+.dark .border-red-300 { border-color: #6B2F38; }
+.dark .text-red-600 { color: #FF8A8A; }
+.dark .bg-blue-100 { background-color: #23364F; }
+.dark .text-blue-700 { color: #9CC5FF; }
+.dark .border-blue-300 { border-color: #33517E; }
+.dark .text-blue-600 { color: #8AB8FF; }
+.dark .bg-amber-50 { background-color: #3B2E14; }
+.dark .border-amber-300 { border-color: #6B5420; }
+.dark .text-amber-600 { color: #FFC96B; }
