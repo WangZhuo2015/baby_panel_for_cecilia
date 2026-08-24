@@ -263,3 +263,17 @@ html.dark {
 .dark .bg-amber-50 { background-color: #3B2E14; }
 .dark .text-amber-700 { color: #FFD98A; }
 .dark .border-amber-200 { border-color: #5A4718; }
+
+/* 半透明白变体映射（bg-white/95 等 alpha 修饰符不会被 .bg-white 规则命中） */
+.dark .bg-white\/95 { background-color: rgba(33, 26, 33, 0.95); }
+.dark .bg-white\/90 { background-color: rgba(33, 26, 33, 0.9); }
+.dark .bg-white\/85 { background-color: rgba(33, 26, 33, 0.85); }
+.dark .bg-white\/80 { background-color: rgba(33, 26, 33, 0.8); }
+.dark .bg-white\/70 { background-color: rgba(33, 26, 33, 0.7); }
+.dark .bg-white\/60 { background-color: rgba(33, 26, 33, 0.6); }
+.dark .bg-white\/50 { background-color: rgba(33, 26, 33, 0.5); }
+.dark .bg-white\/40 { background-color: rgba(33, 26, 33, 0.4); }
+.dark .bg-white\/25 { background-color: rgba(33, 26, 33, 0.25); }
+.dark .bg-white\/20 { background-color: rgba(33, 26, 33, 0.2); }
+.dark .bg-white\/15 { background-color: rgba(33, 26, 33, 0.15); }
+.dark .bg-white\/10 { background-color: rgba(33, 26, 33, 0.1); }
