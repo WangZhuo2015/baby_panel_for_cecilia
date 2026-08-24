@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { readFile } from "fs/promises";
+import { readFile, stat } from "fs/promises";
 import { existsSync } from "fs";
 import path from "path";
 
@@ -15,7 +15,7 @@ const MIME_TYPES: Record<string, string> = {
 };
 
 export async function GET(
-  request: NextRequest,
+  _request: NextRequest,
   context: { params: Promise<{ path: string[] }> }
 ) {
   try {
@@ -24,23 +24,33 @@ export async function GET(
       return new NextResponse("Not Found", { status: 404 });
     }
 
-    // Prevent directory traversal
-    const safePath = pathSegments.map((s) => s.replace(/\.\./g, "")).join("/");
-    const filePath = path.join(process.cwd(), "public", "uploads", safePath);
+    const baseUploadDir = path.resolve(process.cwd(), "public", "uploads");
+    const safePath = path.join(...pathSegments);
+    const resolvedPath = path.resolve(baseUploadDir, safePath);
 
-    if (!existsSync(filePath)) {
+    // Prevent directory traversal attacks (verify path is within uploads boundary)
+    if (!resolvedPath.startsWith(baseUploadDir + path.sep)) {
+      return new NextResponse("Forbidden", { status: 403 });
+    }
+
+    if (!existsSync(resolvedPath)) {
       return new NextResponse("File Not Found", { status: 404 });
     }
 
-    const fileBuffer = await readFile(filePath);
-    const ext = path.extname(filePath).toLowerCase();
+    const fileStat = await stat(resolvedPath);
+    if (!fileStat.isFile()) {
+      return new NextResponse("Not Found", { status: 404 });
+    }
+
+    const fileBuffer = await readFile(resolvedPath);
+    const ext = path.extname(resolvedPath).toLowerCase();
     const contentType = MIME_TYPES[ext] || "application/octet-stream";
 
     return new NextResponse(fileBuffer, {
       status: 200,
       headers: {
         "Content-Type": contentType,
-        "Cache-Control": "public, max-age=31536000, immutable",
+        "Cache-Control": "private, max-age=3600",
       },
     });
   } catch (error) {

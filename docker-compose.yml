@@ -9,11 +9,11 @@ services:
     container_name: baby-panel
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "${PORT:-3000}:3000"
     environment:
       - NODE_ENV=production
       - DATABASE_URL=file:/app/data/app.db
-      - JWT_SECRET=${JWT_SECRET:-baby-panel-jwt-secret-key-change-me-in-production-2026}
+      - JWT_SECRET=${JWT_SECRET}
       - AI_BASE_URL=${AI_BASE_URL:-https://api.deepseek.com/v1}
       - AI_API_KEY=${AI_API_KEY}
       - AI_MODEL=${AI_MODEL:-deepseek-chat}

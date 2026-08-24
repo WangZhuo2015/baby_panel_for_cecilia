@@ -1,36 +1,30 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getLocalDateStr, getLocalDayUtcRange } from "@/lib/date";
-import { getAuthSession, getActiveBabyForUser } from "@/lib/auth";
+import { requireAuth, requireBaby } from "@/lib/api-helpers";
 
 export async function GET(request: Request) {
   try {
-    const user = await getAuthSession(request);
-    let babyId: string | undefined;
-    if (user) {
-      const active = await getActiveBabyForUser(user.id);
-      babyId = active?.baby?.id;
-    }
+    const auth = await requireAuth(request);
+    if (auth.errorResponse) return auth.errorResponse;
+    const { user } = auth;
 
     const { searchParams } = new URL(request.url);
     const date = searchParams.get("date") ?? getLocalDateStr();
-    const targetBabyId = searchParams.get("babyId") || babyId;
+    const requestedBabyId = searchParams.get("babyId");
+
+    const babyResult = await requireBaby(user.id, requestedBabyId);
+    if (babyResult.errorResponse) return babyResult.errorResponse;
+    const babyId = babyResult.baby.id;
 
     const { start, end } = getLocalDayUtcRange(date);
     const dayStartMs = new Date(start).getTime();
     const dayEndMs = new Date(end).getTime();
 
-    const feedingWhere: any = { timestamp: { gte: start, lt: end } };
-    const sleepWhere: any = { startTime: { lt: end }, endTime: { gt: start } };
-    const diaperWhere: any = { timestamp: { gte: start, lt: end } };
-    const foodWhere: any = { date };
-
-    if (targetBabyId) {
-      feedingWhere.babyId = targetBabyId;
-      sleepWhere.babyId = targetBabyId;
-      diaperWhere.babyId = targetBabyId;
-      foodWhere.babyId = targetBabyId;
-    }
+    const feedingWhere = { babyId, timestamp: { gte: start, lt: end } };
+    const sleepWhere = { babyId, startTime: { lt: end }, endTime: { gt: start } };
+    const diaperWhere = { babyId, timestamp: { gte: start, lt: end } };
+    const foodWhere = { babyId, date };
 
     // Fetch all records for the given date in parallel
     const [feedingRecords, sleepRecords, diaperRecords, foodLogs] = await Promise.all([

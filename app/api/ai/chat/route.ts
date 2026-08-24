@@ -1,15 +1,12 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { getAuthSession, getActiveBabyForUser } from "@/lib/auth";
+import { requireAuth, requireBaby } from "@/lib/api-helpers";
 
 export const dynamic = "force-dynamic";
 
-const AI_BASE_URL = process.env.AI_BASE_URL || process.env.OPENAI_BASE_URL || "http://127.0.0.1:8642/v1";
-const AI_API_KEY = process.env.AI_API_KEY || process.env.OPENAI_API_KEY || "";
-const AI_MODEL = process.env.AI_MODEL || process.env.OPENAI_MODEL || "hermes-agent";
+import { AI_CONFIG } from "@/lib/config";
 
 function calculateAgeDetail(birthDateStr: string) {
-  const birth = new Date(birthDateStr);
+  const birth = new Date(`${birthDateStr}T00:00:00`);
   const now = new Date();
   let months = (now.getFullYear() - birth.getFullYear()) * 12 + (now.getMonth() - birth.getMonth());
   const birthDateInMonth = birth.getDate();
@@ -136,37 +133,50 @@ const ACTION_PROTOCOL_PROMPT = `
 
 export async function POST(request: Request) {
   try {
-    const user = await getAuthSession(request);
-    const body = await request.json();
+    const auth = await requireAuth(request);
+    if (auth.errorResponse) return auth.errorResponse;
+    const { user } = auth;
+
+    const body = await request.json().catch(() => ({}));
     const { messages, contextType = "general", contextDetail, babyId, image } = body;
 
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
       return NextResponse.json({ error: "消息内容不能为空" }, { status: 400 });
     }
 
-    // Get target baby info
-    let targetBaby = null;
-    if (babyId) {
-      targetBaby = await prisma.baby.findUnique({ where: { id: babyId } });
-    } else if (user) {
-      const active = await getActiveBabyForUser(user.id);
-      targetBaby = active?.baby;
-    }
-    if (!targetBaby) {
-      targetBaby = await prisma.baby.findFirst();
+    if (messages.length > 50) {
+      return NextResponse.json({ error: "消息历史记录过多，请开启新会话" }, { status: 400 });
     }
 
-    const babyName = targetBaby?.nickname || "宝宝";
-    const gender = targetBaby?.gender === "male" ? "男宝宝（小王子）" : "女宝宝（小公主）";
-    const ageInfo = targetBaby?.birthDate ? calculateAgeDetail(targetBaby.birthDate) : null;
-    const gestationalAge = targetBaby?.gestationalAge;
+    let totalChars = 0;
+    for (const m of messages) {
+      if (typeof m.content === "string") {
+        if (m.content.length > 8000) {
+          return NextResponse.json({ error: "单条消息长度不能超过 8000 字符" }, { status: 400 });
+        }
+        totalChars += m.content.length;
+      }
+    }
+    if (totalChars > 30000) {
+      return NextResponse.json({ error: "消息总长度超出限制" }, { status: 400 });
+    }
+
+    // Require and verify baby ownership
+    const babyResult = await requireBaby(user.id, babyId);
+    if (babyResult.errorResponse) return babyResult.errorResponse;
+    const targetBaby = babyResult.baby;
+
+    const babyName = targetBaby.nickname || "宝宝";
+    const gender = targetBaby.gender === "male" ? "男宝宝（小王子）" : "女宝宝（小公主）";
+    const ageInfo = targetBaby.birthDate ? calculateAgeDetail(targetBaby.birthDate) : null;
+    const gestationalAge = targetBaby.gestationalAge;
     const isPreterm = gestationalAge != null && gestationalAge < 37;
 
     const rolePrompt = CONTEXT_ROLE_MAP[contextType] || CONTEXT_ROLE_MAP.general;
 
     let babyContextPrompt = `【当前宝宝档案】\n- 昵称：${babyName}\n- 性别：${gender}`;
     if (ageInfo) {
-      babyContextPrompt += `\n- 当前实际月龄：${ageInfo.label}（出生于 ${targetBaby?.birthDate}）`;
+      babyContextPrompt += `\n- 当前实际月龄：${ageInfo.label}（出生于 ${targetBaby.birthDate}）`;
     }
     if (isPreterm) {
       const corrMonths = Math.max(0, (ageInfo?.months || 0) - Math.round((40 - gestationalAge!) / 4.345));
@@ -187,15 +197,15 @@ ${ACTION_PROTOCOL_PROMPT}
 【回答要求与原则】
 1. 态度温暖亲切、条理清晰，多用通俗生动的比喻，避免晦涩难懂的医学术语。
 2. 建议应紧密结合宝宝当前的具体月龄(${ageInfo?.label || "当前月龄"})，给出具体可实操的方法。
-3. 采用 Markdown 格式排版，多用要点列表（- ）、加粗重点，必要时分为「💡 核心结论」、「📋 实用操作/建议步骤」、「⚠️ 注意事项与就医警示」。
+3. 采用 Markdown 格式排版，多用要点列表（- ），加粗重点，必要时分为「💡 核心结论」、「📋 实用操作/建议步骤」、「⚠️ 注意事项与就医警示」。
 4. 若识别单据或记录，请在文字解读后附带 \`\`\`json:action 代码块。
 5. 恪守安全底线：如涉及高危症状，务必提醒家长及时就医面诊。`;
 
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
     };
-    if (AI_API_KEY) {
-      headers["Authorization"] = `Bearer ${AI_API_KEY}`;
+    if (AI_CONFIG.apiKey) {
+      headers["Authorization"] = `Bearer ${AI_CONFIG.apiKey}`;
     }
 
     // Build payload messages, handling image if present in the latest message
@@ -213,7 +223,7 @@ ${ACTION_PROTOCOL_PROMPT}
       }
       return {
         role: m.role === "assistant" ? "assistant" : "user",
-        content: String(m.content),
+        content: String(m.content || ""),
       };
     });
 
@@ -223,11 +233,11 @@ ${ACTION_PROTOCOL_PROMPT}
     ];
 
     // Call Hermes with stream: true
-    const upstreamRes = await fetch(`${AI_BASE_URL.replace(/\/+$/, "")}/chat/completions`, {
+    const upstreamRes = await fetch(`${AI_CONFIG.baseUrl.replace(/\/+$/, "")}/chat/completions`, {
       method: "POST",
       headers,
       body: JSON.stringify({
-        model: AI_MODEL,
+        model: AI_CONFIG.model,
         messages: payloadMessages,
         max_tokens: 2000,
         temperature: 0.5,

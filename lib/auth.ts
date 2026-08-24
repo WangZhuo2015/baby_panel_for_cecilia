@@ -1,11 +1,11 @@
 import { SignJWT, jwtVerify } from "jose";
 import bcrypt from "bcryptjs";
+import crypto from "crypto";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
+import { getJwtSecretBytes, AUTH_CONFIG } from "@/lib/config";
 
-const JWT_SECRET_STRING = process.env.JWT_SECRET || "baby-panel-jwt-secret-key-change-me-in-production-2026";
-const JWT_SECRET = new TextEncoder().encode(JWT_SECRET_STRING);
-export const AUTH_COOKIE_NAME = "baby_auth_token";
+export const AUTH_COOKIE_NAME = AUTH_CONFIG.cookieName;
 
 export async function hashPassword(password: string): Promise<string> {
   return bcrypt.hash(password, 10);
@@ -19,13 +19,13 @@ export async function signAuthToken(payload: { userId: string; username: string 
   return new SignJWT(payload)
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
-    .setExpirationTime("30d")
-    .sign(JWT_SECRET);
+    .setExpirationTime(AUTH_CONFIG.tokenExpiry)
+    .sign(getJwtSecretBytes());
 }
 
 export async function verifyAuthToken(token: string): Promise<{ userId: string; username: string } | null> {
   try {
-    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const { payload } = await jwtVerify(token, getJwtSecretBytes());
     if (typeof payload.userId === "string" && typeof payload.username === "string") {
       return { userId: payload.userId, username: payload.username };
     }
@@ -39,7 +39,8 @@ export function generateInviteCode(length = 6): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   let code = "";
   for (let i = 0; i < length; i++) {
-    code += chars.charAt(Math.floor(Math.random() * chars.length));
+    const randomIndex = crypto.randomInt(0, chars.length);
+    code += chars.charAt(randomIndex);
   }
   return code;
 }

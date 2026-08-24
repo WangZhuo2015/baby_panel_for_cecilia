@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
@@ -200,10 +200,157 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  const messagesRef = useRef<Message[]>(messages);
+  messagesRef.current = messages;
+  const inputTextRef = useRef(inputText);
+  inputTextRef.current = inputText;
+  const selectedImageRef = useRef(selectedImage);
+  selectedImageRef.current = selectedImage;
+  const loadingRef = useRef(loading);
+  loadingRef.current = loading;
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
+
+  const handleSend = useCallback(
+    async (textToSend?: string) => {
+      const query = (textToSend || inputTextRef.current).trim();
+      const currentImg = selectedImageRef.current;
+      if ((!query && !currentImg) || loadingRef.current) return;
+
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
+
+      const userMsg: Message = {
+        id: `user_${Date.now()}`,
+        role: "user",
+        content: query || (currentImg ? "请帮我结构化识别这张单据并提供儿科解读" : ""),
+        image: currentImg || undefined,
+        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      };
+
+      const aiMsgId = `ai_${Date.now()}`;
+      const initialAiMsg: Message = {
+        id: aiMsgId,
+        role: "assistant",
+        content: "",
+        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        isStreaming: true,
+      };
+
+      setMessages((prev) => [...prev, userMsg, initialAiMsg]);
+      setInputText("");
+      setSelectedImage(null);
+      setLoading(true);
+
+      try {
+        const history = messagesRef.current
+          .filter((m) => m.id !== "welcome")
+          .map((m) => ({ role: m.role, content: m.content }));
+
+        const res = await fetch("/api/ai/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          signal: controller.signal,
+          body: JSON.stringify({
+            messages: [
+              ...history,
+              {
+                role: "user",
+                content: query || "请帮我结构化识别这张单据并提供儿科解读",
+              },
+            ],
+            contextType,
+            contextDetail,
+            babyId: baby?.id,
+            image: currentImg,
+          }),
+        });
+
+        if (!res.body) {
+          throw new Error("No response stream");
+        }
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let accumulatedText = "";
+        let buffer = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() || "";
+
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed || trimmed.startsWith(":")) continue;
+
+            if (trimmed === "data: [DONE]") {
+              break;
+            }
+
+            if (trimmed.startsWith("data: ")) {
+              try {
+                const data = JSON.parse(trimmed.slice(6));
+                if (data.text) {
+                  accumulatedText += data.text;
+                  setMessages((prev) =>
+                    prev.map((msg) =>
+                      msg.id === aiMsgId
+                        ? { ...msg, content: accumulatedText, isStreaming: true }
+                        : msg
+                    )
+                  );
+                }
+              } catch {
+                // Partial JSON, ignore
+              }
+            }
+          }
+        }
+
+        // Mark streaming finished
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === aiMsgId
+              ? {
+                  ...msg,
+                  content: accumulatedText || "未能获取有效回复，请重试。",
+                  isStreaming: false,
+                }
+              : msg
+          )
+        );
+      } catch (err: unknown) {
+        if (err instanceof Error && err.name === "AbortError") {
+          return;
+        }
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === aiMsgId
+              ? {
+                  ...msg,
+                  content: "网络连接暂时超时，请稍后重新提问。若宝宝身体有明显不适，请以专业医生诊断为准。",
+                  isStreaming: false,
+                }
+              : msg
+          )
+        );
+      } finally {
+        setLoading(false);
+      }
+    },
+    [contextType, contextDetail, baby?.id]
+  );
 
   useEffect(() => {
     if (isOpen) {
@@ -223,7 +370,23 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
       }
       setTimeout(() => inputRef.current?.focus(), 150);
     }
+  }, [isOpen, messages.length, baby?.nickname, age.label, displayTitle, initialPrompt, handleSend]);
+
+  useEffect(() => {
+    if (!isOpen && abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
   }, [isOpen]);
+
+  useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (isOpen) {
@@ -260,130 +423,6 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
     } finally {
       setUploadingImage(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
-    }
-  };
-
-  const handleSend = async (textToSend?: string) => {
-    const query = (textToSend || inputText).trim();
-    const currentImg = selectedImage;
-    if ((!query && !currentImg) || loading) return;
-
-    const userMsg: Message = {
-      id: `user_${Date.now()}`,
-      role: "user",
-      content: query || (currentImg ? "请帮我结构化识别这张单据并提供儿科解读" : ""),
-      image: currentImg || undefined,
-      timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-    };
-
-    const aiMsgId = `ai_${Date.now()}`;
-    const initialAiMsg: Message = {
-      id: aiMsgId,
-      role: "assistant",
-      content: "",
-      timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-      isStreaming: true,
-    };
-
-    setMessages((prev) => [...prev, userMsg, initialAiMsg]);
-    setInputText("");
-    setSelectedImage(null);
-    setLoading(true);
-
-    try {
-      const history = messages
-        .filter((m) => m.id !== "welcome")
-        .map((m) => ({ role: m.role, content: m.content }));
-
-      const res = await fetch("/api/ai/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          messages: [
-            ...history,
-            {
-              role: "user",
-              content: query || "请帮我结构化识别这张单据并提供儿科解读",
-            },
-          ],
-          contextType,
-          contextDetail,
-          babyId: baby?.id,
-          image: currentImg,
-        }),
-      });
-
-      if (!res.body) {
-        throw new Error("No response stream");
-      }
-
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let accumulatedText = "";
-      let buffer = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || "";
-
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (!trimmed || trimmed.startsWith(":")) continue;
-
-          if (trimmed === "data: [DONE]") {
-            break;
-          }
-
-          if (trimmed.startsWith("data: ")) {
-            try {
-              const data = JSON.parse(trimmed.slice(6));
-              if (data.text) {
-                accumulatedText += data.text;
-                setMessages((prev) =>
-                  prev.map((msg) =>
-                    msg.id === aiMsgId
-                      ? { ...msg, content: accumulatedText, isStreaming: true }
-                      : msg
-                  )
-                );
-              }
-            } catch {
-              // Partial JSON, ignore
-            }
-          }
-        }
-      }
-
-      // Mark streaming finished
-      setMessages((prev) =>
-        prev.map((msg) =>
-          msg.id === aiMsgId
-            ? {
-                ...msg,
-                content: accumulatedText || "未能获取有效回复，请重试。",
-                isStreaming: false,
-              }
-            : msg
-        )
-      );
-    } catch (e: any) {
-      setMessages((prev) =>
-        prev.map((msg) =>
-          msg.id === aiMsgId
-            ? {
-                ...msg,
-                content: "网络连接暂时超时，请稍后重新提问。若宝宝身体有明显不适，请以专业医生诊断为准。",
-                isStreaming: false,
-              }
-            : msg
-        )
-      );
-    } finally {
-      setLoading(false);
     }
   };
 

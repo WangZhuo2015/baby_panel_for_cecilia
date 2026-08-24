@@ -4,5 +4,9 @@ node_modules
 .next
 *.log
 .env
+.env*
+*.local
+scratch/
+docs/
 dev.db
 dev.db-journal

@@ -1,23 +1,28 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getAuthSession, getActiveBabyForUser } from "@/lib/auth";
+import { requireAuth, requireBaby, getActiveBaby } from "@/lib/api-helpers";
+import { getLocalDayUtcRange } from "@/lib/date";
 
 export async function GET(request: Request) {
   try {
-    const user = await getAuthSession(request);
-    let babyId: string | undefined;
-    if (user) {
-      const active = await getActiveBabyForUser(user.id);
-      babyId = active?.baby?.id;
-    }
+    const auth = await requireAuth(request);
+    if (auth.errorResponse) return auth.errorResponse;
+    const { user } = auth;
 
     const { searchParams } = new URL(request.url);
+    const requestedBabyId = searchParams.get("babyId");
     const date = searchParams.get("date");
-    const targetBabyId = searchParams.get("babyId") || babyId;
 
-    const where: any = {};
-    if (targetBabyId) where.babyId = targetBabyId;
-    if (date) where.timestamp = { startsWith: date };
+    const babyResult = await requireBaby(user.id, requestedBabyId);
+    if (babyResult.errorResponse) return babyResult.errorResponse;
+
+    const where: any = { babyId: babyResult.baby.id };
+    if (date) {
+      const { start, end } = getLocalDayUtcRange(date);
+      if (start && end) {
+        where.timestamp = { gte: start, lt: end };
+      }
+    }
 
     const records = await prisma.feedingRecord.findMany({
       where,
@@ -36,20 +41,24 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const user = await getAuthSession(request);
-    let babyId: string | undefined;
-    if (user) {
-      const active = await getActiveBabyForUser(user.id);
-      babyId = active?.baby?.id;
-    }
+    const auth = await requireAuth(request);
+    if (auth.errorResponse) return auth.errorResponse;
+    const { user } = auth;
 
-    const body = await request.json();
-    const { babyId: reqBabyId, timestamp, type, amountMl, leftMinutes, rightMinutes, spitUp, notes } = body;
+    const body = await request.json().catch(() => ({}));
+    const {
+      babyId: reqBabyId,
+      timestamp,
+      type,
+      amountMl,
+      leftMinutes,
+      rightMinutes,
+      spitUp,
+      notes,
+    } = body;
 
-    const finalBabyId = reqBabyId || babyId || (await prisma.baby.findFirst())?.id;
-    if (!finalBabyId) {
-      return NextResponse.json({ error: "未找到宝宝档案，请先创建宝宝信息" }, { status: 400 });
-    }
+    const babyResult = await requireBaby(user.id, reqBabyId);
+    if (babyResult.errorResponse) return babyResult.errorResponse;
 
     const validTypes = ["breast", "formula", "bottle_breast", "mixed", "solid"];
     if (!type || !validTypes.includes(type)) {
@@ -59,15 +68,60 @@ export async function POST(request: Request) {
       );
     }
 
+    let parsedAmountMl: number | null = null;
+    if (amountMl !== undefined && amountMl !== null && amountMl !== "") {
+      parsedAmountMl = Number(amountMl);
+      if (Number.isNaN(parsedAmountMl) || parsedAmountMl < 0 || parsedAmountMl > 3000) {
+        return NextResponse.json(
+          { error: "amountMl 必须为 0-3000 之间的有效数值" },
+          { status: 400 }
+        );
+      }
+    }
+
+    let parsedLeft: number | null = null;
+    if (leftMinutes !== undefined && leftMinutes !== null && leftMinutes !== "") {
+      parsedLeft = Number(leftMinutes);
+      if (Number.isNaN(parsedLeft) || parsedLeft < 0 || parsedLeft > 180) {
+        return NextResponse.json(
+          { error: "leftMinutes 必须为 0-180 之间的有效数值" },
+          { status: 400 }
+        );
+      }
+    }
+
+    let parsedRight: number | null = null;
+    if (rightMinutes !== undefined && rightMinutes !== null && rightMinutes !== "") {
+      parsedRight = Number(rightMinutes);
+      if (Number.isNaN(parsedRight) || parsedRight < 0 || parsedRight > 180) {
+        return NextResponse.json(
+          { error: "rightMinutes 必须为 0-180 之间的有效数值" },
+          { status: 400 }
+        );
+      }
+    }
+
+    let recordTimestamp = new Date().toISOString();
+    if (timestamp) {
+      const parsedTime = new Date(timestamp);
+      if (Number.isNaN(parsedTime.getTime())) {
+        return NextResponse.json(
+          { error: "timestamp 格式无效" },
+          { status: 400 }
+        );
+      }
+      recordTimestamp = parsedTime.toISOString();
+    }
+
     const record = await prisma.feedingRecord.create({
       data: {
-        babyId: finalBabyId,
-        recordedById: user?.id ?? null,
-        timestamp: timestamp || new Date().toISOString(),
+        babyId: babyResult.baby.id,
+        recordedById: user.id,
+        timestamp: recordTimestamp,
         type,
-        amountMl: amountMl ? Number(amountMl) : null,
-        leftMinutes: leftMinutes ? Number(leftMinutes) : null,
-        rightMinutes: rightMinutes ? Number(rightMinutes) : null,
+        amountMl: parsedAmountMl,
+        leftMinutes: parsedLeft,
+        rightMinutes: parsedRight,
         spitUp: Boolean(spitUp),
         notes: notes ? String(notes).trim() : null,
       },
@@ -78,6 +132,56 @@ export async function POST(request: Request) {
     console.error("POST /api/records/feeding error:", error);
     return NextResponse.json(
       { error: "Failed to create feeding record" },
+      { status: 500 }
+    );
+  }
+}
+
+export async function DELETE(request: Request) {
+  try {
+    const auth = await requireAuth(request);
+    if (auth.errorResponse) return auth.errorResponse;
+    const { user } = auth;
+
+    const { searchParams } = new URL(request.url);
+    let id = searchParams.get("id");
+
+    if (!id) {
+      const body = await request.json().catch(() => ({}));
+      id = body?.id;
+    }
+
+    if (!id || typeof id !== "string") {
+      return NextResponse.json(
+        { error: "请提供要删除的记录 ID" },
+        { status: 400 }
+      );
+    }
+
+    const record = await prisma.feedingRecord.findUnique({
+      where: { id },
+    });
+
+    if (!record) {
+      return NextResponse.json(
+        { error: "未找到指定的喂养记录" },
+        { status: 404 }
+      );
+    }
+
+    // Verify ownership of the baby associated with the record
+    const babyCheck = await getActiveBaby(user.id, record.babyId);
+    if (babyCheck.errorResponse) return babyCheck.errorResponse;
+
+    await prisma.feedingRecord.delete({
+      where: { id },
+    });
+
+    return NextResponse.json({ success: true, id });
+  } catch (error) {
+    console.error("DELETE /api/records/feeding error:", error);
+    return NextResponse.json(
+      { error: "Failed to delete feeding record" },
       { status: 500 }
     );
   }

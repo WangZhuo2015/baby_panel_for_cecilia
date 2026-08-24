@@ -1,12 +1,24 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireAuth, requireBaby } from "@/lib/api-helpers";
+import { safeJsonParse } from "@/lib/json";
 
 export async function GET(request: Request) {
   try {
+    const auth = await requireAuth(request);
+    if (auth.errorResponse) return auth.errorResponse;
+    const { user } = auth;
+
     const { searchParams } = new URL(request.url);
     const date = searchParams.get("date");
+    const requestedBabyId = searchParams.get("babyId");
 
-    const where = date ? { date } : {};
+    const babyResult = await requireBaby(user.id, requestedBabyId);
+    if (babyResult.errorResponse) return babyResult.errorResponse;
+    const babyId = babyResult.baby.id;
+
+    const where: any = { babyId };
+    if (date) where.date = date;
 
     const plans = await prisma.foodPlan.findMany({
       where,
@@ -27,13 +39,5 @@ export async function GET(request: Request) {
       { error: "Failed to fetch food plans" },
       { status: 500 }
     );
-  }
-}
-
-function safeJsonParse<T>(str: string, fallback: T): T {
-  try {
-    return JSON.parse(str);
-  } catch {
-    return fallback;
   }
 }

@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
+import { PUSH_CONFIG } from "@/lib/config";
 
 export async function GET() {
-  const publicKey = process.env.VAPID_PUBLIC_KEY;
+  const publicKey = PUSH_CONFIG.publicKey;
 
   if (!publicKey) {
     return NextResponse.json(

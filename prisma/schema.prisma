@@ -43,6 +43,8 @@ model FamilyMember {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([familyId, userId])
+  @@index([userId])
+  @@index([familyId])
 }
 
 // ─── Core Baby Tracking Models ──────────────────────────────────────────────
@@ -82,6 +84,8 @@ model FeedingRecord {
   spitUp       Boolean  @default(false)
   notes        String?
   createdAt    DateTime @default(now())
+
+  @@index([babyId, timestamp])
 }
 
 model SleepRecord {
@@ -95,6 +99,8 @@ model SleepRecord {
   nightWakingCount Int      @default(0)
   notes            String?
   createdAt        DateTime @default(now())
+
+  @@index([babyId, startTime])
 }
 
 model DiaperRecord {
@@ -108,6 +114,8 @@ model DiaperRecord {
   poopConsistency String?  // loose, paste, formed
   notes           String?
   createdAt       DateTime @default(now())
+
+  @@index([babyId, timestamp])
 }
 
 model GrowthMeasurement {
@@ -124,6 +132,8 @@ model GrowthMeasurement {
   percentile          Int?
   imageUrl            String?
   createdAt           DateTime @default(now())
+
+  @@index([babyId, date])
 }
 
 model MedicalReport {
@@ -159,6 +169,8 @@ model FoodLogRecord {
   hasAbnormal   Boolean  @default(false)
   abnormalNotes String?
   createdAt     DateTime @default(now())
+
+  @@index([babyId, date])
 }
 
 // ─── Family Status for Shared Knowledge (Foods & Books) ─────────────────────
@@ -477,6 +489,8 @@ model FoodPlan {
   ingredients String   // JSON array
   steps       String   // JSON array
   createdAt   DateTime @default(now())
+
+  @@index([babyId, date])
 }
 
 // ─── Family Vaccine Record (actual completed/scheduled record for baby) ─────
@@ -491,6 +505,8 @@ model VaccineRecord {
   completedDate String?
   isCompleted   Boolean  @default(false)
   countdownDays Int?
+
+  @@index([babyId, scheduledDate])
 }
 
 // ─── Family Vaccine Selection (which optional vaccines the family chooses) ──

@@ -37,6 +37,9 @@
   ],
   "exclude": [
     "node_modules",
-    "server"
+    "server",
+    "scratch",
+    ".next",
+    "dist"
   ]
 }

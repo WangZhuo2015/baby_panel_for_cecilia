@@ -3,11 +3,6 @@
 import React, { useState } from "react";
 import {
   CheckCircle2,
-  FileText,
-  Utensils,
-  Moon,
-  Droplets,
-  TrendingUp,
   Hospital,
   Calendar,
   AlertTriangle,
@@ -15,8 +10,6 @@ import {
   Loader2,
   ArrowRight,
   Edit2,
-  Save,
-  RotateCcw,
 } from "lucide-react";
 import { useToast } from "@/components/ui/Toast";
 import { useBabyStore } from "@/stores/useBabyStore";

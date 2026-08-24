@@ -14,6 +14,38 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 
 const BASE_URL = process.env.BABY_PANEL_URL || "http://127.0.0.1:3088";
+const TOKEN = process.env.BABY_PANEL_TOKEN || process.env.JWT_TOKEN || "";
+
+/**
+ * Helper to perform authenticated API calls with token and helpful 401 error message.
+ */
+async function apiFetch(path, options = {}) {
+  const url = `${BASE_URL.replace(/\/+$/, "")}${path.startsWith("/") ? "" : "/"}${path}`;
+  const headers = { ...(options.headers || {}) };
+
+  if (TOKEN) {
+    headers["Authorization"] = `Bearer ${TOKEN}`;
+  }
+
+  const res = await fetch(url, {
+    ...options,
+    headers,
+  });
+
+  if (res.status === 401) {
+    if (!TOKEN) {
+      throw new Error(
+        `API 返回 401 未授权 (Unauthorized)。请配置环境变量 BABY_PANEL_TOKEN (或 JWT_TOKEN) 以提供有效的身份认证 Token。`
+      );
+    } else {
+      throw new Error(
+        `API 返回 401 未授权 (Unauthorized)。所配置的 BABY_PANEL_TOKEN/JWT_TOKEN 可能已过期或无效。`
+      );
+    }
+  }
+
+  return res;
+}
 
 const server = new Server(
   {
@@ -251,7 +283,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   try {
     if (name === "get_baby_profile") {
-      const res = await fetch(`${BASE_URL}/api/baby`);
+      const res = await apiFetch("/api/baby");
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       return {
@@ -261,7 +293,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
     if (name === "get_daily_summary") {
       const dateParam = args.date ? `?date=${args.date}` : "";
-      const res = await fetch(`${BASE_URL}/api/records/daily-summary${dateParam}`);
+      const res = await apiFetch(`/api/records/daily-summary${dateParam}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       return {
@@ -270,7 +302,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
 
     if (name === "record_feeding") {
-      const res = await fetch(`${BASE_URL}/api/records/feeding`, {
+      const res = await apiFetch("/api/records/feeding", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(args),
@@ -288,7 +320,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
 
     if (name === "record_sleep") {
-      const res = await fetch(`${BASE_URL}/api/records/sleep`, {
+      const res = await apiFetch("/api/records/sleep", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(args),
@@ -306,7 +338,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
 
     if (name === "record_diaper") {
-      const res = await fetch(`${BASE_URL}/api/records/diaper`, {
+      const res = await apiFetch("/api/records/diaper", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(args),
@@ -324,7 +356,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
 
     if (name === "record_growth") {
-      const res = await fetch(`${BASE_URL}/api/growth`, {
+      const res = await apiFetch("/api/growth", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(args),
@@ -342,7 +374,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
 
     if (name === "get_vaccine_schedule") {
-      const res = await fetch(`${BASE_URL}/api/vaccines`);
+      const res = await apiFetch("/api/vaccines");
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       return {
         content: [{ type: "text", text: JSON.stringify(data, null, 2) }],
@@ -350,7 +383,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
 
     if (name === "save_medical_report") {
-      const res = await fetch(`${BASE_URL}/api/medical/reports`, {
+      const res = await apiFetch("/api/medical/reports", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(args),

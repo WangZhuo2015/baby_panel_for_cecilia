@@ -1,7 +1,8 @@
-// Service Worker – PWA lifecycle + Push notifications
-// Cache version: bump when deploying a new version
+// Service Worker – PWA lifecycle + Multi-strategy Caching + Push notifications
 const CACHE_VERSION = 'v1.1.0';
 const STATIC_CACHE = `static-${CACHE_VERSION}`;
+const IMMUTABLE_CACHE = `immutable-${CACHE_VERSION}`;
+const MEDIA_CACHE = `media-${CACHE_VERSION}`;
 const OFFLINE_URL = '/offline.html';
 
 // Assets to pre-cache during install
@@ -11,7 +12,11 @@ const PRECACHE_ASSETS = [
   '/icon-192.png',
   '/icon-512.png',
   '/apple-touch-icon.png',
+  '/icon.svg',
+  '/icons.svg',
 ];
+
+const VALID_CACHES = [STATIC_CACHE, IMMUTABLE_CACHE, MEDIA_CACHE];
 
 // Handle direct message to skip waiting
 self.addEventListener('message', (event) => {
@@ -39,7 +44,7 @@ self.addEventListener('activate', (event) => {
       .then((keys) =>
         Promise.all(
           keys
-            .filter((key) => key !== STATIC_CACHE)
+            .filter((key) => !VALID_CACHES.includes(key))
             .map((key) => caches.delete(key))
         )
       )
@@ -47,7 +52,7 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// ===== Fetch =====
+// ===== Fetch Strategies =====
 
 self.addEventListener('fetch', (event) => {
   const { request } = event;
@@ -58,18 +63,81 @@ self.addEventListener('fetch', (event) => {
   // Skip cross-origin requests
   if (!request.url.startsWith(self.location.origin)) return;
 
-  // Navigation requests (HTML pages) → network-first with offline fallback
+  const url = new URL(request.url);
+  const pathname = url.pathname;
+
+  // 1. Navigation requests (HTML pages) → Network-First with Cache / offline fallback
   if (request.mode === 'navigate') {
     event.respondWith(
-      fetch(request).catch(() => caches.match(OFFLINE_URL))
+      fetch(request)
+        .then((response) => {
+          if (response.ok) {
+            const copy = response.clone();
+            caches.open(STATIC_CACHE).then((cache) => cache.put(request, copy));
+          }
+          return response;
+        })
+        .catch(async () => {
+          const cached = await caches.match(request);
+          if (cached) return cached;
+          return caches.match(OFFLINE_URL);
+        })
     );
     return;
   }
 
-  // Static assets (JS, CSS, images, fonts) → network-first, no caching
-  // We intentionally do NOT cache these so the app always gets fresh
-  // content from the server. The SW's role here is to ensure it doesn't
-  // block requests by simply passing them through.
+  // 2. Next.js static immutable chunks / styles (/_next/static/*) → Cache-First with Network fallback
+  if (pathname.startsWith('/_next/static/')) {
+    event.respondWith(
+      caches.match(request).then((cachedResponse) => {
+        if (cachedResponse) {
+          return cachedResponse;
+        }
+        return fetch(request).then((networkResponse) => {
+          if (networkResponse.ok) {
+            const copy = networkResponse.clone();
+            caches.open(IMMUTABLE_CACHE).then((cache) => cache.put(request, copy));
+          }
+          return networkResponse;
+        });
+      })
+    );
+    return;
+  }
+
+  // 3. Static media, icons, and images (/icons/*, /images/*, images) → Stale-While-Revalidate
+  const isStaticImage =
+    pathname.startsWith('/icons/') ||
+    pathname.startsWith('/images/') ||
+    pathname === '/favicon.svg' ||
+    pathname.endsWith('.png') ||
+    pathname.endsWith('.svg') ||
+    pathname.endsWith('.jpg') ||
+    pathname.endsWith('.jpeg') ||
+    pathname.endsWith('.webp') ||
+    pathname.endsWith('.ico');
+
+  if (isStaticImage && !pathname.startsWith('/api/')) {
+    event.respondWith(
+      caches.open(MEDIA_CACHE).then((cache) => {
+        return cache.match(request).then((cachedResponse) => {
+          const fetchPromise = fetch(request)
+            .then((networkResponse) => {
+              if (networkResponse.ok) {
+                cache.put(request, networkResponse.clone());
+              }
+              return networkResponse;
+            })
+            .catch(() => cachedResponse);
+
+          return cachedResponse || fetchPromise;
+        });
+      })
+    );
+    return;
+  }
+
+  // 4. Default: Network with cache fallback
   event.respondWith(
     fetch(request).catch(() => caches.match(request))
   );

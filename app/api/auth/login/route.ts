@@ -5,6 +5,7 @@ import {
   signAuthToken,
   AUTH_COOKIE_NAME,
 } from "@/lib/auth";
+import { config, AUTH_CONFIG } from "@/lib/config";
 
 export async function POST(request: Request) {
   try {
@@ -80,10 +81,10 @@ export async function POST(request: Request) {
       name: AUTH_COOKIE_NAME,
       value: token,
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
+      secure: config.isProduction,
       sameSite: "lax",
       path: "/",
-      maxAge: 30 * 24 * 60 * 60,
+      maxAge: AUTH_CONFIG.cookieMaxAge,
     });
 
     return response;

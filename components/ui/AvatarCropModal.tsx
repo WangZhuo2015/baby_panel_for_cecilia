@@ -22,7 +22,6 @@ export const AvatarCropModal: React.FC<AvatarCropModalProps> = ({
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [initialDistance, setInitialDistance] = useState<number | null>(null);
-  const [imageNaturalSize, setImageNaturalSize] = useState({ width: 0, height: 0 });
 
   const containerRef = useRef<HTMLDivElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
@@ -40,7 +39,6 @@ export const AvatarCropModal: React.FC<AvatarCropModalProps> = ({
   // Handle natural image load
   const handleImageLoad = (e: React.SyntheticEvent<HTMLImageElement>) => {
     const img = e.currentTarget;
-    setImageNaturalSize({ width: img.naturalWidth, height: img.naturalHeight });
     // Fit smallest side to crop size
     const minDim = Math.min(img.naturalWidth, img.naturalHeight);
     const initialScale = minDim > 0 ? Math.max(1, (CROP_SIZE * 1.2) / minDim) : 1;
@@ -164,7 +162,7 @@ export const AvatarCropModal: React.FC<AvatarCropModalProps> = ({
       "image/jpeg",
       0.92
     );
-  }, [position, scale, onCropComplete]);
+  }, [position, onCropComplete]);
 
   if (!isOpen || !imageSrc) return null;
 

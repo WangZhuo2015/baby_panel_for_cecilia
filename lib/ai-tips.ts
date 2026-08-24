@@ -1,19 +1,8 @@
 import { prisma } from "@/lib/prisma";
+import { calculateAge } from "@/lib/age";
+import { AI_CONFIG } from "@/lib/config";
 
-const AI_BASE_URL = process.env.AI_BASE_URL || process.env.OPENAI_BASE_URL || "https://api.openai.com/v1";
-const AI_API_KEY = process.env.AI_API_KEY || process.env.OPENAI_API_KEY || "";
-const AI_MODEL = process.env.AI_MODEL || process.env.OPENAI_MODEL || "deepseek-chat";
-
-function getAgeMonths(birthDate: string): number {
-  const birth = new Date(birthDate);
-  const now = new Date();
-  const months =
-    (now.getFullYear() - birth.getFullYear()) * 12 +
-    (now.getMonth() - birth.getMonth());
-  return Number.isNaN(months) ? 6 : Math.max(0, months);
-}
-
-function getCuratedTips(ageMonths: number, nickname: string, genderWord: string): string[] {
+function getCuratedTips(ageMonths: number, nickname: string, _genderWord: string): string[] {
   if (ageMonths <= 1) {
     return [
       `${nickname}当前处于新生儿期，按需喂养为主，每次喂奶后记得竖抱轻拍嗝防止吐奶。`,
@@ -72,12 +61,12 @@ export async function getAiTips(babyId?: string): Promise<string[]> {
     throw new Error("尚未创建宝宝档案，请先完善宝宝信息");
   }
 
-  const ageMonths = getAgeMonths(baby.birthDate);
+  const ageMonths = calculateAge(baby.birthDate).months;
   const nickname = baby.nickname || "宝宝";
   const genderWord = baby.gender === "male" ? "男" : "女";
 
   // If no AI API key is configured, return professional curated pediatric tips directly
-  if (!AI_API_KEY) {
+  if (!AI_CONFIG.apiKey) {
     return getCuratedTips(ageMonths, nickname, genderWord);
   }
 
@@ -99,15 +88,15 @@ export async function getAiTips(babyId?: string): Promise<string[]> {
 
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
-    Authorization: `Bearer ${AI_API_KEY}`,
+    Authorization: `Bearer ${AI_CONFIG.apiKey}`,
   };
 
   try {
-    const res = await fetch(`${AI_BASE_URL.replace(/\/+$/, "")}/chat/completions`, {
+    const res = await fetch(`${AI_CONFIG.baseUrl.replace(/\/+$/, "")}/chat/completions`, {
       method: "POST",
       headers,
       body: JSON.stringify({
-        model: AI_MODEL,
+        model: AI_CONFIG.model,
         messages: [
           { role: "system", content: systemPrompt },
           {
@@ -159,4 +148,3 @@ export async function getAiTips(babyId?: string): Promise<string[]> {
     return getCuratedTips(ageMonths, nickname, genderWord);
   }
 }
-

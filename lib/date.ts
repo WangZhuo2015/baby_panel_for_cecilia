@@ -16,9 +16,22 @@ function partsInTz(
   return map;
 }
 
+/** Validate whether a date string is a valid calendar date in YYYY-MM-DD format */
+export function isValidDateStr(dateStr: string): boolean {
+  if (typeof dateStr !== "string" || !/^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/.test(dateStr)) {
+    return false;
+  }
+  const [year, month, day] = dateStr.split("-").map(Number);
+  const parsed = new Date(`${dateStr}T00:00:00+08:00`);
+  if (Number.isNaN(parsed.getTime())) return false;
+  const parts = partsInTz(parsed, { year: "numeric", month: "2-digit", day: "2-digit" });
+  return Number(parts.year) === year && Number(parts.month) === month && Number(parts.day) === day;
+}
+
 /** Local (Asia/Shanghai) date as YYYY-MM-DD. */
-export function getLocalDateStr(date = new Date()): string {
-  const p = partsInTz(date, {
+export function getLocalDateStr(date: Date = new Date()): string {
+  const validDate = date instanceof Date && !Number.isNaN(date.getTime()) ? date : new Date();
+  const p = partsInTz(validDate, {
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
@@ -28,7 +41,8 @@ export function getLocalDateStr(date = new Date()): string {
 
 /** Local (Asia/Shanghai) time as HH:MM (24h). */
 export function getLocalTimeStr(date = new Date()): string {
-  const p = partsInTz(date, {
+  const validDate = date instanceof Date && !Number.isNaN(date.getTime()) ? date : new Date();
+  const p = partsInTz(validDate, {
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
@@ -38,6 +52,7 @@ export function getLocalTimeStr(date = new Date()): string {
 
 /** Format an ISO timestamp as local (Asia/Shanghai) HH:MM. */
 export function formatIsoToLocalTime(iso: string): string {
+  if (!iso) return "";
   const parsed = new Date(iso);
   if (Number.isNaN(parsed.getTime())) return "";
   return getLocalTimeStr(parsed);
@@ -51,6 +66,9 @@ export function getLocalDayUtcRange(dayStr: string): {
   start: string;
   end: string;
 } {
+  if (!dayStr || !isValidDateStr(dayStr)) {
+    return { start: "", end: "" };
+  }
   const start = new Date(`${dayStr}T00:00:00+08:00`).getTime();
   if (Number.isNaN(start)) {
     return { start: "", end: "" };
@@ -71,11 +89,23 @@ export function getTodayUtcRange(date = new Date()): {
 
 /** Combine today's local date with an HH:MM input and store as UTC ISO. */
 export function localTimeToUtcIso(hhmm: string): string {
-  const [h, m] = hhmm.split(":").map(Number);
-  if (h === undefined || m === undefined || Number.isNaN(h) || Number.isNaN(m)) {
+  if (!hhmm || typeof hhmm !== "string") {
     return new Date().toISOString();
   }
-  const now = new Date();
-  const local = new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m);
-  return local.toISOString();
+  const parts = hhmm.trim().split(":");
+  if (parts.length < 2) {
+    return new Date().toISOString();
+  }
+  const h = Number(parts[0]);
+  const m = Number(parts[1]);
+  if (Number.isNaN(h) || Number.isNaN(m) || h < 0 || h > 23 || m < 0 || m > 59) {
+    return new Date().toISOString();
+  }
+  const padded = `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+  const isoStr = `${getLocalDateStr()}T${padded}:00+08:00`;
+  const parsed = new Date(isoStr);
+  if (Number.isNaN(parsed.getTime())) {
+    return new Date().toISOString();
+  }
+  return parsed.toISOString();
 }

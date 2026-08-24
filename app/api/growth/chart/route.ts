@@ -1,34 +1,27 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getAuthSession, getActiveBabyForUser } from "@/lib/auth";
+import { requireAuth, requireBaby } from "@/lib/api-helpers";
 import { getWhoStandard, WHO_MONTHS } from "@/lib/who-growth-standards";
 
 export async function GET(request: Request) {
   try {
-    const user = await getAuthSession(request);
-    let babyId: string | undefined;
-    let gender = "female";
-
-    if (user) {
-      const active = await getActiveBabyForUser(user.id);
-      if (active?.baby) {
-        babyId = active.baby.id;
-        gender = active.baby.gender;
-      }
-    }
+    const auth = await requireAuth(request);
+    if (auth.errorResponse) return auth.errorResponse;
+    const { user } = auth;
 
     const { searchParams } = new URL(request.url);
-    const requestedBabyId = searchParams.get("babyId") || babyId;
+    const requestedBabyId = searchParams.get("babyId");
 
-    const measurements = requestedBabyId
-      ? await prisma.growthMeasurement.findMany({
-          where: { babyId: requestedBabyId },
-          orderBy: { date: "asc" },
-        })
-      : await prisma.growthMeasurement.findMany({
-          orderBy: { date: "asc" },
-        });
+    const babyResult = await requireBaby(user.id, requestedBabyId);
+    if (babyResult.errorResponse) return babyResult.errorResponse;
+    const baby = babyResult.baby;
 
+    const measurements = await prisma.growthMeasurement.findMany({
+      where: { babyId: baby.id },
+      orderBy: { date: "asc" },
+    });
+
+    const gender = baby.gender || "female";
     const whoStandards = getWhoStandard(gender);
 
     return NextResponse.json({

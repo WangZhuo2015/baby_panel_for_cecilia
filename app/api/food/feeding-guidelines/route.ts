@@ -1,13 +1,23 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { safeJsonParse } from '@/lib/json'
 
-const safeJsonParse = (str: string | null | undefined, fallback: any = []) => {
-  try { return str ? JSON.parse(str) : fallback } catch { return fallback }
-}
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url)
+  const month = searchParams.get('month')
 
-export async function GET() {
   try {
+    const where: any = {}
+    if (month) {
+      const m = Number(month)
+      if (Number.isInteger(m) && m >= 0) {
+        where.ageMinMonths = { lte: m }
+        where.ageMaxMonths = { gte: m }
+      }
+    }
+
     const guidelines = await prisma.feedingGuideline.findMany({
+      where,
       orderBy: { ageMinMonths: 'asc' }
     })
 

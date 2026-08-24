@@ -4,20 +4,19 @@ import React, { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Bell } from "lucide-react";
 import { useBabyStore } from "@/stores/useBabyStore";
+import { calculateAge } from "@/lib/age";
 
 interface BabyProfileHeaderProps {
   showNotification?: boolean;
 }
 
 function getAgeLabel(birthDate: string): string {
-  const birth = new Date(birthDate);
-  const now = new Date();
-  const months = (now.getFullYear() - birth.getFullYear()) * 12 + (now.getMonth() - birth.getMonth());
-  const days = Math.floor((now.getTime() - birth.getTime()) / (1000 * 60 * 60 * 24));
+  const { months, days } = calculateAge(birthDate);
   if (months < 1) return `${days}天`;
-  if (months < 24) return `${months}个月${days % 30}天`;
+  if (months < 24) return `${months}个月${days}天`;
   const years = Math.floor(months / 12);
-  return `${years}岁${months % 12}个月`;
+  const remMonths = months % 12;
+  return `${years}岁${remMonths}个月`;
 }
 
 export const BabyProfileHeader: React.FC<BabyProfileHeaderProps> = ({

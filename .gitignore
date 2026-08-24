@@ -33,7 +33,11 @@ prisma/*.db*
 .DS_Store
 *.log
 .baby-panel/
-dev.db
+dev.db*
+*.db-journal
+*.db-wal
+*.db-shm
+
 *.tsbuildinfo
 .agents/
 .claude/

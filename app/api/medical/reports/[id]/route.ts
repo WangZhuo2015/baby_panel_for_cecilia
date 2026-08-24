@@ -1,32 +1,33 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getAuthSession, getActiveBabyForUser } from "@/lib/auth";
+import { requireAuth, getActiveBaby } from "@/lib/api-helpers";
+import { safeJsonParse } from "@/lib/json";
 
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = await params;
-    const user = await getAuthSession(request);
-    const activeBabyInfo = user ? await getActiveBabyForUser(user.id) : null;
-    const baby = activeBabyInfo?.baby || (await prisma.baby.findFirst());
+    const auth = await requireAuth(request);
+    if (auth.errorResponse) return auth.errorResponse;
+    const { user } = auth;
 
-    if (!baby) {
-      return NextResponse.json({ error: "未找到宝宝档案" }, { status: 404 });
-    }
+    const { id } = await params;
 
     const report = await prisma.medicalReport.findUnique({
       where: { id },
     });
 
-    if (!report || report.babyId !== baby.id) {
+    if (!report) {
       return NextResponse.json({ error: "报告不存在" }, { status: 404 });
     }
 
+    const babyCheck = await getActiveBaby(user.id, report.babyId);
+    if (babyCheck.errorResponse) return babyCheck.errorResponse;
+
     return NextResponse.json({
       ...report,
-      items: JSON.parse(report.itemsJson || "[]"),
+      items: safeJsonParse(report.itemsJson, []),
     });
   } catch (error: any) {
     console.error("GET /api/medical/reports/[id] error:", error);
@@ -34,26 +35,26 @@ export async function GET(
   }
 }
 
-export async function PATCH(
+async function handleUpdate(
   request: Request,
-  { params }: { params: Promise<{ id: string }> }
+  params: Promise<{ id: string }>
 ) {
   try {
-    const { id } = await params;
-    const user = await getAuthSession(request);
-    const activeBabyInfo = user ? await getActiveBabyForUser(user.id) : null;
-    const baby = activeBabyInfo?.baby || (await prisma.baby.findFirst());
+    const auth = await requireAuth(request);
+    if (auth.errorResponse) return auth.errorResponse;
+    const { user } = auth;
 
-    if (!baby) {
-      return NextResponse.json({ error: "未找到宝宝档案" }, { status: 404 });
-    }
+    const { id } = await params;
 
     const report = await prisma.medicalReport.findUnique({ where: { id } });
-    if (!report || report.babyId !== baby.id) {
+    if (!report) {
       return NextResponse.json({ error: "报告不存在" }, { status: 404 });
     }
 
-    const body = await request.json();
+    const babyCheck = await getActiveBaby(user.id, report.babyId);
+    if (babyCheck.errorResponse) return babyCheck.errorResponse;
+
+    const body = await request.json().catch(() => ({}));
     const updateData: any = {};
 
     if (body.title !== undefined) updateData.title = String(body.title).trim();
@@ -62,7 +63,7 @@ export async function PATCH(
     if (body.hospital !== undefined) updateData.hospital = body.hospital;
     if (body.doctorNotes !== undefined) updateData.doctorNotes = body.doctorNotes;
     if (body.aiSummary !== undefined) updateData.aiSummary = body.aiSummary;
-    if (body.items !== undefined) updateData.itemsJson = JSON.stringify(body.items);
+    if (body.items !== undefined) updateData.itemsJson = JSON.stringify(Array.isArray(body.items) ? body.items : []);
     if (body.imageUrl !== undefined) updateData.imageUrl = body.imageUrl;
 
     const updated = await prisma.medicalReport.update({
@@ -72,12 +73,26 @@ export async function PATCH(
 
     return NextResponse.json({
       ...updated,
-      items: JSON.parse(updated.itemsJson || "[]"),
+      items: safeJsonParse(updated.itemsJson, []),
     });
   } catch (error: any) {
-    console.error("PATCH /api/medical/reports/[id] error:", error);
+    console.error("PUT/PATCH /api/medical/reports/[id] error:", error);
     return NextResponse.json({ error: "更新报告失败" }, { status: 500 });
   }
+}
+
+export async function PUT(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  return handleUpdate(request, params);
+}
+
+export async function PATCH(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  return handleUpdate(request, params);
 }
 
 export async function DELETE(
@@ -85,23 +100,23 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = await params;
-    const user = await getAuthSession(request);
-    const activeBabyInfo = user ? await getActiveBabyForUser(user.id) : null;
-    const baby = activeBabyInfo?.baby || (await prisma.baby.findFirst());
+    const auth = await requireAuth(request);
+    if (auth.errorResponse) return auth.errorResponse;
+    const { user } = auth;
 
-    if (!baby) {
-      return NextResponse.json({ error: "未找到宝宝档案" }, { status: 404 });
-    }
+    const { id } = await params;
 
     const report = await prisma.medicalReport.findUnique({ where: { id } });
-    if (!report || report.babyId !== baby.id) {
+    if (!report) {
       return NextResponse.json({ error: "报告不存在" }, { status: 404 });
     }
 
+    const babyCheck = await getActiveBaby(user.id, report.babyId);
+    if (babyCheck.errorResponse) return babyCheck.errorResponse;
+
     await prisma.medicalReport.delete({ where: { id } });
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, id });
   } catch (error: any) {
     console.error("DELETE /api/medical/reports/[id] error:", error);
     return NextResponse.json({ error: "删除报告失败" }, { status: 500 });

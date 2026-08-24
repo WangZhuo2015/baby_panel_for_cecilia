@@ -1,17 +1,20 @@
 import { NextResponse } from "next/server";
 import { getAiTips } from "@/lib/ai-tips";
-import { getAuthSession, getActiveBabyForUser } from "@/lib/auth";
+import { requireAuth, requireBaby } from "@/lib/api-helpers";
 
 export async function GET(request: Request) {
   try {
-    const user = await getAuthSession(request);
-    let babyId: string | undefined;
-    if (user) {
-      const active = await getActiveBabyForUser(user.id);
-      babyId = active?.baby?.id;
-    }
+    const auth = await requireAuth(request);
+    if (auth.errorResponse) return auth.errorResponse;
+    const { user } = auth;
 
-    const tips = await getAiTips(babyId);
+    const { searchParams } = new URL(request.url);
+    const requestedBabyId = searchParams.get("babyId");
+
+    const babyResult = await requireBaby(user.id, requestedBabyId);
+    if (babyResult.errorResponse) return babyResult.errorResponse;
+
+    const tips = await getAiTips(babyResult.baby.id);
     return NextResponse.json(tips);
   } catch (error: any) {
     console.error("GET /api/ai/tips error:", error);

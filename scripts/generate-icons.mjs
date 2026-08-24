@@ -1,5 +1,4 @@
 import { chromium } from 'playwright';
-import fs from 'fs';
 import path from 'path';
 
 function getHtml(size) {

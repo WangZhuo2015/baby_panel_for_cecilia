@@ -3,11 +3,14 @@ import { writeFile, mkdir } from "fs/promises";
 import path from "path";
 import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
-import { getAuthSession, getActiveBabyForUser } from "@/lib/auth";
+import { requireAuth, getActiveBaby } from "@/lib/api-helpers";
 
 export async function POST(request: Request) {
   try {
-    const user = await getAuthSession(request);
+    const auth = await requireAuth(request);
+    if (auth.errorResponse) return auth.errorResponse;
+    const { user } = auth;
+
     const formData = await request.formData();
     const file = formData.get("file") as File | null;
 
@@ -40,18 +43,10 @@ export async function POST(request: Request) {
 
     const avatarUrl = `/uploads/avatars/${filename}`;
 
-    // If a baby already exists in the DB, link it immediately
-    let targetBaby = null;
-    if (user) {
-      const active = await getActiveBabyForUser(user.id);
-      targetBaby = active?.baby;
-    } else {
-      targetBaby = await prisma.baby.findFirst();
-    }
-
-    if (targetBaby) {
+    const active = await getActiveBaby(user.id);
+    if (active.baby) {
       await prisma.baby.update({
-        where: { id: targetBaby.id },
+        where: { id: active.baby.id },
         data: { avatarUrl },
       });
     }
@@ -62,4 +57,3 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "头像上传保存失败，请重试" }, { status: 500 });
   }
 }
-

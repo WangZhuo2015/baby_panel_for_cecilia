@@ -24,26 +24,47 @@ async function main() {
   const adapter = new PrismaLibSql({ url: `file:${dbPath}` } as any);
   const prisma = new PrismaClient({ adapter });
 
-  console.log('🗑️  Cleaning existing data...');
-  await prisma.activityRecommendation.deleteMany();
-  await prisma.familyBookStatus.deleteMany();
-  await prisma.book.deleteMany();
-  await prisma.familyFoodStatus.deleteMany();
-  await prisma.foodItem.deleteMany();
-  await prisma.feedingGuideline.deleteMany();
-  await prisma.developmentWarningSign.deleteMany();
-  await prisma.developmentMilestone.deleteMany();
-  await prisma.scheduleEngineRule.deleteMany();
-  await prisma.vaccineScheduleEntry.deleteMany();
-  await prisma.vaccineStrategyGroup.deleteMany();
-  await prisma.vaccineDose.deleteMany();
-  await prisma.vaccine.deleteMany();
-  await prisma.sourceRef.deleteMany();
-  await prisma.dataRelease.deleteMany();
-  await prisma.baby.deleteMany();
-  await prisma.familyMember.deleteMany();
-  await prisma.family.deleteMany();
-  await prisma.user.deleteMany();
+  // Configure SQLite WAL mode and busy timeout for concurrent safety and query performance
+  await prisma.$queryRawUnsafe("PRAGMA journal_mode = WAL;").catch(() => {});
+  await prisma.$queryRawUnsafe("PRAGMA busy_timeout = 5000;").catch(() => {});
+
+  console.log('🗑️  Cleaning existing data (all 31 models in reverse-dependency order)...');
+  await prisma.$transaction([
+    // Child tracking records referencing Baby
+    prisma.pushSubscription.deleteMany(),
+    prisma.feedingRecord.deleteMany(),
+    prisma.sleepRecord.deleteMany(),
+    prisma.diaperRecord.deleteMany(),
+    prisma.growthMeasurement.deleteMany(),
+    prisma.medicalReport.deleteMany(),
+    prisma.foodLogRecord.deleteMany(),
+    prisma.foodPlan.deleteMany(),
+    prisma.vaccineRecord.deleteMany(),
+    prisma.vaccineSelection.deleteMany(),
+    // Family-level pivot records & baby
+    prisma.familyFoodStatus.deleteMany(),
+    prisma.familyBookStatus.deleteMany(),
+    prisma.baby.deleteMany(),
+    prisma.familyMember.deleteMany(),
+    prisma.family.deleteMany(),
+    prisma.user.deleteMany(),
+    // Source references and cross-reference tables
+    prisma.vaccineSourceRef.deleteMany(),
+    prisma.milestoneSourceRef.deleteMany(),
+    prisma.vaccineDose.deleteMany(),
+    prisma.vaccineScheduleEntry.deleteMany(),
+    prisma.vaccineStrategyGroup.deleteMany(),
+    prisma.scheduleEngineRule.deleteMany(),
+    prisma.vaccine.deleteMany(),
+    prisma.developmentWarningSign.deleteMany(),
+    prisma.developmentMilestone.deleteMany(),
+    prisma.feedingGuideline.deleteMany(),
+    prisma.foodItem.deleteMany(),
+    prisma.book.deleteMany(),
+    prisma.activityRecommendation.deleteMany(),
+    prisma.sourceRef.deleteMany(),
+    prisma.dataRelease.deleteMany(),
+  ]);
 
   // ── Read all JSON files ─────────────────────────────────────────────
   console.log('📖 Reading JSON files...');

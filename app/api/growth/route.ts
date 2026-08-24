@@ -1,29 +1,24 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getAuthSession, getActiveBabyForUser } from "@/lib/auth";
+import { requireAuth, requireBaby, getActiveBaby } from "@/lib/api-helpers";
 import { estimatePercentile } from "@/lib/who-growth-standards";
 
 export async function GET(request: Request) {
   try {
-    const user = await getAuthSession(request);
-    let babyId: string | undefined;
-
-    if (user) {
-      const active = await getActiveBabyForUser(user.id);
-      babyId = active?.baby?.id;
-    }
+    const auth = await requireAuth(request);
+    if (auth.errorResponse) return auth.errorResponse;
+    const { user } = auth;
 
     const { searchParams } = new URL(request.url);
-    const targetBabyId = searchParams.get("babyId") || babyId;
+    const requestedBabyId = searchParams.get("babyId");
 
-    const measurements = targetBabyId
-      ? await prisma.growthMeasurement.findMany({
-          where: { babyId: targetBabyId },
-          orderBy: { date: "asc" },
-        })
-      : await prisma.growthMeasurement.findMany({
-          orderBy: { date: "asc" },
-        });
+    const babyResult = await requireBaby(user.id, requestedBabyId);
+    if (babyResult.errorResponse) return babyResult.errorResponse;
+
+    const measurements = await prisma.growthMeasurement.findMany({
+      where: { babyId: babyResult.baby.id },
+      orderBy: { date: "asc" },
+    });
 
     return NextResponse.json(measurements);
   } catch (error) {
@@ -37,19 +32,11 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const user = await getAuthSession(request);
-    let babyId: string | undefined;
-    let gender = "female";
+    const auth = await requireAuth(request);
+    if (auth.errorResponse) return auth.errorResponse;
+    const { user } = auth;
 
-    if (user) {
-      const active = await getActiveBabyForUser(user.id);
-      if (active?.baby) {
-        babyId = active.baby.id;
-        gender = active.baby.gender;
-      }
-    }
-
-    const body = await request.json();
+    const body = await request.json().catch(() => ({}));
     const {
       babyId: reqBabyId,
       date,
@@ -58,49 +45,97 @@ export async function POST(request: Request) {
       weightKg,
       heightCm,
       headCircumferenceCm,
+      imageUrl,
     } = body;
 
-    let targetBabyId = reqBabyId || babyId;
-    if (!targetBabyId) {
-      const defaultBaby = await prisma.baby.findFirst();
-      if (!defaultBaby) {
+    const babyResult = await requireBaby(user.id, reqBabyId);
+    if (babyResult.errorResponse) return babyResult.errorResponse;
+    const baby = babyResult.baby;
+
+    if (!date || typeof date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(date.trim())) {
+      return NextResponse.json(
+        { error: "date 必填且格式必须为 YYYY-MM-DD" },
+        { status: 400 }
+      );
+    }
+
+    let parsedWeight: number | null = null;
+    if (weightKg !== undefined && weightKg !== null && weightKg !== "") {
+      parsedWeight = Number(weightKg);
+      if (Number.isNaN(parsedWeight) || parsedWeight < 0.5 || parsedWeight > 50) {
         return NextResponse.json(
-          { error: "未找到宝宝档案，请先创建宝宝信息" },
+          { error: "体重范围必须在 0.5kg 到 50kg 之间" },
           { status: 400 }
         );
       }
-      targetBabyId = defaultBaby.id;
     }
 
-    if (typeof date !== "string" || date.trim() === "") {
+    let parsedHeight: number | null = null;
+    if (heightCm !== undefined && heightCm !== null && heightCm !== "") {
+      parsedHeight = Number(heightCm);
+      if (Number.isNaN(parsedHeight) || parsedHeight < 20 || parsedHeight > 150) {
+        return NextResponse.json(
+          { error: "身长/身高范围必须在 20cm 到 150cm 之间" },
+          { status: 400 }
+        );
+      }
+    }
+
+    let parsedHeadCirc: number | null = null;
+    if (headCircumferenceCm !== undefined && headCircumferenceCm !== null && headCircumferenceCm !== "") {
+      parsedHeadCirc = Number(headCircumferenceCm);
+      if (Number.isNaN(parsedHeadCirc) || parsedHeadCirc < 20 || parsedHeadCirc > 60) {
+        return NextResponse.json(
+          { error: "头围范围必须在 20cm 到 60cm 之间" },
+          { status: 400 }
+        );
+      }
+    }
+
+    if (parsedWeight === null && parsedHeight === null && parsedHeadCirc === null) {
       return NextResponse.json(
-        { error: "date 必填且不能为空" },
+        { error: "请至少提供一项测量数据（体重、身高或头围）" },
         { status: 400 }
       );
     }
-    if (typeof ageLabel !== "string" || ageLabel.trim() === "") {
-      return NextResponse.json(
-        { error: "ageLabel 必填且不能为空" },
-        { status: 400 }
-      );
+
+    let computedAgeMonths: number | null = typeof ageInMonths === "number" ? ageInMonths : null;
+    let computedAgeLabel: string | null = typeof ageLabel === "string" && ageLabel.trim() ? ageLabel.trim() : null;
+
+    if (computedAgeMonths === null || !computedAgeLabel) {
+      const birth = new Date(`${baby.birthDate}T00:00:00`);
+      const measureDate = new Date(`${date.trim()}T00:00:00`);
+      const diffMs = measureDate.getTime() - birth.getTime();
+      const totalMonthsFloat = Math.max(0, diffMs / (1000 * 60 * 60 * 24 * 30.44));
+      const m = Math.floor(totalMonthsFloat);
+      const d = Math.round((totalMonthsFloat % 1) * 30.44);
+      if (computedAgeMonths === null) computedAgeMonths = m;
+      if (!computedAgeLabel) computedAgeLabel = `${m}月${d}天`;
     }
 
+    // Calculate percentile (priority: weight -> height -> headCircumference)
     let calculatedPercentile: number | null = null;
-    if (typeof ageInMonths === "number" && weightKg) {
-      calculatedPercentile = estimatePercentile(gender, "weight", ageInMonths, weightKg);
+    const gender = baby.gender || "female";
+    if (parsedWeight !== null && computedAgeMonths !== null) {
+      calculatedPercentile = estimatePercentile(gender, "weight", computedAgeMonths, parsedWeight);
+    } else if (parsedHeight !== null && computedAgeMonths !== null) {
+      calculatedPercentile = estimatePercentile(gender, "height", computedAgeMonths, parsedHeight);
+    } else if (parsedHeadCirc !== null && computedAgeMonths !== null) {
+      calculatedPercentile = estimatePercentile(gender, "headCircumference", computedAgeMonths, parsedHeadCirc);
     }
 
     const measurement = await prisma.growthMeasurement.create({
       data: {
-        babyId: targetBabyId,
-        recordedById: user?.id ?? null,
-        date,
-        ageInMonths: typeof ageInMonths === "number" ? ageInMonths : null,
-        ageLabel,
-        weightKg: weightKg != null ? parseFloat(weightKg) : null,
-        heightCm: heightCm != null ? parseFloat(heightCm) : null,
-        headCircumferenceCm: headCircumferenceCm != null ? parseFloat(headCircumferenceCm) : null,
+        babyId: baby.id,
+        recordedById: user.id,
+        date: date.trim(),
+        ageInMonths: computedAgeMonths,
+        ageLabel: computedAgeLabel,
+        weightKg: parsedWeight,
+        heightCm: parsedHeight,
+        headCircumferenceCm: parsedHeadCirc,
         percentile: calculatedPercentile,
+        imageUrl: imageUrl ? String(imageUrl).trim() : null,
       },
     });
 
@@ -109,6 +144,56 @@ export async function POST(request: Request) {
     console.error("POST /api/growth error:", error);
     return NextResponse.json(
       { error: "Failed to create growth measurement" },
+      { status: 500 }
+    );
+  }
+}
+
+export async function DELETE(request: Request) {
+  try {
+    const auth = await requireAuth(request);
+    if (auth.errorResponse) return auth.errorResponse;
+    const { user } = auth;
+
+    const { searchParams } = new URL(request.url);
+    let id = searchParams.get("id");
+
+    if (!id) {
+      const body = await request.json().catch(() => ({}));
+      id = body?.id;
+    }
+
+    if (!id || typeof id !== "string") {
+      return NextResponse.json(
+        { error: "请提供要删除的记录 ID" },
+        { status: 400 }
+      );
+    }
+
+    const record = await prisma.growthMeasurement.findUnique({
+      where: { id },
+    });
+
+    if (!record) {
+      return NextResponse.json(
+        { error: "未找到指定的生长记录" },
+        { status: 404 }
+      );
+    }
+
+    // Verify ownership of the baby associated with the record
+    const babyCheck = await getActiveBaby(user.id, record.babyId);
+    if (babyCheck.errorResponse) return babyCheck.errorResponse;
+
+    await prisma.growthMeasurement.delete({
+      where: { id },
+    });
+
+    return NextResponse.json({ success: true, id });
+  } catch (error) {
+    console.error("DELETE /api/growth error:", error);
+    return NextResponse.json(
+      { error: "Failed to delete growth measurement" },
       { status: 500 }
     );
   }

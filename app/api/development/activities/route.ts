@@ -1,9 +1,6 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-
-const safeJsonParse = (str: string | null | undefined, fallback: any = []) => {
-  try { return str ? JSON.parse(str) : fallback } catch { return fallback }
-}
+import { safeJsonParse } from '@/lib/json'
 
 export async function GET() {
   try {

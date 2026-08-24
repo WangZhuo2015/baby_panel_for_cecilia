@@ -1,21 +1,29 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getAuthSession, getActiveBabyForUser } from "@/lib/auth";
+import { requireAuth, requireBaby, getActiveBaby } from "@/lib/api-helpers";
+import { getLocalDayUtcRange } from "@/lib/date";
 
 export async function GET(request: Request) {
   try {
-    const user = await getAuthSession(request);
-    let babyId: string | undefined;
-    if (user) {
-      const active = await getActiveBabyForUser(user.id);
-      babyId = active?.baby?.id;
-    }
+    const auth = await requireAuth(request);
+    if (auth.errorResponse) return auth.errorResponse;
+    const { user } = auth;
 
     const { searchParams } = new URL(request.url);
-    const targetBabyId = searchParams.get("babyId") || babyId;
+    const requestedBabyId = searchParams.get("babyId");
+    const date = searchParams.get("date");
 
-    const where: any = {};
-    if (targetBabyId) where.babyId = targetBabyId;
+    const babyResult = await requireBaby(user.id, requestedBabyId);
+    if (babyResult.errorResponse) return babyResult.errorResponse;
+
+    const where: any = { babyId: babyResult.baby.id };
+    if (date) {
+      const { start, end } = getLocalDayUtcRange(date);
+      if (start && end) {
+        where.startTime = { lt: end };
+        where.endTime = { gt: start };
+      }
+    }
 
     const records = await prisma.sleepRecord.findMany({
       where,
@@ -34,37 +42,44 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const user = await getAuthSession(request);
-    let babyId: string | undefined;
-    if (user) {
-      const active = await getActiveBabyForUser(user.id);
-      babyId = active?.baby?.id;
-    }
+    const auth = await requireAuth(request);
+    if (auth.errorResponse) return auth.errorResponse;
+    const { user } = auth;
 
-    const body = await request.json();
-    const { babyId: reqBabyId, startTime, endTime, type, nightWakingCount, notes } = body;
+    const body = await request.json().catch(() => ({}));
+    const {
+      babyId: reqBabyId,
+      startTime,
+      endTime,
+      type,
+      nightWakingCount,
+      notes,
+    } = body;
 
-    const finalBabyId = reqBabyId || babyId || (await prisma.baby.findFirst())?.id;
-    if (!finalBabyId) {
-      return NextResponse.json({ error: "未找到宝宝档案，请先创建宝宝信息" }, { status: 400 });
-    }
+    const babyResult = await requireBaby(user.id, reqBabyId);
+    if (babyResult.errorResponse) return babyResult.errorResponse;
 
-    if (!startTime || !endTime) {
+    if (!startTime || typeof startTime !== "string" || !endTime || typeof endTime !== "string") {
       return NextResponse.json(
-        { error: "startTime 和 endTime 必填" },
+        { error: "startTime 和 endTime 必填且必须为有效时间字符串" },
         { status: 400 }
       );
     }
 
+    const sleepType = type === "night" ? "night" : "day";
+    const wakingCount = typeof nightWakingCount === "number" && nightWakingCount >= 0
+      ? Math.floor(nightWakingCount)
+      : 0;
+
     const record = await prisma.sleepRecord.create({
       data: {
-        babyId: finalBabyId,
-        recordedById: user?.id ?? null,
-        startTime,
-        endTime,
-        type: type ?? "day",
-        nightWakingCount: nightWakingCount ?? 0,
-        notes: notes ?? null,
+        babyId: babyResult.baby.id,
+        recordedById: user.id,
+        startTime: startTime.trim(),
+        endTime: endTime.trim(),
+        type: sleepType,
+        nightWakingCount: wakingCount,
+        notes: notes ? String(notes).trim() : null,
       },
     });
 
@@ -73,6 +88,56 @@ export async function POST(request: Request) {
     console.error("POST /api/records/sleep error:", error);
     return NextResponse.json(
       { error: "Failed to create sleep record" },
+      { status: 500 }
+    );
+  }
+}
+
+export async function DELETE(request: Request) {
+  try {
+    const auth = await requireAuth(request);
+    if (auth.errorResponse) return auth.errorResponse;
+    const { user } = auth;
+
+    const { searchParams } = new URL(request.url);
+    let id = searchParams.get("id");
+
+    if (!id) {
+      const body = await request.json().catch(() => ({}));
+      id = body?.id;
+    }
+
+    if (!id || typeof id !== "string") {
+      return NextResponse.json(
+        { error: "请提供要删除的记录 ID" },
+        { status: 400 }
+      );
+    }
+
+    const record = await prisma.sleepRecord.findUnique({
+      where: { id },
+    });
+
+    if (!record) {
+      return NextResponse.json(
+        { error: "未找到指定的睡眠记录" },
+        { status: 404 }
+      );
+    }
+
+    // Verify ownership of the baby associated with the record
+    const babyCheck = await getActiveBaby(user.id, record.babyId);
+    if (babyCheck.errorResponse) return babyCheck.errorResponse;
+
+    await prisma.sleepRecord.delete({
+      where: { id },
+    });
+
+    return NextResponse.json({ success: true, id });
+  } catch (error) {
+    console.error("DELETE /api/records/sleep error:", error);
+    return NextResponse.json(
+      { error: "Failed to delete sleep record" },
       { status: 500 }
     );
   }

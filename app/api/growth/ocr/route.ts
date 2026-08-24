@@ -1,11 +1,9 @@
 import { NextResponse } from "next/server";
-import { writeFile } from "fs/promises";
+import { writeFile, mkdir } from "fs/promises";
 import path from "path";
 import crypto from "crypto";
-
-const AI_BASE_URL = process.env.AI_BASE_URL || process.env.OPENAI_BASE_URL || "https://api.openai.com/v1";
-const AI_API_KEY = process.env.AI_API_KEY || process.env.OPENAI_API_KEY || "";
-const AI_VISION_MODEL = process.env.AI_VISION_MODEL || "gpt-4o-mini";
+import { getAuthSession } from "@/lib/auth";
+import { AI_CONFIG } from "@/lib/config";
 
 interface OcrResult {
   date?: string;
@@ -18,6 +16,11 @@ interface OcrResult {
 export const maxDuration = 30;
 
 export async function POST(request: Request) {
+  const user = await getAuthSession(request);
+  if (!user) {
+    return NextResponse.json({ error: "请先登录" }, { status: 401 });
+  }
+
   let imageBase64: string | null = null;
   let mime = "image/jpeg";
   let savedImageUrl: string | null = null;
@@ -45,9 +48,12 @@ export async function POST(request: Request) {
       imageBase64 = buffer.toString("base64");
 
       // Archive photo
-      const ext = path.extname(file.name) || ".jpg";
-      const filename = `growth_${Date.now()}_${crypto.randomBytes(4).toString("hex")}${ext}`;
+      const ALLOWED_EXTENSIONS = [".jpg", ".jpeg", ".png", ".webp"];
+      const rawExt = path.extname(file.name || "").toLowerCase();
+      const ext = ALLOWED_EXTENSIONS.includes(rawExt) ? rawExt : ".jpg";
+      const filename = `growth_${Date.now()}_${crypto.randomBytes(16).toString("hex")}${ext}`;
       const uploadDir = path.join(process.cwd(), "public", "uploads", "medical");
+      await mkdir(uploadDir, { recursive: true });
       await writeFile(path.join(uploadDir, filename), buffer);
       savedImageUrl = `/uploads/medical/${filename}`;
     } catch {
@@ -71,15 +77,15 @@ export async function POST(request: Request) {
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
     };
-    if (AI_API_KEY) {
-      headers["Authorization"] = `Bearer ${AI_API_KEY}`;
+    if (AI_CONFIG.apiKey) {
+      headers["Authorization"] = `Bearer ${AI_CONFIG.apiKey}`;
     }
 
-    const res = await fetch(`${AI_BASE_URL.replace(/\/+$/, "")}/chat/completions`, {
+    const res = await fetch(`${AI_CONFIG.baseUrl.replace(/\/+$/, "")}/chat/completions`, {
       method: "POST",
       headers,
       body: JSON.stringify({
-        model: AI_VISION_MODEL,
+        model: AI_CONFIG.visionModel,
         messages: [
           {
             role: "system",

@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Baby, Sparkles, Camera, Move } from "lucide-react";
+import { Baby, Sparkles, Camera } from "lucide-react";
 import { AppHeader } from "@/components/ui/AppHeader";
 import { CuteButton } from "@/components/ui/CuteButton";
 import { CuteInput } from "@/components/ui/CuteInput";

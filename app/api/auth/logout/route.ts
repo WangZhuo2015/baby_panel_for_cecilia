@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { AUTH_COOKIE_NAME } from "@/lib/auth";
+import { config } from "@/lib/config";
 
 export async function POST() {
   const response = NextResponse.json({ success: true });
@@ -7,7 +8,7 @@ export async function POST() {
     name: AUTH_COOKIE_NAME,
     value: "",
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure: config.isProduction,
     sameSite: "lax",
     path: "/",
     maxAge: 0,

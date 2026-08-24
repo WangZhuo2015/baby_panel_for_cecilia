@@ -11,6 +11,7 @@ import { SegmentControl } from '@/components/ui/SegmentControl';
 import { useToast } from '@/components/ui/Toast';
 import { useBabyStore } from '@/stores/useBabyStore';
 import { getLocalDateStr } from '@/lib/date';
+import { calculateAge } from '@/lib/age';
 
 type InputMode = 'manual' | 'ocr';
 
@@ -81,16 +82,12 @@ export default function GrowthAddPage() {
       return;
     }
 
-    const birthDate = new Date(baby.birthDate);
-    const measureDate = new Date(date);
-    const diffMs = measureDate.getTime() - birthDate.getTime();
-    const months = diffMs / (1000 * 60 * 60 * 24 * 30.44);
-    const days = Math.round((months % 1) * 30.44);
+    const { months, label } = calculateAge(baby.birthDate, date);
 
     addGrowthMeasurement({
       date,
-      ageInMonths: Math.floor(months),
-      ageLabel: `${Math.floor(months)}月${days}天`,
+      ageInMonths: months,
+      ageLabel: label,
       weightKg: weight ? parseFloat(weight) : undefined,
       heightCm: height ? parseFloat(height) : undefined,
       headCircumferenceCm: head ? parseFloat(head) : undefined,

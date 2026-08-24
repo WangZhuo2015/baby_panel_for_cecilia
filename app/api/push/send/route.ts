@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 import webPush from "web-push";
 import { prisma } from "@/lib/prisma";
+import { PUSH_CONFIG } from "@/lib/config";
 
 export async function POST(request: Request) {
-  if (!process.env.PUSH_SEND_TOKEN) {
+  if (!PUSH_CONFIG.sendToken) {
     return NextResponse.json(
       { error: "Push sending is disabled (PUSH_SEND_TOKEN not configured)" },
       { status: 503 }
@@ -11,15 +12,15 @@ export async function POST(request: Request) {
   }
 
   const token = request.headers.get("x-push-token");
-  if (token !== process.env.PUSH_SEND_TOKEN) {
+  if (token !== PUSH_CONFIG.sendToken) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   try {
     const { title, body, url } = await request.json();
 
-    const publicKey = process.env.VAPID_PUBLIC_KEY;
-    const privateKey = process.env.VAPID_PRIVATE_KEY;
+    const publicKey = PUSH_CONFIG.publicKey;
+    const privateKey = PUSH_CONFIG.privateKey;
 
     if (!publicKey || !privateKey) {
       return NextResponse.json(
@@ -29,7 +30,7 @@ export async function POST(request: Request) {
     }
 
     webPush.setVapidDetails(
-      process.env.VAPID_SUBJECT || "mailto:cecilia@baby-app.local",
+      PUSH_CONFIG.subject,
       publicKey,
       privateKey
     );

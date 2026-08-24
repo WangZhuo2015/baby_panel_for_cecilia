@@ -1,19 +1,22 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getAuthSession, getActiveBabyForUser } from "@/lib/auth";
+import { requireAuth, requireBaby } from "@/lib/api-helpers";
+import { safeJsonParse } from "@/lib/json";
+import { calculateAge } from "@/lib/age";
 
 export async function GET(request: Request) {
   try {
-    const user = await getAuthSession(request);
-    const activeBabyInfo = user ? await getActiveBabyForUser(user.id) : null;
-    const baby = activeBabyInfo?.baby || (await prisma.baby.findFirst());
-
-    if (!baby) {
-      return NextResponse.json({ error: "未找到宝宝档案" }, { status: 404 });
-    }
+    const auth = await requireAuth(request);
+    if (auth.errorResponse) return auth.errorResponse;
+    const { user } = auth;
 
     const { searchParams } = new URL(request.url);
+    const requestedBabyId = searchParams.get("babyId");
     const category = searchParams.get("category");
+
+    const babyResult = await requireBaby(user.id, requestedBabyId);
+    if (babyResult.errorResponse) return babyResult.errorResponse;
+    const baby = babyResult.baby;
 
     const whereClause: any = { babyId: baby.id };
     if (category && category !== "all") {
@@ -25,9 +28,9 @@ export async function GET(request: Request) {
       orderBy: { date: "desc" },
     });
 
-    const formatted = reports.map((r: any) => ({
+    const formatted = reports.map((r) => ({
       ...r,
-      items: JSON.parse(r.itemsJson || "[]"),
+      items: safeJsonParse(r.itemsJson, []),
     }));
 
     return NextResponse.json(formatted);
@@ -39,16 +42,13 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const user = await getAuthSession(request);
-    const activeBabyInfo = user ? await getActiveBabyForUser(user.id) : null;
-    const baby = activeBabyInfo?.baby || (await prisma.baby.findFirst());
+    const auth = await requireAuth(request);
+    if (auth.errorResponse) return auth.errorResponse;
+    const { user } = auth;
 
-    if (!baby) {
-      return NextResponse.json({ error: "未找到宝宝档案" }, { status: 404 });
-    }
-
-    const body = await request.json();
+    const body = await request.json().catch(() => ({}));
     const {
+      babyId: reqBabyId,
       title,
       category,
       date,
@@ -60,6 +60,10 @@ export async function POST(request: Request) {
       growthData,
     } = body;
 
+    const babyResult = await requireBaby(user.id, reqBabyId);
+    if (babyResult.errorResponse) return babyResult.errorResponse;
+    const baby = babyResult.baby;
+
     if (!title || !date) {
       return NextResponse.json({ error: "请填写报告标题和日期" }, { status: 400 });
     }
@@ -69,7 +73,7 @@ export async function POST(request: Request) {
     const createdReport = await prisma.medicalReport.create({
       data: {
         babyId: baby.id,
-        recordedById: user?.id ?? null,
+        recordedById: user.id,
         title: String(title).trim(),
         category: category || "general",
         date: String(date).trim(),
@@ -84,19 +88,15 @@ export async function POST(request: Request) {
     // If growth measurements are included in the report, also save to GrowthMeasurement
     if (growthData && (growthData.weightKg || growthData.heightCm || growthData.headCircumferenceCm)) {
       try {
-        const birthDate = new Date(baby.birthDate);
-        const measureDate = new Date(date);
-        const diffMs = measureDate.getTime() - birthDate.getTime();
-        const months = Math.max(0, diffMs / (1000 * 60 * 60 * 24 * 30.44));
-        const days = Math.round((months % 1) * 30.44);
+        const { months, label } = calculateAge(baby.birthDate, date);
 
         await prisma.growthMeasurement.create({
           data: {
             babyId: baby.id,
-            recordedById: user?.id ?? null,
+            recordedById: user.id,
             date: String(date).trim(),
-            ageInMonths: Math.floor(months),
-            ageLabel: `${Math.floor(months)}月${days}天`,
+            ageInMonths: months,
+            ageLabel: label,
             weightKg: growthData.weightKg ? Number(growthData.weightKg) : null,
             heightCm: growthData.heightCm ? Number(growthData.heightCm) : null,
             headCircumferenceCm: growthData.headCircumferenceCm ? Number(growthData.headCircumferenceCm) : null,
@@ -108,10 +108,13 @@ export async function POST(request: Request) {
       }
     }
 
-    return NextResponse.json({
-      ...createdReport,
-      items: JSON.parse(createdReport.itemsJson),
-    });
+    return NextResponse.json(
+      {
+        ...createdReport,
+        items: safeJsonParse(createdReport.itemsJson, []),
+      },
+      { status: 201 }
+    );
   } catch (error: any) {
     console.error("POST /api/medical/reports error:", error);
     return NextResponse.json({ error: "保存报告失败，请重试" }, { status: 500 });

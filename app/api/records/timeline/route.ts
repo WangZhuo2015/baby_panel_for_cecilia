@@ -5,37 +5,29 @@ import {
   getLocalDayUtcRange,
   formatIsoToLocalTime,
 } from "@/lib/date";
-import { getAuthSession, getActiveBabyForUser } from "@/lib/auth";
-
-const safeJsonParse = (str: string | null | undefined, fallback: any = []) => {
-  try { return str ? JSON.parse(str) : fallback } catch { return fallback }
-}
+import { requireAuth, requireBaby } from "@/lib/api-helpers";
+import { safeJsonParse } from "@/lib/json";
 
 export async function GET(request: Request) {
   try {
-    const user = await getAuthSession(request);
-    let babyId: string | undefined;
-    if (user) {
-      const active = await getActiveBabyForUser(user.id);
-      babyId = active?.baby?.id;
-    }
+    const auth = await requireAuth(request);
+    if (auth.errorResponse) return auth.errorResponse;
+    const { user } = auth;
 
     const { searchParams } = new URL(request.url);
     const date = searchParams.get("date") ?? getLocalDateStr();
-    const targetBabyId = searchParams.get("babyId") || babyId;
+    const requestedBabyId = searchParams.get("babyId");
+
+    const babyResult = await requireBaby(user.id, requestedBabyId);
+    if (babyResult.errorResponse) return babyResult.errorResponse;
+    const babyId = babyResult.baby.id;
+
     const { start, end } = getLocalDayUtcRange(date);
 
-    const feedingWhere: any = { timestamp: { gte: start, lt: end } };
-    const sleepWhere: any = { startTime: { lt: end }, endTime: { gt: start } };
-    const diaperWhere: any = { timestamp: { gte: start, lt: end } };
-    const foodWhere: any = { date };
-
-    if (targetBabyId) {
-      feedingWhere.babyId = targetBabyId;
-      sleepWhere.babyId = targetBabyId;
-      diaperWhere.babyId = targetBabyId;
-      foodWhere.babyId = targetBabyId;
-    }
+    const feedingWhere: any = { babyId, timestamp: { gte: start, lt: end } };
+    const sleepWhere: any = { babyId, startTime: { lt: end }, endTime: { gt: start } };
+    const diaperWhere: any = { babyId, timestamp: { gte: start, lt: end } };
+    const foodWhere: any = { babyId, date };
 
     const [feedingRecords, sleepRecords, diaperRecords, foodLogs] = await Promise.all([
       prisma.feedingRecord.findMany({
@@ -170,13 +162,13 @@ export async function GET(request: Request) {
     }
 
     for (const r of foodLogs) {
-      const foods = safeJsonParse(r.foods);
+      const foods = safeJsonParse<string[]>(r.foods, []);
       timeline.push({
         id: r.id,
         time: r.time,
         type: "food" as const,
         title: "辅食餐点",
-        detail: foods.length > 0 ? foods.join("、") : undefined,
+        detail: Array.isArray(foods) && foods.length > 0 ? foods.join("、") : undefined,
         icon: "🥣",
       });
     }
