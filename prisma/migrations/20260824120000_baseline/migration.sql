@@ -1,16 +1,53 @@
 -- CreateTable
-CREATE TABLE "Baby" (
+CREATE TABLE "User" (
     "id" TEXT NOT NULL PRIMARY KEY,
-    "nickname" TEXT NOT NULL,
-    "gender" TEXT NOT NULL DEFAULT 'female',
-    "birthDate" TEXT NOT NULL,
+    "username" TEXT NOT NULL,
+    "passwordHash" TEXT NOT NULL,
+    "displayName" TEXT NOT NULL,
     "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" DATETIME NOT NULL
 );
 
 -- CreateTable
+CREATE TABLE "Family" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "name" TEXT NOT NULL,
+    "inviteCode" TEXT NOT NULL,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" DATETIME NOT NULL
+);
+
+-- CreateTable
+CREATE TABLE "FamilyMember" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "familyId" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
+    "role" TEXT NOT NULL DEFAULT 'member',
+    "relation" TEXT NOT NULL DEFAULT 'parent',
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "FamilyMember_familyId_fkey" FOREIGN KEY ("familyId") REFERENCES "Family" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT "FamilyMember_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+-- CreateTable
+CREATE TABLE "Baby" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "familyId" TEXT NOT NULL,
+    "nickname" TEXT NOT NULL,
+    "gender" TEXT NOT NULL DEFAULT 'female',
+    "birthDate" TEXT NOT NULL,
+    "gestationalAge" INTEGER,
+    "avatarUrl" TEXT,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" DATETIME NOT NULL,
+    CONSTRAINT "Baby_familyId_fkey" FOREIGN KEY ("familyId") REFERENCES "Family" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+-- CreateTable
 CREATE TABLE "FeedingRecord" (
     "id" TEXT NOT NULL PRIMARY KEY,
+    "babyId" TEXT NOT NULL,
+    "recordedById" TEXT,
     "timestamp" TEXT NOT NULL,
     "type" TEXT NOT NULL,
     "amountMl" INTEGER,
@@ -18,46 +55,78 @@ CREATE TABLE "FeedingRecord" (
     "rightMinutes" INTEGER,
     "spitUp" BOOLEAN NOT NULL DEFAULT false,
     "notes" TEXT,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "FeedingRecord_babyId_fkey" FOREIGN KEY ("babyId") REFERENCES "Baby" ("id") ON DELETE CASCADE ON UPDATE CASCADE
 );
 
 -- CreateTable
 CREATE TABLE "SleepRecord" (
     "id" TEXT NOT NULL PRIMARY KEY,
+    "babyId" TEXT NOT NULL,
+    "recordedById" TEXT,
     "startTime" TEXT NOT NULL,
     "endTime" TEXT NOT NULL,
     "type" TEXT NOT NULL,
     "nightWakingCount" INTEGER NOT NULL DEFAULT 0,
     "notes" TEXT,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "SleepRecord_babyId_fkey" FOREIGN KEY ("babyId") REFERENCES "Baby" ("id") ON DELETE CASCADE ON UPDATE CASCADE
 );
 
 -- CreateTable
 CREATE TABLE "DiaperRecord" (
     "id" TEXT NOT NULL PRIMARY KEY,
+    "babyId" TEXT NOT NULL,
+    "recordedById" TEXT,
     "timestamp" TEXT NOT NULL,
     "type" TEXT NOT NULL,
     "poopColor" TEXT,
     "poopConsistency" TEXT,
     "notes" TEXT,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "DiaperRecord_babyId_fkey" FOREIGN KEY ("babyId") REFERENCES "Baby" ("id") ON DELETE CASCADE ON UPDATE CASCADE
 );
 
 -- CreateTable
 CREATE TABLE "GrowthMeasurement" (
     "id" TEXT NOT NULL PRIMARY KEY,
+    "babyId" TEXT NOT NULL,
+    "recordedById" TEXT,
     "date" TEXT NOT NULL,
+    "ageInMonths" INTEGER,
     "ageLabel" TEXT NOT NULL,
     "weightKg" REAL,
     "heightCm" REAL,
     "headCircumferenceCm" REAL,
     "percentile" INTEGER,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    "imageUrl" TEXT,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "GrowthMeasurement_babyId_fkey" FOREIGN KEY ("babyId") REFERENCES "Baby" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+-- CreateTable
+CREATE TABLE "MedicalReport" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "babyId" TEXT NOT NULL,
+    "recordedById" TEXT,
+    "title" TEXT NOT NULL,
+    "category" TEXT NOT NULL,
+    "date" TEXT NOT NULL,
+    "hospital" TEXT,
+    "doctorNotes" TEXT,
+    "aiSummary" TEXT,
+    "itemsJson" TEXT NOT NULL,
+    "imageUrl" TEXT,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" DATETIME NOT NULL,
+    CONSTRAINT "MedicalReport_babyId_fkey" FOREIGN KEY ("babyId") REFERENCES "Baby" ("id") ON DELETE CASCADE ON UPDATE CASCADE
 );
 
 -- CreateTable
 CREATE TABLE "FoodLogRecord" (
     "id" TEXT NOT NULL PRIMARY KEY,
+    "babyId" TEXT NOT NULL,
+    "recordedById" TEXT,
     "date" TEXT NOT NULL,
     "time" TEXT NOT NULL,
     "foods" TEXT NOT NULL,
@@ -66,7 +135,31 @@ CREATE TABLE "FoodLogRecord" (
     "babyState" TEXT NOT NULL,
     "hasAbnormal" BOOLEAN NOT NULL DEFAULT false,
     "abnormalNotes" TEXT,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "FoodLogRecord_babyId_fkey" FOREIGN KEY ("babyId") REFERENCES "Baby" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+-- CreateTable
+CREATE TABLE "FamilyFoodStatus" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "familyId" TEXT NOT NULL,
+    "foodId" TEXT NOT NULL,
+    "status" TEXT NOT NULL DEFAULT 'to_try',
+    "firstAddedDate" TEXT,
+    "acceptance" INTEGER NOT NULL DEFAULT 0,
+    "updatedAt" DATETIME NOT NULL,
+    CONSTRAINT "FamilyFoodStatus_familyId_fkey" FOREIGN KEY ("familyId") REFERENCES "Family" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+-- CreateTable
+CREATE TABLE "FamilyBookStatus" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "familyId" TEXT NOT NULL,
+    "bookId" TEXT NOT NULL,
+    "readCount" INTEGER NOT NULL DEFAULT 0,
+    "isFavorite" BOOLEAN NOT NULL DEFAULT false,
+    "updatedAt" DATETIME NOT NULL,
+    CONSTRAINT "FamilyBookStatus_familyId_fkey" FOREIGN KEY ("familyId") REFERENCES "Family" ("id") ON DELETE CASCADE ON UPDATE CASCADE
 );
 
 -- CreateTable
@@ -260,9 +353,6 @@ CREATE TABLE "FoodItem" (
     "icon" TEXT NOT NULL,
     "category" TEXT NOT NULL,
     "foodGroup" TEXT,
-    "firstAddedDate" TEXT,
-    "acceptance" INTEGER NOT NULL DEFAULT 0,
-    "status" TEXT NOT NULL DEFAULT 'to_try',
     "recommendedFromMonth" INTEGER,
     "recommendedToMonth" INTEGER,
     "exactMonthEvidence" BOOLEAN NOT NULL DEFAULT false,
@@ -301,8 +391,6 @@ CREATE TABLE "Book" (
     "description" TEXT,
     "interactionSuggestionsJson" TEXT,
     "whyAgeAppropriate" TEXT,
-    "readCount" INTEGER NOT NULL DEFAULT 0,
-    "isFavorite" BOOLEAN NOT NULL DEFAULT false,
     "ratingScore" REAL,
     "ratingCount" INTEGER,
     "ratingSource" TEXT,
@@ -340,28 +428,102 @@ CREATE TABLE "ActivityRecommendation" (
 -- CreateTable
 CREATE TABLE "FoodPlan" (
     "id" TEXT NOT NULL PRIMARY KEY,
+    "babyId" TEXT NOT NULL,
     "date" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "tags" TEXT NOT NULL,
     "nutrition" TEXT NOT NULL,
     "ingredients" TEXT NOT NULL,
     "steps" TEXT NOT NULL,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "FoodPlan_babyId_fkey" FOREIGN KEY ("babyId") REFERENCES "Baby" ("id") ON DELETE CASCADE ON UPDATE CASCADE
 );
 
 -- CreateTable
 CREATE TABLE "VaccineRecord" (
     "id" TEXT NOT NULL PRIMARY KEY,
+    "babyId" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "dose" TEXT NOT NULL,
     "scheduledDate" TEXT NOT NULL,
     "completedDate" TEXT,
     "isCompleted" BOOLEAN NOT NULL DEFAULT false,
-    "countdownDays" INTEGER
+    "countdownDays" INTEGER,
+    CONSTRAINT "VaccineRecord_babyId_fkey" FOREIGN KEY ("babyId") REFERENCES "Baby" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+-- CreateTable
+CREATE TABLE "VaccineSelection" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "babyId" TEXT NOT NULL,
+    "vaccineId" TEXT NOT NULL,
+    "doseNumber" INTEGER NOT NULL DEFAULT 1,
+    "selected" BOOLEAN NOT NULL DEFAULT true,
+    "completed" BOOLEAN NOT NULL DEFAULT false,
+    "updatedAt" DATETIME NOT NULL,
+    CONSTRAINT "VaccineSelection_babyId_fkey" FOREIGN KEY ("babyId") REFERENCES "Baby" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+-- CreateTable
+CREATE TABLE "PushSubscription" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "userId" TEXT,
+    "endpoint" TEXT NOT NULL,
+    "keysJson" TEXT NOT NULL,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "PushSubscription_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User" ("id") ON DELETE CASCADE ON UPDATE CASCADE
 );
 
 -- CreateIndex
+CREATE UNIQUE INDEX "User_username_key" ON "User"("username");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "Family_inviteCode_key" ON "Family"("inviteCode");
+
+-- CreateIndex
+CREATE INDEX "FamilyMember_userId_idx" ON "FamilyMember"("userId");
+
+-- CreateIndex
+CREATE INDEX "FamilyMember_familyId_idx" ON "FamilyMember"("familyId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "FamilyMember_familyId_userId_key" ON "FamilyMember"("familyId", "userId");
+
+-- CreateIndex
+CREATE INDEX "Baby_familyId_idx" ON "Baby"("familyId");
+
+-- CreateIndex
+CREATE INDEX "FeedingRecord_babyId_timestamp_idx" ON "FeedingRecord"("babyId", "timestamp");
+
+-- CreateIndex
+CREATE INDEX "SleepRecord_babyId_startTime_idx" ON "SleepRecord"("babyId", "startTime");
+
+-- CreateIndex
+CREATE INDEX "DiaperRecord_babyId_timestamp_idx" ON "DiaperRecord"("babyId", "timestamp");
+
+-- CreateIndex
+CREATE INDEX "GrowthMeasurement_babyId_date_idx" ON "GrowthMeasurement"("babyId", "date");
+
+-- CreateIndex
+CREATE INDEX "MedicalReport_babyId_date_idx" ON "MedicalReport"("babyId", "date");
+
+-- CreateIndex
+CREATE INDEX "MedicalReport_babyId_category_date_idx" ON "MedicalReport"("babyId", "category", "date");
+
+-- CreateIndex
+CREATE INDEX "FoodLogRecord_babyId_date_idx" ON "FoodLogRecord"("babyId", "date");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "FamilyFoodStatus_familyId_foodId_key" ON "FamilyFoodStatus"("familyId", "foodId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "FamilyBookStatus_familyId_bookId_key" ON "FamilyBookStatus"("familyId", "bookId");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "Vaccine_vaccineId_key" ON "Vaccine"("vaccineId");
+
+-- CreateIndex
+CREATE INDEX "VaccineDose_vaccineId_idx" ON "VaccineDose"("vaccineId");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "VaccineStrategyGroup_strategyId_key" ON "VaccineStrategyGroup"("strategyId");
@@ -371,6 +533,9 @@ CREATE UNIQUE INDEX "ScheduleEngineRule_ruleId_key" ON "ScheduleEngineRule"("rul
 
 -- CreateIndex
 CREATE UNIQUE INDEX "DevelopmentMilestone_milestoneId_key" ON "DevelopmentMilestone"("milestoneId");
+
+-- CreateIndex
+CREATE INDEX "DevelopmentMilestone_assessmentAgeMonths_category_idx" ON "DevelopmentMilestone"("assessmentAgeMonths", "category");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "DevelopmentWarningSign_warningSignId_key" ON "DevelopmentWarningSign"("warningSignId");
@@ -383,3 +548,19 @@ CREATE UNIQUE INDEX "Book_bookId_key" ON "Book"("bookId");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "ActivityRecommendation_activityId_key" ON "ActivityRecommendation"("activityId");
+
+-- CreateIndex
+CREATE INDEX "FoodPlan_babyId_date_idx" ON "FoodPlan"("babyId", "date");
+
+-- CreateIndex
+CREATE INDEX "VaccineRecord_babyId_scheduledDate_idx" ON "VaccineRecord"("babyId", "scheduledDate");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "VaccineSelection_babyId_vaccineId_doseNumber_key" ON "VaccineSelection"("babyId", "vaccineId", "doseNumber");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "PushSubscription_endpoint_key" ON "PushSubscription"("endpoint");
+
+-- CreateIndex
+CREATE INDEX "PushSubscription_userId_idx" ON "PushSubscription"("userId");
+

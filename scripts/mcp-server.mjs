@@ -16,6 +16,7 @@ import {
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { SignJWT } from "jose";
+import { randomUUID } from "crypto";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, "..");
@@ -56,7 +57,9 @@ async function getServiceAuthHeader() {
     const token = await new SignJWT({ userId: MCP_USER_ID, username: "mcp-agent" })
       .setProtectedHeader({ alg: "HS256" })
       .setIssuedAt()
-      .setExpirationTime("30d")
+      .setJti(randomUUID())
+      // 短时效：泄露后损失窗口有限；到期由 MCP 进程自动重签
+      .setExpirationTime("24h")
       .sign(secretBytes);
     return {
       "Content-Type": "application/json",

@@ -2,7 +2,7 @@ import { chromium } from 'playwright';
 import path from 'path';
 import fs from 'fs';
 
-const outDir = '/home/ubuntu/.gemini/antigravity-cli/brain/3e847335-490c-4897-9749-058d8c171efe/scratch/screenshots';
+const outDir = path.join(process.cwd(), "scratch", "screenshots");
 fs.mkdirSync(outDir, { recursive: true });
 
 const baseUrl = 'http://127.0.0.1:3088';

@@ -374,6 +374,14 @@ async function main() {
   // ── 13. Default Family, User & Baby (Only on clean database) ────────
   const userCount = await prisma.user.count();
   if (userCount === 0) {
+    // 默认拒绝：演示账号(admin/123456 + BABY88)必须显式 SEED_DEMO=1 才创建。
+    // 不依赖 NODE_ENV —— tsx 运行时该变量不可靠。
+    if (process.env.SEED_DEMO !== '1') {
+      console.log('ℹ️ 未设置 SEED_DEMO=1，跳过演示账号创建（生产环境请保持关闭）。');
+      console.log('✅ Seed complete!');
+      await prisma.$disconnect();
+      return;
+    }
     console.log('👶 Database is empty, creating default demo family, user (admin / 123456) & baby (好好)...');
     const passwordHash = await bcrypt.hash("123456", 10);
     const demoFamily = await prisma.family.create({
