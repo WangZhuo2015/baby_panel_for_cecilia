@@ -56,3 +56,15 @@ jobs:
 
       - name: Run Next.js build
         run: npm run build
+
+      - name: Verify version consistency (package.json = lib/version.ts = sw.js)
+        run: |
+          node -e "
+            const fs=require('fs');
+            const pkg=require('./package.json').version;
+            const ui=fs.readFileSync('lib/version.ts','utf8').match(/APP_VERSION\s*=\s*\"v([\d.]+)\"/);
+            const sw=fs.readFileSync('public/sw.js','utf8').match(/CACHE_VERSION\s*=\s*'v([\d.]+)'/);
+            if(!ui||!sw){console.error('版本文件解析失败');process.exit(1);}
+            if(pkg!==ui[1]||pkg!==sw[1]){console.error(\`版本漂移: pkg=\${pkg} ui=\${ui[1]} sw=\${sw[1]}\`);process.exit(1);}
+            console.log('version consistent:', pkg);
+          "
