@@ -66,6 +66,33 @@ export async function POST(request: Request) {
       );
     }
 
+    const trimmedStart = startTime.trim();
+    const trimmedEnd = endTime.trim();
+    const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
+
+    let finalStartIso = trimmedStart;
+    let finalEndIso = trimmedEnd;
+
+    if (timeRegex.test(trimmedStart) && timeRegex.test(trimmedEnd)) {
+      const targetDate = body.date || new Date().toISOString().split("T")[0];
+      const [year, month, day] = targetDate.split("-").map(Number);
+      const [sh, sm] = trimmedStart.split(":").map(Number);
+      const [eh, em] = trimmedEnd.split(":").map(Number);
+
+      const startLocal = new Date(year, month - 1, day, sh, sm);
+      let endLocal = new Date(year, month - 1, day, eh, em);
+      if (endLocal.getTime() <= startLocal.getTime()) {
+        endLocal = new Date(endLocal.getTime() + 24 * 60 * 60 * 1000);
+      }
+      finalStartIso = startLocal.toISOString();
+      finalEndIso = endLocal.toISOString();
+    } else if (isNaN(new Date(trimmedStart).getTime()) || isNaN(new Date(trimmedEnd).getTime())) {
+      return NextResponse.json(
+        { error: "时间格式不正确，小时需在00-23之间，分钟需在00-59之间 (如 14:00)" },
+        { status: 400 }
+      );
+    }
+
     const sleepType = type === "night" ? "night" : "day";
     const wakingCount = typeof nightWakingCount === "number" && nightWakingCount >= 0
       ? Math.floor(nightWakingCount)
@@ -75,8 +102,8 @@ export async function POST(request: Request) {
       data: {
         babyId: babyResult.baby.id,
         recordedById: user.id,
-        startTime: startTime.trim(),
-        endTime: endTime.trim(),
+        startTime: finalStartIso,
+        endTime: finalEndIso,
         type: sleepType,
         nightWakingCount: wakingCount,
         notes: notes ? String(notes).trim() : null,

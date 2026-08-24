@@ -12,39 +12,22 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
+import { SignJWT } from "jose";
 
 const BASE_URL = process.env.BABY_PANEL_URL || "http://127.0.0.1:3088";
-const TOKEN = process.env.BABY_PANEL_TOKEN || process.env.JWT_TOKEN || "";
+const JWT_SECRET = process.env.JWT_SECRET || "dev-insecure-jwt-secret-key-32-chars-long-change-me!";
+const secretBytes = new TextEncoder().encode(JWT_SECRET);
 
-/**
- * Helper to perform authenticated API calls with token and helpful 401 error message.
- */
-async function apiFetch(path, options = {}) {
-  const url = `${BASE_URL.replace(/\/+$/, "")}${path.startsWith("/") ? "" : "/"}${path}`;
-  const headers = { ...(options.headers || {}) };
-
-  if (TOKEN) {
-    headers["Authorization"] = `Bearer ${TOKEN}`;
-  }
-
-  const res = await fetch(url, {
-    ...options,
-    headers,
-  });
-
-  if (res.status === 401) {
-    if (!TOKEN) {
-      throw new Error(
-        `API 返回 401 未授权 (Unauthorized)。请配置环境变量 BABY_PANEL_TOKEN (或 JWT_TOKEN) 以提供有效的身份认证 Token。`
-      );
-    } else {
-      throw new Error(
-        `API 返回 401 未授权 (Unauthorized)。所配置的 BABY_PANEL_TOKEN/JWT_TOKEN 可能已过期或无效。`
-      );
-    }
-  }
-
-  return res;
+async function getServiceAuthHeader() {
+  const token = await new SignJWT({ userId: "system-mcp", username: "hermes-agent" })
+    .setProtectedHeader({ alg: "HS256" })
+    .setIssuedAt()
+    .setExpirationTime("365d")
+    .sign(secretBytes);
+  return {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${token}`,
+  };
 }
 
 const server = new Server(
@@ -218,7 +201,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "get_vaccine_schedule",
-        description: "查询宝宝当前的疫苗接种规划（近30天待接种项目、已过期项目、0-3岁完整接种日程与二类苗推荐）。",
+        description: "查询宝宝当前的疫苗接种规划（近30天待接种项、已过期项、0-3岁完整接种日程与二类苗推荐）。",
         inputSchema: {
           type: "object",
           properties: {},
@@ -242,7 +225,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             },
             date: {
               type: "string",
-              description: "就诊/检查日期 (YYYY-MM-DD)",
+              description: "就诊/检查日期 (YYYY-MM-DD，留空默认为今天)",
             },
             hospital: {
               type: "string",
@@ -282,8 +265,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args = {} } = request.params;
 
   try {
+    const headers = await getServiceAuthHeader();
+
     if (name === "get_baby_profile") {
-      const res = await apiFetch("/api/baby");
+      const res = await fetch(`${BASE_URL}/api/baby`, { headers });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       return {
@@ -293,7 +278,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
     if (name === "get_daily_summary") {
       const dateParam = args.date ? `?date=${args.date}` : "";
-      const res = await apiFetch(`/api/records/daily-summary${dateParam}`);
+      const res = await fetch(`${BASE_URL}/api/records/daily-summary${dateParam}`, { headers });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       return {
@@ -302,10 +287,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
 
     if (name === "record_feeding") {
-      const res = await apiFetch("/api/records/feeding", {
+      const payload = {
+        ...args,
+        timestamp: args.timestamp || new Date().toISOString(),
+      };
+      const res = await fetch(`${BASE_URL}/api/records/feeding`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(args),
+        headers,
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
@@ -320,10 +309,23 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
 
     if (name === "record_sleep") {
-      const res = await apiFetch("/api/records/sleep", {
+      const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
+      const start = String(args.startTime || "").trim();
+      const end = String(args.endTime || "").trim();
+      if (!timeRegex.test(start) || !timeRegex.test(end)) {
+        throw new Error(`时间格式不正确，需为 24小时制 HH:mm (00:00-23:59)，如 "14:00"`);
+      }
+
+      const payload = {
+        ...args,
+        startTime: start,
+        endTime: end,
+        date: args.date || new Date().toISOString().split("T")[0],
+      };
+      const res = await fetch(`${BASE_URL}/api/records/sleep`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(args),
+        headers,
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
@@ -338,10 +340,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
 
     if (name === "record_diaper") {
-      const res = await apiFetch("/api/records/diaper", {
+      const payload = {
+        ...args,
+        type: args.type || "pee",
+        timestamp: args.timestamp || new Date().toISOString(),
+      };
+      const res = await fetch(`${BASE_URL}/api/records/diaper`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(args),
+        headers,
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
@@ -356,10 +363,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
 
     if (name === "record_growth") {
-      const res = await apiFetch("/api/growth", {
+      const payload = {
+        ...args,
+        date: args.date || new Date().toISOString().split("T")[0],
+      };
+      const res = await fetch(`${BASE_URL}/api/growth`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(args),
+        headers,
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
@@ -374,8 +385,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
 
     if (name === "get_vaccine_schedule") {
-      const res = await apiFetch("/api/vaccines");
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const res = await fetch(`${BASE_URL}/api/vaccines`, { headers });
       const data = await res.json();
       return {
         content: [{ type: "text", text: JSON.stringify(data, null, 2) }],
@@ -383,10 +393,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
 
     if (name === "save_medical_report") {
-      const res = await apiFetch("/api/medical/reports", {
+      const payload = {
+        ...args,
+        date: args.date || new Date().toISOString().split("T")[0],
+      };
+      const res = await fetch(`${BASE_URL}/api/medical/reports`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(args),
+        headers,
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);

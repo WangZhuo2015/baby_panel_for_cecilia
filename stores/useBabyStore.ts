@@ -199,31 +199,33 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
   // ===== Auth Actions =====
 
   fetchUser: async () => {
-    if (get().user && isFresh('user')) {
+    if (isFresh("user")) {
       set({ authLoading: false });
       return get().user;
     }
-    try {
-      set({ authLoading: true });
-      const res = await fetch("/api/auth/me");
-      if (!res.ok) {
+    return dedup("user", async () => {
+      try {
+        const res = await fetch("/api/auth/me");
+        if (!res.ok) {
+          set({ user: null, family: null, authLoading: false });
+          markFetched("user");
+          return;
+        }
+        const data = await res.json();
+        set({
+          user: data.user,
+          family: data.family,
+          baby: data.baby || get().baby,
+          authLoading: false,
+        });
+        markFetched("user");
+      } catch {
         set({ user: null, family: null, authLoading: false });
-        return null;
+        markFetched("user");
       }
-      const data = await res.json();
-      set({
-        user: data.user,
-        family: data.family,
-        baby: data.baby || get().baby,
-        authLoading: false,
-      });
-      markFetched('user');
-      return data.user;
-    } catch {
-      set({ user: null, family: null, authLoading: false });
-      return null;
-    }
+    }).then(() => get().user);
   },
+
 
   login: async (credentials) => {
     const data = await request<{ user: User; family: Family; baby: Baby | null }>("/api/auth/login", {

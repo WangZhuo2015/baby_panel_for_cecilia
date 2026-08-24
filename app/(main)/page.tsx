@@ -101,27 +101,45 @@ export default function HomePage() {
   const [liveSleepElapsed, setLiveSleepElapsed] = useState<string>("");
 
   useEffect(() => {
-    fetchUser();
-    fetchBaby();
-    fetchDailySummary();
-    fetchTimeline();
     fetchWeather();
-    fetchFeedingRecords();
-    fetchSleepRecords();
-    fetchAiTips();
+    fetchUser().then((u) => {
+      if (u) {
+        fetchBaby();
+      }
+    });
+  }, [fetchUser, fetchBaby, fetchWeather]);
+
+  useEffect(() => {
+    if (baby?.id) {
+      fetchDailySummary();
+      fetchTimeline();
+      fetchFeedingRecords();
+      fetchSleepRecords();
+      fetchAiTips();
+    }
   }, [
-    fetchUser,
-    fetchBaby,
+    baby?.id,
     fetchDailySummary,
     fetchTimeline,
-    fetchWeather,
     fetchFeedingRecords,
     fetchSleepRecords,
     fetchAiTips,
   ]);
 
+
+  // Safety fallback: if auth takes longer than 2s, stop blocking screen
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (useBabyStore.getState().authLoading) {
+        useBabyStore.setState({ authLoading: false });
+      }
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, []);
+
   // Check live sleep session
   useEffect(() => {
+
     const checkLiveSleep = () => {
       try {
         const stored = localStorage.getItem("baby_active_sleep_start");

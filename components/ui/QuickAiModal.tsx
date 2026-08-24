@@ -156,24 +156,28 @@ const CONTEXT_META: Record<
  * Parses out ```json:action ... ``` or ```action ... ``` blocks from assistant messages
  */
 function extractActionAndCleanMarkdown(content: string): { cleanText: string; action: ActionCardData | null } {
-  const actionRegex = /```(?:json:action|action)\s*([\s\S]*?)\s*```/;
-  const match = content.match(actionRegex);
+  const closedRegex = /```(?:json:action|action)\s*([\s\S]*?)\s*```/;
+  const closedMatch = content.match(closedRegex);
 
-  if (!match) {
-    return { cleanText: content, action: null };
+  if (closedMatch) {
+    let action: ActionCardData | null = null;
+    try {
+      action = JSON.parse(closedMatch[1].trim());
+    } catch {
+      // If incomplete JSON during streaming, ignore
+    }
+    const cleanText = content.replace(closedRegex, "").trim();
+    return { cleanText, action };
   }
 
-  const rawJson = match[1].trim();
-  let action: ActionCardData | null = null;
-  try {
-    action = JSON.parse(rawJson);
-  } catch {
-    // If incomplete JSON during streaming, ignore
+  // Strip unclosed streaming action block from visible markdown
+  const unclosedRegex = /```(?:json:action|action)[\s\S]*$/;
+  if (unclosedRegex.test(content)) {
+    const cleanText = content.replace(unclosedRegex, "").trim();
+    return { cleanText, action: null };
   }
 
-  // Remove the action code block from visible markdown
-  const cleanText = content.replace(actionRegex, "").trim();
-  return { cleanText, action };
+  return { cleanText: content, action: null };
 }
 
 export const QuickAiModal: React.FC<QuickAiModalProps> = ({
