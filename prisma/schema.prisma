@@ -69,7 +69,10 @@ model Baby {
   vaccineRecords     VaccineRecord[]
   vaccineSelections  VaccineSelection[]
   medicalReports     MedicalReport[]
+
+  @@index([familyId])
 }
+
 
 model FeedingRecord {
   id           String   @id @default(uuid())
@@ -153,7 +156,9 @@ model MedicalReport {
   updatedAt    DateTime @updatedAt
 
   @@index([babyId, date])
+  @@index([babyId, category, date])
 }
+
 
 model FoodLogRecord {
   id            String   @id @default(uuid())
@@ -284,7 +289,10 @@ model VaccineDose {
   doseVolumeMl                    Float?
   notes                           String?
   sourceRefsJson                  String   // JSON array
+
+  @@index([vaccineId])
 }
+
 
 model VaccineSourceRef {
   id          String    @id @default(uuid())
@@ -349,7 +357,10 @@ model DevelopmentMilestone {
   sourceSystem                   String?
   sourceRefsJson                 String               // JSON array
   sourceRefs                     MilestoneSourceRef[]
+
+  @@index([assessmentAgeMonths, category])
 }
+
 
 model MilestoneSourceRef {
   id          String               @id @default(uuid())
@@ -533,4 +544,7 @@ model PushSubscription {
   endpoint  String   @unique
   keysJson  String
   createdAt DateTime @default(now())
+
+  @@index([userId])
 }
+

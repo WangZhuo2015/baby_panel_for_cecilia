@@ -53,17 +53,22 @@ export default function DiaperRecordPage() {
 
   const showPoopFields = diaperType === 'poop' || diaperType === 'both';
 
-  const onSubmit = (data: DiaperFormData) => {
-    addDiaperRecord({
-      timestamp: localTimeToUtcIso(time),
-      type: diaperType,
-      poopColor: showPoopFields ? selectedColor : undefined,
-      poopConsistency: showPoopFields ? selectedConsistency : undefined,
-      notes: data.notes || undefined,
-    });
-    showToast('记录成功 ✨');
-    setTimeout(() => router.push('/'), 800);
+  const onSubmit = async (data: DiaperFormData) => {
+    try {
+      await addDiaperRecord({
+        timestamp: localTimeToUtcIso(time),
+        type: diaperType,
+        poopColor: showPoopFields ? selectedColor : undefined,
+        poopConsistency: showPoopFields ? selectedConsistency : undefined,
+        notes: data.notes || undefined,
+      });
+      showToast('记录成功 ✨');
+      setTimeout(() => router.push('/'), 600);
+    } catch (err: any) {
+      showToast(err?.message || '保存失败，请稍后重试');
+    }
   };
+
 
   return (
     <div className="min-h-[100dvh] bg-bg">

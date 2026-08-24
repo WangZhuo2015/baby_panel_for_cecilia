@@ -4,6 +4,8 @@ import path from "path";
 import crypto from "crypto";
 import { getAuthSession } from "@/lib/auth";
 import { AI_CONFIG } from "@/lib/config";
+import { getLocalDateStr } from "@/lib/date";
+
 
 export const maxDuration = 45;
 
@@ -210,8 +212,9 @@ function processOcrResult(data: any, savedImageUrl: string | null) {
       category: ["blood", "growth", "trace_element", "allergy", "general"].includes(parsed.category)
         ? parsed.category
         : "general",
-      date: parsed.date || new Date().toISOString().slice(0, 10),
+      date: parsed.date || getLocalDateStr(),
       hospital: parsed.hospital || "",
+
       doctorNotes: parsed.doctorNotes || "",
       aiSummary: parsed.aiSummary || "",
       growthData: parsed.growthData || undefined,

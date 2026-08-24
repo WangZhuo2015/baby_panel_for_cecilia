@@ -1,30 +1,11 @@
 import { NextResponse } from "next/server";
 import { requireAuth, requireBaby } from "@/lib/api-helpers";
+import { AI_CONFIG } from "@/lib/config";
+import { calculateAgeDetail } from "@/lib/age";
+import { getLocalDateStr } from "@/lib/date";
 
 export const dynamic = "force-dynamic";
 
-import { AI_CONFIG } from "@/lib/config";
-
-function calculateAgeDetail(birthDateStr: string) {
-  const birth = new Date(`${birthDateStr}T00:00:00`);
-  const now = new Date();
-  let months = (now.getFullYear() - birth.getFullYear()) * 12 + (now.getMonth() - birth.getMonth());
-  const birthDateInMonth = birth.getDate();
-  const currentDateInMonth = now.getDate();
-  let days = currentDateInMonth - birthDateInMonth;
-  if (days < 0) {
-    months -= 1;
-    const prevMonth = new Date(now.getFullYear(), now.getMonth(), 0);
-    days += prevMonth.getDate();
-  }
-  const totalDays = Math.floor((now.getTime() - birth.getTime()) / (1000 * 60 * 60 * 24));
-  return {
-    months: Math.max(0, months),
-    days: Math.max(0, days),
-    totalDays: Math.max(0, totalDays),
-    label: `${Math.max(0, months)}个月${Math.max(0, days)}天 (第${Math.max(0, totalDays)}天)`,
-  };
-}
 
 const CONTEXT_ROLE_MAP: Record<string, string> = {
   food: "你是一位资深的婴幼儿辅食与营养顾问。擅长根据宝宝月龄提供科学的辅食引入、食材性状处理（防窒息/防噎）、辅食过敏排查与排便观察、营养搭配及挑食应对建议。",
@@ -183,11 +164,13 @@ export async function POST(request: Request) {
       babyContextPrompt += `\n- 胎龄：${gestationalAge}周（早产），矫正月龄约 ${corrMonths} 个月，评估发育时请优先参考矫正月龄`;
     }
     if (contextDetail) {
-      babyContextPrompt += `\n- 当前页面背景与数据：${typeof contextDetail === "string" ? contextDetail : JSON.stringify(contextDetail)}`;
+      const sanitizedDetail = typeof contextDetail === "string" ? contextDetail.slice(0, 1000) : JSON.stringify(contextDetail).slice(0, 1000);
+      babyContextPrompt += `\n- 当前页面背景与数据：${sanitizedDetail}`;
     }
 
-    const todayDate = new Date().toISOString().split("T")[0];
+    const todayDate = getLocalDateStr();
     const systemPrompt = `${rolePrompt}
+
 
 ${babyContextPrompt}
 - 今天日期：${todayDate}

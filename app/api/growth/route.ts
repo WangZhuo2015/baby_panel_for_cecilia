@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth, requireBaby, getActiveBaby } from "@/lib/api-helpers";
 import { estimatePercentile } from "@/lib/who-growth-standards";
+import { calculateAgeDetail } from "@/lib/age";
 
 export async function GET(request: Request) {
   try {
@@ -103,15 +104,11 @@ export async function POST(request: Request) {
     let computedAgeLabel: string | null = typeof ageLabel === "string" && ageLabel.trim() ? ageLabel.trim() : null;
 
     if (computedAgeMonths === null || !computedAgeLabel) {
-      const birth = new Date(`${baby.birthDate}T00:00:00`);
-      const measureDate = new Date(`${date.trim()}T00:00:00`);
-      const diffMs = measureDate.getTime() - birth.getTime();
-      const totalMonthsFloat = Math.max(0, diffMs / (1000 * 60 * 60 * 24 * 30.44));
-      const m = Math.floor(totalMonthsFloat);
-      const d = Math.round((totalMonthsFloat % 1) * 30.44);
-      if (computedAgeMonths === null) computedAgeMonths = m;
-      if (!computedAgeLabel) computedAgeLabel = `${m}月${d}天`;
+      const ageDetail = calculateAgeDetail(baby.birthDate, date.trim());
+      if (computedAgeMonths === null) computedAgeMonths = ageDetail.months;
+      if (!computedAgeLabel) computedAgeLabel = `${ageDetail.months}月${ageDetail.days}天`;
     }
+
 
     // Calculate percentile (priority: weight -> height -> headCircumference)
     let calculatedPercentile: number | null = null;

@@ -120,6 +120,10 @@ interface BabyStore {
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init);
   if (!res.ok) {
+    if (res.status === 401) {
+      // Session expired or unauthenticated - reset auth state
+      useBabyStore.setState({ user: null, family: null, baby: null, authLoading: false });
+    }
     const data = await res.json().catch(() => ({}));
     throw new Error(data?.error || `Request failed (${res.status})`);
   }
@@ -141,6 +145,19 @@ function markFetched(key: string): void {
   _fetchedAt[key] = Date.now();
 }
 
+/** Explicitly invalidate cache keys */
+function invalidateCache(prefix?: string): void {
+  if (!prefix) {
+    for (const k in _fetchedAt) delete _fetchedAt[k];
+    return;
+  }
+  for (const k in _fetchedAt) {
+    if (k === prefix || k.startsWith(`${prefix}:`)) {
+      delete _fetchedAt[k];
+    }
+  }
+}
+
 /** Deduplicate: if an identical request is already in-flight, return it */
 function dedup(key: string, fn: () => Promise<void>): Promise<void> {
   if (_inflight[key]) return _inflight[key]!;
@@ -148,6 +165,7 @@ function dedup(key: string, fn: () => Promise<void>): Promise<void> {
   _inflight[key] = p;
   return p;
 }
+
 
 export const useBabyStore = create<BabyStore>((set, get) => ({
   // Initial state
@@ -237,20 +255,37 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
     try {
       await fetch("/api/auth/logout", { method: "POST" });
     } finally {
+      invalidateCache();
       set({
         user: null,
         family: null,
         familyMembers: [],
         baby: null,
+        medicalReports: [],
         feedingRecords: [],
         sleepRecords: [],
         diaperRecords: [],
         foodLogRecords: [],
+        growthMeasurements: [],
         dailySummary: null,
         timeline: [],
+        weather: null,
+        foodItems: [],
+        feedingGuidelines: [],
+        foodPlans: [],
+        books: [],
+        vaccines: [],
+        vaccineData: null,
+        milestones: [],
+        warningSigns: [],
+        activities: [],
+        aiTips: [],
+        aiError: null,
+        authLoading: false,
       });
     }
   },
+
 
   joinFamily: async (inviteCode: string, relation?: string) => {
     const data = await request<{ message: string; family: Family; baby: Baby | null }>("/api/family/join", {
@@ -558,6 +593,7 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
       }));
     } catch (e) {
       console.error("Failed to update book:", e);
+      throw e;
     }
   },
 
@@ -570,6 +606,8 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(record),
       });
+      invalidateCache("dailySummary");
+      invalidateCache("timeline");
       set((state) => ({
         feedingRecords: [newRecord, ...state.feedingRecords],
       }));
@@ -588,6 +626,8 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(record),
       });
+      invalidateCache("dailySummary");
+      invalidateCache("timeline");
       set((state) => ({
         sleepRecords: [newRecord, ...state.sleepRecords],
       }));
@@ -606,6 +646,8 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(record),
       });
+      invalidateCache("dailySummary");
+      invalidateCache("timeline");
       set((state) => ({
         diaperRecords: [newRecord, ...state.diaperRecords],
       }));
@@ -624,6 +666,8 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(record),
       });
+      invalidateCache("dailySummary");
+      invalidateCache("timeline");
       set((state) => ({
         foodLogRecords: [newRecord, ...state.foodLogRecords],
       }));
@@ -634,6 +678,7 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
       throw e;
     }
   },
+
 
   fetchMedicalReports: async (category?: string) => {
     try {

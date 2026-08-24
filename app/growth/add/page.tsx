@@ -73,8 +73,13 @@ export default function GrowthAddPage() {
     }
   };
 
-  const handleSave = () => {
-    if (!weight && !height && !head) return;
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = async () => {
+    if (!weight && !height && !head) {
+      showToast('请至少输入一项测量数据');
+      return;
+    }
 
     if (!baby?.birthDate) {
       showToast('请先设置宝宝生日');
@@ -82,21 +87,29 @@ export default function GrowthAddPage() {
       return;
     }
 
-    const { months, label } = calculateAge(baby.birthDate, date);
+    setSaving(true);
+    try {
+      const { months, label } = calculateAge(baby.birthDate, date);
 
-    addGrowthMeasurement({
-      date,
-      ageInMonths: months,
-      ageLabel: label,
-      weightKg: weight ? parseFloat(weight) : undefined,
-      heightCm: height ? parseFloat(height) : undefined,
-      headCircumferenceCm: head ? parseFloat(head) : undefined,
-      imageUrl: uploadedImageUrl || undefined,
-    });
+      await addGrowthMeasurement({
+        date,
+        ageInMonths: months,
+        ageLabel: label,
+        weightKg: weight ? parseFloat(weight) : undefined,
+        heightCm: height ? parseFloat(height) : undefined,
+        headCircumferenceCm: head ? parseFloat(head) : undefined,
+        imageUrl: uploadedImageUrl || undefined,
+      });
 
-    showToast('记录保存成功 ✨');
-    setTimeout(() => router.push('/growth'), 800);
+      showToast('记录保存成功 ✨');
+      setTimeout(() => router.push('/growth'), 600);
+    } catch (err: any) {
+      showToast(err?.message || '保存失败，请稍后重试');
+    } finally {
+      setSaving(false);
+    }
   };
+
 
   return (
     <div className="min-h-[100dvh] bg-bg">
@@ -223,10 +236,11 @@ export default function GrowthAddPage() {
         )}
 
         <div className="mt-8">
-          <CuteButton fullWidth size="lg" onClick={handleSave}>
-            保存测量记录
+          <CuteButton fullWidth size="lg" onClick={handleSave} disabled={saving}>
+            {saving ? "正在保存..." : "保存测量记录"}
           </CuteButton>
         </div>
+
       </div>
     </div>
   );

@@ -332,6 +332,11 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
         );
       } catch (err: unknown) {
         if (err instanceof Error && err.name === "AbortError") {
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === aiMsgId ? { ...msg, isStreaming: false } : msg
+            )
+          );
           return;
         }
         setMessages((prev) =>
@@ -353,6 +358,20 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
   );
 
   useEffect(() => {
+    if (!isOpen) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        onClose();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, onClose]);
+
+
+  useEffect(() => {
     if (isOpen) {
       if (messages.length === 0) {
         // Welcome message
@@ -370,7 +389,7 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
       }
       setTimeout(() => inputRef.current?.focus(), 150);
     }
-  }, [isOpen, messages.length, baby?.nickname, age.label, displayTitle, initialPrompt, handleSend]);
+  }, [isOpen, initialPrompt, displayTitle, baby?.nickname, age.label, messages.length, handleSend]);
 
   useEffect(() => {
     if (!isOpen && abortControllerRef.current) {
@@ -432,10 +451,16 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
     setTimeout(() => setCopiedId(null), 2000);
   };
 
+
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-200">
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="quick-ai-title"
+      className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-200"
+    >
       {/* Backdrop with soft blur */}
       <div
         className="absolute inset-0 bg-slate-900/40 backdrop-blur-xs transition-opacity"
@@ -453,7 +478,7 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
             </div>
             <div>
               <div className="flex items-center gap-1.5">
-                <h3 className="font-bold text-text-primary text-sm sm:text-base">
+                <h3 id="quick-ai-title" className="font-bold text-text-primary text-sm sm:text-base">
                   {displayTitle}
                 </h3>
                 <span className="text-[10px] bg-primary-light text-primary px-2 py-0.5 rounded-full font-semibold">

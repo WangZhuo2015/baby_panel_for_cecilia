@@ -63,17 +63,28 @@ export function calculateAgeDetail(
   const tm = map.month || (target.getMonth() + 1);
   const td = map.day || target.getDate();
 
+  // Robust calendar-month algorithm handling end-of-month and variable month lengths
   let months = (ty - by) * 12 + (tm - bm);
-  let days = td - bd;
+  
+  // Calculate anchor date for the full months milestone
+  const getAnchor = (mCount: number) => {
+    const targetY = by + Math.floor((bm - 1 + mCount) / 12);
+    const targetM = ((bm - 1 + mCount) % 12 + 12) % 12 + 1; // 1-12
+    const maxDaysInTargetM = new Date(targetY, targetM, 0).getDate();
+    const targetD = Math.min(bd, maxDaysInTargetM);
+    return new Date(Date.UTC(targetY, targetM - 1, targetD));
+  };
 
-  if (days < 0) {
+  let anchorDate = getAnchor(months);
+  const currentTargetDate = new Date(Date.UTC(ty, tm - 1, td));
+
+  if (currentTargetDate.getTime() < anchorDate.getTime()) {
     months -= 1;
-    const prevMonthDays = new Date(ty, tm - 1, 0).getDate();
-    days += prevMonthDays;
+    anchorDate = getAnchor(months);
   }
 
+  const days = Math.max(0, Math.floor((currentTargetDate.getTime() - anchorDate.getTime()) / (1000 * 60 * 60 * 24)));
   months = Math.max(0, months);
-  days = Math.max(0, days);
 
   return {
     months,
@@ -81,6 +92,7 @@ export function calculateAgeDetail(
     totalDays,
     label: `${months}个月${days}天 (第${totalDays}天)`,
   };
+
 }
 
 /**

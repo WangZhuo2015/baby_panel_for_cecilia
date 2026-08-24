@@ -66,22 +66,10 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
   const pathname = url.pathname;
 
-  // 1. Navigation requests (HTML pages) → Network-First with Cache / offline fallback
+  // 1. Navigation requests (HTML pages) → Network-First with /offline.html fallback
   if (request.mode === 'navigate') {
     event.respondWith(
-      fetch(request)
-        .then((response) => {
-          if (response.ok) {
-            const copy = response.clone();
-            caches.open(STATIC_CACHE).then((cache) => cache.put(request, copy));
-          }
-          return response;
-        })
-        .catch(async () => {
-          const cached = await caches.match(request);
-          if (cached) return cached;
-          return caches.match(OFFLINE_URL);
-        })
+      fetch(request).catch(() => caches.match(OFFLINE_URL))
     );
     return;
   }
@@ -137,11 +125,31 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // 4. Default: Network with cache fallback
+  // 4. API endpoints → Network-Only with graceful offline JSON response
+  if (pathname.startsWith('/api/')) {
+    event.respondWith(
+      fetch(request).catch(() =>
+        new Response(
+          JSON.stringify({ error: "网络连接不可用，请检查您的网络连接。" }),
+          {
+            status: 503,
+            headers: { "Content-Type": "application/json" },
+          }
+        )
+      )
+    );
+    return;
+  }
+
+  // 5. Default fallback
   event.respondWith(
-    fetch(request).catch(() => caches.match(request))
+    fetch(request).catch(async () => {
+      const match = await caches.match(request);
+      return match || new Response("Network error", { status: 503 });
+    })
   );
 });
+
 
 // ===== Push Notifications =====
 

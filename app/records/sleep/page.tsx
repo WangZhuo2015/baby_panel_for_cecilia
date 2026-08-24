@@ -159,15 +159,12 @@ export default function SleepRecordPage() {
     if (e) e.preventDefault();
     setSaving(true);
     try {
-      const [sh, sm] = startTime.split(":").map(Number);
-      const [eh, em] = endTime.split(":").map(Number);
-      const [year, month, day] = date.split("-").map(Number);
-
-      const startLocal = new Date(year, month - 1, day, sh, sm);
-      let endLocal = new Date(year, month - 1, day, eh, em);
+      const startLocal = new Date(`${date}T${startTime.padStart(5, "0")}:00+08:00`);
+      let endLocal = new Date(`${date}T${endTime.padStart(5, "0")}:00+08:00`);
       if (endLocal.getTime() <= startLocal.getTime()) {
         endLocal = new Date(endLocal.getTime() + 24 * 60 * 60 * 1000); // Cross midnight
       }
+
 
       let finalNotes = notes.trim();
       const methodLabel = ASLEEP_METHODS.find((m) => m.id === fallingAsleepMethod)?.label;

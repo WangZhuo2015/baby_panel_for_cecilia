@@ -88,26 +88,31 @@ export default function FoodLogPage() {
     }
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (selectedFoods.length === 0) {
       showToast('请至少选择一种食材');
       return;
     }
 
-    addFoodLogRecord({
-      date,
-      time,
-      foods: selectedFoods,
-      portion,
-      acceptance,
-      babyState,
-      hasAbnormal,
-      abnormalNotes: hasAbnormal ? abnormalNotes : undefined,
-    });
+    try {
+      await addFoodLogRecord({
+        date,
+        time,
+        foods: selectedFoods,
+        portion,
+        acceptance,
+        babyState,
+        hasAbnormal,
+        abnormalNotes: hasAbnormal ? abnormalNotes : undefined,
+      });
 
-    showToast('记录成功 ✨');
-    setTimeout(() => router.push('/food'), 800);
+      showToast('记录成功 ✨');
+      setTimeout(() => router.push('/food'), 600);
+    } catch (err: any) {
+      showToast(err?.message || '保存失败，请稍后重试');
+    }
   };
+
 
   const portionOptions = [
     { value: 'little' as const, label: '少量' },

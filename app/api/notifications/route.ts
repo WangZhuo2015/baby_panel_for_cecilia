@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getAiTips } from '@/lib/ai-tips'
 import { getLocalDateStr, getLocalDayUtcRange } from '@/lib/date'
-import { getAuthSession, getActiveBabyForUser } from '@/lib/auth'
+import { requireAuth, requireBaby } from '@/lib/api-helpers'
 
 export interface NotificationItem {
   id: string
@@ -16,28 +16,27 @@ export interface NotificationItem {
 
 export async function GET(request: Request) {
   try {
-    const user = await getAuthSession(request)
-    let babyId: string | undefined
-    if (user) {
-      const active = await getActiveBabyForUser(user.id)
-      babyId = active?.baby?.id
-    }
+    const auth = await requireAuth(request)
+    if (auth.errorResponse) return auth.errorResponse
+    const { user } = auth
 
     const { searchParams } = new URL(request.url)
-    const targetBabyId = searchParams.get('babyId') || babyId
+    const requestedBabyId = searchParams.get('babyId')
+
+    const babyResult = await requireBaby(user.id, requestedBabyId)
+    if (babyResult.errorResponse) return babyResult.errorResponse
+    const babyId = babyResult.baby.id
 
     const notifications: NotificationItem[] = []
     const todayStr = getLocalDateStr()
     const { start, end } = getLocalDayUtcRange(todayStr)
 
     // 1. Vaccine reminders — upcoming within 7 days
-    const vaccineWhere: any = { isCompleted: false }
-    if (targetBabyId) vaccineWhere.babyId = targetBabyId
-
     const vaccines = await prisma.vaccineRecord.findMany({
-      where: vaccineWhere,
+      where: { babyId, isCompleted: false },
       orderBy: { scheduledDate: 'asc' }
     })
+
 
     for (const v of vaccines) {
       const scheduledDate = new Date(v.scheduledDate)
@@ -66,7 +65,7 @@ export async function GET(request: Request) {
 
     // 2. AI Tips (if AI service is up and responsive)
     try {
-      const aiTips = await getAiTips(targetBabyId)
+      const aiTips = await getAiTips(babyId)
       for (let i = 0; i < aiTips.length; i++) {
         notifications.push({
           id: `ai-${todayStr}-${i}`,
@@ -83,28 +82,27 @@ export async function GET(request: Request) {
     }
 
     // 3. Daily reminders — check today's records
-    const feedingWhere: any = { timestamp: { gte: start, lt: end } }
-    const sleepWhere: any = {}
-    const foodWhere: any = { date: todayStr }
-
-    if (targetBabyId) {
-      feedingWhere.babyId = targetBabyId
-      sleepWhere.babyId = targetBabyId
-      foodWhere.babyId = targetBabyId
-    }
-
     const [feedingRecords, sleepRecords, foodLogs] = await Promise.all([
-      prisma.feedingRecord.findMany({ where: feedingWhere }),
-      prisma.sleepRecord.findMany({ where: sleepWhere }),
-      prisma.foodLogRecord.findMany({ where: foodWhere })
+      prisma.feedingRecord.findMany({
+        where: { babyId, timestamp: { gte: start, lt: end } },
+        take: 1
+      }),
+      prisma.sleepRecord.findMany({
+        where: {
+          babyId,
+          startTime: { lt: end },
+          endTime: { gt: start }
+        },
+        take: 1
+      }),
+      prisma.foodLogRecord.findMany({
+        where: { babyId, date: todayStr },
+        take: 1
+      })
     ])
 
-    // Check sleep records for today
-    const hasSleepToday = sleepRecords.some(r => {
-      const startDate = r.startTime.substring(0, 10)
-      const endDate = r.endTime.substring(0, 10)
-      return startDate === todayStr || endDate === todayStr
-    })
+    const hasSleepToday = sleepRecords.length > 0
+
 
     if (feedingRecords.length === 0) {
       notifications.push({

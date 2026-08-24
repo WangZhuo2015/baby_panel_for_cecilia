@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/components/ui/Toast";
 import { useBabyStore } from "@/stores/useBabyStore";
+import { localTimeToUtcIso, getLocalDateStr } from "@/lib/date";
 
 export interface ActionCardData {
   type: "medical_report" | "feeding" | "sleep" | "diaper" | "growth";
@@ -33,7 +34,7 @@ const CATEGORY_MAP: Record<string, { label: string; emoji: string }> = {
 };
 
 function normalizeDate(val?: string): string {
-  if (!val) return new Date().toISOString().split("T")[0];
+  if (!val) return getLocalDateStr();
   const str = String(val).trim().replace(/\//g, "-").replace(/年|月/g, "-").replace(/日/g, "");
   const match = str.match(/\d{4}-\d{1,2}-\d{1,2}/);
   if (match) {
@@ -47,7 +48,7 @@ function normalizeDate(val?: string): string {
   if (!isNaN(d.getTime())) {
     return d.toISOString().split("T")[0];
   }
-  return new Date().toISOString().split("T")[0];
+  return getLocalDateStr();
 }
 
 function normalizeTime(val?: string): string {
@@ -64,10 +65,11 @@ function normalizeTime(val?: string): string {
 
 export const AiActionCard: React.FC<AiActionCardProps> = ({ action: initialAction, onSaved }) => {
   const { showToast } = useToast();
-  const fetchBaby = useBabyStore((s) => s.fetchBaby);
-  const fetchGrowthMeasurements = useBabyStore((s) => s.fetchGrowthMeasurements);
-  const fetchDailySummary = useBabyStore((s) => s.fetchDailySummary);
-  const fetchTimeline = useBabyStore((s) => s.fetchTimeline);
+  const addFeedingRecord = useBabyStore((s) => s.addFeedingRecord);
+  const addSleepRecord = useBabyStore((s) => s.addSleepRecord);
+  const addDiaperRecord = useBabyStore((s) => s.addDiaperRecord);
+  const addGrowthMeasurement = useBabyStore((s) => s.addGrowthMeasurement);
+  const addMedicalReport = useBabyStore((s) => s.addMedicalReport);
 
   const [cardData, setCardData] = useState<any>(() => {
     const d = { ...(initialAction.data || {}) };
@@ -86,69 +88,42 @@ export const AiActionCard: React.FC<AiActionCardProps> = ({ action: initialActio
 
     try {
       if (initialAction.type === "medical_report") {
-        const res = await fetch("/api/medical/reports", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(cardData),
-        });
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          throw new Error(err.error || "保存化验单失败");
-        }
+        await addMedicalReport(cardData);
         showToast("化验单已成功存入宝宝健康档案 ✨");
-        fetchGrowthMeasurements();
       } else if (initialAction.type === "feeding") {
-        const res = await fetch("/api/records/feeding", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(cardData),
+        const timestamp = cardData.timestamp
+          ? (cardData.timestamp.includes("T") ? cardData.timestamp : localTimeToUtcIso(cardData.timestamp))
+          : new Date().toISOString();
+        await addFeedingRecord({
+          ...cardData,
+          timestamp,
         });
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          throw new Error(err.error || "保存喂养记录失败");
-        }
         showToast("喂养记录已存入 ✨");
-        fetchDailySummary();
-        fetchTimeline();
       } else if (initialAction.type === "sleep") {
-        const res = await fetch("/api/records/sleep", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(cardData),
+        const startTime = cardData.startTime?.includes("T")
+          ? cardData.startTime
+          : localTimeToUtcIso(cardData.startTime || "12:00");
+        const endTime = cardData.endTime?.includes("T")
+          ? cardData.endTime
+          : localTimeToUtcIso(cardData.endTime || "13:30");
+        await addSleepRecord({
+          ...cardData,
+          startTime,
+          endTime,
         });
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          throw new Error(err.error || "保存睡眠记录失败");
-        }
         showToast("睡眠记录已存入 ✨");
-        fetchDailySummary();
-        fetchTimeline();
       } else if (initialAction.type === "diaper") {
-        const res = await fetch("/api/records/diaper", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(cardData),
+        const timestamp = cardData.timestamp
+          ? (cardData.timestamp.includes("T") ? cardData.timestamp : localTimeToUtcIso(cardData.timestamp))
+          : new Date().toISOString();
+        await addDiaperRecord({
+          ...cardData,
+          timestamp,
         });
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          throw new Error(err.error || "保存排便记录失败");
-        }
         showToast("排便记录已存入 ✨");
-        fetchDailySummary();
-        fetchTimeline();
       } else if (initialAction.type === "growth") {
-        const res = await fetch("/api/growth", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(cardData),
-        });
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          throw new Error(err.error || "保存生长数据失败");
-        }
+        await addGrowthMeasurement(cardData);
         showToast("生长发育记录已存入 ✨");
-        fetchGrowthMeasurements();
-        fetchBaby();
       }
 
       setSaved(true);
@@ -160,6 +135,7 @@ export const AiActionCard: React.FC<AiActionCardProps> = ({ action: initialActio
       setSaving(false);
     }
   };
+
 
   // Render Medical Report Action Card
   if (initialAction.type === "medical_report") {

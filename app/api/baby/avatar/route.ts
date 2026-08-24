@@ -22,15 +22,17 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "头像图片不能超过 10MB" }, { status: 400 });
     }
 
+    const ALLOWED_EXTENSIONS = [".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif"];
     const rawExt = path.extname(file.name || "").toLowerCase();
-    const ext = rawExt && [".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif", ".gif", ".bmp"].includes(rawExt)
-      ? rawExt
-      : ".jpg";
+    const isMimeImage = file.type ? file.type.toLowerCase().startsWith("image/") : false;
+    const isExtImage = ALLOWED_EXTENSIONS.includes(rawExt);
 
-    const isImage = !file.type || file.type.toLowerCase().startsWith("image/") || rawExt.length > 0;
-    if (!isImage) {
-      return NextResponse.json({ error: "仅支持图片格式文件" }, { status: 400 });
+    if (!isMimeImage && !isExtImage) {
+      return NextResponse.json({ error: "仅支持图片格式文件（jpg/png/webp）" }, { status: 400 });
     }
+
+    const ext = isExtImage ? rawExt : ".jpg";
+
 
     // Save file to disk
     const buffer = Buffer.from(await file.arrayBuffer());

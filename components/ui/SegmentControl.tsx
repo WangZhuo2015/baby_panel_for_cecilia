@@ -22,6 +22,7 @@ export const SegmentControl: React.FC<SegmentControlProps> = ({
 
   return (
     <div
+      role="tablist"
       className={`p-1 bg-primary-light rounded-full ${
         isMany
           ? 'flex overflow-x-auto scrollbar-hide gap-1 max-w-full'
@@ -34,6 +35,8 @@ export const SegmentControl: React.FC<SegmentControlProps> = ({
           <button
             key={opt.value}
             type="button"
+            role="tab"
+            aria-selected={isActive}
             onClick={() => onChange(opt.value)}
             className={`btn-press whitespace-nowrap select-none rounded-full font-medium transition-all min-h-[34px] cursor-pointer text-xs sm:text-sm ${
               isMany ? 'flex-shrink-0 px-3.5 py-1.5' : 'flex-1 px-2 py-1.5'
@@ -48,5 +51,6 @@ export const SegmentControl: React.FC<SegmentControlProps> = ({
         );
       })}
     </div>
+
   );
 };
