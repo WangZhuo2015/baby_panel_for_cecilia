@@ -43,3 +43,4 @@ data/push-subscriptions.json
 public/uploads/**
 !public/uploads/**/
 !public/uploads/**/.gitkeep
+scratch/
