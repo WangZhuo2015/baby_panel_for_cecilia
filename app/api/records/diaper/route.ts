@@ -152,3 +152,66 @@ export async function DELETE(request: Request) {
     );
   }
 }
+
+export async function PUT(request: Request) {
+  try {
+    const auth = await requireAuth(request);
+    if (auth.errorResponse) return auth.errorResponse;
+    const { user } = auth;
+
+    const body = await request.json().catch(() => ({}));
+    const id = body?.id;
+    if (!id || typeof id !== "string") {
+      return NextResponse.json({ error: "请提供要修改的记录 ID" }, { status: 400 });
+    }
+
+    const record = await prisma.diaperRecord.findUnique({ where: { id } });
+    if (!record) {
+      return NextResponse.json({ error: "未找到指定的换尿布记录" }, { status: 404 });
+    }
+    const babyCheck = await getActiveBaby(user.id, record.babyId);
+    if (babyCheck.errorResponse) return babyCheck.errorResponse;
+
+    const merged = {
+      type: body.type ?? record.type,
+      poopColor: body.poopColor !== undefined
+        ? (body.poopColor ? String(body.poopColor).trim() : null)
+        : record.poopColor,
+      poopConsistency: body.poopConsistency !== undefined
+        ? (body.poopConsistency ? String(body.poopConsistency).trim() : null)
+        : record.poopConsistency,
+      notes: body.notes !== undefined
+        ? (body.notes ? String(body.notes).trim() : null)
+        : record.notes,
+      timestamp: body.timestamp ?? record.timestamp,
+    };
+
+    if (!["pee", "poop", "both"].includes(merged.type)) {
+      return NextResponse.json({ error: "type 只能为 pee、poop 或 both" }, { status: 400 });
+    }
+
+    let recordTimestamp: string;
+    try {
+      const parsed = new Date(merged.timestamp as string);
+      if (Number.isNaN(parsed.getTime())) throw new Error();
+      recordTimestamp = parsed.toISOString();
+    } catch {
+      return NextResponse.json({ error: "timestamp 格式无效" }, { status: 400 });
+    }
+
+    const updated = await prisma.diaperRecord.update({
+      where: { id },
+      data: {
+        type: merged.type,
+        poopColor: merged.poopColor,
+        poopConsistency: merged.poopConsistency,
+        notes: merged.notes,
+        timestamp: recordTimestamp,
+      },
+    });
+    return NextResponse.json(updated);
+  } catch (error) {
+    console.error("PUT /api/records/diaper error:", error);
+    return NextResponse.json({ error: "Failed to update diaper record" }, { status: 500 });
+  }
+}

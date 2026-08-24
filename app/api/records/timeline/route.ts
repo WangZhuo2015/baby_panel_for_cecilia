@@ -28,6 +28,18 @@ export async function GET(request: Request) {
     if (babyResult.errorResponse) return babyResult.errorResponse;
     const babyId = babyResult.baby.id;
 
+    // 记录人映射（recordedById → 显示名）
+    const members = await prisma.familyMember.findMany({
+      where: { familyId: babyResult.family.id },
+      include: { user: { select: { displayName: true, username: true } } },
+    });
+    const recorderNames = new Map<string, string>();
+    for (const m of members) {
+      recorderNames.set(m.userId, m.user.displayName || m.user.username);
+    }
+    const recorderOf = (id: string | null): string | null =>
+      (id && recorderNames.get(id)) || null;
+
     const { start, end } = getLocalDayUtcRange(date);
 
     const feedingWhere: any = { babyId, timestamp: { gte: start, lt: end } };
@@ -112,6 +124,7 @@ export async function GET(request: Request) {
         title: typeLabels[r.type] || "喂奶",
         detail: detail || undefined,
         icon: typeIcons[r.type] || "🍼",
+        recorderName: recorderOf(r.recordedById),
       });
     }
 
@@ -141,6 +154,7 @@ export async function GET(request: Request) {
         title: isOvernight ? "跨夜睡眠 (接昨日)" : (typeLabels[r.type] || "睡觉"),
         detail,
         icon: typeIcons[r.type] || "🌙",
+        recorderName: recorderOf(r.recordedById),
       });
     }
 
@@ -167,6 +181,7 @@ export async function GET(request: Request) {
         title: "换尿布",
         detail: detail || undefined,
         icon: typeIcons[r.type] || "💧",
+        recorderName: recorderOf(r.recordedById),
       });
     }
 
@@ -181,6 +196,7 @@ export async function GET(request: Request) {
         title: "辅食餐点",
         detail: Array.isArray(foods) && foods.length > 0 ? foods.join("、") : undefined,
         icon: "🥣",
+        recorderName: recorderOf(r.recordedById),
       });
     }
 

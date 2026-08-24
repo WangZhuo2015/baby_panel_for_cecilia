@@ -193,3 +193,85 @@ export async function DELETE(request: Request) {
     );
   }
 }
+
+export async function PUT(request: Request) {
+  try {
+    const auth = await requireAuth(request);
+    if (auth.errorResponse) return auth.errorResponse;
+    const { user } = auth;
+
+    const body = await request.json().catch(() => ({}));
+    const id = body?.id;
+    if (!id || typeof id !== "string") {
+      return NextResponse.json({ error: "请提供要修改的记录 ID" }, { status: 400 });
+    }
+
+    const record = await prisma.sleepRecord.findUnique({ where: { id } });
+    if (!record) {
+      return NextResponse.json({ error: "未找到指定的睡眠记录" }, { status: 404 });
+    }
+    const babyCheck = await getActiveBaby(user.id, record.babyId);
+    if (babyCheck.errorResponse) return babyCheck.errorResponse;
+
+    // 编辑入口统一传 ISO 或 HH:MM+date；与 POST 相同的归一化规则
+    const trimmedStart = String(body.startTime ?? record.startTime).trim();
+    const trimmedEnd = String(body.endTime ?? record.endTime).trim();
+    const timeRegex = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+    let finalStartIso: string;
+    let finalEndIso: string;
+
+    if (timeRegex.test(trimmedStart) && timeRegex.test(trimmedEnd)) {
+      const targetDate =
+        body.date && isValidDateStr(body.date)
+          ? body.date
+          : getLocalDateStr(new Date(record.startTime));
+      const startMs = new Date(`${targetDate}T${trimmedStart.padStart(5, "0")}:00+08:00`).getTime();
+      let endMs = new Date(`${targetDate}T${trimmedEnd.padStart(5, "0")}:00+08:00`).getTime();
+      if (endMs <= startMs) endMs += 24 * 60 * 60 * 1000;
+      finalStartIso = new Date(startMs).toISOString();
+      finalEndIso = new Date(endMs).toISOString();
+    } else {
+      const startMs = new Date(trimmedStart).getTime();
+      const endMs = new Date(trimmedEnd).getTime();
+      if (Number.isNaN(startMs) || Number.isNaN(endMs)) {
+        return NextResponse.json({ error: "时间格式不正确" }, { status: 400 });
+      }
+      finalStartIso = new Date(startMs).toISOString();
+      finalEndIso = new Date(endMs).toISOString();
+    }
+
+    const durationMs = new Date(finalEndIso).getTime() - new Date(finalStartIso).getTime();
+    if (durationMs <= 0) {
+      return NextResponse.json({ error: "入睡与醒来时间不能相同" }, { status: 400 });
+    }
+    if (durationMs > 20 * 60 * 60 * 1000) {
+      return NextResponse.json({ error: "单次睡眠时长不能超过 20 小时" }, { status: 400 });
+    }
+
+    const sleepType = body.type !== undefined ? (body.type === "night" ? "night" : "day") : record.type;
+    const wakingCount = body.nightWakingCount !== undefined
+      ? (typeof body.nightWakingCount === "number" && body.nightWakingCount >= 0
+          ? Math.floor(body.nightWakingCount)
+          : 0)
+      : record.nightWakingCount;
+    const notes = body.notes !== undefined
+      ? (body.notes ? String(body.notes).trim() : null)
+      : record.notes;
+
+    const updated = await prisma.sleepRecord.update({
+      where: { id },
+      data: {
+        startTime: finalStartIso,
+        endTime: finalEndIso,
+        type: sleepType,
+        nightWakingCount: wakingCount,
+        notes,
+      },
+    });
+    return NextResponse.json(updated);
+  } catch (error) {
+    console.error("PUT /api/records/sleep error:", error);
+    return NextResponse.json({ error: "Failed to update sleep record" }, { status: 500 });
+  }
+}

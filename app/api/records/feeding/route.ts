@@ -191,3 +191,79 @@ export async function DELETE(request: Request) {
     );
   }
 }
+
+export async function PUT(request: Request) {
+  try {
+    const auth = await requireAuth(request);
+    if (auth.errorResponse) return auth.errorResponse;
+    const { user } = auth;
+
+    const body = await request.json().catch(() => ({}));
+    const id = body?.id;
+    if (!id || typeof id !== "string") {
+      return NextResponse.json({ error: "请提供要修改的记录 ID" }, { status: 400 });
+    }
+
+    const record = await prisma.feedingRecord.findUnique({ where: { id } });
+    if (!record) {
+      return NextResponse.json({ error: "未找到指定的喂养记录" }, { status: 404 });
+    }
+    const babyCheck = await getActiveBaby(user.id, record.babyId);
+    if (babyCheck.errorResponse) return babyCheck.errorResponse;
+
+    const merged = {
+      type: body.type ?? record.type,
+      amountMl: body.amountMl !== undefined ? body.amountMl : record.amountMl,
+      leftMinutes: body.leftMinutes !== undefined ? body.leftMinutes : record.leftMinutes,
+      rightMinutes: body.rightMinutes !== undefined ? body.rightMinutes : record.rightMinutes,
+      spitUp: body.spitUp !== undefined
+        ? body.spitUp === true || body.spitUp === "true" || body.spitUp === 1
+        : record.spitUp,
+      notes: body.notes !== undefined ? (body.notes ? String(body.notes).trim() : null) : record.notes,
+      timestamp: body.timestamp ?? record.timestamp,
+    };
+
+    const validTypes = ["breast", "formula", "bottle_breast", "mixed", "solid"];
+    if (!validTypes.includes(merged.type)) {
+      return NextResponse.json(
+        { error: "type 只能为 breast、formula、bottle_breast、mixed 或 solid" },
+        { status: 400 }
+      );
+    }
+
+    const numOrNull = (v: unknown, min: number, max: number, label: string): number | null => {
+      if (v === undefined || v === null || v === "") return null;
+      const n = Number(v);
+      if (Number.isNaN(n) || n < min || n > max) {
+        throw new RangeError(`${label} 必须为 ${min}-${max} 之间的有效数值`);
+      }
+      return n;
+    };
+
+    try {
+      const updatedData = {
+        type: merged.type,
+        amountMl: numOrNull(merged.amountMl, 0, 3000, "amountMl"),
+        leftMinutes: numOrNull(merged.leftMinutes, 0, 180, "leftMinutes"),
+        rightMinutes: numOrNull(merged.rightMinutes, 0, 180, "rightMinutes"),
+        spitUp: merged.spitUp,
+        notes: merged.notes,
+        timestamp: (() => {
+          const parsed = new Date(merged.timestamp as string);
+          if (Number.isNaN(parsed.getTime())) throw new RangeError("timestamp 格式无效");
+          return parsed.toISOString();
+        })(),
+      };
+      const updated = await prisma.feedingRecord.update({ where: { id }, data: updatedData });
+      return NextResponse.json(updated);
+    } catch (e: any) {
+      if (e instanceof RangeError) {
+        return NextResponse.json({ error: e.message }, { status: 400 });
+      }
+      throw e;
+    }
+  } catch (error) {
+    console.error("PUT /api/records/feeding error:", error);
+    return NextResponse.json({ error: "Failed to update feeding record" }, { status: 500 });
+  }
+}
