@@ -2,6 +2,8 @@ import { PrismaClient } from '../generated/prisma/client';
 import { PrismaLibSql } from '@prisma/adapter-libsql';
 import * as fs from 'fs';
 import * as path from 'path';
+import bcrypt from 'bcryptjs';
+
 
 const DATA_DIR = path.join(process.cwd(), 'data');
 
@@ -386,14 +388,46 @@ async function main() {
     })),
   });
 
-  // ── 13. Baby ────────────────────────────────────────────────────────
-  // 宝宝信息由用户在首次使用时通过 /onboarding 自行填写创建,
-  // 这里不再硬编码默认宝宝。
-  console.log('👶 Baby record: 由用户初始化时创建(未创建)');
+  // ── 13. Default Family, User & Baby ─────────────────────────────────
+  console.log('👶 Creating demo family, user (admin / 123456) & baby (好好)...');
+  const passwordHash = await bcrypt.hash("123456", 10);
+  const demoFamily = await prisma.family.create({
+    data: {
+      name: "好好温馨之家",
+      inviteCode: "BABY88",
+    },
+  });
 
+  const demoUser = await prisma.user.create({
+    data: {
+      username: "admin",
+      passwordHash,
+      displayName: "好好爸爸",
+      memberships: {
+        create: {
+          familyId: demoFamily.id,
+          role: "admin",
+          relation: "parent",
+        },
+      },
+    },
+  });
+
+  await prisma.baby.create({
+    data: {
+      familyId: demoFamily.id,
+      nickname: "好好",
+      gender: "female",
+      birthDate: "2024-02-15",
+      gestationalAge: 39,
+    },
+  });
+
+  console.log(`✅ Demo user seeded: username="admin", password="123456", userId="${demoUser.id}"`);
   console.log('✅ Seed complete!');
   await prisma.$disconnect();
 }
+
 
 main().catch((e) => {
   console.error(e);
