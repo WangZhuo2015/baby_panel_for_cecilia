@@ -27,7 +27,10 @@ export const viewport: Viewport = {
   maximumScale: 1,
   userScalable: false,
   viewportFit: "cover",
-  themeColor: "#FFF9FB",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#FFF9FB" },
+    { media: "(prefers-color-scheme: dark)", color: "#171216" },
+  ],
 };
 
 
@@ -42,6 +45,12 @@ export default function RootLayout({
         {/* appleWebApp/icons metadata 已生成 status-bar/title/touch-icon；
             此处仅保留 Next 不生成的旧版 Android 兼容位 */}
         <meta name="mobile-web-app-capable" content="yes" />
+        {/* 防闪脚本：在首帧渲染前根据持久化/系统偏好挂载 dark class */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var t=localStorage.getItem('baby-theme');if(!t){t=window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';}if(t==='dark'){document.documentElement.classList.add('dark');}}catch(e){}})();`,
+          }}
+        />
       </head>
       <body className="antialiased">
         <ServiceWorkerRegistrar />

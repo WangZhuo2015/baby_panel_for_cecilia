@@ -1,5 +1,6 @@
 import React from 'react';
 import { ChevronLeft } from 'lucide-react';
+import { ThemeToggle } from '@/components/ui/ThemeToggle';
 
 interface AppHeaderProps {
   title: string;
@@ -38,8 +39,9 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
           {title}
         </h1>
 
-        {/* Right: action */}
-        <div className="w-10 flex-shrink-0 flex justify-end">
+        {/* Right: theme toggle + action */}
+        <div className="flex-shrink-0 flex items-center justify-end gap-0.5 min-w-[44px]">
+          <ThemeToggle />
           {rightAction}
         </div>
       </div>

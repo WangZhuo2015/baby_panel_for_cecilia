@@ -194,3 +194,72 @@ html {
   position: absolute;
   inset: -8px;
 }
+
+/* ===== Dark Mode ===== */
+/* class 驱动（防闪脚本/ThemeToggle 控制 <html>.dark），非系统自动 */
+@custom-variant dark (&:where(.dark, .dark *));
+
+.dark {
+  /* Primary Pinks —— 品牌色保持，浅色底改为暗玫瑰调 */
+  --color-primary-light: #33202C;
+  --color-primary-soft: #43293A;
+
+  /* Text */
+  --color-text-primary: #F2E7EC;
+  --color-text-secondary: #C9B2BA;
+  --color-text-muted: #937E88;
+
+  /* Backgrounds */
+  --color-bg: #171216;
+  --color-bg-warm: #1D151B;
+  --color-card: #211A21;
+
+  /* Borders */
+  --color-divider: #352B34;
+
+  /* Shadows 加深 */
+  --shadow-soft: 0 8px 24px rgba(0, 0, 0, 0.35);
+  --shadow-card: 0 4px 16px rgba(0, 0, 0, 0.3);
+  --shadow-elevated: 0 12px 32px rgba(0, 0, 0, 0.45);
+  --shadow-button: 0 4px 12px rgba(232, 90, 138, 0.25);
+}
+
+html.dark {
+  background: var(--color-bg);
+}
+
+.dark body,
+.dark .app-wrapper {
+  background: var(--color-bg);
+}
+
+@media (min-width: 431px) {
+  .dark body {
+    background: #0F0B10;
+  }
+  .dark .app-wrapper {
+    box-shadow: 0 0 40px rgba(0, 0, 0, 0.5);
+  }
+}
+
+/* ---- 硬编码工具类映射：一处覆盖全站 200+ 处散落的 gray/white ---- */
+.dark .bg-white { background-color: var(--color-card); }
+.dark .bg-gray-50 { background-color: #262026; }
+.dark .bg-gray-100 { background-color: #2C252C; }
+.dark .border-gray-100 { border-color: #352B34; }
+.dark .border-divider { border-color: var(--color-divider); }
+
+.dark .text-gray-300 { color: #6E6469; }
+.dark .text-gray-400 { color: #8A7F85; }
+.dark .text-gray-500 { color: #A99DA3; }
+.dark .text-gray-600 { color: #C4B8BE; }
+.dark .text-gray-700 { color: #DCD2D8; }
+.dark .text-gray-800 { color: #EEE6EB; }
+
+.dark .bg-red-50 { background-color: #3B1D22; }
+.dark .hover\:bg-red-100:hover { background-color: #4A232B; }
+.dark .text-red-500 { color: #F87171; }
+
+.dark .bg-amber-50 { background-color: #3B2E14; }
+.dark .text-amber-700 { color: #FFD98A; }
+.dark .border-amber-200 { border-color: #5A4718; }
