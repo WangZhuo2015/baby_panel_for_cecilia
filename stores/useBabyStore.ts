@@ -231,24 +231,25 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
       try {
         const res = await fetch("/api/auth/me");
         if (!res.ok) {
-          set({ user: null, family: null, authLoading: false });
+          set({ user: null, family: null, baby: null, authLoading: false });
           markFetched("user");
           return;
         }
         const data = await res.json();
         set({
-          user: data.user,
-          family: data.family,
-          baby: data.baby || get().baby,
+          user: data.user || null,
+          family: data.family || null,
+          baby: data.baby || (data.user ? get().baby : null),
           authLoading: false,
         });
         markFetched("user");
       } catch {
-        set({ user: null, family: null, authLoading: false });
+        set({ user: null, family: null, baby: null, authLoading: false });
         markFetched("user");
       }
     }).then(() => get().user);
   },
+
 
 
   login: async (credentials) => {

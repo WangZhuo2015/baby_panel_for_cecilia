@@ -5,8 +5,9 @@ export async function GET(request: Request) {
   try {
     const user = await getAuthSession(request);
     if (!user) {
-      return NextResponse.json({ user: null }, { status: 401 });
+      return NextResponse.json({ user: null, family: null, baby: null }, { status: 200 });
     }
+
 
     const primaryMembership = user.memberships[0];
     const family = primaryMembership?.family;
