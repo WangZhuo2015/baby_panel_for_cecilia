@@ -48,7 +48,16 @@ export async function PUT(request: Request) {
         { status: 400 }
       );
     }
-    const dose = typeof doseNumber === "number" ? doseNumber : 1;
+    let dose = 1;
+    if (doseNumber !== undefined && doseNumber !== null) {
+      if (!Number.isInteger(doseNumber) || doseNumber < 1 || doseNumber > 12) {
+        return NextResponse.json(
+          { error: "doseNumber 必须为 1-12 之间的整数" },
+          { status: 400 }
+        );
+      }
+      dose = doseNumber;
+    }
     if (typeof selected !== "boolean" && typeof completed !== "boolean") {
       return NextResponse.json(
         { error: "selected 或 completed 必须为布尔值" },

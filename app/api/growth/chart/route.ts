@@ -18,7 +18,7 @@ export async function GET(request: Request) {
 
     const measurements = await prisma.growthMeasurement.findMany({
       where: { babyId: baby.id },
-      orderBy: { date: "asc" },
+      orderBy: [{ date: "asc" }, { createdAt: "asc" }],
     });
 
     const gender = baby.gender || "female";

@@ -45,17 +45,35 @@ export async function GET(request: Request) {
       0
     );
 
-    // Total sleep minutes
+    // Total sleep minutes —— 先做区间并集合并再求和，重叠/重复段不双计
+    const sleepIntervals = sleepRecords
+      .map((record) => ({
+        startMs: new Date(record.startTime).getTime(),
+        endMs: new Date(record.endTime).getTime(),
+      }))
+      .filter((iv) => !Number.isNaN(iv.startMs) && !Number.isNaN(iv.endMs) && iv.endMs > iv.startMs)
+      .map((iv) => ({
+        startMs: Math.max(iv.startMs, dayStartMs),
+        endMs: Math.min(iv.endMs, dayEndMs),
+      }))
+      .filter((iv) => iv.endMs > iv.startMs)
+      .sort((a, b) => a.startMs - b.startMs);
+
     let totalSleepMinutes = 0;
-    for (const record of sleepRecords) {
-      const startMs = new Date(record.startTime).getTime();
-      const endMs = new Date(record.endTime).getTime();
-      if (Number.isNaN(startMs) || Number.isNaN(endMs)) continue;
-      const overlapMs =
-        Math.min(endMs, dayEndMs) - Math.max(startMs, dayStartMs);
-      if (overlapMs > 0) {
-        totalSleepMinutes += Math.round(overlapMs / 60000);
+    let mergedStartMs = 0;
+    let mergedEndMs = 0;
+    for (const interval of sleepIntervals) {
+      if (mergedEndMs === 0 || interval.startMs > mergedEndMs) {
+        // 结算上一段
+        if (mergedEndMs > 0) totalSleepMinutes += Math.round((mergedEndMs - mergedStartMs) / 60000);
+        mergedStartMs = interval.startMs;
+        mergedEndMs = interval.endMs;
+      } else {
+        mergedEndMs = Math.max(mergedEndMs, interval.endMs);
       }
+    }
+    if (mergedEndMs > 0) {
+      totalSleepMinutes += Math.round((mergedEndMs - mergedStartMs) / 60000);
     }
 
     const diaperCount = diaperRecords.length;

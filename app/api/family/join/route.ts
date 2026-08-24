@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/api-helpers";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
+import { normalizeRelation } from "@/lib/constants";
 
 export async function POST(request: Request) {
   try {
@@ -70,7 +71,7 @@ export async function POST(request: Request) {
         familyId: targetFamily.id,
         userId: user.id,
         role: "member",
-        relation: relation || "parent",
+        relation: normalizeRelation(relation),
       },
     });
 

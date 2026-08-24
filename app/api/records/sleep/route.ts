@@ -104,6 +104,18 @@ export async function POST(request: Request) {
       finalEndIso = new Date(endMs).toISOString();
     }
 
+    // 统一守卫：拒绝零时长（会被跨天逻辑放大成 24h）；单段时长上限 20h；防未来毒化数据
+    const durationMs = new Date(finalEndIso).getTime() - new Date(finalStartIso).getTime();
+    if (durationMs <= 0) {
+      return NextResponse.json({ error: "入睡与醒来时间不能相同" }, { status: 400 });
+    }
+    if (durationMs > 20 * 60 * 60 * 1000) {
+      return NextResponse.json({ error: "单次睡眠时长不能超过 20 小时" }, { status: 400 });
+    }
+    if (new Date(finalStartIso).getTime() > Date.now() + 48 * 60 * 60 * 1000) {
+      return NextResponse.json({ error: "睡眠开始时间不能在未来两天以后" }, { status: 400 });
+    }
+
     const sleepType = type === "night" ? "night" : "day";
     const wakingCount = typeof nightWakingCount === "number" && nightWakingCount >= 0
       ? Math.floor(nightWakingCount)

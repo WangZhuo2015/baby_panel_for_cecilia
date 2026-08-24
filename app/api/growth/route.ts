@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAuth, requireBaby, getActiveBaby } from "@/lib/api-helpers";
 import { estimatePercentile } from "@/lib/who-growth-standards";
 import { calculateAgeDetail } from "@/lib/age";
+import { isValidDateStr, getLocalDateStr, addDays } from "@/lib/date";
 
 export async function GET(request: Request) {
   try {
@@ -18,7 +19,7 @@ export async function GET(request: Request) {
 
     const measurements = await prisma.growthMeasurement.findMany({
       where: { babyId: babyResult.baby.id },
-      orderBy: { date: "asc" },
+      orderBy: [{ date: "asc" }, { createdAt: "asc" }],
     });
 
     return NextResponse.json(measurements);
@@ -52,11 +53,21 @@ export async function POST(request: Request) {
     if (babyResult.errorResponse) return babyResult.errorResponse;
     const baby = babyResult.baby;
 
-    if (!date || typeof date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(date.trim())) {
+    if (!date || typeof date !== "string" || !isValidDateStr(date.trim())) {
       return NextResponse.json(
-        { error: "date 必填且格式必须为 YYYY-MM-DD" },
+        { error: "date 必填且必须为有效的 YYYY-MM-DD 日期" },
         { status: 400 }
       );
+    }
+
+    // 日期边界：不得晚于今天（+1 天补录容差），不得早于出生日期
+    const today = getLocalDateStr();
+    const dateVal = date.trim();
+    if (dateVal > addDays(today, 1)) {
+      return NextResponse.json({ error: "测量日期不能是未来" }, { status: 400 });
+    }
+    if (baby.birthDate && dateVal < baby.birthDate) {
+      return NextResponse.json({ error: "测量日期不能早于宝宝出生日期" }, { status: 400 });
     }
 
     let parsedWeight: number | null = null;

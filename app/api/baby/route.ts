@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth, getActiveBaby } from "@/lib/api-helpers";
 import { generateInviteCode } from "@/lib/auth";
+import { isValidDateStr } from "@/lib/date";
 
 export async function GET(request: Request) {
   try {
@@ -29,12 +30,8 @@ function validateBody(body: any): { nickname: string; birthDate: string; gender:
   if (typeof body.nickname !== "string" || body.nickname.trim() === "") {
     return "nickname 必填且不能为空";
   }
-  if (
-    typeof body.birthDate !== "string" ||
-    !/^\d{4}-\d{2}-\d{2}$/.test(body.birthDate) ||
-    Number.isNaN(new Date(`${body.birthDate}T00:00:00`).getTime())
-  ) {
-    return "birthDate 必填且格式为 YYYY-MM-DD";
+  if (typeof body.birthDate !== "string" || !isValidDateStr(body.birthDate.trim())) {
+    return "birthDate 必填且必须为有效的 YYYY-MM-DD 日期";
   }
   const gender = body.gender === "male" ? "male" : "female";
   const gestationalAge = typeof body.gestationalAge === "number" ? body.gestationalAge : undefined;

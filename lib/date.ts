@@ -50,6 +50,14 @@ export function getLocalTimeStr(date = new Date()): string {
   return `${p.hour}:${p.minute}`;
 }
 
+/** 返回 ISO 日期字符串加 n 天后的 YYYY-MM-DD（上海时区锚定） */
+export function addDays(dateStr: string, days: number): string {
+  if (!isValidDateStr(dateStr)) return dateStr;
+  const d = new Date(`${dateStr}T00:00:00+08:00`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
 /** Format an ISO timestamp as local (Asia/Shanghai) HH:MM. */
 export function formatIsoToLocalTime(iso: string): string {
   if (!iso) return "";
