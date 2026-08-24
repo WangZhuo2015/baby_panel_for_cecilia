@@ -19,12 +19,13 @@ export default function MainLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const user = useBabyStore((s) => s.user);
   const fetchBaby = useBabyStore((s) => s.fetchBaby);
   const hideNav = hideNavRoutes.includes(pathname);
 
   useEffect(() => {
-    if (!useBabyStore.getState().baby) fetchBaby();
-  }, [fetchBaby]);
+    if (user && !useBabyStore.getState().baby) fetchBaby();
+  }, [user, fetchBaby]);
 
   return (
     <div className="flex flex-col min-h-[100dvh]">

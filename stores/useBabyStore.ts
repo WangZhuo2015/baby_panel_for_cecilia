@@ -755,6 +755,11 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
 }));
 
 setOnUnauthorized(() => {
-  useBabyStore.setState({ user: null, family: null, baby: null, authLoading: false });
+  // Only reset state if we had a logged-in user (session expired).
+  // During cold start, user is null and 401s are expected — don't interfere.
+  const state = useBabyStore.getState();
+  if (state.user) {
+    useBabyStore.setState({ user: null, family: null, baby: null, authLoading: false });
+  }
 });
 
