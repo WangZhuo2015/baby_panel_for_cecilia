@@ -124,6 +124,13 @@ export function setOnUnauthorized(handler: UnauthorizedHandler) {
   _onUnauthorized = handler;
 }
 
+class AuthError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "AuthError";
+  }
+}
+
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init);
   if (!res.ok) {
@@ -131,12 +138,14 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
       if (_onUnauthorized) {
         _onUnauthorized();
       }
+      throw new AuthError("Unauthorized");
     }
     const data = await res.json().catch(() => ({}));
     throw new Error(data?.error || `Request failed (${res.status})`);
   }
   return res.json();
 }
+
 
 
 /* ── Fetch caching / deduplication ────────────────────────── */
@@ -319,7 +328,7 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
         familyMembers: data.members || [],
       });
     } catch (e) {
-      console.error("Failed to fetch family members:", e);
+      if (!(e instanceof AuthError)) console.error("Failed to fetch family members:", e);
     }
   },
 
@@ -333,7 +342,7 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
         if (data) set({ baby: data });
         markFetched('baby');
       } catch (e) {
-        console.error("Failed to fetch baby:", e);
+        if (!(e instanceof AuthError)) if (!(e instanceof AuthError)) console.error("Failed to fetch baby:", e);
       }
     });
   },
@@ -363,7 +372,7 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
         set({ feedingRecords: data || [] });
         markFetched(key);
       } catch (e) {
-        console.error("Failed to fetch feeding records:", e);
+        if (!(e instanceof AuthError)) console.error("Failed to fetch feeding records:", e);
       }
     });
   },
@@ -376,7 +385,7 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
         set({ sleepRecords: data || [] });
         markFetched('sleepRecords');
       } catch (e) {
-        console.error("Failed to fetch sleep records:", e);
+        if (!(e instanceof AuthError)) console.error("Failed to fetch sleep records:", e);
       }
     });
   },
@@ -389,7 +398,7 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
         set({ diaperRecords: data || [] });
         markFetched('diaperRecords');
       } catch (e) {
-        console.error("Failed to fetch diaper records:", e);
+        if (!(e instanceof AuthError)) console.error("Failed to fetch diaper records:", e);
       }
     });
   },
@@ -400,7 +409,7 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
       const data = await request<FoodLogRecord[]>(`/api/food/logs${params}`);
       set({ foodLogRecords: data || [] });
     } catch (e) {
-      console.error("Failed to fetch food log records:", e);
+      if (!(e instanceof AuthError)) console.error("Failed to fetch food log records:", e);
     }
   },
 
@@ -412,7 +421,7 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
         set({ growthMeasurements: data || [] });
         markFetched('growthMeasurements');
       } catch (e) {
-        console.error("Failed to fetch growth measurements:", e);
+        if (!(e instanceof AuthError)) console.error("Failed to fetch growth measurements:", e);
       }
     });
   },
@@ -427,7 +436,7 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
         set({ dailySummary: data });
         markFetched(key);
       } catch (e) {
-        console.error("Failed to fetch daily summary:", e);
+        if (!(e instanceof AuthError)) console.error("Failed to fetch daily summary:", e);
       }
     });
   },
@@ -442,7 +451,7 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
         set({ timeline: data || [] });
         markFetched(key);
       } catch (e) {
-        console.error("Failed to fetch timeline:", e);
+        if (!(e instanceof AuthError)) console.error("Failed to fetch timeline:", e);
       }
     });
   },
@@ -478,7 +487,7 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
         set({ weather: data });
         markFetched('weather');
       } catch (e) {
-        console.error("Failed to fetch weather:", e);
+        if (!(e instanceof AuthError)) console.error("Failed to fetch weather:", e);
       }
     });
   },
@@ -489,7 +498,7 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
       const data = await request<FoodItem[]>(`/api/food/items${params}`);
       set({ foodItems: data || [] });
     } catch (e) {
-      console.error("Failed to fetch food items:", e);
+      if (!(e instanceof AuthError)) console.error("Failed to fetch food items:", e);
     }
   },
 
@@ -498,7 +507,7 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
       const data = await request<FeedingGuideline[]>("/api/food/feeding-guidelines");
       set({ feedingGuidelines: data || [] });
     } catch (e) {
-      console.error("Failed to fetch feeding guidelines:", e);
+      if (!(e instanceof AuthError)) console.error("Failed to fetch feeding guidelines:", e);
     }
   },
 
@@ -508,7 +517,7 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
       const data = await request<FoodPlan[]>(`/api/food/plans${params}`);
       set({ foodPlans: data || [] });
     } catch (e) {
-      console.error("Failed to fetch food plans:", e);
+      if (!(e instanceof AuthError)) console.error("Failed to fetch food plans:", e);
     }
   },
 
@@ -518,7 +527,7 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
       const data = await request<Book[]>(`/api/books${params}`);
       set({ books: data || [] });
     } catch (e) {
-      console.error("Failed to fetch books:", e);
+      if (!(e instanceof AuthError)) console.error("Failed to fetch books:", e);
     }
   },
 
@@ -528,7 +537,7 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
       const data = await request<BabyStore["vaccineData"]>(`/api/vaccines${params}`);
       set({ vaccineData: data });
     } catch (e) {
-      console.error("Failed to fetch vaccines:", e);
+      if (!(e instanceof AuthError)) console.error("Failed to fetch vaccines:", e);
     }
   },
 
@@ -543,7 +552,7 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
       );
       set({ milestones: data?.milestones || [] });
     } catch (e) {
-      console.error("Failed to fetch milestones:", e);
+      if (!(e instanceof AuthError)) console.error("Failed to fetch milestones:", e);
     }
   },
 
@@ -554,7 +563,7 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
       );
       set({ warningSigns: Array.isArray(data) ? data : [] });
     } catch (e) {
-      console.error("Failed to fetch warning signs:", e);
+      if (!(e instanceof AuthError)) console.error("Failed to fetch warning signs:", e);
     }
   },
 
@@ -565,7 +574,7 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
       );
       set({ activities: data || [] });
     } catch (e) {
-      console.error("Failed to fetch activities:", e);
+      if (!(e instanceof AuthError)) console.error("Failed to fetch activities:", e);
     }
   },
 
@@ -584,7 +593,7 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
         set({ aiTips: Array.isArray(data) ? data : [], aiError: null });
         markFetched('aiTips');
       } catch (e: any) {
-        console.error("Failed to fetch AI tips:", e);
+        if (!(e instanceof AuthError)) console.error("Failed to fetch AI tips:", e);
         set({ aiTips: [], aiError: e?.message || "AI 育儿建议连接失败" });
       }
     });
@@ -697,7 +706,7 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
       const data = await request<MedicalReport[]>(`/api/medical/reports${params}`);
       set({ medicalReports: data || [] });
     } catch (e) {
-      console.error("Failed to fetch medical reports:", e);
+      if (!(e instanceof AuthError)) console.error("Failed to fetch medical reports:", e);
     }
   },
 
