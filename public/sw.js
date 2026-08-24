@@ -94,16 +94,19 @@ self.addEventListener('fetch', (event) => {
   }
 
   // 3. Static media, icons, and images (/icons/*, /images/*, images) → Stale-While-Revalidate
+  // ⚠️ /uploads/*（宝宝头像/医学影像）刻意排除：Cache API 不遵守 private 头，
+  //    缓存后登出也无法清理，共享电脑上构成隐私泄露。
   const isStaticImage =
-    pathname.startsWith('/icons/') ||
-    pathname.startsWith('/images/') ||
-    pathname === '/favicon.svg' ||
-    pathname.endsWith('.png') ||
-    pathname.endsWith('.svg') ||
-    pathname.endsWith('.jpg') ||
-    pathname.endsWith('.jpeg') ||
-    pathname.endsWith('.webp') ||
-    pathname.endsWith('.ico');
+    (pathname.startsWith('/icons/') ||
+      pathname.startsWith('/images/') ||
+      pathname === '/favicon.svg' ||
+      pathname.endsWith('.png') ||
+      pathname.endsWith('.svg') ||
+      pathname.endsWith('.jpg') ||
+      pathname.endsWith('.jpeg') ||
+      pathname.endsWith('.webp') ||
+      pathname.endsWith('.ico')) &&
+    !pathname.startsWith('/uploads/');
 
   if (isStaticImage && !pathname.startsWith('/api/')) {
     event.respondWith(

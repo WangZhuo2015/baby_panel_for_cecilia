@@ -38,16 +38,15 @@ function normalizeDate(val?: string): string {
   const str = String(val).trim().replace(/\//g, "-").replace(/年|月/g, "-").replace(/日/g, "");
   const match = str.match(/\d{4}-\d{1,2}-\d{1,2}/);
   if (match) {
-    const parts = match[0].split("-");
-    const y = parts[0];
-    const m = parts[1].padStart(2, "0");
-    const d = parts[2].padStart(2, "0");
-    return `${y}-${m}-${d}`;
+    const [y, m, d] = match[0].split("-").map(Number);
+    // 历法真实性校验：拒绝 2026-02-30 类进位日期
+    const probe = new Date(y, m - 1, d);
+    if (m >= 1 && m <= 12 && probe.getFullYear() === y && probe.getMonth() === m - 1 && probe.getDate() === d) {
+      return `${String(y).padStart(4, "0")}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+    }
+    return getLocalDateStr();
   }
-  const d = new Date(val);
-  if (!isNaN(d.getTime())) {
-    return d.toISOString().split("T")[0];
-  }
+  // 无年份输入（如"02-30"）不可信：不使用裸 new Date 回退，避免捏造 2001 年
   return getLocalDateStr();
 }
 
