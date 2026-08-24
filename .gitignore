@@ -48,3 +48,9 @@ public/uploads/**
 !public/uploads/**/
 !public/uploads/**/.gitkeep
 scratch/
+
+# DB backups
+backups/
+
+# Gemini 取证导出（含密码哈希，禁止入库）
+database_backup_full.*

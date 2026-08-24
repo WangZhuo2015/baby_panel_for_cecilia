@@ -152,7 +152,7 @@ fetch(`${BASE_URL}/api/baby`) // 无 Authorization
 **修复**: 读取 `JWT_TOKEN` 环境变量，所有 `fetch` 加 `Authorization: Bearer`；服务端强制校验。
 
 #### C-06 本地 `.env.local` 真实 VAPID 私钥泄漏
-**文件**: `.env.local:4-5` `VAPID_PRIVATE_KEY=-PvpIxIM...`  
+**文件**: `.env.local:4-5` `VAPID_PRIVATE_KEY=<已脱敏，原值片段已从本文档移除>`  
 **描述**: 虽 `.gitignore` 含 `*.local`，但 `COPY . .` 会打入镜像层，可通过穿越或镜像历史提取；可伪造 `web-push` 钓鱼。  
 **修复**: 立即轮换 `npx tsx scripts/generate-vapid-keys.ts`，`.dockerignore` 添加 `.env*`。
 

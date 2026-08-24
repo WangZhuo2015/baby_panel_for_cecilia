@@ -44,6 +44,18 @@ npm run dev
 
 打开浏览器访问 `http://localhost:3000` 即可使用。
 
+### 数据库迁移策略
+
+项目采用 **基线迁移（baseline）** 模式，`prisma/migrations/20260824120000_baseline` 与当前 `schema.prisma` 完全一致（含全部复合索引）：
+
+| 场景 | 命令 |
+|------|------|
+| 全新数据库部署 | `npm run db:deploy`（执行 migrate deploy 建表+索引），再 `npm run db:seed` |
+| 既有库（曾用 db push 同步） | 首次需登记基线：`npx prisma migrate resolve --applied 20260824120000_baseline` |
+| 开发期快速同步 schema | `npm run db:push`（不走迁移记录） |
+
+> ⚠️ 注意：`migrate deploy/resolve` 在 dev 服务器运行时会因 SQLite 写锁报 `database is locked`，请先停服或对副本操作。修改 schema 后请用 `npx prisma migrate diff --from-migrations prisma/migrations --to-schema prisma/schema.prisma --script` 检查漂移并生成增量迁移。
+
 ---
 
 ## 🐳 公网与 Docker 部署
