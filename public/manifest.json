@@ -2,12 +2,20 @@
   "name": "宝宝成长工作台",
   "short_name": "宝宝成长",
   "description": "宝宝日常喂养与睡眠记录、WHO成长曲线、智能体检单OCR及AI育儿助手",
+  "lang": "zh-CN",
+  "dir": "ltr",
   "start_url": "/",
   "id": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#FFF9FB",
-  "theme_color": "#FF6F9F",
+  "theme_color": "#FFF9FB",
   "orientation": "portrait",
+  "categories": [
+    "lifestyle",
+    "health",
+    "utilities"
+  ],
   "icons": [
     {
       "src": "/icon-192.png",

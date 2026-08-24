@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import {
   Play,
@@ -25,6 +25,45 @@ import type { FeedingType } from "@/types";
 
 const FORMULA_PRESETS = [60, 90, 120, 150, 180, 210, 240];
 
+
+// ===== 亲喂秒表外部 store：计时 tick 不经过页面 state =====
+const stopwatchStore = {
+  left: 600, // default 10m
+  right: 480, // default 8m
+  listeners: new Set<() => void>(),
+  subscribe(fn: () => void) {
+    this.listeners.add(fn);
+    return () => {
+      this.listeners.delete(fn);
+    };
+  },
+  emit() {
+    this.listeners.forEach((fn) => fn());
+  },
+};
+
+function StopwatchText({ side }: { side: "left" | "right" }) {
+  const totalSec = useSyncExternalStore(
+    (cb) => stopwatchStore.subscribe(cb),
+    () => stopwatchStore[side]
+  );
+  return <>{formatTimerStatic(totalSec)}</>;
+}
+
+function StopwatchMinutes({ side }: { side: "left" | "right" }) {
+  const totalSec = useSyncExternalStore(
+    (cb) => stopwatchStore.subscribe(cb),
+    () => stopwatchStore[side]
+  );
+  return <>{Math.round(totalSec / 60)}分</>;
+}
+
+function formatTimerStatic(totalSec: number) {
+  const m = Math.floor(totalSec / 60);
+  const sec = totalSec % 60;
+  return `${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
+}
+
 export default function FeedingRecordPage() {
   const router = useRouter();
   const { showToast } = useToast();
@@ -33,9 +72,8 @@ export default function FeedingRecordPage() {
   const [feedingType, setFeedingType] = useState<FeedingType>("formula");
   const [amount, setAmount] = useState(120);
 
-  // Breastfeeding stopwatch & minutes
-  const [leftSeconds, setLeftSeconds] = useState(600); // default 10m
-  const [rightSeconds, setRightSeconds] = useState(480); // default 8m
+  // Breastfeeding stopwatch —— 秒数存模块级 store，叶子组件自订阅，
+  // 计时期间不再每秒重渲染整页（提交时直接读 store）
   const [activeSide, setActiveSide] = useState<"left" | "right" | null>(null);
 
   const [spitUp, setSpitUp] = useState(false);
@@ -49,27 +87,18 @@ export default function FeedingRecordPage() {
   });
   const [isNow, setIsNow] = useState(true);
 
-  // Stopwatch timer interval
+  // Stopwatch timer interval：只推进 store 并通知叶子组件
   useEffect(() => {
     if (!activeSide) return;
     const interval = setInterval(() => {
-      if (activeSide === "left") {
-        setLeftSeconds((prev) => prev + 1);
-      } else if (activeSide === "right") {
-        setRightSeconds((prev) => prev + 1);
-      }
+      stopwatchStore[activeSide] += 1;
+      stopwatchStore.emit();
     }, 1000);
     return () => clearInterval(interval);
   }, [activeSide]);
 
-  const formatTimer = (totalSec: number) => {
-    const m = Math.floor(totalSec / 60);
-    const s = totalSec % 60;
-    return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
-  };
-
-  const leftMin = Math.round(leftSeconds / 60);
-  const rightMin = Math.round(rightSeconds / 60);
+  const leftMin = Math.round(stopwatchStore.left / 60);
+  const rightMin = Math.round(stopwatchStore.right / 60);
   const totalNursingMin = leftMin + rightMin;
 
   const handleSubmit = async (e?: React.FormEvent) => {
@@ -179,7 +208,7 @@ export default function FeedingRecordPage() {
               >
                 <span className="text-xs font-semibold text-text-secondary">左侧乳房</span>
                 <div className="text-2xl font-mono font-bold text-text-primary my-1.5">
-                  {formatTimer(leftSeconds)}
+                  {<StopwatchText side="left" />}
                 </div>
 
                 <div className="flex items-center justify-center gap-1.5 mb-2">
@@ -199,7 +228,8 @@ export default function FeedingRecordPage() {
                     type="button"
                     onClick={() => {
                       if (activeSide === "left") setActiveSide(null);
-                      setLeftSeconds(0);
+                      stopwatchStore.left = 0;
+                      stopwatchStore.emit();
                     }}
                     className="p-1 rounded-full text-gray-400 hover:text-gray-600"
                     title="重置"
@@ -212,15 +242,15 @@ export default function FeedingRecordPage() {
                 <div className="flex items-center justify-center gap-1 pt-1 border-t border-divider/50">
                   <button
                     type="button"
-                    onClick={() => setLeftSeconds(Math.max(0, leftSeconds - 60))}
+                    onClick={() => { stopwatchStore.left = Math.max(0, stopwatchStore.left - 60); stopwatchStore.emit(); }}
                     className="w-6 h-6 rounded-full bg-gray-100 text-gray-600 text-xs font-bold flex items-center justify-center"
                   >
                     -1
                   </button>
-                  <span className="text-xs font-bold text-text-primary w-8">{leftMin}分</span>
+                  <span className="text-xs font-bold text-text-primary w-8">{<StopwatchMinutes side="left" />}</span>
                   <button
                     type="button"
-                    onClick={() => setLeftSeconds(leftSeconds + 60)}
+                    onClick={() => { stopwatchStore.left = stopwatchStore.left + 60; stopwatchStore.emit(); }}
                     className="w-6 h-6 rounded-full bg-gray-100 text-gray-600 text-xs font-bold flex items-center justify-center"
                   >
                     +1
@@ -238,7 +268,7 @@ export default function FeedingRecordPage() {
               >
                 <span className="text-xs font-semibold text-text-secondary">右侧乳房</span>
                 <div className="text-2xl font-mono font-bold text-text-primary my-1.5">
-                  {formatTimer(rightSeconds)}
+                  {<StopwatchText side="right" />}
                 </div>
 
                 <div className="flex items-center justify-center gap-1.5 mb-2">
@@ -258,7 +288,8 @@ export default function FeedingRecordPage() {
                     type="button"
                     onClick={() => {
                       if (activeSide === "right") setActiveSide(null);
-                      setRightSeconds(0);
+                      stopwatchStore.right = 0;
+                      stopwatchStore.emit();
                     }}
                     className="p-1 rounded-full text-gray-400 hover:text-gray-600"
                     title="重置"
@@ -271,15 +302,15 @@ export default function FeedingRecordPage() {
                 <div className="flex items-center justify-center gap-1 pt-1 border-t border-divider/50">
                   <button
                     type="button"
-                    onClick={() => setRightSeconds(Math.max(0, rightSeconds - 60))}
+                    onClick={() => { stopwatchStore.right = Math.max(0, stopwatchStore.right - 60); stopwatchStore.emit(); }}
                     className="w-6 h-6 rounded-full bg-gray-100 text-gray-600 text-xs font-bold flex items-center justify-center"
                   >
                     -1
                   </button>
-                  <span className="text-xs font-bold text-text-primary w-8">{rightMin}分</span>
+                  <span className="text-xs font-bold text-text-primary w-8">{<StopwatchMinutes side="right" />}</span>
                   <button
                     type="button"
-                    onClick={() => setRightSeconds(rightSeconds + 60)}
+                    onClick={() => { stopwatchStore.right = stopwatchStore.right + 60; stopwatchStore.emit(); }}
                     className="w-6 h-6 rounded-full bg-gray-100 text-gray-600 text-xs font-bold flex items-center justify-center"
                   >
                     +1

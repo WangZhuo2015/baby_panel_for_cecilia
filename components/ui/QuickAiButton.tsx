@@ -2,7 +2,14 @@
 
 import React, { useState } from "react";
 import { Sparkles } from "lucide-react";
-import { QuickAiModal, AiContextType } from "./QuickAiModal";
+import dynamic from "next/dynamic";
+import type { AiContextType } from "./QuickAiModal";
+
+// react-markdown 全家桶 ~52KB gzip，仅在真正打开 AI 对话时加载
+const QuickAiModal = dynamic(
+  () => import("./QuickAiModal").then((m) => m.QuickAiModal),
+  { ssr: false }
+);
 
 interface QuickAiButtonProps {
   contextType: AiContextType;

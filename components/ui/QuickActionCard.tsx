@@ -7,7 +7,7 @@ interface QuickActionCardProps {
   onClick?: () => void;
 }
 
-export const QuickActionCard: React.FC<QuickActionCardProps> = ({
+const QuickActionCardImpl: React.FC<QuickActionCardProps> = ({
   icon,
   label,
   color,
@@ -29,3 +29,5 @@ export const QuickActionCard: React.FC<QuickActionCardProps> = ({
     </button>
   );
 };
+
+export const QuickActionCard = React.memo(QuickActionCardImpl);

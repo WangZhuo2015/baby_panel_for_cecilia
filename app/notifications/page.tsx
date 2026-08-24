@@ -7,6 +7,7 @@ import { AppHeader } from "@/components/ui/AppHeader";
 import { CuteCard } from "@/components/ui/CuteCard";
 import { SectionTitle } from "@/components/ui/SectionTitle";
 import { useToast } from "@/components/ui/Toast";
+import { InstallGuideModal } from "@/components/ui/InstallGuideModal";
 
 interface NotificationItem {
   id: string;
@@ -41,6 +42,7 @@ export default function NotificationsPage() {
   const [pushPermission, setPushPermission] = useState<NotificationPermission | "unsupported">(
     "default"
   );
+  const [showInstallGuide, setShowInstallGuide] = useState(false);
   const { showToast } = useToast();
   const fetchNotifications = useCallback(async () => {
     try {
@@ -101,6 +103,17 @@ export default function NotificationsPage() {
 
   const handleEnablePush = async () => {
     try {
+      // iOS Safari 需先安装到主屏幕（standalone）才有 Push API
+      const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent);
+      const isStandalone =
+        window.matchMedia("(display-mode: standalone)").matches ||
+        (window.navigator as { standalone?: boolean }).standalone === true;
+      if (isIos && !isStandalone) {
+        showToast("iOS 需先「添加到主屏幕」，从桌面图标打开才能开启推送");
+        setShowInstallGuide(true);
+        return;
+      }
+
       if (!("Notification" in window)) {
         showToast("您的浏览器不支持推送通知");
         return;
@@ -320,6 +333,8 @@ export default function NotificationsPage() {
       <p className="text-[10px] text-text-muted text-center mt-8">
         AI 建议仅供参考，如有疑问请咨询专业医生。
       </p>
+
+      <InstallGuideModal isOpen={showInstallGuide} onClose={() => setShowInstallGuide(false)} />
     </div>
   );
 }

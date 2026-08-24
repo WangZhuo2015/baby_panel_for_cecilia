@@ -717,7 +717,7 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
               <button
                 type="button"
                 onClick={() => setSelectedImage(null)}
-                className="w-5 h-5 rounded-full bg-primary/20 text-primary hover:bg-primary/30 flex items-center justify-center cursor-pointer"
+                className="tap-hotzone w-5 h-5 rounded-full bg-primary/20 text-primary hover:bg-primary/30 flex items-center justify-center cursor-pointer"
               >
                 <X size={12} />
               </button>

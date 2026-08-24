@@ -8,7 +8,7 @@ interface StatCardProps {
   color?: string;
 }
 
-export const StatCard: React.FC<StatCardProps> = ({
+const StatCardImpl: React.FC<StatCardProps> = ({
   icon,
   label,
   value,
@@ -30,3 +30,5 @@ export const StatCard: React.FC<StatCardProps> = ({
     </div>
   );
 };
+
+export const StatCard = React.memo(StatCardImpl);

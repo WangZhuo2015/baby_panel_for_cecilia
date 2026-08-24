@@ -39,11 +39,9 @@ export default function RootLayout({
   return (
     <html lang="zh-CN">
       <head>
+        {/* appleWebApp/icons metadata 已生成 status-bar/title/touch-icon；
+            此处仅保留 Next 不生成的旧版 Android 兼容位 */}
         <meta name="mobile-web-app-capable" content="yes" />
-        <meta name="apple-mobile-web-app-capable" content="yes" />
-        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-        <meta name="apple-mobile-web-app-title" content="宝宝成长" />
-        <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
       </head>
       <body className="antialiased">
         <ServiceWorkerRegistrar />

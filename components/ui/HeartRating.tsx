@@ -26,7 +26,7 @@ export const HeartRating: React.FC<HeartRatingProps> = ({
             type="button"
             disabled={!isInteractive}
             onClick={() => onChange?.(star)}
-            className={`${isInteractive ? 'btn-press cursor-pointer' : 'cursor-default'} p-0.5`}
+            className={`${isInteractive ? 'btn-press cursor-pointer' : 'cursor-default'} tap-hotzone p-0.5`}
             aria-label={`${star} heart${filled ? '' : 's'}`}
           >
             <Heart

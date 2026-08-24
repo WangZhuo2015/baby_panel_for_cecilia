@@ -43,7 +43,6 @@ export default function SleepRecordPage() {
   // Live Timer State (persisted in localStorage)
   const [isLiveSleeping, setIsLiveSleeping] = useState(false);
   const [liveStartTime, setLiveStartTime] = useState<string | null>(null);
-  const [liveElapsedSeconds, setLiveElapsedSeconds] = useState(0);
 
   // Manual Form State
   const [date, setDate] = useState(getLocalDateStr());
@@ -71,18 +70,6 @@ export default function SleepRecordPage() {
     }
   }, []);
 
-  // Tick timer when sleeping
-  useEffect(() => {
-    if (!isLiveSleeping || !liveStartTime) return;
-    const updateElapsed = () => {
-      const startMs = new Date(liveStartTime).getTime();
-      const nowMs = Date.now();
-      setLiveElapsedSeconds(Math.max(0, Math.floor((nowMs - startMs) / 1000)));
-    };
-    updateElapsed();
-    const timer = setInterval(updateElapsed, 1000);
-    return () => clearInterval(timer);
-  }, [isLiveSleeping, liveStartTime]);
 
   const handleStartLiveSleep = () => {
     const isoNow = new Date().toISOString();
@@ -134,12 +121,26 @@ export default function SleepRecordPage() {
     }
   };
 
-  const formatLiveDuration = (totalSec: number) => {
-    const h = Math.floor(totalSec / 3600);
-    const m = Math.floor((totalSec % 3600) / 60);
-    const s = totalSec % 60;
-    return `${h > 0 ? `${h}小时 ` : ""}${String(m).padStart(2, "0")}分 ${String(s).padStart(2, "0")}秒`;
-  };
+
+/** 睡眠计时叶子组件：interval 收敛在此，避免整页每秒重渲染 */
+function LiveSleepDuration({ startIso }: { startIso: string }) {
+  const [sec, setSec] = useState(() =>
+    Math.max(0, Math.floor((Date.now() - new Date(startIso).getTime()) / 1000))
+  );
+  useEffect(() => {
+    const tick = () =>
+      setSec(Math.max(0, Math.floor((Date.now() - new Date(startIso).getTime()) / 1000)));
+    tick();
+    const t = setInterval(tick, 1000);
+    return () => clearInterval(t);
+  }, [startIso]);
+
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const ss = sec % 60;
+  const text = h > 0 ? `${h}小时${String(m).padStart(2, "0")}分` : `${m}分${String(ss).padStart(2, "0")}秒`;
+  return <>{text}</>;
+}
 
   // Duration calculation for manual form
   const durationText = useMemo(() => {
@@ -237,7 +238,7 @@ export default function SleepRecordPage() {
 
               <div className="py-2">
                 <div className="text-3xl font-mono font-bold text-white tracking-wider">
-                  {formatLiveDuration(liveElapsedSeconds)}
+                  {liveStartTime ? <LiveSleepDuration startIso={liveStartTime} /> : null}
                 </div>
                 <p className="text-[11px] text-purple-200/80 mt-1">
                   入睡时间：{liveStartTime ? formatIsoToLocalTime(liveStartTime) : ""}

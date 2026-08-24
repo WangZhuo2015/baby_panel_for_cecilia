@@ -22,7 +22,7 @@ const colorMap: Record<TimelineEntry['type'], string> = {
   food: 'bg-mint/20 text-mint',
 };
 
-export const Timeline: React.FC<TimelineProps> = ({ items, onItemTap }) => {
+const TimelineImpl: React.FC<TimelineProps> = ({ items, onItemTap }) => {
   if (items.length === 0) return null;
 
   return (
@@ -61,7 +61,7 @@ export const Timeline: React.FC<TimelineProps> = ({ items, onItemTap }) => {
 
         if (!onItemTap) {
           return (
-            <div key={item.id} className="relative flex gap-3 pb-5 last:pb-0 animate-fade-in" style={{ animationDelay: `${idx * 60}ms` }}>
+            <div key={item.id} className="relative flex gap-3 pb-5 last:pb-0 animate-fade-in" style={{ animationDelay: `${Math.min(idx * 60, 600)}ms` }}>
               {content}
             </div>
           );
@@ -74,7 +74,7 @@ export const Timeline: React.FC<TimelineProps> = ({ items, onItemTap }) => {
             onClick={() => onItemTap(item)}
             aria-label={`查看可对「${item.title}」执行的操作`}
             className="relative flex gap-3 pb-5 last:pb-0 animate-fade-in w-full text-left active:opacity-70 transition-opacity"
-            style={{ animationDelay: `${idx * 60}ms` }}
+            style={{ animationDelay: `${Math.min(idx * 60, 600)}ms` }}
           >
             {content}
           </button>
@@ -83,3 +83,5 @@ export const Timeline: React.FC<TimelineProps> = ({ items, onItemTap }) => {
     </div>
   );
 };
+
+export const Timeline = React.memo(TimelineImpl);

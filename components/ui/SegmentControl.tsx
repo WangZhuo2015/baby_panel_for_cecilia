@@ -38,7 +38,7 @@ export const SegmentControl: React.FC<SegmentControlProps> = ({
             role="tab"
             aria-selected={isActive}
             onClick={() => onChange(opt.value)}
-            className={`btn-press whitespace-nowrap select-none rounded-full font-medium transition-all min-h-[34px] cursor-pointer text-xs sm:text-sm ${
+            className={`btn-press whitespace-nowrap select-none rounded-full font-medium transition-all min-h-[40px] cursor-pointer text-xs sm:text-sm ${
               isMany ? 'flex-shrink-0 px-3.5 py-1.5' : 'flex-1 px-2 py-1.5'
             } ${
               isActive

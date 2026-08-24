@@ -43,7 +43,7 @@ export const RecordActionSheet: React.FC<RecordActionSheetProps> = ({
             type="button"
             onClick={onClose}
             aria-label="关闭"
-            className="p-1.5 rounded-full text-text-muted hover:bg-primary-soft/30"
+            className="tap-hotzone p-1.5 rounded-full text-text-muted hover:bg-primary-soft/30"
           >
             <X size={16} />
           </button>
