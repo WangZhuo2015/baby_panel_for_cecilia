@@ -30,26 +30,8 @@ async function main() {
   await prisma.$queryRawUnsafe("PRAGMA journal_mode = WAL;").catch(() => {});
   await prisma.$queryRawUnsafe("PRAGMA busy_timeout = 5000;").catch(() => {});
 
-  console.log('🗑️  Cleaning existing data (all 31 models in reverse-dependency order)...');
+  console.log('🗑️  Refreshing reference knowledge base data (vaccines, food items, milestones, books)...');
   await prisma.$transaction([
-    // Child tracking records referencing Baby
-    prisma.pushSubscription.deleteMany(),
-    prisma.feedingRecord.deleteMany(),
-    prisma.sleepRecord.deleteMany(),
-    prisma.diaperRecord.deleteMany(),
-    prisma.growthMeasurement.deleteMany(),
-    prisma.medicalReport.deleteMany(),
-    prisma.foodLogRecord.deleteMany(),
-    prisma.foodPlan.deleteMany(),
-    prisma.vaccineRecord.deleteMany(),
-    prisma.vaccineSelection.deleteMany(),
-    // Family-level pivot records & baby
-    prisma.familyFoodStatus.deleteMany(),
-    prisma.familyBookStatus.deleteMany(),
-    prisma.baby.deleteMany(),
-    prisma.familyMember.deleteMany(),
-    prisma.family.deleteMany(),
-    prisma.user.deleteMany(),
     // Source references and cross-reference tables
     prisma.vaccineSourceRef.deleteMany(),
     prisma.milestoneSourceRef.deleteMany(),
@@ -67,6 +49,7 @@ async function main() {
     prisma.sourceRef.deleteMany(),
     prisma.dataRelease.deleteMany(),
   ]);
+
 
   // ── Read all JSON files ─────────────────────────────────────────────
   console.log('📖 Reading JSON files...');
@@ -388,45 +371,52 @@ async function main() {
     })),
   });
 
-  // ── 13. Default Family, User & Baby ─────────────────────────────────
-  console.log('👶 Creating demo family, user (admin / 123456) & baby (好好)...');
-  const passwordHash = await bcrypt.hash("123456", 10);
-  const demoFamily = await prisma.family.create({
-    data: {
-      name: "好好温馨之家",
-      inviteCode: "BABY88",
-    },
-  });
+  // ── 13. Default Family, User & Baby (Only on clean database) ────────
+  const userCount = await prisma.user.count();
+  if (userCount === 0) {
+    console.log('👶 Database is empty, creating default demo family, user (admin / 123456) & baby (好好)...');
+    const passwordHash = await bcrypt.hash("123456", 10);
+    const demoFamily = await prisma.family.create({
+      data: {
+        name: "好好温馨之家",
+        inviteCode: "BABY88",
+      },
+    });
 
-  const demoUser = await prisma.user.create({
-    data: {
-      username: "admin",
-      passwordHash,
-      displayName: "好好爸爸",
-      memberships: {
-        create: {
-          familyId: demoFamily.id,
-          role: "admin",
-          relation: "parent",
+    const demoUser = await prisma.user.create({
+      data: {
+        username: "admin",
+        passwordHash,
+        displayName: "好好爸爸",
+        memberships: {
+          create: {
+            familyId: demoFamily.id,
+            role: "admin",
+            relation: "parent",
+          },
         },
       },
-    },
-  });
+    });
 
-  await prisma.baby.create({
-    data: {
-      familyId: demoFamily.id,
-      nickname: "好好",
-      gender: "female",
-      birthDate: "2024-02-15",
-      gestationalAge: 39,
-    },
-  });
+    await prisma.baby.create({
+      data: {
+        familyId: demoFamily.id,
+        nickname: "好好",
+        gender: "female",
+        birthDate: "2024-02-15",
+        gestationalAge: 39,
+      },
+    });
 
-  console.log(`✅ Demo user seeded: username="admin", password="123456", userId="${demoUser.id}"`);
+    console.log(`✅ Demo user seeded: username="admin", password="123456", userId="${demoUser.id}"`);
+  } else {
+    console.log(`ℹ️ Existing users found (${userCount}), preserving all user, family, and baby records.`);
+  }
+
   console.log('✅ Seed complete!');
   await prisma.$disconnect();
 }
+
 
 
 main().catch((e) => {
