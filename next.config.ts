@@ -3,7 +3,17 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   output: "standalone",
   poweredByHeader: false,
-  allowedDevOrigins: ["baby.zwang.fun", "localhost:3088", "localhost:3000"],
+  allowedDevOrigins: [
+    "baby.zwang.fun",
+    "localhost:3088",
+    "localhost:3000",
+    "localhost",
+    "127.0.0.1:3088",
+    "127.0.0.1:3000",
+    "127.0.0.1",
+    "*.zwang.fun",
+  ],
+
   async redirects() {
     return [
       { source: "/health", destination: "/health/vaccines", permanent: true },

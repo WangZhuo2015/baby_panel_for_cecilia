@@ -88,8 +88,8 @@ export default function HomePage() {
   const authLoading = useBabyStore((s) => s.authLoading);
 
   const fetchUser = useBabyStore((s) => s.fetchUser);
-  const fetchBaby = useBabyStore((s) => s.fetchBaby);
   const fetchDailySummary = useBabyStore((s) => s.fetchDailySummary);
+
   const fetchTimeline = useBabyStore((s) => s.fetchTimeline);
   const fetchWeather = useBabyStore((s) => s.fetchWeather);
   const fetchFeedingRecords = useBabyStore((s) => s.fetchFeedingRecords);
@@ -102,12 +102,9 @@ export default function HomePage() {
 
   useEffect(() => {
     fetchWeather();
-    fetchUser().then((u) => {
-      if (u) {
-        fetchBaby();
-      }
-    });
-  }, [fetchUser, fetchBaby, fetchWeather]);
+    fetchUser();
+  }, [fetchUser, fetchWeather]);
+
 
   useEffect(() => {
     if (baby?.id) {
