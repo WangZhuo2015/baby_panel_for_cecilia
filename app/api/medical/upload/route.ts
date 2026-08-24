@@ -2,16 +2,23 @@ import { NextResponse } from "next/server";
 import { writeFile, mkdir } from "fs/promises";
 import path from "path";
 import crypto from "crypto";
-import { getAuthSession } from "@/lib/auth";
-
-const ALLOWED_EXTENSIONS = [".jpg", ".jpeg", ".png", ".webp"];
-const MAX_FILE_SIZE = 15 * 1024 * 1024; // 15MB
+import { requireAuth } from "@/lib/api-helpers";
+import { validateUploadedImage } from "@/lib/upload";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 
 export async function POST(request: Request) {
   try {
-    const user = await getAuthSession(request);
-    if (!user) {
-      return NextResponse.json({ error: "请先登录" }, { status: 401 });
+    const auth = await requireAuth(request);
+    if (auth.errorResponse) return auth.errorResponse;
+    const { user } = auth;
+
+    const ip = getClientIp(request);
+    const rateLimit = checkRateLimit(`upload:${user.id || ip}`, 15, 60_000);
+    if (!rateLimit.success) {
+      return NextResponse.json(
+        { error: `上传过于频繁，请 ${rateLimit.resetSeconds} 秒后再试` },
+        { status: 429 }
+      );
     }
 
     const formData = await request.formData();
@@ -21,30 +28,21 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "请选择需要上传的照片" }, { status: 400 });
     }
 
-    if (file.size > MAX_FILE_SIZE) {
-      return NextResponse.json({ error: "图片大小不能超过 15MB" }, { status: 400 });
-    }
-
-    const rawExt = path.extname(file.name || "").toLowerCase();
-    if (!ALLOWED_EXTENSIONS.includes(rawExt)) {
-      return NextResponse.json(
-        { error: "仅支持 JPG、PNG、WebP 格式图片" },
-        { status: 400 }
-      );
-    }
-
-    if (file.type && !file.type.toLowerCase().startsWith("image/")) {
-      return NextResponse.json({ error: "仅支持图片格式文件" }, { status: 400 });
-    }
-
     const buffer = Buffer.from(await file.arrayBuffer());
+    const validation = validateUploadedImage(file, buffer);
+    if (!validation.valid) {
+      return NextResponse.json({ error: validation.error || "图片格式不合法" }, { status: 400 });
+    }
+
+    const ext = validation.ext || ".jpg";
     const randomHex = crypto.randomBytes(16).toString("hex");
-    const filename = `${Date.now()}_${randomHex}${rawExt}`;
+    const filename = `${Date.now()}_${randomHex}${ext}`;
     const uploadDir = path.join(process.cwd(), "public", "uploads", "medical");
 
     await mkdir(uploadDir, { recursive: true });
     const filePath = path.join(uploadDir, filename);
     await writeFile(filePath, buffer);
+
 
     const imageUrl = `/uploads/medical/${filename}`;
     return NextResponse.json({ success: true, imageUrl, filename });

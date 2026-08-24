@@ -97,23 +97,3 @@ export async function getAuthSession(request?: Request) {
   return user;
 }
 
-export async function getActiveBabyForUser(userId: string) {
-  const membership = await prisma.familyMember.findFirst({
-    where: { userId },
-    include: {
-      family: {
-        include: {
-          babies: {
-            orderBy: { createdAt: "asc" },
-          },
-        },
-      },
-    },
-  });
-
-  if (!membership || !membership.family) return null;
-  return {
-    family: membership.family,
-    baby: membership.family.babies[0] || null,
-  };
-}

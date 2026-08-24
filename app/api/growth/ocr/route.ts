@@ -2,8 +2,10 @@ import { NextResponse } from "next/server";
 import { writeFile, mkdir } from "fs/promises";
 import path from "path";
 import crypto from "crypto";
-import { getAuthSession } from "@/lib/auth";
+import { requireAuth } from "@/lib/api-helpers";
 import { AI_CONFIG } from "@/lib/config";
+import { validateUploadedImage } from "@/lib/upload";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 
 interface OcrResult {
   date?: string;
@@ -16,9 +18,17 @@ interface OcrResult {
 export const maxDuration = 30;
 
 export async function POST(request: Request) {
-  const user = await getAuthSession(request);
-  if (!user) {
-    return NextResponse.json({ error: "请先登录" }, { status: 401 });
+  const auth = await requireAuth(request);
+  if (auth.errorResponse) return auth.errorResponse;
+  const { user } = auth;
+
+  const ip = getClientIp(request);
+  const rateLimit = checkRateLimit(`ocr:${user.id || ip}`, 15, 60_000);
+  if (!rateLimit.success) {
+    return NextResponse.json(
+      { error: `请求过于频繁，请 ${rateLimit.resetSeconds} 秒后再试` },
+      { status: 429 }
+    );
   }
 
   let imageBase64: string | null = null;
@@ -37,20 +47,18 @@ export async function POST(request: Request) {
           { status: 400 }
         );
       }
-      if (file.size > 15 * 1024 * 1024) {
-        return NextResponse.json(
-          { error: "图片过大，请选择 15MB 以内的照片" },
-          { status: 400 }
-        );
-      }
-      mime = file.type || "image/jpeg";
+
       const buffer = Buffer.from(await file.arrayBuffer());
+      const validation = validateUploadedImage(file, buffer);
+      if (!validation.valid) {
+        return NextResponse.json({ error: validation.error || "图片格式不合法" }, { status: 400 });
+      }
+
+      mime = validation.mime || "image/jpeg";
       imageBase64 = buffer.toString("base64");
 
-      // Archive photo
-      const ALLOWED_EXTENSIONS = [".jpg", ".jpeg", ".png", ".webp"];
-      const rawExt = path.extname(file.name || "").toLowerCase();
-      const ext = ALLOWED_EXTENSIONS.includes(rawExt) ? rawExt : ".jpg";
+      // Archive verified photo
+      const ext = validation.ext || ".jpg";
       const filename = `growth_${Date.now()}_${crypto.randomBytes(16).toString("hex")}${ext}`;
       const uploadDir = path.join(process.cwd(), "public", "uploads", "medical");
       await mkdir(uploadDir, { recursive: true });
@@ -63,15 +71,9 @@ export async function POST(request: Request) {
       );
     }
   } else {
-    const body = await request.arrayBuffer();
-    if (body.byteLength === 0) {
-      return NextResponse.json(
-        { error: "请选择测量记录照片" },
-        { status: 400 }
-      );
-    }
-    imageBase64 = Buffer.from(body).toString("base64");
+    return NextResponse.json({ error: "请通过 multipart/form-data 上传照片文件" }, { status: 400 });
   }
+
 
   try {
     const headers: Record<string, string> = {

@@ -85,28 +85,48 @@ export async function POST(request: Request) {
       },
     });
 
-    // If growth measurements are included in the report, also save to GrowthMeasurement
-    if (growthData && (growthData.weightKg || growthData.heightCm || growthData.headCircumferenceCm)) {
+    // If growth measurements are included in the report, validate ranges and save to GrowthMeasurement
+    if (growthData && typeof growthData === "object") {
       try {
-        const { months, label } = calculateAge(baby.birthDate, date);
+        let weightKg: number | null = null;
+        let heightCm: number | null = null;
+        let headCircumferenceCm: number | null = null;
 
-        await prisma.growthMeasurement.create({
-          data: {
-            babyId: baby.id,
-            recordedById: user.id,
-            date: String(date).trim(),
-            ageInMonths: months,
-            ageLabel: label,
-            weightKg: growthData.weightKg ? Number(growthData.weightKg) : null,
-            heightCm: growthData.heightCm ? Number(growthData.heightCm) : null,
-            headCircumferenceCm: growthData.headCircumferenceCm ? Number(growthData.headCircumferenceCm) : null,
-            imageUrl: imageUrl || null,
-          },
-        });
+        if (growthData.weightKg != null && growthData.weightKg !== "") {
+          const w = Number(growthData.weightKg);
+          if (!Number.isNaN(w) && w >= 0.5 && w <= 50.0) weightKg = w;
+        }
+        if (growthData.heightCm != null && growthData.heightCm !== "") {
+          const h = Number(growthData.heightCm);
+          if (!Number.isNaN(h) && h >= 20.0 && h <= 150.0) heightCm = h;
+        }
+        if (growthData.headCircumferenceCm != null && growthData.headCircumferenceCm !== "") {
+          const hc = Number(growthData.headCircumferenceCm);
+          if (!Number.isNaN(hc) && hc >= 20.0 && hc <= 60.0) headCircumferenceCm = hc;
+        }
+
+        if (weightKg != null || heightCm != null || headCircumferenceCm != null) {
+          const { months, label } = calculateAge(baby.birthDate, date);
+
+          await prisma.growthMeasurement.create({
+            data: {
+              babyId: baby.id,
+              recordedById: user.id,
+              date: String(date).trim(),
+              ageInMonths: months,
+              ageLabel: label,
+              weightKg,
+              heightCm,
+              headCircumferenceCm,
+              imageUrl: imageUrl ? String(imageUrl).trim() : null,
+            },
+          });
+        }
       } catch (e) {
         console.error("Failed to sync growth measurement from medical report:", e);
       }
     }
+
 
     return NextResponse.json(
       {

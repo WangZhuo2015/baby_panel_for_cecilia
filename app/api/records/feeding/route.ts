@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth, requireBaby, getActiveBaby } from "@/lib/api-helpers";
-import { getLocalDayUtcRange } from "@/lib/date";
+import { getLocalDayUtcRange, isValidDateStr } from "@/lib/date";
 
 export async function GET(request: Request) {
   try {
@@ -18,11 +18,15 @@ export async function GET(request: Request) {
 
     const where: any = { babyId: babyResult.baby.id };
     if (date) {
+      if (!isValidDateStr(date)) {
+        return NextResponse.json({ error: "Invalid date format, expected YYYY-MM-DD" }, { status: 400 });
+      }
       const { start, end } = getLocalDayUtcRange(date);
       if (start && end) {
         where.timestamp = { gte: start, lt: end };
       }
     }
+
 
     const records = await prisma.feedingRecord.findMany({
       where,
@@ -122,10 +126,11 @@ export async function POST(request: Request) {
         amountMl: parsedAmountMl,
         leftMinutes: parsedLeft,
         rightMinutes: parsedRight,
-        spitUp: Boolean(spitUp),
+        spitUp: spitUp === true || spitUp === "true" || spitUp === 1,
         notes: notes ? String(notes).trim() : null,
       },
     });
+
 
     return NextResponse.json(record, { status: 201 });
   } catch (error) {

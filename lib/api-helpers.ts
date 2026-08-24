@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getAuthSession, getActiveBabyForUser } from "@/lib/auth";
+import { getAuthSession } from "@/lib/auth";
 import type { Baby, Family } from "@/generated/prisma/client";
 
-export { getAuthSession, getActiveBabyForUser };
+export { getAuthSession };
 
 export type AuthUser = NonNullable<Awaited<ReturnType<typeof getAuthSession>>>;
 
@@ -14,6 +14,36 @@ export interface ActiveBabyResult {
 }
 
 /**
+ * Validates request origin against Host header for state-mutating requests (CSRF protection)
+ */
+export function validateCsrfOrigin(request: Request): NextResponse | null {
+  const method = request.method.toUpperCase();
+  if (method === "GET" || method === "HEAD" || method === "OPTIONS") {
+    return null;
+  }
+  const authHeader = request.headers.get("authorization");
+  if (authHeader?.startsWith("Bearer ")) {
+    return null;
+  }
+  const origin = request.headers.get("origin");
+  const host = request.headers.get("x-forwarded-host") || request.headers.get("host");
+  if (origin && host) {
+    try {
+      const originHost = new URL(origin).host;
+      const cleanHost = host.split(":")[0];
+      const cleanOriginHost = originHost.split(":")[0];
+      if (cleanOriginHost !== cleanHost && originHost !== host) {
+        return NextResponse.json({ error: "Forbidden: Cross-Origin Request Blocked" }, { status: 403 });
+      }
+    } catch {
+      return NextResponse.json({ error: "Forbidden: Invalid Origin Header" }, { status: 403 });
+    }
+  }
+  return null;
+}
+
+
+/**
  * Ensures the incoming request is authenticated.
  * If no valid session exists, returns a 401 Unauthorized response in errorResponse.
  */
@@ -21,6 +51,11 @@ export async function requireAuth(request: Request): Promise<
   | { user: AuthUser; errorResponse: null }
   | { user: null; errorResponse: NextResponse }
 > {
+  const csrfError = validateCsrfOrigin(request);
+  if (csrfError) {
+    return { user: null, errorResponse: csrfError };
+  }
+
   const user = await getAuthSession(request);
   if (!user) {
     return {
@@ -43,23 +78,8 @@ export async function getActiveBaby(
   userId: string,
   requestedBabyId?: string | null
 ): Promise<ActiveBabyResult> {
-  if (userId === "system-mcp") {
-    let baby = null;
-    if (requestedBabyId) {
-      baby = await prisma.baby.findUnique({ where: { id: requestedBabyId } });
-    }
-    if (!baby) {
-      baby = await prisma.baby.findFirst();
-    }
-    const family = baby ? await prisma.family.findUnique({ where: { id: baby.familyId } }) : null;
-    return {
-      baby,
-      family,
-      errorResponse: null,
-    };
-  }
-
   const memberships = await prisma.familyMember.findMany({
+
     where: { userId },
     include: {
       family: {

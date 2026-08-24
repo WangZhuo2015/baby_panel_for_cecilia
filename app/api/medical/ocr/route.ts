@@ -2,10 +2,11 @@ import { NextResponse } from "next/server";
 import { writeFile, mkdir } from "fs/promises";
 import path from "path";
 import crypto from "crypto";
-import { getAuthSession } from "@/lib/auth";
+import { requireAuth } from "@/lib/api-helpers";
 import { AI_CONFIG } from "@/lib/config";
 import { getLocalDateStr } from "@/lib/date";
-
+import { validateUploadedImage } from "@/lib/upload";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 
 export const maxDuration = 45;
 
@@ -28,31 +29,34 @@ const SYSTEM_PROMPT = `
   },
   "items": [
     {
-      "name": "检测项目名称，如 白细胞计数(WBC) / 血红蛋白(HGB) / 钙(Ca) / 锌(Zn)",
-      "value": "检测结果数值或定性描述，如 9.6 或 阴性",
-      "unit": "单位，如 10^9/L, g/L, mmol/L (无单位填空字符串)",
-      "referenceRange": "参考区间，如 4.0-10.0, 110-140",
-      "status": "normal | high | low | abnormal | positive | negative",
-      "interpretation": "该指标含义简述，如：反映机体感染与免疫状态"
+      "name": "指标全称 (如 白细胞计数 / 血红蛋白 / 身高)",
+      "value": "数值字符串，如 11.2 或 125",
+      "unit": "单位 (如 10^9/L, g/L, cm, kg)",
+      "refRange": "参考区间字符串 (如 4.0-10.0 或 110-160)",
+      "status": "normal | high | low | abnormal",
+      "hint": "简明通俗临床意义说明 (20字以内)"
     }
   ]
 }
 
-判断规则：
-1. category 分类：
-   - "blood": 血常规、CRP、凝血、血型等
-   - "growth": 儿保体检、生长发育测量、骨龄、囟门体检
-   - "trace_element": 钙/铁/锌/镁/铜、维生素D、铁蛋白等
-   - "allergy": IgE、食物不耐受、过敏原特异性抗体
-   - "general": 其他化验、B超、脑电图、听力筛查等
-2. status 标识：根据单据上的箭头提示（↑ / ↓ / H / L / + / -）或参考区间判断，超出上限标 "high"，低于下限标 "low"，阳性标 "positive"，正常标 "normal"。
-3. 务必严格输出合法的 JSON 格式，不要包含 markdown \`\`\` 以外的无关文字。
+【要求】
+1. 只返回标准 JSON，不要附加 markdown 外壳或解释性文字。
+2. 指标状态判定规则：低于参考区间为 low，高于为 high，其他异常为 abnormal，正常为 normal。
+3. 婴幼儿正常血常规白细胞偏高为生理性正常，但如有异常仍需在 hint 里客观标注。
 `;
 
 export async function POST(request: Request) {
-  const user = await getAuthSession(request);
-  if (!user) {
-    return NextResponse.json({ error: "请先登录" }, { status: 401 });
+  const auth = await requireAuth(request);
+  if (auth.errorResponse) return auth.errorResponse;
+  const { user } = auth;
+
+  const ip = getClientIp(request);
+  const rateLimit = checkRateLimit(`ocr:${user.id || ip}`, 15, 60_000);
+  if (!rateLimit.success) {
+    return NextResponse.json(
+      { error: `请求过于频繁，请 ${rateLimit.resetSeconds} 秒后再试` },
+      { status: 429 }
+    );
   }
 
   let imageBase64: string | null = null;
@@ -68,18 +72,18 @@ export async function POST(request: Request) {
       if (!file || file.size === 0) {
         return NextResponse.json({ error: "请提供清晰的单据照片" }, { status: 400 });
       }
-      if (file.size > 15 * 1024 * 1024) {
-        return NextResponse.json({ error: "图片过大，请控制在 15MB 以内" }, { status: 400 });
+
+      const buffer = Buffer.from(await file.arrayBuffer());
+      const validation = validateUploadedImage(file, buffer);
+      if (!validation.valid) {
+        return NextResponse.json({ error: validation.error || "图片格式不合法" }, { status: 400 });
       }
 
-      mime = file.type || "image/jpeg";
-      const buffer = Buffer.from(await file.arrayBuffer());
+      mime = validation.mime || "image/jpeg";
       imageBase64 = buffer.toString("base64");
 
-      // Save image to permanent storage
-      const ALLOWED_EXTENSIONS = [".jpg", ".jpeg", ".png", ".webp"];
-      const rawExt = path.extname(file.name || "").toLowerCase();
-      const ext = ALLOWED_EXTENSIONS.includes(rawExt) ? rawExt : ".jpg";
+      // Save verified image to permanent storage
+      const ext = validation.ext || ".jpg";
       const filename = `medical_${Date.now()}_${crypto.randomBytes(16).toString("hex")}${ext}`;
       const uploadDir = path.join(process.cwd(), "public", "uploads", "medical");
       await mkdir(uploadDir, { recursive: true });
@@ -160,7 +164,7 @@ export async function POST(request: Request) {
         console.error("OpenAI OCR API failed:", retryResponse.status, errorText);
         return NextResponse.json(
           {
-            error: `AI 识别服务暂时不可用 (${retryResponse.status})，请检查 AI_API_KEY / AI_BASE_URL 设置`,
+            error: "AI 识别服务暂时不可用，请稍后重试",
           },
           { status: 503 }
         );

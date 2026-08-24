@@ -6,6 +6,9 @@
  * to read and record baby daily activities, growth metrics, vaccines, and medical reports.
  */
 
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import {
@@ -14,8 +17,29 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { SignJWT } from "jose";
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const projectRoot = path.resolve(__dirname, "..");
+
+// Auto-load .env from project root
+try {
+  const envPath = path.join(projectRoot, ".env");
+  if (fs.existsSync(envPath)) {
+    const content = fs.readFileSync(envPath, "utf-8");
+    for (const line of content.split("\n")) {
+      const match = line.match(/^\s*([\w.-]+)\s*=\s*(.*)?\s*$/);
+      if (match) {
+        const key = match[1];
+        let value = match[2] || "";
+        if (value.startsWith('"') && value.endsWith('"')) value = value.slice(1, -1);
+        if (value.startsWith("'") && value.endsWith("'")) value = value.slice(1, -1);
+        if (!process.env[key]) process.env[key] = value;
+      }
+    }
+  }
+} catch {}
+
 const BASE_URL = process.env.BABY_PANEL_URL || "http://127.0.0.1:3088";
-const JWT_SECRET = process.env.JWT_SECRET || "dev-insecure-jwt-secret-key-32-chars-long-change-me!";
+const JWT_SECRET = process.env.JWT_SECRET || "baby_panel_sec_993b482f7d1a4e259c63b88d2f10e4a7";
 const secretBytes = new TextEncoder().encode(JWT_SECRET);
 
 async function getServiceAuthHeader() {

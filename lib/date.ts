@@ -67,17 +67,19 @@ export function getLocalDayUtcRange(dayStr: string): {
   end: string;
 } {
   if (!dayStr || !isValidDateStr(dayStr)) {
-    return { start: "", end: "" };
+    // Impossible range so gte: start, lt: end returns 0 rows instead of full-table scan
+    return { start: "9999-12-31T23:59:59.999Z", end: "1970-01-01T00:00:00.000Z" };
   }
   const start = new Date(`${dayStr}T00:00:00+08:00`).getTime();
   if (Number.isNaN(start)) {
-    return { start: "", end: "" };
+    return { start: "9999-12-31T23:59:59.999Z", end: "1970-01-01T00:00:00.000Z" };
   }
   return {
     start: new Date(start).toISOString(),
     end: new Date(start + 24 * 60 * 60 * 1000).toISOString(),
   };
 }
+
 
 /** UTC ISO bounds for today (Asia/Shanghai). */
 export function getTodayUtcRange(date = new Date()): {

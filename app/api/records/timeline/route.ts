@@ -4,6 +4,7 @@ import {
   getLocalDateStr,
   getLocalDayUtcRange,
   formatIsoToLocalTime,
+  isValidDateStr,
 } from "@/lib/date";
 import { requireAuth, requireBaby } from "@/lib/api-helpers";
 import { safeJsonParse } from "@/lib/json";
@@ -15,8 +16,13 @@ export async function GET(request: Request) {
     const { user } = auth;
 
     const { searchParams } = new URL(request.url);
-    const date = searchParams.get("date") ?? getLocalDateStr();
+    const dateParam = searchParams.get("date");
+    if (dateParam && !isValidDateStr(dateParam)) {
+      return NextResponse.json({ error: "Invalid date format, expected YYYY-MM-DD" }, { status: 400 });
+    }
+    const date = dateParam ?? getLocalDateStr();
     const requestedBabyId = searchParams.get("babyId");
+
 
     const babyResult = await requireBaby(user.id, requestedBabyId);
     if (babyResult.errorResponse) return babyResult.errorResponse;
