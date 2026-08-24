@@ -303,3 +303,20 @@ html.dark {
 .dark .text-emerald-900 { color: #D5F5E5; }
 .dark .text-emerald-700 { color: #7BE3AE; }
 .dark .bg-emerald-400 { background-color: #2FA974; }
+
+/* 首页顶部状态卡（sky / purple 粉彩系） */
+.dark .bg-gradient-to-br.from-sky-50 { --tw-gradient-from: #1E2732; }
+.dark .to-blue-50\/50 { --tw-gradient-to: rgba(27, 36, 48, 0.5); }
+.dark .border-sky-100 { border-color: #2C3A4A; }
+.dark .text-sky-900 { color: #D6E8F7; }
+.dark .text-sky-700 { color: #8FC7F5; }
+.dark .text-sky-600 { color: #7BB8EE; }
+.dark .bg-sky-100\/70 { background-color: rgba(56, 86, 120, 0.55); }
+
+.dark .bg-gradient-to-br.from-purple-50 { --tw-gradient-from: #251C33; }
+.dark .to-pink-50\/50 { --tw-gradient-to: rgba(51, 32, 44, 0.5); }
+.dark .border-purple-100 { border-color: #3A2F4A; }
+.dark .text-purple-900 { color: #EAE2F7; }
+.dark .text-purple-700 { color: #B9A8EC; }
+.dark .text-purple-600 { color: #A78BE8; }
+.dark .bg-purple-100\/70 { background-color: rgba(90, 70, 140, 0.5); }
