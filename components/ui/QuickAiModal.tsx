@@ -12,12 +12,14 @@ import {
   Baby,
   Bot,
   AlertCircle,
+  Mic,
   Image as ImageIcon,
   Loader2,
 } from "lucide-react";
 import { useBabyStore } from "@/stores/useBabyStore";
 import { calculateAge } from "@/lib/age";
 import { AiActionCard, ActionCardData } from "@/components/ui/AiActionCard";
+import { useToast } from "@/components/ui/Toast";
 
 export type AiContextType =
   | "food"
@@ -155,29 +157,33 @@ const CONTEXT_META: Record<
 /**
  * Parses out ```json:action ... ``` or ```action ... ``` blocks from assistant messages
  */
-function extractActionAndCleanMarkdown(content: string): { cleanText: string; action: ActionCardData | null } {
-  const closedRegex = /```(?:json:action|action)\s*([\s\S]*?)\s*```/;
-  const closedMatch = content.match(closedRegex);
+function extractActionsAndCleanMarkdown(content: string): { cleanText: string; actions: ActionCardData[] } {
+  const closedRegex = /```(?:json:action|action)\s*([\s\S]*?)\s*```/g;
+  const actions: ActionCardData[] = [];
+  let cleanText = content;
 
-  if (closedMatch) {
-    let action: ActionCardData | null = null;
+  // 收集全部闭合块：一句话多事件 → 多张待确认卡片
+  const matches = [...content.matchAll(closedRegex)];
+  for (const match of matches) {
     try {
-      action = JSON.parse(closedMatch[1].trim());
+      const parsed = JSON.parse(match[1].trim());
+      if (actions.length < 6) actions.push(parsed);
     } catch {
-      // If incomplete JSON during streaming, ignore
+      // 单块解析失败不影响其余
     }
-    const cleanText = content.replace(closedRegex, "").trim();
-    return { cleanText, action };
+  }
+  if (matches.length > 0) {
+    cleanText = content.replace(closedRegex, "").trim();
+    return { cleanText, actions };
   }
 
   // Strip unclosed streaming action block from visible markdown
   const unclosedRegex = /```(?:json:action|action)[\s\S]*$/;
   if (unclosedRegex.test(content)) {
-    const cleanText = content.replace(unclosedRegex, "").trim();
-    return { cleanText, action: null };
+    return { cleanText: content.replace(unclosedRegex, "").trim(), actions: [] };
   }
 
-  return { cleanText: content, action: null };
+  return { cleanText: content, actions: [] };
 }
 
 export const QuickAiModal: React.FC<QuickAiModalProps> = ({
@@ -195,6 +201,7 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
   const displayTitle = contextTitle || meta.title;
 
   const [messages, setMessages] = useState<Message[]>([]);
+  const { showToast } = useToast();
   const [inputText, setInputText] = useState("");
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
@@ -212,6 +219,59 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
   inputTextRef.current = inputText;
   const selectedImageRef = useRef(selectedImage);
   selectedImageRef.current = selectedImage;
+
+  // ===== 语音输入（服务端中文 ASR）=====
+  const [recording, setRecording] = useState(false);
+  const [transcribing, setTranscribing] = useState(false);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const streamRef = useRef<MediaStream | null>(null);
+
+  const stopRecording = React.useCallback(() => {
+    const mr = mediaRecorderRef.current;
+    if (mr && mr.state === "recording") mr.stop();
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
+    setRecording(false);
+  }, []);
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+      const mime = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+        ? "audio/webm;codecs=opus"
+        : MediaRecorder.isTypeSupported("audio/mp4")
+          ? "audio/mp4"
+          : "";
+      const mr = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+      chunksRef.current = [];
+      mr.ondataavailable = (e) => e.data.size > 0 && chunksRef.current.push(e.data);
+      mr.onstop = async () => {
+        setTranscribing(true);
+        try {
+          const blob = new Blob(chunksRef.current, { type: mr.mimeType || "audio/webm" });
+          if (blob.size < 800) throw new Error("录音太短");
+          const fd = new FormData();
+          fd.append("audio", blob, `voice${mime.includes("mp4") ? ".m4a" : ".webm"}`);
+          const res = await fetch("/api/asr/transcribe", { method: "POST", body: fd });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(data?.error || "识别失败");
+          setInputText((prev) => (prev ? `${prev} ${data.text}` : data.text));
+          showToast(`已转写：${String(data.text).slice(0, 40)}${data.text.length > 40 ? "…" : ""}`);
+        } catch (err: unknown) {
+          showToast(err instanceof Error ? err.message : "语音识别失败");
+        } finally {
+          setTranscribing(false);
+        }
+      };
+      mr.start(250);
+      mediaRecorderRef.current = mr;
+      setRecording(true);
+    } catch {
+      showToast("无法访问麦克风，请检查权限");
+    }
+  };
   const loadingRef = useRef(loading);
   loadingRef.current = loading;
 
@@ -531,7 +591,9 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
           {messages.map((m) => {
             const isUser = m.role === "user";
             const isThinking = !isUser && m.isStreaming && !m.content;
-            const { cleanText, action } = !isUser ? extractActionAndCleanMarkdown(m.content) : { cleanText: m.content, action: null };
+            const { cleanText, actions } = !isUser
+              ? extractActionsAndCleanMarkdown(m.content)
+              : { cleanText: m.content, actions: [] as ActionCardData[] };
 
             return (
               <div
@@ -654,8 +716,12 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
                         )}
                       </div>
 
-                      {/* Interactive Action Card if extracted */}
-                      {action && <AiActionCard action={action} />}
+                      {/* Interactive Action Cards（支持多事件多卡片） */}
+                      {actions.map((a, i) => (
+                        <div key={`${a.type}-${i}`} className={i > 0 ? "mt-2.5" : ""}>
+                          <AiActionCard action={a} />
+                        </div>
+                      ))}
                     </div>
                   )}
 
@@ -752,6 +818,27 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
                 <Loader2 size={16} className="animate-spin text-primary" />
               ) : (
                 <ImageIcon size={18} />
+              )}
+            </button>
+
+            {/* Voice input button */}
+            <button
+              type="button"
+              disabled={loading || transcribing}
+              onClick={() => (recording ? stopRecording() : startRecording())}
+              className={`w-10 h-10 rounded-2xl flex items-center justify-center border transition-all shrink-0 active:scale-95 cursor-pointer disabled:opacity-40 ${
+                recording
+                  ? "bg-red-500 text-white border-red-500 animate-pulse"
+                  : "bg-slate-100 hover:bg-primary-light text-text-secondary hover:text-primary border-primary/15"
+              }`}
+              title={recording ? "点击停止并发送识别" : "按一下说话，自动转成文字"}
+            >
+              {transcribing ? (
+                <Loader2 size={18} className="animate-spin text-primary" />
+              ) : recording ? (
+                <span className="w-3 h-3 bg-white rounded-sm" />
+              ) : (
+                <Mic size={18} />
               )}
             </button>
 

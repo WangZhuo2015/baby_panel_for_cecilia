@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, TrendingUp, UtensilsCrossed, Star, ShieldCheck } from "lucide-react";
+import { Home, TrendingUp, UtensilsCrossed, Star, ShieldCheck, Sparkles } from "lucide-react";
+import { openQuickAI } from "@/lib/quickai-bus";
 
 const navItems = [
   { path: "/", label: "今日", icon: Home },
@@ -22,6 +23,16 @@ export function BottomNav() {
 
   return (
     <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px] bg-white/95 backdrop-blur-xl border-t border-primary-soft/40 z-50 pb-[max(8px,env(safe-area-inset-bottom,0px))]">
+      {/* 中央显眼 AI 入口 */}
+      <button
+        type="button"
+        onClick={() => openQuickAI({ contextTitle: "AI 育儿助手" })}
+        aria-label="打开 AI 育儿助手（语音/文字录入）"
+        className="absolute -top-5 left-1/2 -translate-x-1/2 w-[52px] h-[52px] rounded-full bg-gradient-to-br from-primary to-pink-500 text-white shadow-button flex items-center justify-center active:scale-95 transition-transform cursor-pointer ring-4 ring-[var(--color-bg)]"
+      >
+        <Sparkles size={24} className="drop-shadow" />
+      </button>
+
       <div className="flex items-center justify-around px-2 pt-1.5 pb-0.5">
         {navItems.map((item) => {
           const Icon = item.icon;

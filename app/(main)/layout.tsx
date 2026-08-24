@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation";
 import { useEffect } from "react";
 import { BottomNav } from "@/components/navigation/BottomNav";
 import { OfflineBanner } from "@/components/ui/OfflineBanner";
+import { QuickAiHost } from "@/components/ui/QuickAiHost";
 import { useBabyStore } from "@/stores/useBabyStore";
 
 const hideNavRoutes = [
@@ -37,6 +38,7 @@ export default function MainLayout({
         {children}
       </main>
       {!hideNav && <BottomNav />}
+      <QuickAiHost />
     </div>
   );
 }
