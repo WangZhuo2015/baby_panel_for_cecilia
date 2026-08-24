@@ -60,8 +60,10 @@ export async function POST(request: Request) {
       );
     }
 
-    const isValid = await verifyPassword(password, user.passwordHash);
-    if (!isValid) {
+    // 时序抹平：用户不存在时也执行一次同代价的 bcrypt 比较，防止按响应时间枚举用户名
+    const DUMMY_HASH = "$2b$10$CwTycUXWue0Thq9StjUM0uJ8.PxHqXn5rJQWvFPGf1PVLfZGmOB7a";
+    const isValid = await verifyPassword(password, user?.passwordHash ?? DUMMY_HASH);
+    if (!user || !isValid) {
       return NextResponse.json(
         { error: "用户名或密码错误" },
         { status: 401 }

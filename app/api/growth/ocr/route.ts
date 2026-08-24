@@ -23,7 +23,7 @@ export async function POST(request: Request) {
   const { user } = auth;
 
   const ip = getClientIp(request);
-  const rateLimit = checkRateLimit(`ocr:${user.id || ip}`, 15, 60_000);
+  const rateLimit = checkRateLimit(`growth_ocr:${user.id || ip}`, 15, 60_000);
   if (!rateLimit.success) {
     return NextResponse.json(
       { error: `请求过于频繁，请 ${rateLimit.resetSeconds} 秒后再试` },

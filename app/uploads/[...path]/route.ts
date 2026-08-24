@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { readFile, stat } from "fs/promises";
 import { existsSync } from "fs";
 import path from "path";
+import { getAuthSession } from "@/lib/auth";
 
 const MIME_TYPES: Record<string, string> = {
   ".jpg": "image/jpeg",
@@ -9,16 +10,25 @@ const MIME_TYPES: Record<string, string> = {
   ".png": "image/png",
   ".webp": "image/webp",
   ".gif": "image/gif",
-  ".svg": "image/svg+xml",
+  // 刻意不映射 .svg（可执行脚本，防存储型 XSS）；未知扩展名一律 octet-stream + nosniff
   ".heic": "image/heic",
   ".heif": "image/heif",
 };
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   context: { params: Promise<{ path: string[] }> }
 ) {
   try {
+    // 儿童头像/医学影像属最高敏数据：拒绝匿名访问（能力 URL 模式不可吊销，必须加会话门槛）
+    const session = await getAuthSession(request);
+    if (!session) {
+      return new NextResponse("Unauthorized", {
+        status: 401,
+        headers: { "Cache-Control": "no-store" },
+      });
+    }
+
     const { path: pathSegments } = await context.params;
     if (!pathSegments || pathSegments.length === 0) {
       return new NextResponse("Not Found", { status: 404 });

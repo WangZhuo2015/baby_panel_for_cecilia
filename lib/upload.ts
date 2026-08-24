@@ -102,6 +102,22 @@ export function validateUploadedImage(
     return { valid: false, error: "图片文件内容或签名不合法，请提供真实的有效图片" };
   }
 
+  // 交叉校验：真实二进制签名必须与扩展名声明的格式一致，防止改名混淆
+  const extFamily: Record<string, string> = {
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+    ".webp": "image/webp",
+    ".heic": "image/heic",
+    ".heif": "image/heic",
+  };
+  if (magic.detectedMime !== extFamily[rawExt]) {
+    return {
+      valid: false,
+      error: `文件内容与扩展名不符：内容为 ${magic.detectedMime}，扩展名为 ${rawExt}`,
+    };
+  }
+
   return {
     valid: true,
     ext: rawExt === ".jpeg" ? ".jpg" : rawExt,

@@ -209,13 +209,32 @@ ${ACTION_PROTOCOL_PROMPT}
       const isLatestUser = idx === arr.length - 1 && m.role === "user";
       if (isLatestUser && (image || m.image)) {
         const imgUrl = image || m.image;
-        return {
-          role: "user",
-          content: [
-            { type: "text", text: String(m.content || "请帮我识别并解读这张图片/单据") },
-            { type: "image_url", image_url: { url: imgUrl } },
-          ],
-        };
+        // 仅允许 data:image base64 或 https 外链，防止内网 SSRF 与任意协议注入
+        const safeImg = (() => {
+          if (typeof imgUrl !== "string" || imgUrl.length > 16_000_000) return null;
+          if (/^data:image\/(png|jpe?g|webp|heic|heif);base64,[A-Za-z0-9+/=]+$/.test(imgUrl)) {
+            return imgUrl;
+          }
+          try {
+            const u = new URL(imgUrl);
+            // 仅允许无凭据的 https 外链，防内网 SSRF 与任意协议注入
+            if (u.protocol === "https:" && !u.username && !u.password && u.hostname) {
+              return imgUrl;
+            }
+          } catch {
+            /* 非法 URL */
+          }
+          return null;
+        })();
+        if (safeImg) {
+          return {
+            role: "user",
+            content: [
+              { type: "text", text: String(m.content || "请帮我识别并解读这张图片/单据") },
+              { type: "image_url", image_url: { url: safeImg } },
+            ],
+          };
+        }
       }
       return {
         role: m.role === "assistant" ? "assistant" : "user",

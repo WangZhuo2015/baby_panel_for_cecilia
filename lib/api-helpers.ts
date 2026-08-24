@@ -25,6 +25,11 @@ export function validateCsrfOrigin(request: Request): NextResponse | null {
   if (authHeader?.startsWith("Bearer ")) {
     return null;
   }
+  // 浏览器会附带 Sec-Fetch-Site；非同站请求直接拒绝（缺失时走下方 Origin 校验，兼容 curl/MCP）
+  const fetchSite = request.headers.get("sec-fetch-site");
+  if (fetchSite && fetchSite !== "same-origin" && fetchSite !== "none") {
+    return NextResponse.json({ error: "Forbidden: Cross-Site Request Blocked" }, { status: 403 });
+  }
   const origin = request.headers.get("origin");
   const host = request.headers.get("x-forwarded-host") || request.headers.get("host");
   if (origin && host) {

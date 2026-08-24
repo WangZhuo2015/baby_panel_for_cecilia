@@ -5,7 +5,7 @@ import crypto from "crypto";
 import { requireAuth } from "@/lib/api-helpers";
 import { AI_CONFIG } from "@/lib/config";
 import { getLocalDateStr } from "@/lib/date";
-import { validateUploadedImage } from "@/lib/upload";
+import { validateUploadedImage, validateImageMagicBytes, ALLOWED_IMAGE_MIMES } from "@/lib/upload";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 
 export const maxDuration = 45;
@@ -51,7 +51,7 @@ export async function POST(request: Request) {
   const { user } = auth;
 
   const ip = getClientIp(request);
-  const rateLimit = checkRateLimit(`ocr:${user.id || ip}`, 15, 60_000);
+  const rateLimit = checkRateLimit(`medical_ocr:${user.id || ip}`, 15, 60_000);
   if (!rateLimit.success) {
     return NextResponse.json(
       { error: `请求过于频繁，请 ${rateLimit.resetSeconds} 秒后再试` },
@@ -92,9 +92,19 @@ export async function POST(request: Request) {
     } else {
       const json = await request.json();
       if (json.imageBase64) {
+        if (typeof json.imageBase64 !== "string" || json.imageBase64.length > 20_000_000) {
+          return NextResponse.json({ error: "图片数据过大或格式无效" }, { status: 400 });
+        }
+        const decoded = Buffer.from(json.imageBase64, "base64");
+        if (decoded.length === 0 || !validateImageMagicBytes(decoded).valid) {
+          return NextResponse.json({ error: "图片内容或签名不合法" }, { status: 400 });
+        }
         imageBase64 = json.imageBase64;
-        mime = json.mime || "image/jpeg";
+        mime = ALLOWED_IMAGE_MIMES.includes(json.mime) ? json.mime : "image/jpeg";
       } else if (json.imageUrl) {
+        if (typeof json.imageUrl !== "string" || !/^\/uploads\//.test(json.imageUrl)) {
+          return NextResponse.json({ error: "imageUrl 仅支持本站 /uploads/ 路径" }, { status: 400 });
+        }
         savedImageUrl = json.imageUrl;
       }
     }

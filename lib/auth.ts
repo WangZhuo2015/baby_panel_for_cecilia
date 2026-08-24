@@ -56,7 +56,13 @@ export async function getAuthSession(request?: Request) {
       const cookieHeader = request.headers.get("cookie");
       if (cookieHeader) {
         const match = cookieHeader.match(new RegExp(`(?:^|;\\s*)${AUTH_COOKIE_NAME}=([^;]*)`));
-        if (match) token = decodeURIComponent(match[1]);
+        if (match) {
+          try {
+            token = decodeURIComponent(match[1]);
+          } catch {
+            // 畸形 cookie（如裸 %）按无会话处理，返回 401 而非抛 URIError 致 500
+          }
+        }
       }
     }
   }
