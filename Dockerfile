@@ -30,6 +30,7 @@ RUN mkdir -p /app/data && chown -R nextjs:nodejs /app/data
 
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/prisma ./prisma
+COPY --from=builder /app/generated ./generated
 COPY --from=builder /app/data ./seed-data
 COPY --from=builder /app/package.json ./package.json
 
@@ -41,4 +42,8 @@ USER nextjs
 
 EXPOSE 3000
 
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD wget --no-verbose --tries=1 --spider http://127.0.0.1:${PORT:-3000}/ || exit 1
+
 CMD ["node", "server.js"]
+

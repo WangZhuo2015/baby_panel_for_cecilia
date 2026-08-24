@@ -1,16 +1,26 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getAuthSession } from "@/lib/auth";
+import { requireAuth } from "@/lib/api-helpers";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 
 export async function POST(request: Request) {
   try {
-    const user = await getAuthSession(request);
-    if (!user) {
-      return NextResponse.json({ error: "请先登录" }, { status: 401 });
+    const auth = await requireAuth(request);
+    if (auth.errorResponse) return auth.errorResponse;
+    const { user } = auth;
+
+    const ip = getClientIp(request);
+    const rateLimit = checkRateLimit(`family_join:${user.id || ip}`, 10, 60_000);
+    if (!rateLimit.success) {
+      return NextResponse.json(
+        { error: `尝试过于频繁，请 ${rateLimit.resetSeconds} 秒后再试` },
+        { status: 429 }
+      );
     }
 
     const body = await request.json().catch(() => ({}));
     const { inviteCode, relation } = body;
+
 
     if (!inviteCode || typeof inviteCode !== "string") {
       return NextResponse.json(

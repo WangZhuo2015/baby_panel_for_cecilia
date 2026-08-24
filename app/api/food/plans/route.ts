@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth, requireBaby } from "@/lib/api-helpers";
 import { safeJsonParse } from "@/lib/json";
+import { isValidDateStr } from "@/lib/date";
 
 export async function GET(request: Request) {
   try {
@@ -18,7 +19,13 @@ export async function GET(request: Request) {
     const babyId = babyResult.baby.id;
 
     const where: any = { babyId };
-    if (date) where.date = date;
+    if (date) {
+      if (!isValidDateStr(date)) {
+        return NextResponse.json({ error: "Invalid date format, expected YYYY-MM-DD" }, { status: 400 });
+      }
+      where.date = date;
+    }
+
 
     const plans = await prisma.foodPlan.findMany({
       where,

@@ -41,13 +41,12 @@ export async function POST(request: Request) {
     const {
       babyId: reqBabyId,
       date,
-      ageInMonths,
-      ageLabel,
       weightKg,
       heightCm,
       headCircumferenceCm,
       imageUrl,
     } = body;
+
 
     const babyResult = await requireBaby(user.id, reqBabyId);
     if (babyResult.errorResponse) return babyResult.errorResponse;
@@ -100,14 +99,10 @@ export async function POST(request: Request) {
       );
     }
 
-    let computedAgeMonths: number | null = typeof ageInMonths === "number" ? ageInMonths : null;
-    let computedAgeLabel: string | null = typeof ageLabel === "string" && ageLabel.trim() ? ageLabel.trim() : null;
+    const ageDetail = calculateAgeDetail(baby.birthDate, date.trim());
+    const computedAgeMonths = ageDetail.months;
+    const computedAgeLabel = `${ageDetail.months}月${ageDetail.days}天`;
 
-    if (computedAgeMonths === null || !computedAgeLabel) {
-      const ageDetail = calculateAgeDetail(baby.birthDate, date.trim());
-      if (computedAgeMonths === null) computedAgeMonths = ageDetail.months;
-      if (!computedAgeLabel) computedAgeLabel = `${ageDetail.months}月${ageDetail.days}天`;
-    }
 
 
     // Calculate percentile (priority: weight -> height -> headCircumference)

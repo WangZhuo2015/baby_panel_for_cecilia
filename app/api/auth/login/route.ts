@@ -6,11 +6,26 @@ import {
   AUTH_COOKIE_NAME,
 } from "@/lib/auth";
 import { config, AUTH_CONFIG } from "@/lib/config";
+import { validateCsrfOrigin } from "@/lib/api-helpers";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 
 export async function POST(request: Request) {
   try {
+    const csrfError = validateCsrfOrigin(request);
+    if (csrfError) return csrfError;
+
+    const ip = getClientIp(request);
+    const rateLimit = checkRateLimit(`login:${ip}`, 10, 60_000);
+    if (!rateLimit.success) {
+      return NextResponse.json(
+        { error: `登录尝试过于频繁，请 ${rateLimit.resetSeconds} 秒后再试` },
+        { status: 429 }
+      );
+    }
+
     const body = await request.json().catch(() => ({}));
     const { username, password } = body;
+
 
     if (!username || !password) {
       return NextResponse.json(

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth, requireBaby, getActiveBaby } from "@/lib/api-helpers";
-import { getLocalDayUtcRange } from "@/lib/date";
+import { getLocalDayUtcRange, isValidDateStr, getLocalDateStr } from "@/lib/date";
 
 export async function GET(request: Request) {
   try {
@@ -18,6 +18,9 @@ export async function GET(request: Request) {
 
     const where: any = { babyId: babyResult.baby.id };
     if (date) {
+      if (!isValidDateStr(date)) {
+        return NextResponse.json({ error: "Invalid date format, expected YYYY-MM-DD" }, { status: 400 });
+      }
       const { start, end } = getLocalDayUtcRange(date);
       if (start && end) {
         where.startTime = { lt: end };
@@ -70,27 +73,35 @@ export async function POST(request: Request) {
     const trimmedEnd = endTime.trim();
     const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
-    let finalStartIso = trimmedStart;
-    let finalEndIso = trimmedEnd;
+    let finalStartIso: string;
+    let finalEndIso: string;
 
     if (timeRegex.test(trimmedStart) && timeRegex.test(trimmedEnd)) {
-      const targetDate = body.date || new Date().toISOString().split("T")[0];
-      const [year, month, day] = targetDate.split("-").map(Number);
-      const [sh, sm] = trimmedStart.split(":").map(Number);
-      const [eh, em] = trimmedEnd.split(":").map(Number);
-
-      const startLocal = new Date(year, month - 1, day, sh, sm);
-      let endLocal = new Date(year, month - 1, day, eh, em);
-      if (endLocal.getTime() <= startLocal.getTime()) {
-        endLocal = new Date(endLocal.getTime() + 24 * 60 * 60 * 1000);
+      const targetDate = (body.date && isValidDateStr(body.date)) ? body.date : getLocalDateStr();
+      const startMs = new Date(`${targetDate}T${trimmedStart.padStart(5, "0")}:00+08:00`).getTime();
+      let endMs = new Date(`${targetDate}T${trimmedEnd.padStart(5, "0")}:00+08:00`).getTime();
+      if (endMs <= startMs) {
+        endMs += 24 * 60 * 60 * 1000; // Cross midnight
       }
-      finalStartIso = startLocal.toISOString();
-      finalEndIso = endLocal.toISOString();
-    } else if (isNaN(new Date(trimmedStart).getTime()) || isNaN(new Date(trimmedEnd).getTime())) {
-      return NextResponse.json(
-        { error: "时间格式不正确，小时需在00-23之间，分钟需在00-59之间 (如 14:00)" },
-        { status: 400 }
-      );
+      finalStartIso = new Date(startMs).toISOString();
+      finalEndIso = new Date(endMs).toISOString();
+    } else {
+      const startMs = new Date(trimmedStart).getTime();
+      const endMs = new Date(trimmedEnd).getTime();
+      if (Number.isNaN(startMs) || Number.isNaN(endMs)) {
+        return NextResponse.json(
+          { error: "时间格式不正确，请输入 HH:MM 或标准 ISO 时间戳" },
+          { status: 400 }
+        );
+      }
+      if (endMs <= startMs) {
+        return NextResponse.json(
+          { error: "醒来时间必须晚于入睡时间" },
+          { status: 400 }
+        );
+      }
+      finalStartIso = new Date(startMs).toISOString();
+      finalEndIso = new Date(endMs).toISOString();
     }
 
     const sleepType = type === "night" ? "night" : "day";
@@ -121,6 +132,7 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+
   try {
     const auth = await requireAuth(request);
     if (auth.errorResponse) return auth.errorResponse;

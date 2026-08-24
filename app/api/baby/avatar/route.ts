@@ -4,12 +4,23 @@ import path from "path";
 import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
 import { requireAuth, getActiveBaby } from "@/lib/api-helpers";
+import { validateUploadedImage } from "@/lib/upload";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 
 export async function POST(request: Request) {
   try {
     const auth = await requireAuth(request);
     if (auth.errorResponse) return auth.errorResponse;
     const { user } = auth;
+
+    const ip = getClientIp(request);
+    const rateLimit = checkRateLimit(`avatar:${user.id || ip}`, 10, 60_000);
+    if (!rateLimit.success) {
+      return NextResponse.json(
+        { error: `上传过于频繁，请 ${rateLimit.resetSeconds} 秒后再试` },
+        { status: 429 }
+      );
+    }
 
     const formData = await request.formData();
     const file = formData.get("file") as File | null;
@@ -18,30 +29,20 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "请选择需要上传的照片" }, { status: 400 });
     }
 
-    if (file.size > 10 * 1024 * 1024) {
-      return NextResponse.json({ error: "头像图片不能超过 10MB" }, { status: 400 });
-    }
-
-    const ALLOWED_EXTENSIONS = [".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif"];
-    const rawExt = path.extname(file.name || "").toLowerCase();
-    const isMimeImage = file.type ? file.type.toLowerCase().startsWith("image/") : false;
-    const isExtImage = ALLOWED_EXTENSIONS.includes(rawExt);
-
-    if (!isMimeImage && !isExtImage) {
-      return NextResponse.json({ error: "仅支持图片格式文件（jpg/png/webp）" }, { status: 400 });
-    }
-
-    const ext = isExtImage ? rawExt : ".jpg";
-
-
-    // Save file to disk
     const buffer = Buffer.from(await file.arrayBuffer());
-    const filename = `avatar_${Date.now()}_${crypto.randomBytes(4).toString("hex")}${ext}`;
+    const validation = validateUploadedImage(file, buffer);
+    if (!validation.valid) {
+      return NextResponse.json({ error: validation.error || "仅支持 JPG、PNG、WebP、HEIC 格式图片" }, { status: 400 });
+    }
+
+    const ext = validation.ext || ".jpg";
+    const filename = `avatar_${Date.now()}_${crypto.randomBytes(8).toString("hex")}${ext}`;
     const uploadDir = path.join(process.cwd(), "public", "uploads", "avatars");
 
     await mkdir(uploadDir, { recursive: true });
     const filePath = path.join(uploadDir, filename);
     await writeFile(filePath, buffer);
+
 
     const avatarUrl = `/uploads/avatars/${filename}`;
 

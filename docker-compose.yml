@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   baby-panel:
     build:
@@ -9,11 +7,12 @@ services:
     container_name: baby-panel
     restart: unless-stopped
     ports:
-      - "${PORT:-3000}:3000"
+      - "${PORT:-3088}:${PORT:-3088}"
     environment:
       - NODE_ENV=production
       - DATABASE_URL=file:/app/data/app.db
-      - JWT_SECRET=${JWT_SECRET}
+      - JWT_SECRET=${JWT_SECRET:?JWT_SECRET is required}
+      - PORT=${PORT:-3088}
       - AI_BASE_URL=${AI_BASE_URL:-https://api.deepseek.com/v1}
       - AI_API_KEY=${AI_API_KEY}
       - AI_MODEL=${AI_MODEL:-deepseek-chat}
@@ -22,6 +21,7 @@ services:
       - VAPID_PRIVATE_KEY=${VAPID_PRIVATE_KEY}
       - VAPID_SUBJECT=${VAPID_SUBJECT:-mailto:admin@example.com}
       - PUSH_SEND_TOKEN=${PUSH_SEND_TOKEN}
+
     volumes:
       - baby-data:/app/data
 

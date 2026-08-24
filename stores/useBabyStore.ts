@@ -117,18 +117,27 @@ interface BabyStore {
   deleteMedicalReport: (id: string) => Promise<void>;
 }
 
+type UnauthorizedHandler = () => void;
+let _onUnauthorized: UnauthorizedHandler | null = null;
+
+export function setOnUnauthorized(handler: UnauthorizedHandler) {
+  _onUnauthorized = handler;
+}
+
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init);
   if (!res.ok) {
     if (res.status === 401) {
-      // Session expired or unauthenticated - reset auth state
-      useBabyStore.setState({ user: null, family: null, baby: null, authLoading: false });
+      if (_onUnauthorized) {
+        _onUnauthorized();
+      }
     }
     const data = await res.json().catch(() => ({}));
     throw new Error(data?.error || `Request failed (${res.status})`);
   }
   return res.json();
 }
+
 
 /* ── Fetch caching / deduplication ────────────────────────── */
 const STALE_MS = 30_000; // 30 seconds before data is considered stale
@@ -744,3 +753,8 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
     }
   },
 }));
+
+setOnUnauthorized(() => {
+  useBabyStore.setState({ user: null, family: null, baby: null, authLoading: false });
+});
+

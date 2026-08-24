@@ -38,21 +38,37 @@ try {
   }
 } catch {}
 
-const BASE_URL = process.env.BABY_PANEL_URL || "http://127.0.0.1:3088";
-const JWT_SECRET = process.env.JWT_SECRET || "baby_panel_sec_993b482f7d1a4e259c63b88d2f10e4a7";
-const secretBytes = new TextEncoder().encode(JWT_SECRET);
+const BASE_URL = process.env.BABY_PANEL_URL || `http://127.0.0.1:${process.env.PORT || 3088}`;
+const JWT_SECRET = process.env.JWT_SECRET || "";
+const MCP_TOKEN = process.env.BABY_PANEL_TOKEN || process.env.JWT_TOKEN || "";
+const MCP_USER_ID = process.env.BABY_PANEL_USER_ID || "";
 
 async function getServiceAuthHeader() {
-  const token = await new SignJWT({ userId: "system-mcp", username: "hermes-agent" })
-    .setProtectedHeader({ alg: "HS256" })
-    .setIssuedAt()
-    .setExpirationTime("365d")
-    .sign(secretBytes);
+  if (MCP_TOKEN) {
+    return {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${MCP_TOKEN}`,
+    };
+  }
+
+  if (JWT_SECRET && MCP_USER_ID) {
+    const secretBytes = new TextEncoder().encode(JWT_SECRET);
+    const token = await new SignJWT({ userId: MCP_USER_ID, username: "mcp-agent" })
+      .setProtectedHeader({ alg: "HS256" })
+      .setIssuedAt()
+      .setExpirationTime("30d")
+      .sign(secretBytes);
+    return {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    };
+  }
+
   return {
     "Content-Type": "application/json",
-    Authorization: `Bearer ${token}`,
   };
 }
+
 
 const server = new Server(
   {

@@ -3,8 +3,11 @@ import { requireAuth, requireBaby } from "@/lib/api-helpers";
 import { AI_CONFIG } from "@/lib/config";
 import { calculateAgeDetail } from "@/lib/age";
 import { getLocalDateStr } from "@/lib/date";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
+
 
 export const dynamic = "force-dynamic";
+
 
 
 const CONTEXT_ROLE_MAP: Record<string, string> = {
@@ -118,7 +121,17 @@ export async function POST(request: Request) {
     if (auth.errorResponse) return auth.errorResponse;
     const { user } = auth;
 
+    const ip = getClientIp(request);
+    const rateLimit = checkRateLimit(`chat:${user.id || ip}`, 20, 60_000);
+    if (!rateLimit.success) {
+      return NextResponse.json(
+        { error: `提问过于频繁，请 ${rateLimit.resetSeconds} 秒后再试` },
+        { status: 429 }
+      );
+    }
+
     const body = await request.json().catch(() => ({}));
+
     const { messages, contextType = "general", contextDetail, babyId, image } = body;
 
     if (!messages || !Array.isArray(messages) || messages.length === 0) {

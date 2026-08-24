@@ -41,36 +41,8 @@ function validateBody(body: any): { nickname: string; birthDate: string; gender:
   return { nickname: body.nickname.trim(), birthDate: body.birthDate, gender, gestationalAge };
 }
 
-async function createFamilyWithUniqueInviteCode(userId: string, displayName: string) {
-  const maxRetries = 5;
-  for (let i = 0; i < maxRetries; i++) {
-    const inviteCode = generateInviteCode(6);
-    try {
-      const family = await prisma.family.create({
-        data: {
-          name: `${displayName}的家`,
-          inviteCode,
-          members: {
-            create: {
-              userId,
-              role: "admin",
-              relation: "parent",
-            },
-          },
-        },
-      });
-      return family;
-    } catch (err: any) {
-      if (err.code === "P2002" && i < maxRetries - 1) {
-        continue;
-      }
-      throw err;
-    }
-  }
-  throw new Error("Failed to generate unique invite code");
-}
-
 export async function POST(request: Request) {
+
   try {
     const auth = await requireAuth(request);
     if (auth.errorResponse) return auth.errorResponse;
@@ -90,26 +62,42 @@ export async function POST(request: Request) {
       );
     }
 
-    let familyId: string;
-    if (active.family) {
-      familyId = active.family.id;
-    } else {
-      const family = await createFamilyWithUniqueInviteCode(user.id, user.displayName);
-      familyId = family.id;
-    }
+    const baby = await prisma.$transaction(async (tx) => {
+      let targetFamilyId: string;
+      if (active.family) {
+        targetFamilyId = active.family.id;
+      } else {
+        const inviteCode = generateInviteCode(6);
+        const family = await tx.family.create({
+          data: {
+            name: `${user.displayName}的家`,
+            inviteCode,
+            members: {
+              create: {
+                userId: user.id,
+                role: "admin",
+                relation: "parent",
+              },
+            },
+          },
+        });
+        targetFamilyId = family.id;
+      }
 
-    const baby = await prisma.baby.create({
-      data: {
-        familyId,
-        nickname: validated.nickname,
-        birthDate: validated.birthDate,
-        gender: validated.gender,
-        gestationalAge: validated.gestationalAge,
-        ...(typeof body.avatarUrl === "string" ? { avatarUrl: body.avatarUrl } : {}),
-      },
+      return tx.baby.create({
+        data: {
+          familyId: targetFamilyId,
+          nickname: validated.nickname,
+          birthDate: validated.birthDate,
+          gender: validated.gender,
+          gestationalAge: validated.gestationalAge,
+          ...(typeof body.avatarUrl === "string" ? { avatarUrl: body.avatarUrl } : {}),
+        },
+      });
     });
 
     return NextResponse.json(baby, { status: 201 });
+
   } catch (error) {
     console.error("POST /api/baby error:", error);
     return NextResponse.json(

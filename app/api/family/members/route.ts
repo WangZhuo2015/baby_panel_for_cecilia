@@ -1,18 +1,18 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getAuthSession, getActiveBabyForUser } from "@/lib/auth";
+import { requireAuth, getActiveBaby } from "@/lib/api-helpers";
 
 export async function GET(request: Request) {
   try {
-    const user = await getAuthSession(request);
-    if (!user) {
-      return NextResponse.json({ error: "请先登录" }, { status: 401 });
-    }
+    const auth = await requireAuth(request);
+    if (auth.errorResponse) return auth.errorResponse;
+    const { user } = auth;
 
-    const active = await getActiveBabyForUser(user.id);
+    const active = await getActiveBaby(user.id);
     if (!active?.family) {
       return NextResponse.json({ members: [], inviteCode: null });
     }
+
 
     const members = await prisma.familyMember.findMany({
       where: { familyId: active.family.id },
