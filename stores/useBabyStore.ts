@@ -139,17 +139,26 @@ export function isAuthError(e: any): boolean {
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init);
   if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    const errorMessage =
+      data?.error ||
+      (res.status === 401 ? "请先登录" : `请求失败 (${res.status})`);
+
     if (res.status === 401) {
-      if (_onUnauthorized) {
+      if (
+        _onUnauthorized &&
+        !url.includes("/api/auth/login") &&
+        !url.includes("/api/auth/register")
+      ) {
         _onUnauthorized();
       }
-      throw new AuthError("Unauthorized");
+      throw new AuthError(errorMessage);
     }
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data?.error || `Request failed (${res.status})`);
+    throw new Error(errorMessage);
   }
   return res.json();
 }
+
 
 
 
