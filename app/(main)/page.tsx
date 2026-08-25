@@ -223,7 +223,7 @@ export default function HomePage() {
 
   if (!baby) {
     return (
-      <div className="px-4 pt-12 pb-36 max-w-md mx-auto text-center">
+      <div className="px-4 pt-safe-12 pb-36 max-w-md mx-auto text-center">
         <div className="w-20 h-20 rounded-3xl bg-primary-light text-primary mx-auto flex items-center justify-center shadow-card mb-4">
           <Baby size={40} />
         </div>

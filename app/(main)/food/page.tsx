@@ -49,7 +49,7 @@ export default function FoodPage() {
   return (
     <div className="min-h-[100dvh] bg-bg pb-36">
       {/* Baby info header */}
-      <div className="safe-top px-4 pt-4 pb-3 flex items-center justify-between">
+      <div className="pt-safe-4 px-4 pb-3 flex items-center justify-between">
         <div
           className="flex items-center gap-3 cursor-pointer group"
           onClick={() => router.push("/onboarding")}

@@ -180,7 +180,7 @@ export default function NotificationsPage() {
   const dailyNotifs = notifications.filter((n) => n.type === "daily");
 
   return (
-    <div className="px-4 pt-12 pb-8">
+    <div className="px-4 pb-8">
       {/* Header */}
       <AppHeader
         title="通知中心"

@@ -110,7 +110,7 @@ export default function GrowthPage() {
     : undefined;
 
   return (
-    <div className="px-4 pt-12 pb-36 max-w-md mx-auto">
+    <div className="px-4 pt-safe-12 pb-36 max-w-md mx-auto">
       {/* Baby header */}
       <div className="flex items-center justify-between mb-5">
         <div

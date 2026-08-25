@@ -2,7 +2,7 @@
 
 export default function MainLoading() {
   return (
-    <div className="px-4 pt-6 pb-36 max-w-md mx-auto space-y-4 animate-pulse">
+    <div className="px-4 pt-safe-6 pb-36 max-w-md mx-auto space-y-4 animate-pulse">
       {/* Header skeleton */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">

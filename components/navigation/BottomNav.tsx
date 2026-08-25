@@ -21,7 +21,7 @@ export function BottomNav() {
   };
 
   return (
-    <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px] bg-white/95 backdrop-blur-xl border-t border-primary-soft/40 z-50 pb-[max(8px,env(safe-area-inset-bottom,0px))]">
+    <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[var(--app-max-width)] bg-white/95 backdrop-blur-xl border-t border-primary-soft/40 z-50 pb-[max(8px,env(safe-area-inset-bottom,0px))]">
       {/* 中央显眼 AI 入口 */}
       <button
         type="button"

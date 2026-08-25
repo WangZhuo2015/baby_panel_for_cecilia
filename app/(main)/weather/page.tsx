@@ -71,7 +71,7 @@ export default function WeatherPage() {
   ];
 
   return (
-    <div className="px-4 pt-12 pb-6">
+    <div className="px-4 pb-6">
       {/* Header */}
       <AppHeader title="天气详情" showBack />
 
