@@ -18,6 +18,7 @@ import { CuteCard } from "@/components/ui/CuteCard";
 import { FormSection } from "@/components/ui/FormSection";
 import { SegmentControl } from "@/components/ui/SegmentControl";
 import { QuickAiButton } from "@/components/ui/QuickAiButton";
+import { VoiceConfirmEntry } from "@/components/ui/VoiceConfirmEntry";
 import { useToast } from "@/components/ui/Toast";
 import { useBabyStore } from "@/stores/useBabyStore";
 import { localTimeToUtcIso } from "@/lib/date";
@@ -162,6 +163,7 @@ export default function FeedingRecordPage() {
             variant="compact"
           />
         </div>
+        <VoiceConfirmEntry contextType="feeding" />
 
         {/* Feeding Type Selector */}
         <CuteCard className="p-3">

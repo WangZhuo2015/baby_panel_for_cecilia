@@ -14,11 +14,9 @@ import {
 import { useToast } from "@/components/ui/Toast";
 import { useBabyStore } from "@/stores/useBabyStore";
 import { localTimeToUtcIso, getLocalDateStr } from "@/lib/date";
+import type { ActionCardData } from "@/lib/extract-actions";
 
-export interface ActionCardData {
-  type: "medical_report" | "feeding" | "sleep" | "diaper" | "growth";
-  data: any;
-}
+export type { ActionCardData } from "@/lib/extract-actions";
 
 interface AiActionCardProps {
   action: ActionCardData;
@@ -127,6 +125,7 @@ export const AiActionCard: React.FC<AiActionCardProps> = ({ action: initialActio
   const addDiaperRecord = useBabyStore((s) => s.addDiaperRecord);
   const addGrowthMeasurement = useBabyStore((s) => s.addGrowthMeasurement);
   const addMedicalReport = useBabyStore((s) => s.addMedicalReport);
+  const addFoodLogRecord = useBabyStore((s) => s.addFoodLogRecord);
 
   const [cardData, setCardData] = useState<any>(() => {
     const d = { ...(initialAction.data || {}) };
@@ -181,6 +180,18 @@ export const AiActionCard: React.FC<AiActionCardProps> = ({ action: initialActio
       } else if (initialAction.type === "growth") {
         await addGrowthMeasurement(cardData);
         showToast("生长发育记录已存入 ✨");
+      } else if (initialAction.type === "food") {
+        await addFoodLogRecord({
+          date: cardData.date || getLocalDateStr(),
+          time: cardData.time || hhmmNow(0),
+          foods: Array.isArray(cardData.foods) ? cardData.foods : [],
+          portion: cardData.portion || "most",
+          acceptance: Number(cardData.acceptance) || 3,
+          babyState: cardData.babyState || "happy",
+          hasAbnormal: Boolean(cardData.hasAbnormal),
+          abnormalNotes: cardData.abnormalNotes,
+        });
+        showToast("辅食记录已存入 ✨");
       }
 
       setSaved(true);
@@ -678,6 +689,46 @@ export const AiActionCard: React.FC<AiActionCardProps> = ({ action: initialActio
         >
           {saved ? <CheckCircle2 size={13} /> : <Sparkles size={13} />}
           <span>{saved ? "已存入生长曲线 ✨" : "确认存入生长曲线"}</span>
+        </button>
+      </div>
+    );
+  }
+
+  if (initialAction.type === "food") {
+    const foods = Array.isArray(cardData.foods) ? cardData.foods : [];
+    const ready = foods.length > 0;
+    return (
+      <div className="my-2.5 p-3 bg-gradient-to-br from-orange-50/90 to-amber-50/40 rounded-2xl border border-orange-200/70 shadow-xs text-xs space-y-2">
+        <div className="flex items-center justify-between">
+          <span className="font-bold text-orange-900 flex items-center gap-1.5">
+            <span>🍽️</span> 辅食记录确认
+          </span>
+          {(cardData.time || cardData.date) && (
+            <span className="text-[10px] text-orange-800 font-semibold">
+              {[cardData.date, cardData.time].filter(Boolean).join(" ")}
+            </span>
+          )}
+        </div>
+        <p className="text-[11px] text-text-primary leading-relaxed">
+          {foods.length ? foods.join("、") : "未识别到食材"}
+        </p>
+        <div className="flex flex-wrap gap-1.5 text-[10px] text-text-muted">
+          {cardData.portion && <span>份量：{cardData.portion}</span>}
+          {cardData.babyState && <span>状态：{cardData.babyState}</span>}
+        </div>
+        <button
+          onClick={handleConfirmSave}
+          disabled={saved || saving || !ready}
+          className={`w-full py-2 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1 transition-all ${
+            saved
+              ? "bg-emerald-500 text-white cursor-default"
+              : !ready
+                ? "bg-slate-300 text-slate-500 cursor-not-allowed"
+                : "bg-orange-500 text-white hover:bg-orange-600 shadow-xs cursor-pointer"
+          }`}
+        >
+          {saved ? <CheckCircle2 size={13} /> : <Sparkles size={13} />}
+          <span>{saved ? "已存入辅食记录 ✨" : !ready ? "缺少食材名称" : "确认保存辅食记录"}</span>
         </button>
       </div>
     );

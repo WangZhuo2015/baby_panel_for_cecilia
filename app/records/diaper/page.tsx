@@ -9,6 +9,7 @@ import { CuteTextarea } from '@/components/ui/CuteTextarea';
 import { SegmentControl } from '@/components/ui/SegmentControl';
 import { FormSection } from '@/components/ui/FormSection';
 import { QuickAiButton } from '@/components/ui/QuickAiButton';
+import { VoiceConfirmEntry } from '@/components/ui/VoiceConfirmEntry';
 import { useToast } from '@/components/ui/Toast';
 import { useBabyStore } from '@/stores/useBabyStore';
 import { localTimeToUtcIso } from '@/lib/date';
@@ -92,6 +93,7 @@ export default function DiaperRecordPage() {
             variant="compact"
           />
         </div>
+        <VoiceConfirmEntry contextType="diaper" />
 
         {/* Time */}
         <FormSection title="记录时间">

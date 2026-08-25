@@ -8,6 +8,7 @@ import { CuteTextarea } from '@/components/ui/CuteTextarea';
 import { FormSection } from '@/components/ui/FormSection';
 import { HeartRating } from '@/components/ui/HeartRating';
 import { useToast } from '@/components/ui/Toast';
+import { VoiceConfirmEntry } from '@/components/ui/VoiceConfirmEntry';
 import { useBabyStore } from '@/stores/useBabyStore';
 import { getLocalDateStr } from '@/lib/date';
 import type { FoodLogRecord } from '@/types';
@@ -131,7 +132,8 @@ export default function FoodLogPage() {
     <div className="min-h-[100dvh] bg-bg pb-8">
       <AppHeader title="辅食记录" showBack />
 
-      <div className="px-4 pt-4">
+      <div className="px-4 pt-4 space-y-4">
+        <VoiceConfirmEntry contextType="food" />
         {/* Date and time */}
         <FormSection title="时间">
           <div className="flex gap-3">

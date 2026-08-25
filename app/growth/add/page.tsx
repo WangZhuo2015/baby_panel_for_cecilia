@@ -9,6 +9,7 @@ import { CuteCard } from '@/components/ui/CuteCard';
 import { FormSection } from '@/components/ui/FormSection';
 import { SegmentControl } from '@/components/ui/SegmentControl';
 import { useToast } from '@/components/ui/Toast';
+import { VoiceConfirmEntry } from '@/components/ui/VoiceConfirmEntry';
 import { useBabyStore } from '@/stores/useBabyStore';
 import { getLocalDateStr } from '@/lib/date';
 import { calculateAge } from '@/lib/age';
@@ -115,7 +116,8 @@ export default function GrowthAddPage() {
     <div className="min-h-[100dvh] bg-bg">
       <AppHeader title="添加测量记录" showBack />
 
-      <div className="px-4 pt-4 pb-8">
+      <div className="px-4 pt-4 pb-8 space-y-4">
+        <VoiceConfirmEntry contextType="growth" />
         {/* Mode switch */}
         <FormSection title="输入方式">
           <SegmentControl

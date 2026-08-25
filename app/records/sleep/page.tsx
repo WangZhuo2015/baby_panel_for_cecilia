@@ -16,6 +16,7 @@ import { CuteCard } from "@/components/ui/CuteCard";
 import { FormSection } from "@/components/ui/FormSection";
 import { SegmentControl } from "@/components/ui/SegmentControl";
 import { QuickAiButton } from "@/components/ui/QuickAiButton";
+import { VoiceConfirmEntry } from "@/components/ui/VoiceConfirmEntry";
 import { useToast } from "@/components/ui/Toast";
 import { useBabyStore } from "@/stores/useBabyStore";
 import { getLocalDateStr, formatIsoToLocalTime } from "@/lib/date";
@@ -223,6 +224,7 @@ function LiveSleepDuration({ startIso }: { startIso: string }) {
             variant="compact"
           />
         </div>
+        <VoiceConfirmEntry contextType="sleep" />
 
         {/* 🌙 实时入睡快捷卡片 (One-Tap Live Stopwatch) */}
         <CuteCard className="p-4 bg-gradient-to-br from-indigo-900 to-purple-900 text-white shadow-xl relative overflow-hidden border-0">
