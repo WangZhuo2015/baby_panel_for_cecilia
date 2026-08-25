@@ -86,15 +86,10 @@ export async function getAiTips(babyId?: string): Promise<string[]> {
 - 用中文回答
 - 直接返回严格的JSON字符串数组，如：["建议1", "建议2", "建议3"]`;
 
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    Authorization: `Bearer ${AI_CONFIG.apiKey}`,
-  };
-
   try {
     const res = await fetch(`${AI_CONFIG.baseUrl.replace(/\/+$/, "")}/chat/completions`, {
       method: "POST",
-      headers,
+      headers: AI_CONFIG.headers,
       body: JSON.stringify({
         model: AI_CONFIG.model,
         messages: [
@@ -104,8 +99,9 @@ export async function getAiTips(babyId?: string): Promise<string[]> {
             content: `请给${ageMonths}个月${genderWord}宝宝${nickname}今天的育儿建议`,
           },
         ],
-        max_tokens: 500,
+        max_tokens: 800,
         temperature: 0.7,
+        ...AI_CONFIG.completionExtras,
       }),
       cache: "no-store",
       signal: AbortSignal.timeout(15000),

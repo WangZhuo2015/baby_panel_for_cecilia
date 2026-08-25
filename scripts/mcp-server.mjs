@@ -2,8 +2,9 @@
 
 /**
  * Baby Panel MCP Server
- * Exposes Model Context Protocol (MCP) tools for Hermes Agent / AI assistants
+ * Exposes Model Context Protocol (MCP) tools for external AI assistants
  * to read and record baby daily activities, growth metrics, vaccines, and medical reports.
+ * Web chat does not use this server; see docs/adr/0001-no-hermes-for-web-chat.md.
  */
 
 import fs from "fs";
@@ -15,7 +16,7 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
-import { SignJWT } from "jose";
+import { SignJWT, jwtVerify } from "jose";
 import { randomUUID } from "crypto";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -43,33 +44,97 @@ const BASE_URL = process.env.BABY_PANEL_URL || `http://127.0.0.1:${process.env.P
 const JWT_SECRET = process.env.JWT_SECRET || "";
 const MCP_TOKEN = process.env.BABY_PANEL_TOKEN || process.env.JWT_TOKEN || "";
 const MCP_USER_ID = process.env.BABY_PANEL_USER_ID || "";
+const ALLOW_STATIC_USER = process.env.MCP_ALLOW_STATIC_USER === "1";
 
-async function getServiceAuthHeader() {
-  if (MCP_TOKEN) {
-    return {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${MCP_TOKEN}`,
-    };
+const SESSION_PROP = {
+  session: {
+    type: "string",
+    description:
+      "必填。从系统提示【MCP会话凭证】原样复制的整串，禁止修改、禁止使用其他值。用于绑定当前家长与当前宝宝，防止串号。",
+  },
+};
+
+function apiUrl(pathname, babyId, extraQuery = {}) {
+  const url = new URL(pathname, BASE_URL);
+  if (babyId) url.searchParams.set("babyId", babyId);
+  for (const [k, v] of Object.entries(extraQuery)) {
+    if (v != null && v !== "") url.searchParams.set(k, String(v));
+  }
+  return url.toString();
+}
+
+/** Bind this tool call to one parent + one baby. Never trust model-supplied babyId. */
+async function bindCall(args = {}) {
+  const session = typeof args.session === "string" ? args.session.trim() : "";
+  if (session) {
+    if (!JWT_SECRET) throw new Error("JWT_SECRET 未配置，拒绝执行 MCP 工具");
+    try {
+      const { payload } = await jwtVerify(session, new TextEncoder().encode(JWT_SECRET));
+      if (
+        payload.typ !== "mcp" ||
+        typeof payload.userId !== "string" ||
+        typeof payload.babyId !== "string" ||
+        typeof payload.username !== "string" ||
+        !payload.userId ||
+        !payload.babyId
+      ) {
+        throw new Error("invalid");
+      }
+      const rest = { ...args };
+      delete rest.session;
+      delete rest.babyId;
+      delete rest.userId;
+      return {
+        userId: payload.userId,
+        babyId: payload.babyId,
+        args: rest,
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session}`,
+        },
+      };
+    } catch {
+      throw new Error("session 凭证无效或已过期（防串号）");
+    }
   }
 
-  if (JWT_SECRET && MCP_USER_ID) {
+  // CLI 单用户兜底：默认关闭。打开等于全网关共用一个家庭，会串号。
+  if (ALLOW_STATIC_USER && JWT_SECRET && MCP_USER_ID) {
     const secretBytes = new TextEncoder().encode(JWT_SECRET);
     const token = await new SignJWT({ userId: MCP_USER_ID, username: "mcp-agent" })
       .setProtectedHeader({ alg: "HS256" })
       .setIssuedAt()
       .setJti(randomUUID())
-      // 短时效：泄露后损失窗口有限；到期由 MCP 进程自动重签
       .setExpirationTime("24h")
       .sign(secretBytes);
+    const rest = { ...args };
+    delete rest.session;
     return {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
+      userId: MCP_USER_ID,
+      babyId: null,
+      args: rest,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
     };
   }
 
-  return {
-    "Content-Type": "application/json",
-  };
+  if (ALLOW_STATIC_USER && MCP_TOKEN) {
+    const rest = { ...args };
+    delete rest.session;
+    return {
+      userId: null,
+      babyId: null,
+      args: rest,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${MCP_TOKEN}`,
+      },
+    };
+  }
+
+  throw new Error("缺少 session 会话凭证，拒绝执行（防串号：不在未绑定家长/宝宝时读写档案）");
 }
 
 
@@ -91,10 +156,11 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
     tools: [
       {
         name: "get_baby_profile",
-        description: "获取宝宝基本档案信息（姓名、性别、出生日期、实际精准月龄天数、胎龄/早产周数、头像）。",
+        description: "获取当前会话绑定宝宝的基本档案。必须传入 session。",
         inputSchema: {
           type: "object",
-          properties: {},
+          required: ["session"],
+          properties: { ...SESSION_PROP },
         },
       },
       {
@@ -102,7 +168,9 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         description: "获取宝宝当天的日常汇总数据（今日累计总奶量ml、总睡眠时长分钟、排便换尿布次数及时间轴记录）。",
         inputSchema: {
           type: "object",
+          required: ["session"],
           properties: {
+            ...SESSION_PROP,
             date: {
               type: "string",
               description: "查询日期 (格式: YYYY-MM-DD，留空则默认今天)",
@@ -115,8 +183,9 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         description: "记录宝宝一次喂养事件（母乳亲喂、配方奶粉、瓶喂母乳或混合喂养）。",
         inputSchema: {
           type: "object",
-          required: ["type"],
+          required: ["session", "type"],
           properties: {
+            ...SESSION_PROP,
             type: {
               type: "string",
               enum: ["breast", "formula", "bottle_breast", "mixed"],
@@ -146,8 +215,9 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         description: "记录宝宝一次睡眠作息（入睡与醒来时间、白天小睡或夜间长睡眠）。",
         inputSchema: {
           type: "object",
-          required: ["startTime", "endTime"],
+          required: ["session", "startTime", "endTime"],
           properties: {
+            ...SESSION_PROP,
             startTime: {
               type: "string",
               description: "入睡时间 (格式: HH:mm，如 14:00)",
@@ -185,8 +255,9 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         description: "记录宝宝一次换尿布/排便事件（尿尿、便便状态与颜色）。",
         inputSchema: {
           type: "object",
-          required: ["type"],
+          required: ["session", "type"],
           properties: {
+            ...SESSION_PROP,
             type: {
               type: "string",
               enum: ["pee", "poop", "both"],
@@ -218,7 +289,9 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         description: "记录宝宝一次生长发育测量数据（体重、身长、头围），并可评估 WHO 百分位。",
         inputSchema: {
           type: "object",
+          required: ["session"],
           properties: {
+            ...SESSION_PROP,
             weightKg: {
               type: "number",
               description: "体重 (千克/kg，如 8.2)",
@@ -247,7 +320,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         description: "查询宝宝当前的疫苗接种规划（近30天待接种项、已过期项、0-3岁完整接种日程与二类苗推荐）。",
         inputSchema: {
           type: "object",
-          properties: {},
+          required: ["session"],
+          properties: { ...SESSION_PROP },
         },
       },
       {
@@ -255,8 +329,9 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         description: "保存一份儿童医学化验单或体检档案（血常规、微量元素、儿保体检、过敏原等），包含各检验项目指标。",
         inputSchema: {
           type: "object",
-          required: ["title", "category"],
+          required: ["session", "title", "category"],
           properties: {
+            ...SESSION_PROP,
             title: {
               type: "string",
               description: "报告名称（如：末梢血常规化验单、6月龄儿保体检表）",
@@ -303,15 +378,29 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
   };
 });
 
+async function postJson(path, bound, payload) {
+  const body = bound.babyId ? { ...payload, babyId: bound.babyId } : payload;
+  const res = await fetch(apiUrl(path, bound.babyId || ""), {
+    method: "POST",
+    headers: bound.headers,
+    body: JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+  return data;
+}
+
 // Handle tool executions
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
-  const { name, arguments: args = {} } = request.params;
+  const { name, arguments: rawArgs = {} } = request.params;
 
   try {
-    const headers = await getServiceAuthHeader();
+    const bound = await bindCall(rawArgs);
+    const args = bound.args;
+    const headers = bound.headers;
 
     if (name === "get_baby_profile") {
-      const res = await fetch(`${BASE_URL}/api/baby`, { headers });
+      const res = await fetch(apiUrl("/api/baby", bound.babyId || ""), { headers });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       return {
@@ -320,8 +409,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
 
     if (name === "get_daily_summary") {
-      const dateParam = args.date ? `?date=${args.date}` : "";
-      const res = await fetch(`${BASE_URL}/api/records/daily-summary${dateParam}`, { headers });
+      const extra = args.date ? { date: args.date } : {};
+      const res = await fetch(apiUrl("/api/records/daily-summary", bound.babyId || "", extra), {
+        headers,
+      });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       return {
@@ -330,23 +421,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
 
     if (name === "record_feeding") {
-      const payload = {
+      const data = await postJson("/api/records/feeding", bound, {
         ...args,
         timestamp: args.timestamp || new Date().toISOString(),
-      };
-      const res = await fetch(`${BASE_URL}/api/records/feeding`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify(payload),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
       return {
         content: [
-          {
-            type: "text",
-            text: `✅ 喂养记录保存成功！\n${JSON.stringify(data, null, 2)}`,
-          },
+          { type: "text", text: `✅ 喂养记录保存成功！\n${JSON.stringify(data, null, 2)}` },
         ],
       };
     }
@@ -358,77 +439,46 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       if (!timeRegex.test(start) || !timeRegex.test(end)) {
         throw new Error(`时间格式不正确，需为 24小时制 HH:mm (00:00-23:59)，如 "14:00"`);
       }
-
-      const payload = {
+      const data = await postJson("/api/records/sleep", bound, {
         ...args,
         startTime: start,
         endTime: end,
         date: args.date || new Date().toISOString().split("T")[0],
-      };
-      const res = await fetch(`${BASE_URL}/api/records/sleep`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify(payload),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
       return {
         content: [
-          {
-            type: "text",
-            text: `✅ 睡眠记录保存成功！\n${JSON.stringify(data, null, 2)}`,
-          },
+          { type: "text", text: `✅ 睡眠记录保存成功！\n${JSON.stringify(data, null, 2)}` },
         ],
       };
     }
 
     if (name === "record_diaper") {
-      const payload = {
+      const data = await postJson("/api/records/diaper", bound, {
         ...args,
         type: args.type || "pee",
         timestamp: args.timestamp || new Date().toISOString(),
-      };
-      const res = await fetch(`${BASE_URL}/api/records/diaper`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify(payload),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
       return {
         content: [
-          {
-            type: "text",
-            text: `✅ 排便/换尿布记录保存成功！\n${JSON.stringify(data, null, 2)}`,
-          },
+          { type: "text", text: `✅ 排便/换尿布记录保存成功！\n${JSON.stringify(data, null, 2)}` },
         ],
       };
     }
 
     if (name === "record_growth") {
-      const payload = {
+      const data = await postJson("/api/growth", bound, {
         ...args,
         date: args.date || new Date().toISOString().split("T")[0],
-      };
-      const res = await fetch(`${BASE_URL}/api/growth`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify(payload),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
       return {
         content: [
-          {
-            type: "text",
-            text: `✅ 生长发育测量记录保存成功！\n${JSON.stringify(data, null, 2)}`,
-          },
+          { type: "text", text: `✅ 生长发育测量记录保存成功！\n${JSON.stringify(data, null, 2)}` },
         ],
       };
     }
 
     if (name === "get_vaccine_schedule") {
-      const res = await fetch(`${BASE_URL}/api/vaccines`, { headers });
+      const res = await fetch(apiUrl("/api/vaccines", bound.babyId || ""), { headers });
       const data = await res.json();
       return {
         content: [{ type: "text", text: JSON.stringify(data, null, 2) }],
@@ -436,23 +486,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
 
     if (name === "save_medical_report") {
-      const payload = {
+      const data = await postJson("/api/medical/reports", bound, {
         ...args,
         date: args.date || new Date().toISOString().split("T")[0],
-      };
-      const res = await fetch(`${BASE_URL}/api/medical/reports`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify(payload),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
       return {
         content: [
-          {
-            type: "text",
-            text: `✅ 医学化验单/体检档案保存成功！\n${JSON.stringify(data, null, 2)}`,
-          },
+          { type: "text", text: `✅ 医学化验单/体检档案保存成功！\n${JSON.stringify(data, null, 2)}` },
         ],
       };
     }

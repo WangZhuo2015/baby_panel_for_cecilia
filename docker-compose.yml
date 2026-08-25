@@ -13,10 +13,12 @@ services:
       - DATABASE_URL=file:/app/data/app.db
       - JWT_SECRET=${JWT_SECRET:?JWT_SECRET is required}
       - PORT=${PORT:-3088}
-      - AI_BASE_URL=${AI_BASE_URL:-https://api.deepseek.com/v1}
-      - AI_API_KEY=${AI_API_KEY}
-      - AI_MODEL=${AI_MODEL:-deepseek-chat}
-      - AI_VISION_MODEL=${AI_VISION_MODEL:-gpt-4o-mini}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+      - OPENROUTER_MODEL=${OPENROUTER_MODEL:-stealth/ox-alpha}
+      - AI_BASE_URL=${AI_BASE_URL:-}
+      - AI_API_KEY=${AI_API_KEY:-}
+      - AI_MODEL=${AI_MODEL:-}
+      - AI_VISION_MODEL=${AI_VISION_MODEL:-}
       - VAPID_PUBLIC_KEY=${VAPID_PUBLIC_KEY}
       - VAPID_PRIVATE_KEY=${VAPID_PRIVATE_KEY}
       - VAPID_SUBJECT=${VAPID_SUBJECT:-mailto:admin@example.com}

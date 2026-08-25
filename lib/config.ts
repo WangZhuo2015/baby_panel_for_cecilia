@@ -62,18 +62,53 @@ export const AUTH_CONFIG = {
   cookieMaxAge: 7 * 24 * 60 * 60, // 7 days in seconds
 } as const;
 
+const OPENROUTER_BASE = "https://openrouter.ai/api/v1";
+
+function isAbandonedHermesUpstream(url: string): boolean {
+  return /:8642\b/.test(url);
+}
+
+function preferOpenRouter(): boolean {
+  return Boolean(process.env.OPENROUTER_API_KEY);
+}
+
 export const AI_CONFIG = {
   get baseUrl() {
-    return process.env.AI_BASE_URL || process.env.OPENAI_BASE_URL || "http://127.0.0.1:8642/v1";
+    if (preferOpenRouter()) return OPENROUTER_BASE;
+    const url = process.env.AI_BASE_URL || process.env.OPENAI_BASE_URL || "";
+    if (url && !isAbandonedHermesUpstream(url)) return url.replace(/\/+$/, "");
+    return OPENROUTER_BASE;
   },
   get apiKey() {
+    if (preferOpenRouter()) return process.env.OPENROUTER_API_KEY || "";
+    const url = process.env.AI_BASE_URL || process.env.OPENAI_BASE_URL || "";
+    if (isAbandonedHermesUpstream(url)) return "";
     return process.env.AI_API_KEY || process.env.OPENAI_API_KEY || "";
   },
   get model() {
-    return process.env.AI_MODEL || process.env.OPENAI_MODEL || "hermes-agent";
+    if (preferOpenRouter()) return process.env.OPENROUTER_MODEL || "stealth/ox-alpha";
+    const model = process.env.AI_MODEL || process.env.OPENAI_MODEL || "";
+    if (!model || model === "hermes-agent") return process.env.OPENROUTER_MODEL || "stealth/ox-alpha";
+    return model;
   },
   get visionModel() {
-    return process.env.AI_VISION_MODEL || "gpt-4o-mini";
+    const vision = process.env.AI_VISION_MODEL;
+    if (vision && vision !== "hermes-agent") return vision;
+    return this.model;
+  },
+  get headers(): Record<string, string> {
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (this.apiKey) headers.Authorization = `Bearer ${this.apiKey}`;
+    if (this.baseUrl.includes("openrouter.ai")) {
+      headers["HTTP-Referer"] = "https://baby.zwang.fun";
+      headers["X-Title"] = "Baby Panel";
+    }
+    return headers;
+  },
+  /** Ox Alpha spends thinking tokens; without this, OCR/tips can return empty content. */
+  get completionExtras(): Record<string, unknown> {
+    if (!this.baseUrl.includes("openrouter.ai")) return {};
+    return { reasoning: { effort: "low" } };
   },
 } as const;
 

@@ -76,16 +76,9 @@ export async function POST(request: Request) {
 
 
   try {
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-    };
-    if (AI_CONFIG.apiKey) {
-      headers["Authorization"] = `Bearer ${AI_CONFIG.apiKey}`;
-    }
-
     const res = await fetch(`${AI_CONFIG.baseUrl.replace(/\/+$/, "")}/chat/completions`, {
       method: "POST",
-      headers,
+      headers: AI_CONFIG.headers,
       body: JSON.stringify({
         model: AI_CONFIG.visionModel,
         messages: [
@@ -108,8 +101,9 @@ export async function POST(request: Request) {
             ],
           },
         ],
-        max_tokens: 300,
+        max_tokens: 1500,
         temperature: 0,
+        ...AI_CONFIG.completionExtras,
       }),
       cache: "no-store",
       signal: AbortSignal.timeout(100000),

@@ -33,6 +33,7 @@ if (isProd) {
 const nextConfig: NextConfig = {
   output: "standalone",
   poweredByHeader: false,
+  serverExternalPackages: ["@earendil-works/pi-agent-core", "@earendil-works/pi-ai"],
   allowedDevOrigins: [
     "baby.zwang.fun",
     "localhost:3088",

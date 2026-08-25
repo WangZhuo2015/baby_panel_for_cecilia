@@ -9,6 +9,8 @@
     "start": "next start",
     "lint": "oxlint",
     "typecheck": "tsc --noEmit",
+    "test:agent": "tsx lib/agent/run.test.ts",
+    "test:mcp-session": "tsx lib/mcp-session.test.ts",
     "db:seed": "npx tsx prisma/seed.ts",
     "db:studio": "npx prisma studio",
     "db:backup": "bash scripts/backup-db.sh",
@@ -16,6 +18,8 @@
     "db:deploy": "prisma migrate deploy"
   },
   "dependencies": {
+    "@earendil-works/pi-agent-core": "^0.84.3",
+    "@earendil-works/pi-ai": "^0.84.3",
     "@libsql/client": "0.17.4",
     "@prisma/adapter-libsql": "7.9.1",
     "@prisma/client": "7.9.1",

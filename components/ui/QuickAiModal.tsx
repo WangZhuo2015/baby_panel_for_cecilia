@@ -15,6 +15,7 @@ import {
   Mic,
   Image as ImageIcon,
   Loader2,
+  Wrench,
 } from "lucide-react";
 import { useBabyStore } from "@/stores/useBabyStore";
 import { calculateAge } from "@/lib/age";
@@ -41,6 +42,14 @@ interface QuickAiModalProps {
   initialPrompt?: string;
 }
 
+interface ToolTrace {
+  name: string;
+  label?: string;
+  status: "start" | "end";
+  isError?: boolean;
+  summary?: string;
+}
+
 interface Message {
   id: string;
   role: "user" | "assistant";
@@ -48,6 +57,7 @@ interface Message {
   image?: string;
   timestamp: string;
   isStreaming?: boolean;
+  tools?: ToolTrace[];
 }
 
 const CONTEXT_META: Record<
@@ -398,6 +408,24 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
                     )
                   );
                 }
+                if (data.tool && typeof data.tool.name === "string") {
+                  const incoming = data.tool as ToolTrace;
+                  setMessages((prev) =>
+                    prev.map((msg) => {
+                      if (msg.id !== aiMsgId) return msg;
+                      const tools = [...(msg.tools || [])];
+                      const idx = tools.findIndex(
+                        (t) => t.name === incoming.name && t.status === "start"
+                      );
+                      if (incoming.status === "end" && idx >= 0) {
+                        tools[idx] = { ...tools[idx], ...incoming };
+                      } else {
+                        tools.push(incoming);
+                      }
+                      return { ...msg, tools, isStreaming: true };
+                    })
+                  );
+                }
               } catch {
                 // Partial JSON, ignore
               }
@@ -456,7 +484,6 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isOpen, onClose]);
-
 
   useEffect(() => {
     if (isOpen) {
@@ -555,7 +582,7 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
       />
 
       {/* Sheet / Modal Container - Full screen on mobile, elegant dialog on desktop */}
-      <div className="relative w-full max-w-lg bg-card h-[100dvh] sm:h-[680px] max-h-[100dvh] sm:max-h-[90vh] rounded-none sm:rounded-[28px] shadow-2xl overflow-hidden flex flex-col border-0 sm:border sm:border-primary/15 animate-in slide-in-from-bottom-6 duration-200 z-10">
+      <div className="relative w-full max-w-lg bg-card h-full sm:h-[680px] max-h-full sm:max-h-[90vh] rounded-none sm:rounded-[28px] shadow-2xl overflow-hidden flex flex-col border-0 sm:border sm:border-primary/15 animate-in slide-in-from-bottom-6 duration-200 z-10">
         
         {/* Header - Frosted pastel navbar with notch safe area */}
         <div className="flex items-center justify-between px-4 py-3 pt-[max(12px,env(safe-area-inset-top))] bg-white/95 backdrop-blur-md border-b border-primary/10 shrink-0">
@@ -568,9 +595,6 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
                 <h3 id="quick-ai-title" className="font-bold text-text-primary text-sm sm:text-base">
                   {displayTitle}
                 </h3>
-                <span className="text-[10px] bg-primary-light text-primary px-2 py-0.5 rounded-full font-semibold">
-                  Hermes 多模态 AI
-                </span>
               </div>
               <p className="text-[11px] text-text-muted flex items-center gap-1 mt-0.5">
                 <span className="font-medium text-text-secondary">{baby?.nickname || "宝宝"}</span>
@@ -613,7 +637,8 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
         <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4 bg-gradient-to-b from-transparent to-primary-light/10">
           {messages.map((m) => {
             const isUser = m.role === "user";
-            const isThinking = !isUser && m.isStreaming && !m.content;
+            const isThinking =
+              !isUser && m.isStreaming && !m.content && !(m.tools && m.tools.length);
             const { cleanText, actions } = !isUser
               ? extractActionsAndCleanMarkdown(m.content)
               : { cleanText: m.content, actions: [] as ActionCardData[] };
@@ -659,6 +684,27 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
                   ) : (
                     /* Assistant Rich Markdown Rendering + Action Card */
                     <div className="space-y-2">
+                      {m.tools && m.tools.length > 0 && (
+                        <div className="flex flex-wrap gap-1">
+                          {m.tools.map((t, i) => (
+                            <span
+                              key={`${t.name}-${i}`}
+                              className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border ${
+                                t.status === "start"
+                                  ? "bg-primary-light/50 text-text-secondary border-primary/15"
+                                  : t.isError
+                                    ? "bg-red-50 text-red-600 border-red-200"
+                                    : "bg-emerald-50 text-emerald-700 border-emerald-200"
+                              }`}
+                              title={t.summary || t.name}
+                            >
+                              <Wrench size={10} />
+                              {t.status === "start" ? "正在" : t.isError ? "失败" : "已完成"}
+                              {t.label || t.name}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                       <div className="markdown-content space-y-2">
                         <ReactMarkdown
                           remarkPlugins={[remarkGfm]}

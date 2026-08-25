@@ -9,7 +9,7 @@
 - **专业生长曲线 (WHO 标准)**: 内置完整的 WHO 0-36 个月男宝/女宝生长标准数据库（体重、身长、头围 P3~P97 分位曲线及动态百分位估算）。
 - **育儿参考知识库**: 国家免疫规划疫苗与自费方案、发育里程碑与预警征象、辅食添加指南与食材库、绘本推荐库与亲子活动库。
 - **智能天气**: 支持浏览器实时定位天气、UV 指数、空气质量及外出活动建议。
-- **AI 育儿助手 & 体检单识别**: 兼容标准 OpenAI 协议（DeepSeek / 通义千问 / OpenAI / 本地 Ollama / Hermes 等），严谨报错并支持手动重试，无虚假假数据兜底。
+- **AI 育儿助手 & 体检单识别**: OpenRouter（默认 `stealth/ox-alpha`）+ Pi Agent 工具调用；严谨报错并支持手动重试，无虚假假数据兜底。
 - **Web Push 推送通知**: 疫苗接种提醒、每日记录提醒。
 
 ---
@@ -88,10 +88,12 @@ npm start
 | :--- | :--- | :--- |
 | `DATABASE_URL` | SQLite 数据库路径 | `file:./dev.db` 或 `file:/app/data/app.db` |
 | `JWT_SECRET` | 用户会话加密密钥 | 生产环境务必设置强随机字符串 |
-| `AI_BASE_URL` | OpenAI 兼容接口地址 | `https://api.deepseek.com/v1` |
-| `AI_API_KEY` | 大模型 API Key | `sk-...` |
-| `AI_MODEL` | 文本对话大模型名称 | `deepseek-chat` / `gpt-4o-mini` |
-| `AI_VISION_MODEL` | 视觉识别模型 (用于体检单拍照识别) | `gpt-4o-mini` / `qwen-vl-max` |
+| `OPENROUTER_API_KEY` | OpenRouter API Key（聊天必填） | `sk-or-v1-...` |
+| `OPENROUTER_MODEL` | OpenRouter 模型 | `stealth/ox-alpha` |
+| `AI_BASE_URL` | 可选 OpenAI 兼容回落（勿指向 Hermes） | `https://api.deepseek.com/v1` |
+| `AI_API_KEY` | 回落接口 Key | `sk-...` |
+| `AI_MODEL` | 回落文本模型 | `deepseek-chat` / `gpt-4o-mini` |
+| `AI_VISION_MODEL` | 可选视觉模型覆盖 | `gpt-4o-mini` / `qwen-vl-max` |
 | `VAPID_PUBLIC_KEY` | Web Push 公钥 | 运行 `scripts/generate-vapid-keys.ts` 生成 |
 | `VAPID_PRIVATE_KEY` | Web Push 私钥 | 运行 `scripts/generate-vapid-keys.ts` 生成 |
 | `PUSH_SEND_TOKEN` | 推送发送鉴权 Token | 自定义字符串 |
