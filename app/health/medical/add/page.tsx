@@ -21,6 +21,8 @@ import { SegmentControl } from "@/components/ui/SegmentControl";
 import { useToast } from "@/components/ui/Toast";
 import { useBabyStore } from "@/stores/useBabyStore";
 import { getLocalDateStr } from "@/lib/date";
+import { composeMedicalAiSummary } from "@/lib/medical-summary";
+import { MarkdownBody } from "@/components/ui/MarkdownBody";
 import type { MedicalReportCategory, MedicalReportItem } from "@/types";
 
 export default function MedicalAddPage() {
@@ -37,6 +39,7 @@ export default function MedicalAddPage() {
   const [uploadedImageUrl, setUploadedImageUrl] = useState<string | null>(null);
   const [ocrLoading, setOcrLoading] = useState(false);
   const [jobId, setJobId] = useState<string | null>(null);
+  const [claimJobId, setClaimJobId] = useState<string | null>(null);
   const [jobElapsed, setJobElapsed] = useState(0);
   const [ocrError, setOcrError] = useState<string | null>(null);
   const [ocrDone, setOcrDone] = useState(false);
@@ -107,17 +110,25 @@ export default function MedicalAddPage() {
 
   // 将 OCR 结构化结果填入表单
   const applyOcrResult = (data: any) => {
-    if (data.title) setTitle(data.title);
-    if (data.category) setCategory(data.category);
-    if (data.date) setDate(data.date);
-    if (data.hospital) setHospital(data.hospital);
-    if (data.doctorNotes) setDoctorNotes(data.doctorNotes);
-    if (data.aiSummary) setAiSummary(data.aiSummary);
-    if (data.imageUrl) setUploadedImageUrl(data.imageUrl);
+    const payload = data?.data && typeof data.data === "object" ? data.data : data;
+    if (payload.title) setTitle(payload.title);
+    if (payload.category) setCategory(payload.category);
+    if (payload.date) setDate(payload.date);
+    if (payload.hospital) setHospital(payload.hospital);
+    if (payload.doctorNotes) setDoctorNotes(payload.doctorNotes);
+    const summary = payload.aiSummary || data.aiSummary;
+    const itemList = Array.isArray(payload.items) ? payload.items : data.items;
+    if (typeof summary === "string" && summary.trim()) {
+      setAiSummary(summary.trim());
+    } else if (Array.isArray(itemList)) {
+      const fallback = composeMedicalAiSummary(itemList);
+      if (fallback) setAiSummary(fallback);
+    }
+    if (payload.imageUrl || data.imageUrl) setUploadedImageUrl(payload.imageUrl || data.imageUrl);
 
-    if (Array.isArray(data.items)) {
+    if (Array.isArray(itemList)) {
       setItems(
-        data.items.map((it: any, idx: number) => ({
+        itemList.map((it: any, idx: number) => ({
           id: `item_${Date.now()}_${idx}`,
           name: it.name || "",
           value: it.value ?? "",
@@ -129,11 +140,12 @@ export default function MedicalAddPage() {
       );
     }
 
-    if (data.growthData) {
-      if (data.growthData.weightKg) setWeightKg(String(data.growthData.weightKg));
-      if (data.growthData.heightCm) setHeightCm(String(data.growthData.heightCm));
-      if (data.growthData.headCm || data.growthData.headCircumferenceCm)
-        setHeadCm(String(data.growthData.headCircumferenceCm ?? data.growthData.headCm));
+    const growth = payload.growthData || data.growthData;
+    if (growth) {
+      if (growth.weightKg) setWeightKg(String(growth.weightKg));
+      if (growth.heightCm) setHeightCm(String(growth.heightCm));
+      if (growth.headCm || growth.headCircumferenceCm)
+        setHeadCm(String(growth.headCircumferenceCm ?? growth.headCm));
     }
 
     setOcrDone(true);
@@ -142,29 +154,36 @@ export default function MedicalAddPage() {
 
   // 轮询任务状态直至完成/失败
   const startJobPolling = (id: string) => {
-    const timer = setInterval(async () => {
-      setJobElapsed((v) => v + 3);
+    const tick = async () => {
       try {
         const res = await fetch(`/api/ai/jobs/${id}`);
-        if (!res.ok) return;
+        if (!res.ok) return false;
         const job = await res.json();
         if (job.status === "done" && job.result) {
-          clearInterval(timer);
           sessionStorage.removeItem("pending-ocr-job");
-          fetch(`/api/ai/jobs/${id}`, { method: "PATCH" }).catch(() => {});
           applyOcrResult(job.result);
+          setClaimJobId(id);
           setOcrLoading(false);
           setJobId(null);
-        } else if (job.status === "failed") {
-          clearInterval(timer);
+          return true;
+        }
+        if (job.status === "failed") {
           sessionStorage.removeItem("pending-ocr-job");
           setOcrError(job.errorMessage || "识别失败，请重试或手动录入");
           setOcrLoading(false);
           setJobId(null);
+          return true;
         }
       } catch {
         /* 网络抖动，下个周期继续 */
       }
+      return false;
+    };
+
+    void tick();
+    const timer = setInterval(async () => {
+      setJobElapsed((v) => v + 3);
+      if (await tick()) clearInterval(timer);
     }, 3000);
   };
 
@@ -246,11 +265,15 @@ export default function MedicalAddPage() {
         date,
         hospital: hospital.trim() || undefined,
         doctorNotes: doctorNotes.trim() || undefined,
-        aiSummary: aiSummary.trim() || undefined,
+        aiSummary: aiSummary.trim() || composeMedicalAiSummary(items) || undefined,
         items,
         imageUrl: finalImageUrl,
         growthData: growthDataPayload,
       });
+
+      if (claimJobId) {
+        fetch(`/api/ai/jobs/${claimJobId}`, { method: "PATCH" }).catch(() => {});
+      }
 
       showToast("报告已成功保存并归档 ✨");
       setTimeout(() => router.push("/health/medical"), 600);
@@ -262,7 +285,7 @@ export default function MedicalAddPage() {
   };
 
   return (
-    <div className="min-h-[100dvh] bg-bg max-w-md mx-auto px-4 pt-4 pb-28">
+    <div className="min-h-[100dvh] bg-bg max-w-md mx-auto px-4 pb-28">
       <AppHeader title="录入化验 / 体检单" showBack />
 
       {/* Hidden file inputs */}
@@ -317,7 +340,7 @@ export default function MedicalAddPage() {
                 AI 正在结构化识别单据指标{jobId ? `（已 ${jobElapsed}s）` : "..."}
               </p>
               <p className="text-xs text-text-muted mt-1">
-                通常约需 1 分钟。你可以先离开 ⏳ 完成后会出现在「化验单」页顶部，随时回来确认。
+                通常约需 1 分钟。你可以先离开，完成后会出现在化验单列表里，随时回来确认。
               </p>
             </div>
           ) : (
@@ -412,6 +435,21 @@ export default function MedicalAddPage() {
               />
             </FormSection>
           </div>
+        </CuteCard>
+
+        <CuteCard className="p-4 space-y-3 border border-primary/20 bg-gradient-to-br from-primary-light/50 to-lavender/10">
+          <h3 className="text-sm font-bold text-primary flex items-center gap-1.5">
+            🤖 AI 临床解读与注意事项
+          </h3>
+          {aiSummary.trim() ? (
+            <div className="rounded-xl bg-white/80 border border-primary/15 p-3">
+              <MarkdownBody>{aiSummary}</MarkdownBody>
+            </div>
+          ) : (
+            <p className="text-xs text-text-muted">
+              {ocrLoading ? "识别完成后会自动填入解读…" : "暂无解读"}
+            </p>
+          )}
         </CuteCard>
 
         {/* Growth Measurement Sync (Optional) */}
@@ -568,13 +606,17 @@ export default function MedicalAddPage() {
                       </button>
                     ))}
                   </div>
+                  {item.interpretation ? (
+                    <p className="text-[11px] text-text-secondary leading-relaxed bg-white/80 rounded-lg px-2 py-1.5">
+                      {item.interpretation}
+                    </p>
+                  ) : null}
                 </div>
               ))}
             </div>
           )}
         </CuteCard>
 
-        {/* Doctor & AI Summary */}
         <CuteCard className="p-4 space-y-3">
           <FormSection title="👨‍⚕️ 医生诊断 / 体格评价意见">
             <textarea
@@ -582,16 +624,6 @@ export default function MedicalAddPage() {
               value={doctorNotes}
               onChange={(e) => setDoctorNotes(e.target.value)}
               placeholder="单据上填写的诊断结论或医嘱建议..."
-              className="w-full text-xs p-2.5 rounded-xl border border-divider bg-white focus:border-primary focus:outline-none"
-            />
-          </FormSection>
-
-          <FormSection title="🤖 AI 临床解读与注意事项">
-            <textarea
-              rows={2}
-              value={aiSummary}
-              onChange={(e) => setAiSummary(e.target.value)}
-              placeholder="AI 自动生成的通俗解读与家庭护理提示..."
               className="w-full text-xs p-2.5 rounded-xl border border-divider bg-white focus:border-primary focus:outline-none"
             />
           </FormSection>

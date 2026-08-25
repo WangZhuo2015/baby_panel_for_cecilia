@@ -25,6 +25,8 @@ import { SegmentControl } from "@/components/ui/SegmentControl";
 import { QuickAiButton } from "@/components/ui/QuickAiButton";
 import { useToast } from "@/components/ui/Toast";
 import { useBabyStore } from "@/stores/useBabyStore";
+import { composeMedicalAiSummary } from "@/lib/medical-summary";
+import { MarkdownBody } from "@/components/ui/MarkdownBody";
 import type { MedicalReport, MedicalReportItem } from "@/types";
 
 const CATEGORY_MAP: Record<string, { label: string; emoji: string; color: string }> = {
@@ -98,74 +100,10 @@ export default function MedicalReportsPage() {
   }, [hasProcessing, fetchAiJobs]);
 
 
+  const pendingJobs = aiJobs.filter((j) => !j.claimed);
+
   return (
-    <div className="min-h-[100dvh] bg-bg px-4 pt-4 pb-28 max-w-md mx-auto">
-
-    {aiJobs.filter((j) => !j.claimed).length > 0 && (
-      <div className="mb-3 space-y-2">
-        {aiJobs.filter((j) => !j.claimed).map((job) => {
-          const elapsedS = Math.max(0, Math.floor((nowTick - new Date(job.createdAt).getTime()) / 1000));
-          const elapsedText =
-            elapsedS >= 60 ? `${Math.floor(elapsedS / 60)}分${elapsedS % 60}秒` : `${elapsedS}秒`;
-
-          if (job.status === "processing") {
-            return (
-              <div
-                key={job.id}
-                className="p-3 rounded-[20px] bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-200 dark:border-indigo-800 animate-pulse"
-              >
-                <div className="flex items-center gap-2 text-sm font-bold text-indigo-700 dark:text-indigo-300">
-                  <Loader2 size={15} className="animate-spin" />
-                  AI 正在识别化验单… 已 {elapsedText}
-                </div>
-                <p className="text-[11px] text-text-muted mt-1 ml-6">
-                  可以先离开去记录其他内容，完成后这里会变成确认入口
-                </p>
-              </div>
-            );
-          }
-
-          if (job.status === "done") {
-            return (
-              <Link
-                key={job.id}
-                href={`/health/medical/add?job=${job.id}`}
-                className="block p-3 rounded-[20px] bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-800 hover:border-emerald-400 transition-colors"
-              >
-                <div className="flex items-center gap-2 text-sm font-bold text-emerald-700 dark:text-emerald-300">
-                  <Sparkles size={15} />
-                  化验单识别完成，点击核对入库 →
-                </div>
-                {job.imageUrl && (
-                  <img src={job.imageUrl} alt="" className="mt-2 w-full h-24 object-cover rounded-xl opacity-80" />
-                )}
-              </Link>
-            );
-          }
-
-          // failed
-          return (
-            <button
-              key={job.id}
-              type="button"
-              onClick={async () => {
-                await fetch(`/api/ai/jobs/${job.id}`, { method: "PATCH" });
-                fetchAiJobs();
-              }}
-              className="w-full text-left p-3 rounded-[20px] bg-red-50 dark:bg-red-900/25 border border-red-200 dark:border-red-800 cursor-pointer"
-            >
-              <div className="flex items-center justify-between text-sm font-bold text-red-600 dark:text-red-400">
-                <span>⚠️ 识别失败：{job.errorMessage?.slice(0, 60) || "请重试"}</span>
-                <X size={14} />
-              </div>
-              <p className="text-[11px] text-text-muted mt-1">点击关闭此提醒；可重新拍照再试</p>
-            </button>
-          );
-        })}
-      </div>
-    )}
-
-
+    <div className="min-h-[100dvh] bg-bg px-4 pb-28 max-w-md mx-auto">
       <AppHeader title="化验与体检档案" showBack />
 
       {/* Top Switcher with Vaccines */}
@@ -180,6 +118,69 @@ export default function MedicalReportsPage() {
           📑 化验与体检
         </div>
       </div>
+
+      {pendingJobs.length > 0 && (
+        <div className="mb-4 space-y-2">
+          {pendingJobs.map((job) => {
+            const elapsedS = Math.max(0, Math.floor((nowTick - new Date(job.createdAt).getTime()) / 1000));
+            const elapsedText =
+              elapsedS >= 60 ? `${Math.floor(elapsedS / 60)}分${elapsedS % 60}秒` : `${elapsedS}秒`;
+
+            if (job.status === "processing") {
+              return (
+                <div
+                  key={job.id}
+                  className="p-3 rounded-[20px] bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-200 dark:border-indigo-800 animate-pulse"
+                >
+                  <div className="flex items-center gap-2 text-sm font-bold text-indigo-700 dark:text-indigo-300">
+                    <Loader2 size={15} className="animate-spin" />
+                    AI 正在识别化验单… 已 {elapsedText}
+                  </div>
+                  <p className="text-[11px] text-text-muted mt-1 ml-6">
+                    可以先离开去记录其他内容，完成后这里会变成确认入口
+                  </p>
+                </div>
+              );
+            }
+
+            if (job.status === "done") {
+              return (
+                <Link
+                  key={job.id}
+                  href={`/health/medical/add?job=${job.id}`}
+                  className="block p-3 rounded-[20px] bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-800 hover:border-emerald-400 transition-colors"
+                >
+                  <div className="flex items-center gap-2 text-sm font-bold text-emerald-700 dark:text-emerald-300">
+                    <Sparkles size={15} />
+                    化验单识别完成，点击核对入库 →
+                  </div>
+                  {job.imageUrl && (
+                    <img src={job.imageUrl} alt="" className="mt-2 w-full h-24 object-cover rounded-xl opacity-80" />
+                  )}
+                </Link>
+              );
+            }
+
+            return (
+              <button
+                key={job.id}
+                type="button"
+                onClick={async () => {
+                  await fetch(`/api/ai/jobs/${job.id}`, { method: "PATCH" });
+                  fetchAiJobs();
+                }}
+                className="w-full text-left p-3 rounded-[20px] bg-red-50 dark:bg-red-900/25 border border-red-200 dark:border-red-800 cursor-pointer"
+              >
+                <div className="flex items-center justify-between text-sm font-bold text-red-600 dark:text-red-400">
+                  <span>⚠️ 识别失败：{job.errorMessage?.slice(0, 60) || "请重试"}</span>
+                  <X size={14} />
+                </div>
+                <p className="text-[11px] text-text-muted mt-1">点击关闭此提醒；可重新拍照再试</p>
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {/* Action Banner */}
       <CuteCard variant="gradient" className="mb-4 shadow-card">
@@ -249,6 +250,9 @@ export default function MedicalReportsPage() {
           {filteredReports.map((report) => {
             const abnormalCount = getAbnormalCount(report.items || []);
             const catInfo = CATEGORY_MAP[report.category] || CATEGORY_MAP.general;
+            const summaryText =
+              (report.aiSummary && report.aiSummary.trim()) ||
+              composeMedicalAiSummary(report.items || []);
 
             return (
               <CuteCard
@@ -306,10 +310,14 @@ export default function MedicalReportsPage() {
                   </div>
                 </div>
 
-                {report.aiSummary && (
-                  <div className="mt-2 text-[11px] text-text-secondary bg-primary-light/40 rounded-xl p-2 flex items-start gap-1.5">
-                    <Sparkles size={13} className="text-primary mt-0.5 shrink-0" />
-                    <p className="line-clamp-2 leading-relaxed">{report.aiSummary}</p>
+                {summaryText && (
+                  <div className="mt-2 text-xs text-text-secondary bg-primary-light/40 rounded-xl p-2.5">
+                    <div className="flex items-center gap-1.5 text-[11px] font-bold text-primary mb-1">
+                      <Sparkles size={13} /> AI 临床解读
+                    </div>
+                    <div className="line-clamp-5 overflow-hidden">
+                      <MarkdownBody className="text-xs">{summaryText}</MarkdownBody>
+                    </div>
                   </div>
                 )}
               </CuteCard>
@@ -347,6 +355,19 @@ export default function MedicalReportsPage() {
 
             {/* Modal Body */}
             <div className="p-4 overflow-y-auto space-y-4">
+              {((selectedReport.aiSummary && selectedReport.aiSummary.trim()) ||
+                composeMedicalAiSummary(selectedReport.items || [])) && (
+                <div className="bg-gradient-to-br from-primary-light/60 to-lavender/10 rounded-2xl p-3.5 border border-primary/20">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-primary mb-1">
+                    <Sparkles size={14} /> AI 智能临床解读
+                  </div>
+                  <MarkdownBody>
+                    {(selectedReport.aiSummary && selectedReport.aiSummary.trim()) ||
+                      composeMedicalAiSummary(selectedReport.items || [])}
+                  </MarkdownBody>
+                </div>
+              )}
+
               {/* Original Photo Preview */}
               {selectedReport.imageUrl && (
                 <div className="bg-gray-50 rounded-2xl p-3 border border-divider">
@@ -374,18 +395,6 @@ export default function MedicalReportsPage() {
                       <span className="text-white text-xs bg-black/60 px-3 py-1 rounded-full">点击放大查看</span>
                     </div>
                   </div>
-                </div>
-              )}
-
-              {/* AI Clinical Summary */}
-              {selectedReport.aiSummary && (
-                <div className="bg-gradient-to-br from-primary-light/60 to-lavender/10 rounded-2xl p-3.5 border border-primary/20">
-                  <div className="flex items-center gap-1.5 text-xs font-bold text-primary mb-1">
-                    <Sparkles size={14} /> AI 智能临床解读
-                  </div>
-                  <p className="text-xs text-text-primary leading-relaxed">
-                    {selectedReport.aiSummary}
-                  </p>
                 </div>
               )}
 

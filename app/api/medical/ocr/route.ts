@@ -9,17 +9,25 @@ import { validateImageMagicBytes, ALLOWED_IMAGE_MIMES } from "@/lib/upload";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import { prisma } from "@/lib/prisma";
 import { archiveBuffer, archiveText } from "@/lib/archive";
+import { composeMedicalAiSummary } from "@/lib/medical-summary";
 
 export const maxDuration = 120;
 
 const SYSTEM_PROMPT = `你是儿科检验单 OCR 助手。只输出一个 JSON 对象，不要 markdown，不要把字段包进 type/data。
 
-顶层字段：
+顶层字段必须按这个顺序写，且 aiSummary 禁止空字符串：
 - title: 单据名称
 - category: blood | growth | trace_element | allergy | general
 - date: YYYY-MM-DD（检验/报告日期）
 - hospital: 医院或机构名
-- aiSummary: 中文综合解读，150~250 字。先总体印象，再点出异常项（实测值 vs 参考区间，婴幼儿常见良性原因优先），最后复查/就医建议，并以「以上分析仅供家长参考，不能替代医生面诊」结尾。
+- aiSummary: 必填 Markdown 字符串（写在 JSON 的 items 之前，禁止空）。结构固定为：
+  ## 总体印象
+  （一段话）
+  ## 需要关注
+  - **项目名** \`实测值单位\`（参考 x-y）：一句话原因与建议
+  ## 复查与就医
+  （何时复查、何时就医）
+  并以「以上分析仅供家长参考，不能替代医生面诊」结尾。可用加粗、列表，不要用 HTML。
 - growthData: 仅当单据含体重/身长/头围时给出 {weightKg, heightCm, headCircumferenceCm}
 - items: 数组，单据上每一个检测项目都要有，血常规通常 20+ 项，禁止漏行
 
@@ -234,6 +242,10 @@ function parseOcrSuccess(data: any, savedImageUrl: string | null) {
       }))
     : [];
 
+  const aiSummary =
+    (typeof parsed.aiSummary === "string" && parsed.aiSummary.trim()) ||
+    composeMedicalAiSummary(items);
+
   return {
     title: parsed.title || "化验与体检记录",
     category: ["blood", "growth", "trace_element", "allergy", "general"].includes(parsed.category)
@@ -242,7 +254,7 @@ function parseOcrSuccess(data: any, savedImageUrl: string | null) {
     date: parsed.date || getLocalDateStr(),
     hospital: parsed.hospital || "",
     doctorNotes: parsed.doctorNotes || "",
-    aiSummary: parsed.aiSummary || "",
+    aiSummary,
     growthData: parsed.growthData || undefined,
     items,
     imageUrl: savedImageUrl,
