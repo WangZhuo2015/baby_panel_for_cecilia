@@ -202,6 +202,28 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
 
   const [messages, setMessages] = useState<Message[]>([]);
   const { showToast } = useToast();
+
+  // ===== iOS 键盘适配：visualViewport 收缩时把输入条上移，避免露出下层内容 =====
+  const [keyboardInset, setKeyboardInset] = useState(0);
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const update = () => {
+      // 布局视口高度 - 可视视口高度 - 顶部偏移 ≈ 键盘占据的高度
+      const inset = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+      setKeyboardInset(inset > 120 ? inset : 0); // 小于阈值视作收起
+    };
+    update();
+    vv.addEventListener("resize", update);
+    vv.addEventListener("scroll", update);
+    window.addEventListener("orientationchange", update);
+    return () => {
+      vv.removeEventListener("resize", update);
+      vv.removeEventListener("scroll", update);
+      window.removeEventListener("orientationchange", update);
+    };
+  }, []);
+
   const [inputText, setInputText] = useState("");
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
@@ -772,7 +794,14 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
         </div>
 
         {/* Input Bar - High contrast, sticky with image upload */}
-        <div className="p-3 pb-[max(14px,env(safe-area-inset-bottom))] bg-white border-t border-primary/15 flex flex-col gap-2 shrink-0 shadow-[0_-4px_16px_rgba(0,0,0,0.04)] z-20">
+        <div
+          className="p-3 pb-[max(14px,env(safe-area-inset-bottom))] bg-card border-t border-primary/15 flex flex-col gap-2 shrink-0 z-30"
+          style={{
+            transform: keyboardInset > 0 ? `translateY(-${keyboardInset}px)` : undefined,
+            paddingBottom: keyboardInset > 0 ? 12 : undefined,
+            transition: "transform 0.15s ease-out",
+          }}
+        >
           
           {/* Selected image preview chip */}
           {selectedImage && (

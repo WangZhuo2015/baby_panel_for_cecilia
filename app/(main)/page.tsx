@@ -274,7 +274,7 @@ export default function HomePage() {
   };
 
   return (
-    <div className="px-4 pt-6 pb-36 max-w-md mx-auto space-y-4">
+    <div className="px-4 pt-safe-6 pb-36 max-w-md mx-auto space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div

@@ -106,6 +106,14 @@ body {
   padding-top: max(10px, env(safe-area-inset-top, 0px));
 }
 
+/* 页面内容延伸到异形屏状态栏之下，但有效内容避开缺口 */
+.safe-page {
+  padding-top: calc(env(safe-area-inset-top, 0px));
+}
+.pt-safe-6 {
+  padding-top: calc(env(safe-area-inset-top, 0px) + 24px);
+}
+
 .safe-bottom {
   padding-bottom: max(10px, env(safe-area-inset-bottom, 0px));
 }
@@ -338,3 +346,15 @@ html.dark {
 .dark .bg-amber-50 { background-color: #3B2E14; }
 .dark .border-amber-300 { border-color: #6B5420; }
 .dark .text-amber-600 { color: #FFC96B; }
+
+/* 输入框/控件深色补全（slate 系与 hover/focus 白色变体） */
+.dark .bg-slate-50 { background-color: #241E28; }
+.dark .bg-slate-50\/90 { background-color: rgba(36, 30, 40, 0.9); }
+.dark .bg-slate-100 { background-color: #2A2430; }
+.dark .bg-slate-300 { background-color: #4A4250; }
+.dark .hover\:bg-slate-50:hover { background-color: #241E28; }
+.dark .hover\:bg-white:hover { background-color: var(--color-card); }
+.dark .focus\:bg-white:focus { background-color: var(--color-card); }
+.dark .hover\:bg-gray-200:hover { background-color: #352C38; }
+.dark .hover\:bg-gray-100:hover { background-color: #2C252C; }
+.dark .bg-slate-700 { background-color: #C4B8BE; } /* 反转用途：深底上的浅色块 */
