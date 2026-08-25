@@ -21,8 +21,22 @@ export function getEffectiveTheme(): ThemeMode {
   return document.documentElement.classList.contains("dark") ? "dark" : "light";
 }
 
+const THEME_META_COLORS: Record<ThemeMode, string> = {
+  light: "#FFF9FB",
+  dark: "#171216",
+};
+
+/** 同步状态栏/灵动岛区域颜色（standalone PWA 由 theme-color meta 决定） */
+function syncThemeColorMeta(mode: ThemeMode): void {
+  const color = THEME_META_COLORS[mode];
+  document.querySelectorAll('meta[name="theme-color"]').forEach((el) => {
+    el.setAttribute("content", color);
+  });
+}
+
 export function applyTheme(mode: ThemeMode): void {
   document.documentElement.classList.toggle("dark", mode === "dark");
+  syncThemeColorMeta(mode);
   try {
     localStorage.setItem(KEY, mode);
   } catch { /* 隐私模式忽略 */ }
