@@ -358,11 +358,3 @@ html.dark {
 .dark .hover\:bg-gray-200:hover { background-color: #352C38; }
 .dark .hover\:bg-gray-100:hover { background-color: #2C252C; }
 .dark .bg-slate-700 { background-color: #C4B8BE; } /* 反转用途：深底上的浅色块 */
-
-/* iOS 键盘工具条/表单控件/滚动条随主题配色 */
-:root {
-  color-scheme: light;
-}
-.dark {
-  color-scheme: dark;
-}

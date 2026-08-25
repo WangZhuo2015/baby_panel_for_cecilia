@@ -795,13 +795,17 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
 
         {/* Input Bar - High contrast, sticky with image upload */}
         <div
-          className="p-3 pb-[max(14px,env(safe-area-inset-bottom))] bg-card border-t border-primary/15 flex flex-col gap-2 shrink-0 z-30"
+          className="p-3 pb-[max(14px,env(safe-area-inset-bottom))] relative bg-card border-t border-primary/15 flex flex-col gap-2 shrink-0 z-30"
           style={{
             transform: keyboardInset > 0 ? `translateY(-${keyboardInset}px)` : undefined,
             paddingBottom: keyboardInset > 0 ? 12 : undefined,
             transition: "transform 0.15s ease-out",
           }}
         >
+          {/* 键盘上方 iOS form assistant 栏是半透明的，用不透明色块向下延伸遮住透出的页面 */}
+          {keyboardInset > 0 && (
+            <div aria-hidden className="absolute left-0 right-0 top-full h-[40vh] bg-card pointer-events-none" />
+          )}
           
           {/* Selected image preview chip */}
           {selectedImage && (

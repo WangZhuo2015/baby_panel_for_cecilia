@@ -9,7 +9,9 @@ export const metadata: Metadata = {
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
-    statusBarStyle: "default",
+    // 内容延伸到状态栏/灵动岛之下（env(safe-area-inset-top) 才会生效），
+    // 由各页 safe-top/pt-safe-6 自行避让；文字颜色随系统深浅自动反白
+    statusBarStyle: "black-translucent",
     title: "宝宝成长",
   },
   icons: {
@@ -28,7 +30,10 @@ export const viewport: Viewport = {
   userScalable: false,
     viewportFit: "cover",
     interactiveWidget: "resizes-content",
-  themeColor: "#FFF9FB", // 运行时由 ThemeToggle/防闪脚本按当前模式动态覆盖
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#FFF9FB" },
+    { media: "(prefers-color-scheme: dark)", color: "#171216" },
+  ],
 };
 
 
@@ -46,7 +51,7 @@ export default function RootLayout({
         {/* 防闪脚本：在首帧渲染前根据持久化/系统偏好挂载 dark class */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var t=localStorage.getItem('baby-theme');if(!t){t=window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';}if(t==='dark'){document.documentElement.classList.add('dark');}var m=document.querySelector('meta[name="theme-color"]');if(!m){m=document.createElement('meta');m.name='theme-color';document.head.appendChild(m);}m.content=t==='dark'?'#171216':'#FFF9FB';}catch(e){}})();`,
+            __html: `(function(){try{var t=localStorage.getItem('baby-theme');if(!t){t=window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';}if(t==='dark'){document.documentElement.classList.add('dark');}}catch(e){}})();`,
           }}
         />
       </head>
