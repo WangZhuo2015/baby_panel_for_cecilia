@@ -4,7 +4,9 @@ export type ActionCardType =
   | "sleep"
   | "diaper"
   | "growth"
-  | "food";
+  | "food"
+  | "food_plan"
+  | "vaccine";
 
 export interface ActionCardData {
   type: ActionCardType;
@@ -18,6 +20,8 @@ const ALLOWED = new Set<ActionCardType>([
   "diaper",
   "growth",
   "food",
+  "food_plan",
+  "vaccine",
 ]);
 
 const TYPE_ALIAS: Record<string, ActionCardType> = {
@@ -34,6 +38,10 @@ const TYPE_ALIAS: Record<string, ActionCardType> = {
   growth: "growth",
   food: "food",
   solid: "food",
+  food_plan: "food_plan",
+  plan: "food_plan",
+  vaccine: "vaccine",
+  vac: "vaccine",
 };
 
 function asAction(raw: unknown): ActionCardData | null {

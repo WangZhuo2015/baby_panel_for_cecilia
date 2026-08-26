@@ -34,12 +34,20 @@ metadata:
 | :--- | :--- | :--- |
 | `get_baby_profile` | 获取当前宝宝基本档案与精准月龄 | 无 |
 | `get_daily_summary` | 获取指定日期（默认今日）累计奶量、睡眠时长、换尿布汇总 | `date?: string` (YYYY-MM-DD) |
+| `get_recent_records` | 查询具体活动时间轴明细（每次吃奶/睡眠/排便/辅食详情） | `date?`, `type?` (all/feeding/sleep/diaper/food), `limit?` |
 | `record_feeding` | 记录一次吃奶喂养事件 | `type` (breast/formula/bottle_breast/mixed), `amountMl?`, `durationMinutes?`, `notes?` |
 | `record_food` | 记录一次辅食餐点 | `foods` (string[]), `date?`, `time?`, `portion?`, `acceptance?`, `babyState?`, `hasAbnormal?`, `abnormalNotes?` |
+| `record_food_plan` | 制定并保存一日辅食食谱日程计划 | `name`, `ingredients`, `steps`, `nutrition`, `date?`, `tags?` |
+| `query_food_item` | 查询食材库适龄推荐、防噎处理与过敏原指引 | `name` (食材名称) |
 | `record_sleep` | 记录一次睡眠事件 | `startTime` (HH:mm), `endTime` (HH:mm), `type` (day/night), `notes?` |
 | `record_diaper` | 记录一次排便/换尿布 | `type` (pee/poop/both), `poopColor?`, `poopConsistency?`, `notes?` |
 | `record_growth` | 记录生长测量数据 | `weightKg?`, `heightCm?`, `headCircumferenceCm?`, `date?`, `notes?` |
-| `get_vaccine_schedule` | 查询疫苗接种时间表与临近接种项 | 无 |
+| `get_vaccine_schedule` | 查询疫苗接种时间表与临近接种项 | `regionCode?`, `maxMonthsAhead?` |
+| `record_vaccine` | 记录宝宝已接种疫苗剂次 | `name`, `dose`, `completedDate?` |
+| `get_development_milestones` | 查询国家卫健委儿童发育里程碑指标 | `month?`, `category?` |
+| `get_warning_signs` | 查询儿童发育预警红线与就医指征 | `month?`, `category?` |
+| `get_recommended_books` | 适龄精选绘本推荐与亲子共读要点 | `tag?`, `month?` |
+| `get_activity_recommendations` | 适龄早教与亲子互动游戏建议 | `month?`, `category?` |
 | `save_medical_report` | 保存医学化验单/体检档案 | `title`, `category`, `date`, `hospital?`, `items`, `growthData?`, `aiSummary?` |
 
 ---
@@ -47,12 +55,12 @@ metadata:
 ## 💬 自然语言与 Action Card 交互协议
 
 在 Web 聊天交互中，Agent 会输出自然语言儿科分析，并附带特制标准结构：
-\`\`\`json:action
+```json:action
 {
-  "type": "medical_report" | "feeding" | "food" | "sleep" | "diaper" | "growth",
+  "type": "medical_report" | "feeding" | "food" | "food_plan" | "sleep" | "diaper" | "growth" | "vaccine",
   "data": { ... }
 }
-\`\`\`
+```
 前端会自动解析并在聊天流中渲染交互式确认卡片（支持原地微调与一键存入）。
 
 ---

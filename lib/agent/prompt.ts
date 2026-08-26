@@ -25,14 +25,33 @@ const ANSWER_STYLE = `
 const TOOL_PROTOCOL = `
 【工具使用（必须遵守）】
 你可以通过工具查询和写入宝宝档案，不要凭空编造已记录的数据。
-- 家长问今日奶量/睡眠/尿布/辅食时，先调用 get_daily_summary。
-- 家长口述吃奶（母乳/配方奶/瓶喂）、辅食（米粉/菜泥/肉泥/果泥等餐点）、睡眠、换尿布、生长测量时，必须调用对应 record_* 工具（吃奶用 record_feeding，辅食餐点用 record_food，睡眠用 record_sleep，排便尿布用 record_diaper，身高体重头围用 record_growth）真正入库，不要只口头答应。
-- 一句话里有多件事就分别调用多次工具（例如吃了辅食又喝了奶 = record_food + record_feeding）。
-- 时间用 24 小时制 HH:mm，日期用 YYYY-MM-DD；不确定的字段省略，让工具用默认值。
-- 化验单/体检图：先从图片提取指标，再调用 save_medical_report 入库；生长数字同时出现则再调用 record_growth。
-- 查询疫苗规划用 get_vaccine_schedule。
-- 工具失败时向家长说明原因，不要假装已保存。
-- 不要向家长解释工具调用细节。
+1. **日常活动记录**：
+   - 吃奶（母乳/配方奶/瓶喂）调用 record_feeding；
+   - 辅食餐点（米粉/菜泥/肉泥/果泥等）调用 record_food；
+   - 辅食计划/食谱制定调用 record_food_plan；
+   - 睡眠小睡/夜间睡眠调用 record_sleep；
+   - 换尿布/排便记录调用 record_diaper；
+   - 身高/体重/头围测量调用 record_growth；
+   - 疫苗接种完成记录调用 record_vaccine。
+   - 一句话里有多件事就分别调用多次工具（例如吃了辅食又喝了奶 = record_food + record_feeding）。
+
+2. **数据与历史查询**：
+   - 问今日各项总量汇总调用 get_daily_summary；
+   - 问具体几点喝奶、睡了多久、最近几次详细记录调用 get_recent_records；
+   - 问食材月龄、防噎处理、过敏原指引调用 query_food_item；
+   - 问疫苗接种排期调用 get_vaccine_schedule；
+   - 问月龄大运动/精细/语言/认知发育标准调用 get_development_milestones；
+   - 问发育迟缓预警红线调用 get_warning_signs；
+   - 问适龄绘本推荐调用 get_recommended_books；
+   - 问早教亲子互动游戏调用 get_activity_recommendations。
+
+3. **医学单据与报告**：
+   - 化验单/体检图：先从图片提取指标，再调用 save_medical_report 入库；生长数字同时出现则再调用 record_growth。
+
+4. **规范与原则**：
+   - 时间用 24 小时制 HH:mm，日期用 YYYY-MM-DD；不确定的字段省略，让工具用默认值。
+   - 工具失败时向家长说明原因，不要假装已保存。
+   - 不要向家长输出工具调用细节或函数名。
 `;
 
 export function buildAgentSystemPrompt(opts: {

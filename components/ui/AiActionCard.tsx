@@ -192,6 +192,34 @@ export const AiActionCard: React.FC<AiActionCardProps> = ({ action: initialActio
           abnormalNotes: cardData.abnormalNotes,
         });
         showToast("辅食记录已存入 ✨");
+      } else if (initialAction.type === "food_plan") {
+        const res = await fetch("/api/food/plans", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            date: cardData.date || getLocalDateStr(),
+            name: cardData.name || "辅食食谱",
+            ingredients: Array.isArray(cardData.ingredients) ? cardData.ingredients : [],
+            steps: Array.isArray(cardData.steps) ? cardData.steps : [],
+            nutrition: cardData.nutrition || "营养均衡",
+            tags: Array.isArray(cardData.tags) ? cardData.tags : ["自制辅食"],
+          }),
+        });
+        if (!res.ok) throw new Error("保存食谱计划失败");
+        showToast("辅食食谱已加入日程计划 🥗✨");
+      } else if (initialAction.type === "vaccine") {
+        const res = await fetch("/api/vaccines", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: cardData.name,
+            dose: cardData.dose || "第1剂",
+            completedDate: cardData.completedDate || getLocalDateStr(),
+            isCompleted: true,
+          }),
+        });
+        if (!res.ok) throw new Error("保存疫苗记录失败");
+        showToast("疫苗接种记录已保存 💉✨");
       }
 
       setSaved(true);
@@ -730,6 +758,69 @@ export const AiActionCard: React.FC<AiActionCardProps> = ({ action: initialActio
         >
           {saved ? <CheckCircle2 size={13} /> : <Sparkles size={13} />}
           <span>{saved ? "已存入辅食记录 ✨" : !ready ? "缺少食材名称" : "确认保存辅食记录"}</span>
+        </button>
+      </div>
+    );
+  }
+
+  if (initialAction.type === "food_plan") {
+    const ingredients = Array.isArray(cardData.ingredients) ? cardData.ingredients : [];
+    return (
+      <div className="my-2.5 p-3 bg-gradient-to-br from-emerald-50/90 to-teal-50/40 rounded-2xl border border-emerald-200/70 shadow-xs text-xs space-y-2">
+        <div className="flex items-center justify-between">
+          <span className="font-bold text-emerald-900 flex items-center gap-1.5">
+            <span>🥗</span> 辅食食谱计划确认
+          </span>
+          <span className="text-[10px] text-emerald-800 font-semibold">{cardData.date || getLocalDateStr()}</span>
+        </div>
+        <p className="font-bold text-[12px] text-emerald-950">{cardData.name || "营养餐点"}</p>
+        {ingredients.length > 0 && (
+          <div className="text-[11px] text-text-secondary">
+            <span className="font-medium text-emerald-800">食材：</span>{ingredients.join("、")}
+          </div>
+        )}
+        {cardData.nutrition && (
+          <div className="text-[10px] text-emerald-700 bg-emerald-100/60 px-2 py-1 rounded-lg">
+            💡 {cardData.nutrition}
+          </div>
+        )}
+        <button
+          onClick={handleConfirmSave}
+          disabled={saved || saving}
+          className={`w-full py-2 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1 transition-all ${
+            saved
+              ? "bg-emerald-500 text-white cursor-default"
+              : "bg-emerald-600 text-white hover:bg-emerald-700 shadow-xs cursor-pointer"
+          }`}
+        >
+          {saved ? <CheckCircle2 size={13} /> : <Sparkles size={13} />}
+          <span>{saved ? "已加入辅食日程 ✨" : "确认保存辅食计划"}</span>
+        </button>
+      </div>
+    );
+  }
+
+  if (initialAction.type === "vaccine") {
+    return (
+      <div className="my-2.5 p-3 bg-gradient-to-br from-sky-50/90 to-blue-50/40 rounded-2xl border border-sky-200/70 shadow-xs text-xs space-y-2">
+        <div className="flex items-center justify-between">
+          <span className="font-bold text-sky-900 flex items-center gap-1.5">
+            <span>💉</span> 疫苗接种确认
+          </span>
+          <span className="text-[10px] text-sky-800 font-semibold">{cardData.completedDate || getLocalDateStr()}</span>
+        </div>
+        <p className="font-bold text-[12px] text-sky-950">{cardData.name} {cardData.dose || "第1剂"}</p>
+        <button
+          onClick={handleConfirmSave}
+          disabled={saved || saving}
+          className={`w-full py-2 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1 transition-all ${
+            saved
+              ? "bg-emerald-500 text-white cursor-default"
+              : "bg-sky-600 text-white hover:bg-sky-700 shadow-xs cursor-pointer"
+          }`}
+        >
+          {saved ? <CheckCircle2 size={13} /> : <Sparkles size={13} />}
+          <span>{saved ? "已记录接种完成 💉✨" : "确认保存接种记录"}</span>
         </button>
       </div>
     );

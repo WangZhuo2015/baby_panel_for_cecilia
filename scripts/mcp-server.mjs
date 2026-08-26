@@ -420,6 +420,112 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           },
         },
       },
+      {
+        name: "get_recent_records",
+        description: "查询宝宝今日或近期的具体活动时间轴记录（包含吃奶、睡眠、排便、辅食每次的具体时间与量）。",
+        inputSchema: {
+          type: "object",
+          required: ["session"],
+          properties: {
+            ...SESSION_PROP,
+            date: { type: "string", description: "日期 (YYYY-MM-DD，默认今天)" },
+            limit: { type: "number", description: "返回数量上限，默认 20" },
+          },
+        },
+      },
+      {
+        name: "query_food_item",
+        description: "查询食材库中某食材的月龄指引、防噎防窒息处理方式、过敏原风险与营养搭配。",
+        inputSchema: {
+          type: "object",
+          required: ["session", "name"],
+          properties: {
+            ...SESSION_PROP,
+            name: { type: "string", description: "食材名称，如'牛油果'、'南瓜'、'鸡蛋'等" },
+          },
+        },
+      },
+      {
+        name: "record_food_plan",
+        description: "为宝宝保存一日辅食食谱计划（包含餐点名、主要食材、制作步骤与营养要点）。",
+        inputSchema: {
+          type: "object",
+          required: ["session", "name", "ingredients", "steps"],
+          properties: {
+            ...SESSION_PROP,
+            date: { type: "string", description: "日期 (YYYY-MM-DD，默认今天或明天)" },
+            name: { type: "string", description: "食谱名称，如'高铁牛肉胡萝卜米糊'" },
+            ingredients: { type: "array", items: { type: "string" }, description: "食材清单" },
+            steps: { type: "array", items: { type: "string" }, description: "制作步骤" },
+            nutrition: { type: "string", description: "营养要点" },
+            tags: { type: "array", items: { type: "string" }, description: "标签" },
+          },
+        },
+      },
+      {
+        name: "get_development_milestones",
+        description: "查询指定月龄或领域的国家卫健委儿童发育里程碑（大运动、精细动作、语言、认知、社交）。",
+        inputSchema: {
+          type: "object",
+          required: ["session"],
+          properties: {
+            ...SESSION_PROP,
+            month: { type: "number", description: "评估月龄（1-36），默认当前月龄" },
+            category: { type: "string", description: "领域分类（gross_motor, fine_motor, language, cognitive, social_emotional）" },
+          },
+        },
+      },
+      {
+        name: "get_warning_signs",
+        description: "查询指定月龄的发育迟缓预警信号与红线就医指征。",
+        inputSchema: {
+          type: "object",
+          required: ["session"],
+          properties: {
+            ...SESSION_PROP,
+            month: { type: "number", description: "月龄（1-36）" },
+          },
+        },
+      },
+      {
+        name: "record_vaccine",
+        description: "记录宝宝已完成接种的疫苗剂次（如'乙肝疫苗第2剂'）。",
+        inputSchema: {
+          type: "object",
+          required: ["session", "name"],
+          properties: {
+            ...SESSION_PROP,
+            name: { type: "string", description: "疫苗名称" },
+            dose: { type: "string", description: "剂次，如'第1剂'、'第2剂'" },
+            completedDate: { type: "string", description: "接种日期 (YYYY-MM-DD，默认今天)" },
+          },
+        },
+      },
+      {
+        name: "get_recommended_books",
+        description: "查询精选绘本馆中适合当前宝宝月龄的绘本、评分、适读要点及亲子共读互动建议。",
+        inputSchema: {
+          type: "object",
+          required: ["session"],
+          properties: {
+            ...SESSION_PROP,
+            tag: { type: "string", description: "主题标签或关键词" },
+            month: { type: "number", description: "适读月龄" },
+          },
+        },
+      },
+      {
+        name: "get_activity_recommendations",
+        description: "查询适合当前宝宝月龄的家庭早教与亲子互动游戏、安全指引与发展目标。",
+        inputSchema: {
+          type: "object",
+          required: ["session"],
+          properties: {
+            ...SESSION_PROP,
+            month: { type: "number", description: "月龄" },
+          },
+        },
+      },
     ],
   };
 });
@@ -553,6 +659,91 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         content: [
           { type: "text", text: `✅ 医学化验单/体检档案保存成功！\n${JSON.stringify(data, null, 2)}` },
         ],
+      };
+    }
+
+    if (name === "get_recent_records") {
+      const extra = {};
+      if (args.date) extra.date = args.date;
+      const res = await fetch(apiUrl("/api/records/timeline", bound.babyId || "", extra), { headers });
+      const data = await res.json();
+      return {
+        content: [{ type: "text", text: JSON.stringify(data, null, 2) }],
+      };
+    }
+
+    if (name === "query_food_item") {
+      const res = await fetch(apiUrl("/api/food/items", "", { search: args.name }), { headers });
+      const data = await res.json();
+      return {
+        content: [{ type: "text", text: JSON.stringify(data, null, 2) }],
+      };
+    }
+
+    if (name === "record_food_plan") {
+      const data = await postJson("/api/food/plans", bound, {
+        ...args,
+        date: args.date || new Date().toISOString().split("T")[0],
+        ingredients: args.ingredients || [],
+        steps: args.steps || [],
+        tags: args.tags || ["营养辅食"],
+      });
+      return {
+        content: [
+          { type: "text", text: `✅ 辅食计划食谱保存成功！\n${JSON.stringify(data, null, 2)}` },
+        ],
+      };
+    }
+
+    if (name === "get_development_milestones") {
+      const extra = {};
+      if (args.month != null) extra.month = args.month;
+      if (args.category) extra.category = args.category;
+      const res = await fetch(apiUrl("/api/development/milestones", "", extra), { headers });
+      const data = await res.json();
+      return {
+        content: [{ type: "text", text: JSON.stringify(data, null, 2) }],
+      };
+    }
+
+    if (name === "get_warning_signs") {
+      const res = await fetch(apiUrl("/api/development/warning-signs", ""), { headers });
+      const data = await res.json();
+      return {
+        content: [{ type: "text", text: JSON.stringify(data, null, 2) }],
+      };
+    }
+
+    if (name === "record_vaccine") {
+      const data = await postJson("/api/vaccines", bound, {
+        ...args,
+        completedDate: args.completedDate || new Date().toISOString().split("T")[0],
+        isCompleted: true,
+      });
+      return {
+        content: [
+          { type: "text", text: `✅ 疫苗接种记录保存成功！\n${JSON.stringify(data, null, 2)}` },
+        ],
+      };
+    }
+
+    if (name === "get_recommended_books") {
+      const extra = {};
+      if (args.tag) extra.tab = args.tag;
+      const res = await fetch(apiUrl("/api/books", "", extra), { headers });
+      const data = await res.json();
+      return {
+        content: [{ type: "text", text: JSON.stringify(data, null, 2) }],
+      };
+    }
+
+    if (name === "get_activity_recommendations") {
+      const extra = {};
+      if (args.month != null) extra.month = args.month;
+      const res = await fetch(apiUrl("/api/development/activities", "", extra), { headers });
+      const data = await res.json();
+      return {
+        content: [{ type: "text", text: JSON.stringify(data, null, 2) }],
       };
     }
 
