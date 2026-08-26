@@ -7,22 +7,21 @@ import { SegmentControl } from "@/components/ui/SegmentControl";
 import { QuickAiButton } from "@/components/ui/QuickAiButton";
 import { useBabyStore } from "@/stores/useBabyStore";
 import { calculateAge } from "@/lib/age";
-import { getLocalDateStr } from "@/lib/date";
+import { getLocalDateStr, addDays } from "@/lib/date";
 import { Baby, Plus, Utensils, AlertCircle, Trash2, Heart, Smile, Meh, Frown, RefreshCw } from "lucide-react";
 import type { FoodLogRecord } from "@/types";
 
 function generateWeeklyDates() {
   const weekdays = ["日", "一", "二", "三", "四", "五", "六"];
-  const today = new Date();
+  const todayStr = getLocalDateStr();
   return Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(today);
-    d.setDate(today.getDate() - 3 + i);
-    const dateStr = getLocalDateStr(d);
+    const dateStr = addDays(todayStr, i - 3);
+    const d = new Date(`${dateStr}T00:00:00+08:00`);
     return {
       date: dateStr,
-      day: d.getDate(),
+      day: Number(dateStr.slice(8, 10)),
       weekday: weekdays[d.getDay()],
-      isToday: i === 3,
+      isToday: dateStr === todayStr,
     };
   });
 }
@@ -51,14 +50,12 @@ export default function FoodPage() {
   const deleteTimelineRecord = useBabyStore((s) => s.deleteTimelineRecord);
 
   const weeklyDates = generateWeeklyDates();
-  const [selectedDate, setSelectedDate] = useState(
-    weeklyDates.find((d) => d.isToday)?.date || weeklyDates[3].date
-  );
+  const [selectedDate, setSelectedDate] = useState(() => getLocalDateStr());
   const [activeTab, setActiveTab] = useState("today");
 
   const loadData = useCallback(() => {
-    fetchFoodPlans(selectedDate);
-    fetchFoodLogRecords(selectedDate);
+    fetchFoodPlans(selectedDate, true);
+    fetchFoodLogRecords(selectedDate, true);
   }, [selectedDate, fetchFoodPlans, fetchFoodLogRecords]);
 
   useEffect(() => {
