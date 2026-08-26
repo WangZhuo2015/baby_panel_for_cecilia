@@ -526,6 +526,19 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           },
         },
       },
+      {
+        name: "web_search",
+        description: "通过互联网实时搜索最新的育儿科普、儿科指南、药品说明、疫苗政策与专业护理知识。",
+        inputSchema: {
+          type: "object",
+          required: ["session", "query"],
+          properties: {
+            ...SESSION_PROP,
+            query: { type: "string", description: "搜索关键词" },
+            limit: { type: "number", description: "结果条数，默认 5" },
+          },
+        },
+      },
     ],
   };
 });
@@ -741,6 +754,16 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const extra = {};
       if (args.month != null) extra.month = args.month;
       const res = await fetch(apiUrl("/api/development/activities", "", extra), { headers });
+      const data = await res.json();
+      return {
+        content: [{ type: "text", text: JSON.stringify(data, null, 2) }],
+      };
+    }
+
+    if (name === "web_search") {
+      const extra = { q: args.query };
+      if (args.limit) extra.limit = args.limit;
+      const res = await fetch(apiUrl("/api/ai/search", "", extra), { headers });
       const data = await res.json();
       return {
         content: [{ type: "text", text: JSON.stringify(data, null, 2) }],

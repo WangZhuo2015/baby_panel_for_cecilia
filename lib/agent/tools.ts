@@ -9,6 +9,7 @@ import {
   addDays,
 } from "@/lib/date";
 import { estimatePercentile } from "@/lib/who-growth-standards";
+import { performWebSearch } from "@/lib/agent/search";
 import type { Baby } from "@/generated/prisma/client";
 
 export interface BabyToolContext {
@@ -940,6 +941,34 @@ export function createBabyPanelTools(ctx: BabyToolContext): AgentTool[] {
     },
   };
 
+  const webSearch: AgentTool = {
+    name: "web_search",
+    label: "联网搜索",
+    description:
+      "通过互联网实时搜索最新的育儿科普、儿科临床指南、权威医学建议、药品说明、疫苗接种政策或特定辅食品牌做法。当家长询问最新权威医学常识、特定品牌/症状细节或本地库未涵盖的内容时使用。",
+    parameters: Type.Object({
+      query: Type.String({
+        description: "搜索关键词，支持中文。例如：'婴儿发烧38.5退热贴'、'13价肺炎疫苗接种禁忌'、'辅食油怎么选'等",
+      }),
+      limit: Type.Optional(Type.Number({ description: "返回结果条数（1-8，默认 5）" })),
+    }),
+    execute: async (_id, raw) => {
+      const { query, limit } = raw as { query: string; limit?: number };
+      const trimmed = (query || "").trim();
+      if (!trimmed) fail("请输入要搜索的关键词");
+
+      try {
+        const results = await performWebSearch(trimmed, limit || 5);
+        if (results.length === 0) {
+          return ok(`未检索到与「${trimmed}」直接相关的网页结果，请根据专业儿科知识为家长解答。`);
+        }
+        return ok(JSON.stringify({ query: trimmed, totalResults: results.length, results }, null, 2));
+      } catch (err: any) {
+        return ok(`联网搜索暂时不可用（${err?.message || "网络波动"}），请结合既有专业医学知识解答。`);
+      }
+    },
+  };
+
   return [
     getBabyProfile,
     getDailySummary,
@@ -957,6 +986,7 @@ export function createBabyPanelTools(ctx: BabyToolContext): AgentTool[] {
     getWarningSigns,
     getRecommendedBooks,
     getActivityRecommendations,
+    webSearch,
     saveMedicalReport,
   ];
 }

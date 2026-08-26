@@ -48,6 +48,7 @@ metadata:
 | `get_warning_signs` | 查询儿童发育预警红线与就医指征 | `month?`, `category?` |
 | `get_recommended_books` | 适龄精选绘本推荐与亲子共读要点 | `tag?`, `month?` |
 | `get_activity_recommendations` | 适龄早教与亲子互动游戏建议 | `month?`, `category?` |
+| `web_search` | 互联网实时搜索最新儿科指南、药品说明与育儿科普 | `query` (关键词), `limit?` |
 | `save_medical_report` | 保存医学化验单/体检档案 | `title`, `category`, `date`, `hospital?`, `items`, `growthData?`, `aiSummary?` |
 
 ---
