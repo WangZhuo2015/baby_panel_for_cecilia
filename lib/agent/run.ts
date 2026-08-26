@@ -20,6 +20,7 @@ export type AgentStreamEvent =
       args?: unknown;
       isError?: boolean;
       summary?: string;
+      details?: unknown;
     };
 
 export interface RunBabyAgentOptions {
@@ -111,6 +112,7 @@ export async function runBabyAgent(opts: RunBabyAgentOptions): Promise<void> {
         status: "end",
         isError: event.isError,
         summary: toolResultSummary(event.result),
+        details: (event.result as { details?: unknown })?.details ?? event.result,
       });
     }
   });

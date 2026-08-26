@@ -16,6 +16,10 @@ import {
   Image as ImageIcon,
   Loader2,
   Wrench,
+  Globe,
+  ExternalLink,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { useBabyStore } from "@/stores/useBabyStore";
 import { calculateAge } from "@/lib/age";
@@ -48,6 +52,78 @@ interface ToolTrace {
   status: "start" | "end";
   isError?: boolean;
   summary?: string;
+  details?: any;
+}
+
+interface SearchEvidenceItem {
+  title: string;
+  url: string;
+  snippet: string;
+  source?: string;
+}
+
+function WebSearchCitationCard({ results }: { results: SearchEvidenceItem[] }) {
+  const [expanded, setExpanded] = useState(false);
+  if (!results || results.length === 0) return null;
+
+  const displayResults = expanded ? results : results.slice(0, 2);
+
+  return (
+    <div className="my-2 rounded-2xl bg-gradient-to-br from-blue-50/80 via-indigo-50/40 to-sky-50/30 border border-blue-200/70 p-2.5 space-y-2 text-xs">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-1.5 font-bold text-blue-900 text-xs">
+          <Globe size={13} className="text-blue-600 animate-pulse" />
+          <span>权威联网佐证与引用来源（{results.length} 篇）</span>
+        </div>
+        {results.length > 2 && (
+          <button
+            type="button"
+            onClick={() => setExpanded(!expanded)}
+            className="text-[11px] font-medium text-blue-600 hover:text-blue-800 flex items-center gap-0.5 cursor-pointer"
+          >
+            <span>{expanded ? "收起" : `查看更多 (${results.length - 2})`}</span>
+            {expanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+          </button>
+        )}
+      </div>
+
+      <div className="space-y-1.5">
+        {displayResults.map((r, i) => {
+          let domain = "";
+          try {
+            domain = new URL(r.url).hostname.replace(/^www\./, "");
+          } catch {}
+
+          return (
+            <a
+              key={i}
+              href={r.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="block p-2 rounded-xl bg-white/90 hover:bg-white border border-blue-100/80 shadow-2xs transition-all hover:border-blue-300 hover:shadow-xs group"
+            >
+              <div className="flex items-start justify-between gap-1.5">
+                <span className="font-semibold text-text-primary text-[11px] group-hover:text-blue-600 line-clamp-1 flex items-center gap-1">
+                  <span>{r.title || "参考资料"}</span>
+                  <ExternalLink size={10} className="text-text-muted shrink-0 group-hover:text-blue-500" />
+                </span>
+                {domain && (
+                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-blue-100/70 text-blue-800 shrink-0 font-medium">
+                    {domain}
+                  </span>
+                )}
+              </div>
+              {r.snippet && (
+                <p className="text-[10px] text-text-secondary mt-1 line-clamp-2 leading-relaxed">
+                  {r.snippet}
+                </p>
+              )}
+            </a>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 interface Message {
@@ -686,7 +762,7 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
                       <div className="whitespace-pre-wrap">{m.content}</div>
                     </div>
                   ) : (
-                    /* Assistant Rich Markdown Rendering + Action Card */
+                    /* Assistant Rich Markdown Rendering + Action Card + Search Citations */
                     <div className="space-y-2">
                       {m.tools && m.tools.length > 0 && (
                         <div className="flex flex-wrap gap-1">
@@ -694,25 +770,62 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
                             <span
                               key={`${t.name}-${i}`}
                               className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border ${
-                                t.status === "start"
-                                  ? "bg-primary-light/50 text-text-secondary border-primary/15"
-                                  : t.isError
-                                    ? "bg-red-50 text-red-600 border-red-200"
-                                    : "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                t.name === "web_search"
+                                  ? "bg-blue-50 text-blue-700 border-blue-200"
+                                  : t.status === "start"
+                                    ? "bg-primary-light/50 text-text-secondary border-primary/15"
+                                    : t.isError
+                                      ? "bg-red-50 text-red-600 border-red-200"
+                                      : "bg-emerald-50 text-emerald-700 border-emerald-200"
                               }`}
                               title={t.summary || t.name}
                             >
-                              <Wrench size={10} />
+                              {t.name === "web_search" ? (
+                                <Globe size={10} className="text-blue-500 animate-pulse" />
+                              ) : (
+                                <Wrench size={10} />
+                              )}
                               {t.status === "start" ? "正在" : t.isError ? "失败" : "已完成"}
                               {t.label || t.name}
                             </span>
                           ))}
                         </div>
                       )}
+
+                      {/* 🌐 实时联网检索佐证卡片 */}
+                      {(() => {
+                        const webSearchTool = m.tools?.find((t) => t.name === "web_search");
+                        let searchEvidenceResults: SearchEvidenceItem[] = [];
+                        if (webSearchTool) {
+                          if (Array.isArray((webSearchTool.details as any)?.results)) {
+                            searchEvidenceResults = (webSearchTool.details as any).results;
+                          } else if (typeof webSearchTool.summary === "string") {
+                            try {
+                              const parsed = JSON.parse(webSearchTool.summary);
+                              if (Array.isArray(parsed.results)) searchEvidenceResults = parsed.results;
+                            } catch {}
+                          }
+                        }
+                        return searchEvidenceResults.length > 0 ? (
+                          <WebSearchCitationCard results={searchEvidenceResults} />
+                        ) : null;
+                      })()}
+
                       <div className="markdown-content space-y-2">
                         <ReactMarkdown
                           remarkPlugins={[remarkGfm]}
                           components={{
+                            a: ({ href, children }) => (
+                              <a
+                                href={href}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-0.5 px-1.5 py-0.5 my-0.5 rounded-md bg-blue-50/80 hover:bg-blue-100 text-blue-600 hover:text-blue-800 border border-blue-200/60 font-medium text-[11px] transition-colors"
+                              >
+                                <span>{children}</span>
+                                <ExternalLink size={10} className="shrink-0 text-blue-400" />
+                              </a>
+                            ),
                             h1: ({ children }) => (
                               <h1 className="text-sm font-bold text-primary-dark mt-2 mb-1 border-l-2 border-primary pl-2">
                                 {children}
