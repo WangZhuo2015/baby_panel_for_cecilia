@@ -145,47 +145,54 @@ export function createBabyPanelTools(ctx: BabyToolContext): AgentTool[] {
     label: "记录喂养",
     description: "记录一次喂养。type: breast(亲喂)/formula(配方奶)/bottle_breast(瓶喂母乳)/mixed(混合)。",
     parameters: Type.Object({
-      type: Type.Union([
-        Type.Literal("breast"),
-        Type.Literal("formula"),
-        Type.Literal("bottle_breast"),
-        Type.Literal("mixed"),
-      ]),
+      type: Type.Optional(Type.String({ description: "breast, formula, bottle_breast, mixed" })),
       amountMl: Type.Optional(Type.Number({ description: "奶量毫升" })),
       durationMinutes: Type.Optional(Type.Number({ description: "喂养时长分钟" })),
       leftMinutes: Type.Optional(Type.Number({ description: "左侧亲喂分钟" })),
       rightMinutes: Type.Optional(Type.Number({ description: "右侧亲喂分钟" })),
       notes: Type.Optional(Type.String()),
-      timestamp: Type.Optional(Type.String({ description: "ISO 时间，默认现在" })),
+      timestamp: Type.Optional(Type.String({ description: "HH:mm 或 ISO 时间，默认现在" })),
     }),
     executionMode: "sequential",
     execute: async (_id, raw) => {
       const params = raw as Params;
-      const amountMl = optionalNumber(params.amountMl, 0, 3000, "amountMl");
-      let leftMinutes = optionalNumber(params.leftMinutes, 0, 180, "leftMinutes");
-      const rightMinutes = optionalNumber(params.rightMinutes, 0, 180, "rightMinutes");
-      if (leftMinutes == null && typeof params.durationMinutes === "number") {
-        leftMinutes = optionalNumber(params.durationMinutes, 0, 180, "durationMinutes");
+      const amountMl = optionalNumber(params.amountMl ?? params.amount_ml ?? params.amount ?? params.ml, 0, 3000, "amountMl");
+      let leftMinutes = optionalNumber(params.leftMinutes ?? params.left_minutes, 0, 180, "leftMinutes");
+      const rightMinutes = optionalNumber(params.rightMinutes ?? params.right_minutes, 0, 180, "rightMinutes");
+      if (leftMinutes == null && (typeof params.durationMinutes === "number" || typeof params.duration_minutes === "number")) {
+        leftMinutes = optionalNumber(params.durationMinutes ?? params.duration_minutes, 0, 180, "durationMinutes");
       }
+
       let recordTimestamp = new Date().toISOString();
-      if (typeof params.timestamp === "string" && params.timestamp.trim()) {
-        const parsed = new Date(params.timestamp);
-        if (Number.isNaN(parsed.getTime())) fail("timestamp 格式无效");
-        recordTimestamp = parsed.toISOString();
+      const rawTime = params.timestamp ?? params.time ?? params.startTime ?? params.start_time;
+      if (typeof rawTime === "string" && rawTime.trim()) {
+        const trimmed = rawTime.trim();
+        if (TIME_RE.test(trimmed)) {
+          recordTimestamp = hhmmToIso(trimmed, getLocalDateStr());
+        } else {
+          const parsed = new Date(trimmed);
+          if (!Number.isNaN(parsed.getTime())) recordTimestamp = parsed.toISOString();
+        }
       }
+
+      let typeStr = String(params.type ?? "formula").toLowerCase();
+      if (typeStr === "bottle" || typeStr === "milk" || typeStr === "formula_milk") typeStr = "formula";
+      if (typeStr === "breast_milk" || typeStr === "bottle_breast_milk") typeStr = "bottle_breast";
+      if (!["breast", "formula", "bottle_breast", "mixed"].includes(typeStr)) typeStr = "formula";
+
       const record = await prisma.feedingRecord.create({
         data: {
           babyId,
           recordedById: ctx.userId,
           timestamp: recordTimestamp,
-          type: String(params.type),
+          type: typeStr,
           amountMl,
           leftMinutes,
           rightMinutes,
           notes: typeof params.notes === "string" ? params.notes.trim() : null,
         },
       });
-      return ok(`已记录喂养：${params.type}${amountMl != null ? ` ${amountMl}ml` : ""}`, { id: record.id });
+      return ok(`已记录喂养：${typeStr}${amountMl != null ? ` ${amountMl}ml` : ""}`, { id: record.id, recordId: record.id });
     },
   };
 
@@ -194,8 +201,8 @@ export function createBabyPanelTools(ctx: BabyToolContext): AgentTool[] {
     label: "记录睡眠",
     description: "记录一次睡眠。startTime/endTime 为 HH:mm（上海时区）。跨夜会自动加一天。",
     parameters: Type.Object({
-      startTime: Type.String({ description: "入睡 HH:mm" }),
-      endTime: Type.String({ description: "醒来 HH:mm" }),
+      startTime: Type.Optional(Type.String({ description: "入睡 HH:mm" })),
+      endTime: Type.Optional(Type.String({ description: "醒来 HH:mm" })),
       type: Type.Optional(Type.Union([Type.Literal("day"), Type.Literal("night")])),
       date: Type.Optional(Type.String({ description: "YYYY-MM-DD，默认今天" })),
       notes: Type.Optional(Type.String()),
@@ -203,13 +210,24 @@ export function createBabyPanelTools(ctx: BabyToolContext): AgentTool[] {
     executionMode: "sequential",
     execute: async (_id, raw) => {
       const params = raw as Params;
-      const start = String(params.startTime || "").trim();
-      const end = String(params.endTime || "").trim();
-      if (!TIME_RE.test(start) || !TIME_RE.test(end)) fail("时间须为 HH:mm，如 14:00");
+      let start = String(params.startTime ?? params.start_time ?? params.start ?? "").trim();
+      let end = String(params.endTime ?? params.end_time ?? params.end ?? "").trim();
+      
       const date =
         typeof params.date === "string" && isValidDateStr(params.date)
           ? params.date
           : getLocalDateStr();
+
+      if (!TIME_RE.test(start) || !TIME_RE.test(end)) {
+        // Fallback for relative or duration-based sleep
+        const duration = Number(params.durationMinutes ?? params.duration_minutes ?? params.duration ?? 60);
+        const now = new Date();
+        const endD = new Date(now);
+        const startD = new Date(now.getTime() - duration * 60 * 1000);
+        start = `${String(startD.getHours()).padStart(2, "0")}:${String(startD.getMinutes()).padStart(2, "0")}`;
+        end = `${String(endD.getHours()).padStart(2, "0")}:${String(endD.getMinutes()).padStart(2, "0")}`;
+      }
+
       const startIso = hhmmToIso(start, date);
       let endIso = hhmmToIso(end, date);
       if (new Date(endIso).getTime() <= new Date(startIso).getTime()) {
@@ -228,7 +246,7 @@ export function createBabyPanelTools(ctx: BabyToolContext): AgentTool[] {
           notes: typeof params.notes === "string" ? params.notes.trim() : null,
         },
       });
-      return ok(`已记录睡眠 ${start}–${end}`, { id: record.id });
+      return ok(`已记录睡眠 ${start}–${end}`, { id: record.id, recordId: record.id });
     },
   };
 
@@ -237,47 +255,45 @@ export function createBabyPanelTools(ctx: BabyToolContext): AgentTool[] {
     label: "记录尿布",
     description: "记录一次换尿布。type: pee/poop/both。",
     parameters: Type.Object({
-      type: Type.Union([Type.Literal("pee"), Type.Literal("poop"), Type.Literal("both")]),
-      poopColor: Type.Optional(
-        Type.Union([
-          Type.Literal("yellow"),
-          Type.Literal("green"),
-          Type.Literal("brown"),
-          Type.Literal("other"),
-        ])
-      ),
-      poopConsistency: Type.Optional(
-        Type.Union([
-          Type.Literal("soft"),
-          Type.Literal("watery"),
-          Type.Literal("hard"),
-          Type.Literal("seedy"),
-        ])
-      ),
+      type: Type.Optional(Type.String({ description: "pee, poop, both" })),
+      poopColor: Type.Optional(Type.String({ description: "yellow, green, brown, other" })),
+      poopConsistency: Type.Optional(Type.String({ description: "soft, watery, hard, seedy" })),
       notes: Type.Optional(Type.String()),
-      timestamp: Type.Optional(Type.String()),
+      timestamp: Type.Optional(Type.String({ description: "HH:mm 或 ISO 时间" })),
     }),
     executionMode: "sequential",
     execute: async (_id, raw) => {
       const params = raw as Params;
       let recordTimestamp = new Date().toISOString();
-      if (typeof params.timestamp === "string" && params.timestamp.trim()) {
-        const parsed = new Date(params.timestamp);
-        if (Number.isNaN(parsed.getTime())) fail("timestamp 格式无效");
-        recordTimestamp = parsed.toISOString();
+      const rawTime = params.timestamp ?? params.time;
+      if (typeof rawTime === "string" && rawTime.trim()) {
+        const trimmed = rawTime.trim();
+        if (TIME_RE.test(trimmed)) {
+          recordTimestamp = hhmmToIso(trimmed, getLocalDateStr());
+        } else {
+          const parsed = new Date(trimmed);
+          if (!Number.isNaN(parsed.getTime())) recordTimestamp = parsed.toISOString();
+        }
       }
+
+      let typeStr = String(params.type ?? "both").toLowerCase();
+      if (!["pee", "poop", "both"].includes(typeStr)) typeStr = "both";
+
+      const poopColor = (params.poopColor ?? params.poop_color ?? params.color) as string | undefined;
+      const poopConsistency = (params.poopConsistency ?? params.poop_consistency ?? params.texture ?? params.poop_texture ?? params.consistency) as string | undefined;
+
       const record = await prisma.diaperRecord.create({
         data: {
           babyId,
           recordedById: ctx.userId,
           timestamp: recordTimestamp,
-          type: String(params.type),
-          poopColor: typeof params.poopColor === "string" ? params.poopColor : null,
-          poopConsistency: typeof params.poopConsistency === "string" ? params.poopConsistency : null,
+          type: typeStr,
+          poopColor: typeof poopColor === "string" ? poopColor : null,
+          poopConsistency: typeof poopConsistency === "string" ? poopConsistency : null,
           notes: typeof params.notes === "string" ? params.notes.trim() : null,
         },
       });
-      return ok(`已记录尿布：${params.type}`, { id: record.id });
+      return ok(`已记录尿布：${typeStr}`, { id: record.id, recordId: record.id });
     },
   };
 
@@ -471,12 +487,15 @@ export function createBabyPanelTools(ctx: BabyToolContext): AgentTool[] {
         typeof params.time === "string" && TIME_RE.test(params.time.trim())
           ? params.time.trim()
           : new Date().toTimeString().slice(0, 5);
-      const foods = Array.isArray(params.foods)
-        ? (params.foods as string[])
-            .map((f) => String(f || "").trim())
-            .filter(Boolean)
-        : [];
-      if (foods.length === 0) fail("请提供至少一种辅食食材（如米粉、胡萝卜泥等）");
+
+      let rawFoods = params.foods ?? params.food ?? params.foodName ?? params.food_name ?? params.name;
+      let foods: string[] = [];
+      if (Array.isArray(rawFoods)) {
+        foods = rawFoods.map((f) => String(f || "").trim()).filter(Boolean);
+      } else if (typeof rawFoods === "string" && rawFoods.trim()) {
+        foods = rawFoods.split(/[,，、\s]+/).map((f) => f.trim()).filter(Boolean);
+      }
+      if (foods.length === 0) foods = ["辅食"];
 
       const portion = typeof params.portion === "string" ? params.portion : "most";
       const acceptance =
@@ -505,6 +524,7 @@ export function createBabyPanelTools(ctx: BabyToolContext): AgentTool[] {
 
       return ok(`已记录辅食：${foods.join("、")}（${date} ${time}）`, {
         id: record.id,
+        recordId: record.id,
         foods,
         date,
         time,
