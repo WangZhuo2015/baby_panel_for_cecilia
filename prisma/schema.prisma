@@ -18,6 +18,7 @@ model User {
   updatedAt         DateTime           @updatedAt
   memberships       FamilyMember[]
   pushSubscriptions PushSubscription[]
+  aiChatSessions    AiChatSession[]
 }
 
 model Family {
@@ -69,6 +70,7 @@ model Baby {
   vaccineRecords     VaccineRecord[]
   vaccineSelections  VaccineSelection[]
   medicalReports     MedicalReport[]
+  aiChatSessions     AiChatSession[]
 
   @@index([familyId])
 }
@@ -587,3 +589,35 @@ model AiArchive {
 
   @@index([kind, createdAt])
 }
+
+// ─── AI Chat Session & History Persistence ───────────────────────────────────
+
+model AiChatSession {
+  id          String          @id @default(uuid())
+  userId      String
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  babyId      String?
+  baby        Baby?           @relation(fields: [babyId], references: [id], onDelete: SetNull)
+  title       String          @default("新对话")
+  contextType String          @default("general")
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  messages    AiChatMessage[]
+
+  @@index([userId, updatedAt])
+  @@index([babyId, updatedAt])
+}
+
+model AiChatMessage {
+  id        String        @id @default(uuid())
+  sessionId String
+  session   AiChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  role      String        // "user" | "assistant" | "system"
+  content   String
+  image     String?
+  toolsJson String?       // JSON serialized tool traces / evidence citations
+  createdAt DateTime      @default(now())
+
+  @@index([sessionId, createdAt])
+}
+

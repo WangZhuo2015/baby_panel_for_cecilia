@@ -20,6 +20,12 @@ import {
   ExternalLink,
   ChevronDown,
   ChevronUp,
+  History,
+  MessageSquare,
+  Plus,
+  Trash2,
+  Clock,
+  ChevronLeft,
 } from "lucide-react";
 import { useBabyStore } from "@/stores/useBabyStore";
 import { calculateAge } from "@/lib/age";
@@ -53,6 +59,22 @@ interface ToolTrace {
   isError?: boolean;
   summary?: string;
   details?: any;
+}
+
+export interface SessionSummary {
+  id: string;
+  title: string;
+  contextType: string;
+  babyId?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  messageCount: number;
+  lastMessage?: {
+    id: string;
+    role: string;
+    content: string;
+    createdAt: string;
+  } | null;
 }
 
 interface SearchEvidenceItem {
@@ -316,6 +338,96 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
   const [loading, setLoading] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
+  // ===== 会话与历史持久化状态 =====
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [sessionTitle, setSessionTitle] = useState<string | null>(null);
+  const sessionIdRef = useRef<string | null>(sessionId);
+  sessionIdRef.current = sessionId;
+
+  const [showHistory, setShowHistory] = useState(false);
+  const [historyFilter, setHistoryFilter] = useState<"all" | "current">("all");
+  const [sessionList, setSessionList] = useState<SessionSummary[]>([]);
+  const [loadingSessions, setLoadingSessions] = useState(false);
+
+  const fetchSessions = useCallback(async () => {
+    setLoadingSessions(true);
+    try {
+      const res = await fetch("/api/ai/sessions?limit=50");
+      if (res.ok) {
+        const data = await res.json();
+        setSessionList(data.sessions || []);
+      }
+    } catch {
+      // ignore
+    } finally {
+      setLoadingSessions(false);
+    }
+  }, []);
+
+  const loadSessionDetail = async (targetId: string) => {
+    try {
+      const res = await fetch(`/api/ai/sessions/${targetId}`);
+      if (!res.ok) throw new Error("加载历史对话失败");
+      const data = await res.json();
+      const s = data.session;
+      setSessionId(s.id);
+      setSessionTitle(s.title);
+      if (s.messages && s.messages.length > 0) {
+        setMessages(
+          s.messages.map((m: any) => ({
+            id: m.id,
+            role: m.role,
+            content: m.content,
+            image: m.image || undefined,
+            timestamp: new Date(m.createdAt).toLocaleTimeString([], {
+              hour: "2-digit",
+              minute: "2-digit",
+            }),
+            tools: Array.isArray(m.tools) ? m.tools : [],
+          }))
+        );
+      }
+      setShowHistory(false);
+    } catch (err: any) {
+      showToast(err?.message || "加载历史对话失败");
+    }
+  };
+
+  const startNewSession = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    setSessionId(null);
+    setSessionTitle(null);
+    const welcome: Message = {
+      id: "welcome",
+      role: "assistant",
+      content: `你好！我是针对 **${baby?.nickname || "宝宝"}**（${age.label}）的专属 **${displayTitle}** ✨\n\n你可以点击上方的热门问题、拍照上传单据，或直接输入任何你想了解的育儿疑问：`,
+      timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+    };
+    setMessages([welcome]);
+    setShowHistory(false);
+    setTimeout(() => inputRef.current?.focus(), 150);
+  };
+
+  const handleDeleteSession = async (e: React.MouseEvent, targetId: string) => {
+    e.stopPropagation();
+    if (!window.confirm("确定删除这条历史对话记录吗？")) return;
+    try {
+      const res = await fetch(`/api/ai/sessions/${targetId}`, { method: "DELETE" });
+      if (res.ok) {
+        setSessionList((prev) => prev.filter((s) => s.id !== targetId));
+        showToast("已删除历史对话");
+        if (sessionId === targetId) {
+          startNewSession();
+        }
+      }
+    } catch {
+      showToast("删除失败，请重试");
+    }
+  };
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -443,6 +555,7 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
             contextDetail,
             babyId: baby?.id,
             image: currentImg,
+            sessionId: sessionIdRef.current || undefined,
           }),
         });
 
@@ -474,6 +587,10 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
             if (trimmed.startsWith("data: ")) {
               try {
                 const data = JSON.parse(trimmed.slice(6));
+                if (data.session && typeof data.session.id === "string") {
+                  setSessionId(data.session.id);
+                  setSessionTitle(data.session.title);
+                }
                 if (data.text) {
                   accumulatedText += data.text;
                   setMessages((prev) =>
@@ -666,30 +783,202 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
         
         {/* Header - Frosted pastel navbar with notch safe area */}
         <div className="flex items-center justify-between px-4 py-3 pt-[max(12px,env(safe-area-inset-top))] bg-white/95 backdrop-blur-md border-b border-primary/10 shrink-0">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-2xl bg-gradient-to-br from-primary to-pink-500 text-white flex items-center justify-center text-lg shadow-sm shadow-primary/25">
+          <div className="flex items-center gap-2.5 min-w-0 flex-1 mr-2">
+            <div className="w-9 h-9 rounded-2xl bg-gradient-to-br from-primary to-pink-500 text-white flex items-center justify-center text-lg shadow-sm shadow-primary/25 shrink-0">
               {meta.emoji}
             </div>
-            <div>
+            <div className="min-w-0 flex-1">
               <div className="flex items-center gap-1.5">
-                <h3 id="quick-ai-title" className="font-bold text-text-primary text-sm sm:text-base">
-                  {displayTitle}
+                <h3 id="quick-ai-title" className="font-bold text-text-primary text-sm sm:text-base truncate">
+                  {sessionTitle || displayTitle}
                 </h3>
               </div>
-              <p className="text-[11px] text-text-muted flex items-center gap-1 mt-0.5">
+              <p className="text-[11px] text-text-muted flex items-center gap-1 mt-0.5 truncate">
                 <span className="font-medium text-text-secondary">{baby?.nickname || "宝宝"}</span>
                 <span>·</span>
                 <span>{age.label}</span>
+                {sessionTitle && (
+                  <>
+                    <span>·</span>
+                    <span className="text-primary font-medium">{meta.title}</span>
+                  </>
+                )}
               </p>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="w-8 h-8 rounded-full bg-primary-soft/40 hover:bg-primary-soft text-text-muted hover:text-text-primary flex items-center justify-center transition-colors cursor-pointer"
-          >
-            <X size={16} />
-          </button>
+          <div className="flex items-center gap-1 shrink-0">
+            <button
+              type="button"
+              onClick={() => {
+                setShowHistory(true);
+                fetchSessions();
+              }}
+              className="w-8 h-8 rounded-full bg-primary-soft/40 hover:bg-primary-soft text-text-muted hover:text-primary flex items-center justify-center transition-colors cursor-pointer"
+              title="历史对话记录"
+              aria-label="历史对话记录"
+            >
+              <History size={16} />
+            </button>
+            <button
+              type="button"
+              onClick={startNewSession}
+              className="w-8 h-8 rounded-full bg-primary-soft/40 hover:bg-primary-soft text-text-muted hover:text-primary flex items-center justify-center transition-colors cursor-pointer"
+              title="新建对话"
+              aria-label="新建对话"
+            >
+              <Plus size={16} />
+            </button>
+            <button
+              onClick={onClose}
+              className="w-8 h-8 rounded-full bg-primary-soft/40 hover:bg-primary-soft text-text-muted hover:text-text-primary flex items-center justify-center transition-colors cursor-pointer"
+              title="关闭"
+              aria-label="关闭"
+            >
+              <X size={16} />
+            </button>
+          </div>
         </div>
+
+        {/* History Drawer Overlay */}
+        {showHistory && (
+          <div className="absolute inset-0 bg-card z-30 flex flex-col animate-in fade-in slide-in-from-right-4 duration-200">
+            {/* History Header */}
+            <div className="flex items-center justify-between px-4 py-3 pt-[max(12px,env(safe-area-inset-top))] bg-white/95 backdrop-blur-md border-b border-primary/10 shrink-0">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowHistory(false)}
+                  className="w-8 h-8 rounded-full bg-primary-soft/40 hover:bg-primary-soft text-text-muted hover:text-text-primary flex items-center justify-center transition-colors cursor-pointer"
+                  title="返回当前对话"
+                >
+                  <ChevronLeft size={18} />
+                </button>
+                <div>
+                  <h3 className="font-bold text-text-primary text-sm sm:text-base">历史对话记录</h3>
+                  <p className="text-[11px] text-text-muted">按主题回溯与随时续聊</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={startNewSession}
+                className="px-3 py-1.5 rounded-full bg-gradient-to-r from-primary to-pink-500 text-white text-xs font-bold shadow-xs hover:opacity-95 flex items-center gap-1 cursor-pointer"
+              >
+                <Plus size={14} />
+                <span>新对话</span>
+              </button>
+            </div>
+
+            {/* Filter Chips */}
+            <div className="px-3.5 py-2 bg-white/60 border-b border-primary/10 flex gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => setHistoryFilter("all")}
+                className={`text-xs px-3 py-1 rounded-full font-medium transition-all ${
+                  historyFilter === "all"
+                    ? "bg-primary text-white shadow-xs"
+                    : "bg-card text-text-secondary border border-primary/15 hover:bg-primary-light/40"
+                }`}
+              >
+                全部历史 ({sessionList.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setHistoryFilter("current")}
+                className={`text-xs px-3 py-1 rounded-full font-medium transition-all ${
+                  historyFilter === "current"
+                    ? "bg-primary text-white shadow-xs"
+                    : "bg-card text-text-secondary border border-primary/15 hover:bg-primary-light/40"
+                }`}
+              >
+                当前领域 ({sessionList.filter((s) => s.contextType === contextType).length})
+              </button>
+            </div>
+
+            {/* Session List */}
+            <div className="flex-1 min-h-0 overflow-y-auto p-3.5 space-y-2.5">
+              {loadingSessions ? (
+                <div className="flex flex-col items-center justify-center py-16 text-text-muted gap-2">
+                  <Loader2 size={24} className="animate-spin text-primary" />
+                  <span className="text-xs">加载历史记录中...</span>
+                </div>
+              ) : sessionList.filter((s) => (historyFilter === "current" ? s.contextType === contextType : true)).length === 0 ? (
+                <div className="text-center py-16 space-y-2">
+                  <p className="text-3xl">💬</p>
+                  <p className="text-xs text-text-muted">暂无历史对话记录</p>
+                  <button
+                    type="button"
+                    onClick={startNewSession}
+                    className="text-xs text-primary font-bold hover:underline"
+                  >
+                    开启一次新对话
+                  </button>
+                </div>
+              ) : (
+                sessionList
+                  .filter((s) => (historyFilter === "current" ? s.contextType === contextType : true))
+                  .map((s) => {
+                    const sMeta = CONTEXT_META[s.contextType as AiContextType] || CONTEXT_META.general;
+                    const isCurrentActive = s.id === sessionId;
+
+                    return (
+                      <div
+                        key={s.id}
+                        onClick={() => loadSessionDetail(s.id)}
+                        className={`p-3 rounded-2xl border transition-all cursor-pointer group flex items-start justify-between gap-2.5 ${
+                          isCurrentActive
+                            ? "bg-primary-light/40 border-primary shadow-xs ring-1 ring-primary/20"
+                            : "bg-card hover:bg-white border-primary/10 hover:border-primary/30 shadow-2xs"
+                        }`}
+                      >
+                        <div className="flex items-start gap-2.5 flex-1 min-w-0">
+                          <div className="w-8 h-8 rounded-xl bg-primary-soft/50 text-base flex items-center justify-center shrink-0 mt-0.5">
+                            {sMeta.emoji}
+                          </div>
+                          <div className="flex-1 min-w-0 space-y-1">
+                            <div className="flex items-center gap-1.5">
+                              <h4 className="font-bold text-xs sm:text-sm text-text-primary truncate group-hover:text-primary transition-colors">
+                                {s.title}
+                              </h4>
+                              {isCurrentActive && (
+                                <span className="text-[9px] px-1.5 py-0.5 rounded bg-primary text-white font-bold shrink-0">
+                                  当前
+                                </span>
+                              )}
+                            </div>
+                            {s.lastMessage && (
+                              <p className="text-[11px] text-text-muted truncate">
+                                {s.lastMessage.role === "user" ? "家长：" : "AI："}{s.lastMessage.content}
+                              </p>
+                            )}
+                            <div className="flex items-center gap-2 text-[10px] text-text-muted">
+                              <span className="flex items-center gap-0.5">
+                                <Clock size={10} />
+                                <span>{new Date(s.updatedAt).toLocaleDateString()} {new Date(s.updatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+                              </span>
+                              <span>·</span>
+                              <span className="flex items-center gap-0.5">
+                                <MessageSquare size={10} />
+                                <span>{s.messageCount} 条</span>
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={(e) => handleDeleteSession(e, s.id)}
+                          className="p-1.5 text-text-muted hover:text-red-500 rounded-lg hover:bg-red-50 transition-colors shrink-0"
+                          title="删除会话"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    );
+                  })
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Quick Suggestion Chips */}
         <div className="px-3.5 py-2.5 bg-white/60 backdrop-blur-xs border-b border-primary/10 overflow-x-auto scrollbar-hide flex gap-2 shrink-0">

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
+import { prisma } from "@/lib/prisma";
 import { requireAuth, requireBaby } from "@/lib/api-helpers";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import { archiveText } from "@/lib/archive";
@@ -71,7 +72,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json().catch(() => ({}));
-    const { messages, contextType = "general", contextDetail, babyId, image } = body;
+    const { messages, contextType = "general", contextDetail, babyId, image, sessionId } = body;
 
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
       return NextResponse.json({ error: "消息内容不能为空" }, { status: 400 });
@@ -109,6 +110,26 @@ export async function POST(request: Request) {
       void archiveText("input_text", promptText).catch(() => {});
     }
 
+    // 1. Session Persistence Setup
+    let activeSession: { id: string; title: string; contextType: string } | null = null;
+    if (sessionId && typeof sessionId === "string") {
+      const existing = await prisma.aiChatSession.findFirst({
+        where: { id: sessionId, userId: user.id },
+      });
+      if (existing) activeSession = existing;
+    }
+    if (!activeSession) {
+      const generatedTitle = promptText.replace(/[\r\n\t]+/g, " ").trim().slice(0, 24) || "新对话";
+      activeSession = await prisma.aiChatSession.create({
+        data: {
+          userId: user.id,
+          babyId: targetBaby.id,
+          title: generatedTitle,
+          contextType,
+        },
+      });
+    }
+
     const systemPrompt = buildAgentSystemPrompt({
       contextType,
       contextDetail,
@@ -121,7 +142,12 @@ export async function POST(request: Request) {
         const send = (payload: unknown) => {
           controller.enqueue(encoder.encode(`data: ${JSON.stringify(payload)}\n\n`));
         };
+        // Emit session info as first SSE event
+        send({ session: activeSession });
+
         let assistantFull = "";
+        const toolTraces: any[] = [];
+
         try {
           const prior = messages.filter(
             (m: { role?: string }, idx: number) =>
@@ -140,13 +166,47 @@ export async function POST(request: Request) {
                 assistantFull += event.text;
                 send({ text: event.text });
               } else {
+                if (event.status === "end") {
+                  toolTraces.push(event);
+                }
                 send({ tool: event });
               }
             },
           });
+
           if (assistantFull) {
             void archiveText("output_json", assistantFull).catch(() => {});
           }
+
+          // Persist user and assistant messages into DB
+          try {
+            if (activeSession) {
+              const sid = activeSession.id;
+              await prisma.aiChatMessage.create({
+                data: {
+                  sessionId: sid,
+                  role: "user",
+                  content: promptText,
+                  image: typeof image === "string" ? image : null,
+                },
+              });
+              await prisma.aiChatMessage.create({
+                data: {
+                  sessionId: sid,
+                  role: "assistant",
+                  content: assistantFull || "未能获取有效回复，请重试。",
+                  toolsJson: toolTraces.length > 0 ? JSON.stringify(toolTraces) : null,
+                },
+              });
+              await prisma.aiChatSession.update({
+                where: { id: sid },
+                data: { updatedAt: new Date() },
+              });
+            }
+          } catch (dbErr) {
+            console.error("Failed to save chat message history:", dbErr);
+          }
+
           controller.enqueue(encoder.encode("data: [DONE]\n\n"));
         } catch (err) {
           console.error("AI chat run error:", err);
@@ -154,6 +214,30 @@ export async function POST(request: Request) {
             assistantFull ||
             "网络连接暂时超时，请稍后重新提问。若宝宝身体有明显不适，请以专业医生诊断为准。";
           if (!assistantFull) send({ text: fallback });
+
+          // Persist on error as well
+          try {
+            if (activeSession) {
+              const sid = activeSession.id;
+              await prisma.aiChatMessage.create({
+                data: {
+                  sessionId: sid,
+                  role: "user",
+                  content: promptText,
+                  image: typeof image === "string" ? image : null,
+                },
+              });
+              await prisma.aiChatMessage.create({
+                data: {
+                  sessionId: sid,
+                  role: "assistant",
+                  content: fallback,
+                  toolsJson: toolTraces.length > 0 ? JSON.stringify(toolTraces) : null,
+                },
+              });
+            }
+          } catch {}
+
           controller.enqueue(encoder.encode("data: [DONE]\n\n"));
         } finally {
           controller.close();

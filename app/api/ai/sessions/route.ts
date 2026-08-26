@@ -1,0 +1,110 @@
+import { NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+import { requireAuth, requireBaby } from "@/lib/api-helpers";
+
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
+export async function GET(request: Request) {
+  const auth = await requireAuth(request);
+  if (auth.errorResponse) return auth.errorResponse;
+  const { user } = auth;
+
+  const url = new URL(request.url);
+  const babyId = url.searchParams.get("babyId");
+  const contextType = url.searchParams.get("contextType");
+  const limit = Math.min(50, Math.max(1, parseInt(url.searchParams.get("limit") || "30", 10)));
+  const offset = Math.max(0, parseInt(url.searchParams.get("offset") || "0", 10));
+
+  const where: any = { userId: user.id };
+  if (babyId) where.babyId = babyId;
+  if (contextType) where.contextType = contextType;
+
+  const [total, sessions] = await Promise.all([
+    prisma.aiChatSession.count({ where }),
+    prisma.aiChatSession.findMany({
+      where,
+      orderBy: { updatedAt: "desc" },
+      take: limit,
+      skip: offset,
+      include: {
+        _count: {
+          select: { messages: true },
+        },
+        messages: {
+          orderBy: { createdAt: "desc" },
+          take: 1,
+          select: {
+            id: true,
+            role: true,
+            content: true,
+            createdAt: true,
+          },
+        },
+      },
+    }),
+  ]);
+
+  const formatted = sessions.map((s) => ({
+    id: s.id,
+    title: s.title,
+    contextType: s.contextType,
+    babyId: s.babyId,
+    createdAt: s.createdAt.toISOString(),
+    updatedAt: s.updatedAt.toISOString(),
+    messageCount: s._count.messages,
+    lastMessage: s.messages[0]
+      ? {
+          id: s.messages[0].id,
+          role: s.messages[0].role,
+          content: s.messages[0].content.slice(0, 100),
+          createdAt: s.messages[0].createdAt.toISOString(),
+        }
+      : null,
+  }));
+
+  return NextResponse.json({ total, sessions: formatted });
+}
+
+export async function POST(request: Request) {
+  const auth = await requireAuth(request);
+  if (auth.errorResponse) return auth.errorResponse;
+  const { user } = auth;
+
+  const body = await request.json().catch(() => ({}));
+  const { babyId, title, contextType = "general" } = body;
+
+  let targetBabyId: string | null = null;
+  if (babyId) {
+    const babyRes = await requireBaby(user.id, babyId);
+    if (babyRes.errorResponse) return babyRes.errorResponse;
+    targetBabyId = babyRes.baby.id;
+  } else {
+    const defaultBaby = await prisma.baby.findFirst({
+      where: { family: { members: { some: { userId: user.id } } } },
+    });
+    targetBabyId = defaultBaby?.id || null;
+  }
+
+  const session = await prisma.aiChatSession.create({
+    data: {
+      userId: user.id,
+      babyId: targetBabyId,
+      title: typeof title === "string" && title.trim() ? title.trim().slice(0, 50) : "新对话",
+      contextType: typeof contextType === "string" ? contextType : "general",
+    },
+  });
+
+  return NextResponse.json({
+    session: {
+      id: session.id,
+      title: session.title,
+      contextType: session.contextType,
+      babyId: session.babyId,
+      createdAt: session.createdAt.toISOString(),
+      updatedAt: session.updatedAt.toISOString(),
+      messages: [],
+    },
+  });
+}
+
