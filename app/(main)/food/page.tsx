@@ -41,7 +41,9 @@ const STATE_ICONS: Record<string, { label: string; icon: typeof Smile; color: st
 
 export default function FoodPage() {
   const router = useRouter();
+  const user = useBabyStore((s) => s.user);
   const baby = useBabyStore((s) => s.baby);
+  const fetchUser = useBabyStore((s) => s.fetchUser);
   const age = baby ? calculateAge(baby.birthDate) : { months: 0, days: 0, label: "0月0天" };
   const foodPlans = useBabyStore((s) => s.foodPlans);
   const fetchFoodPlans = useBabyStore((s) => s.fetchFoodPlans);
@@ -53,6 +55,11 @@ export default function FoodPage() {
   const [selectedDate, setSelectedDate] = useState(() => getLocalDateStr());
   const [activeTab, setActiveTab] = useState("today");
 
+  // Ensure user and baby profile are loaded
+  useEffect(() => {
+    fetchUser();
+  }, [fetchUser]);
+
   const loadData = useCallback(() => {
     fetchFoodPlans(selectedDate, true);
     fetchFoodLogRecords(selectedDate, true);
@@ -60,6 +67,17 @@ export default function FoodPage() {
 
   useEffect(() => {
     loadData();
+  }, [loadData, baby?.id, user?.id]);
+
+  // Auto-refresh when tab becomes visible
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        loadData();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
   }, [loadData]);
 
   // Get food plan for selected date
