@@ -7,7 +7,13 @@ import { Syringe, Shield, Info, AlertTriangle, ChevronDown, ChevronUp, MapPin, C
 import { AppHeader, CuteCard, SectionTitle, SegmentControl, QuickAiButton } from '@/components/ui'
 import DataVersionBadge from '@/components/ui/DataVersionBadge'
 import { useBabyStore } from '@/stores/useBabyStore'
-import { getLocalDateStr } from '@/lib/date'
+import {
+  getLocalDateStr,
+  addDays,
+  addMonths,
+  diffDaysFromToday,
+  getWeekdayStr,
+} from '@/lib/date'
 import { calculateAge } from '@/lib/age'
 
 interface Vaccine {
@@ -61,6 +67,7 @@ interface ScheduleItem {
   doseNumber: number
   vaccineName: string
   doseLabel: string
+  ageLabel: string
   date: string
   diffDays: number
   isOptional: boolean
@@ -87,28 +94,6 @@ function getAgeLabel(months?: number | null): string {
   if (months < 12) return `${months}月龄`
   if (months % 12 === 0) return `${Math.floor(months / 12)}岁`
   return `${Math.floor(months / 12)}岁${months % 12}个月`
-}
-
-function addMonths(dateStr: string, months: number): string {
-  const d = new Date(`${dateStr}T00:00:00`)
-  d.setMonth(d.getMonth() + months)
-  return getLocalDateStr(d)
-}
-
-function addDays(dateStr: string, days: number): string {
-  const d = new Date(`${dateStr}T00:00:00`)
-  d.setDate(d.getDate() + days)
-  return getLocalDateStr(d)
-}
-
-function diffDaysFromToday(dateStr: string): number {
-  const today = new Date(`${getLocalDateStr()}T00:00:00`).getTime()
-  const target = new Date(`${dateStr}T00:00:00`).getTime()
-  return Math.round((target - today) / (1000 * 60 * 60 * 24))
-}
-
-function weekdayOf(dateStr: string): string {
-  return new Date(`${dateStr}T00:00:00`).toLocaleDateString('zh-CN', { weekday: 'short' })
 }
 
 function VaccineCard({ vaccine }: { vaccine: Vaccine }) {
@@ -195,23 +180,29 @@ function VaccineCard({ vaccine }: { vaccine: Vaccine }) {
 }
 
 const RANGE_OPTIONS = [
-  { value: '7', label: '7天' },
-  { value: '30', label: '30天' },
-  { value: '90', label: '90天' },
-  { value: 'all', label: '全部' },
+  { value: 'pending', label: '待接种/待补' },
+  { value: '30', label: '近30天' },
+  { value: '90', label: '近90天' },
+  { value: 'all', label: '全部规划' },
 ]
 
 export default function VaccinesPage() {
   const router = useRouter()
+  const baby = useBabyStore((s) => s.baby)
+  const fetchUser = useBabyStore((s) => s.fetchUser)
   const [vaccines, setVaccines] = useState<Vaccine[]>([])
   const [schedule, setSchedule] = useState<ScheduleEntry[]>([])
   const [dataRelease, setDataRelease] = useState<{ asOf?: string | null; sources?: { organization?: string }[] } | null>(null)
-  const [selections, setSelections] = useState<Record<string, boolean>>({})
-  const [range, setRange] = useState('30')
+  const [selections, setSelections] = useState<Record<string, { selected: boolean; completed: boolean }>>({})
+  const [range, setRange] = useState('pending')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
-  const baby = useBabyStore((s) => s.baby)
+
+  // Ensure user session & baby profile are loaded
+  useEffect(() => {
+    fetchUser()
+  }, [fetchUser])
 
   const handleRefresh = async () => {
     if (refreshing) return;
@@ -241,9 +232,12 @@ export default function VaccinesPage() {
       }
       if (selRes.ok) {
         const sels = await selRes.json();
-        const map: Record<string, boolean> = {};
+        const map: Record<string, { selected: boolean; completed: boolean }> = {};
         for (const s of Array.isArray(sels) ? sels : []) {
-          map[`${s.vaccineId}-${s.doseNumber}`] = s.selected;
+          map[`${s.vaccineId}-${s.doseNumber}`] = {
+            selected: Boolean(s.selected),
+            completed: Boolean(s.completed),
+          };
         }
         setSelections(map);
       }
@@ -279,9 +273,12 @@ export default function VaccinesPage() {
 
         if (selRes.ok) {
           const sels = await selRes.json()
-          const map: Record<string, boolean> = {}
+          const map: Record<string, { selected: boolean; completed: boolean }> = {}
           for (const s of Array.isArray(sels) ? sels : []) {
-            map[`${s.vaccineId}-${s.doseNumber}`] = s.selected
+            map[`${s.vaccineId}-${s.doseNumber}`] = {
+              selected: Boolean(s.selected),
+              completed: Boolean(s.completed),
+            }
           }
           setSelections(map)
         }
@@ -310,10 +307,13 @@ export default function VaccinesPage() {
       if (!vaccine || vaccine.routineHealthyChildOption === false) continue
 
       let date: string
+      let ageLabel = ''
       if (entry.ageDays != null) {
         date = addDays(birthDate, entry.ageDays)
+        ageLabel = entry.ageLabel || `${entry.ageDays}天`
       } else if (entry.ageMonths != null) {
         date = addMonths(birthDate, entry.ageMonths)
+        ageLabel = entry.ageLabel || getAgeLabel(entry.ageMonths)
       } else {
         continue
       }
@@ -325,6 +325,7 @@ export default function VaccinesPage() {
         doseNumber: entry.doseNumber,
         vaccineName: vaccine.name,
         doseLabel: dose?.doseLabel ?? `第${entry.doseNumber}剂`,
+        ageLabel,
         date,
         diffDays: diffDaysFromToday(date),
         isOptional: entry.isOptional,
@@ -333,28 +334,48 @@ export default function VaccinesPage() {
         manualReviewRequired: vaccine.manualReviewRequired ?? false,
       })
     }
-    items.sort((a, b) => a.date.localeCompare(b.date))
+    items.sort((a, b) => {
+      const diff = a.date.localeCompare(b.date);
+      if (diff !== 0) return diff;
+      return a.doseNumber - b.doseNumber;
+    })
     return items
   }, [schedule, vaccineById, birthDate])
 
-  const visibleItems = useMemo(() => {
-    if (range === 'all') return scheduleItems
-    const max = Number(range)
-    return scheduleItems.filter((item) => item.diffDays >= 0 && item.diffDays <= max)
-  }, [scheduleItems, range])
-
-  const upcomingCount = scheduleItems.filter((i) => i.diffDays >= 0 && i.diffDays <= 30).length
-  const overdueCount = scheduleItems.filter((i) => i.diffDays < 0).length
-
-  const isSelected = useCallback(
-    (item: ScheduleItem) => selections[item.key] ?? !item.isOptional,
+  const isCompleted = useCallback(
+    (item: ScheduleItem) => Boolean(selections[item.key]?.completed),
     [selections]
   )
 
-  const toggleSelection = async (item: ScheduleItem) => {
-    const current = isSelected(item)
-    const next = !current
-    setSelections((prev) => ({ ...prev, [item.key]: next }))
+  const isSelected = useCallback(
+    (item: ScheduleItem) => selections[item.key]?.selected ?? !item.isOptional,
+    [selections]
+  )
+
+  const visibleItems = useMemo(() => {
+    if (range === 'all') return scheduleItems
+    if (range === 'pending') {
+      return scheduleItems.filter((item) => {
+        const completed = isCompleted(item)
+        return !completed && item.diffDays <= 60
+      })
+    }
+    const max = Number(range)
+    return scheduleItems.filter((item) => item.diffDays >= -30 && item.diffDays <= max)
+  }, [scheduleItems, range, isCompleted])
+
+  const upcomingCount = scheduleItems.filter((i) => !isCompleted(i) && i.diffDays >= 0 && i.diffDays <= 30).length
+  const overdueCount = scheduleItems.filter((i) => !isCompleted(i) && i.diffDays < 0).length
+
+  const toggleCompleted = async (item: ScheduleItem) => {
+    const nextCompleted = !isCompleted(item)
+    setSelections((prev) => ({
+      ...prev,
+      [item.key]: {
+        selected: prev[item.key]?.selected ?? isSelected(item),
+        completed: nextCompleted,
+      },
+    }))
     try {
       const res = await fetch('/api/vaccines/selections', {
         method: 'PUT',
@@ -362,12 +383,18 @@ export default function VaccinesPage() {
         body: JSON.stringify({
           vaccineId: item.vaccineId,
           doseNumber: item.doseNumber,
-          selected: next,
+          completed: nextCompleted,
         }),
       })
-      if (!res.ok) throw new Error('保存失败')
+      if (!res.ok) throw new Error('保存接种状态失败')
     } catch {
-      setSelections((prev) => ({ ...prev, [item.key]: current }))
+      setSelections((prev) => ({
+        ...prev,
+        [item.key]: {
+          selected: prev[item.key]?.selected ?? isSelected(item),
+          completed: !nextCompleted,
+        },
+      }))
     }
   }
 
@@ -511,31 +538,42 @@ export default function VaccinesPage() {
               ) : (
                 <div className="space-y-2.5">
                   {visibleItems.map((item) => {
-                    const selected = isSelected(item)
-                    const overdue = item.diffDays < 0
-                    const dueToday = item.diffDays === 0
+                    const completed = isCompleted(item)
+                    const overdue = item.diffDays < 0 && !completed
+                    const dueToday = item.diffDays === 0 && !completed
                     const colors = PROGRAM_COLORS[item.programType] || PROGRAM_COLORS.non_program
 
-                    const countdownLabel = overdue
-                      ? `已过期 ${-item.diffDays} 天`
-                      : dueToday
-                        ? '今天'
-                        : item.diffDays === 1
-                          ? '明天'
-                          : `${item.diffDays} 天后`
-
                     return (
-                      <CuteCard key={item.key} className={overdue || !selected ? 'opacity-60' : ''}>
+                      <CuteCard
+                        key={item.key}
+                        className={`transition-all ${
+                          completed
+                            ? 'bg-emerald-50/40 border-emerald-200/60'
+                            : overdue
+                              ? 'bg-amber-50/30 border-amber-200/70 shadow-2xs'
+                              : 'bg-card border-primary/10'
+                        }`}
+                      >
                         <div className="flex items-center gap-3">
                           {/* Date block */}
-                          <div className={`flex-shrink-0 w-14 text-center rounded-xl py-2 ${overdue ? 'bg-gray-100' : dueToday ? 'bg-primary text-white' : 'bg-primary-light/60'}`}>
-                            <p className={`text-[10px] ${overdue ? 'text-gray-400' : dueToday ? 'text-white/80' : 'text-text-muted'}`}>
-                              {weekdayOf(item.date)}
+                          <div
+                            className={`flex-shrink-0 w-14 text-center rounded-2xl py-2 transition-colors ${
+                              completed
+                                ? 'bg-emerald-100/80 text-emerald-800'
+                                : overdue
+                                  ? 'bg-amber-100 text-amber-900 font-bold'
+                                  : dueToday
+                                    ? 'bg-primary text-white shadow-xs'
+                                    : 'bg-primary-light/60 text-primary'
+                            }`}
+                          >
+                            <p className={`text-[10px] font-medium ${dueToday ? 'text-white/80' : 'opacity-75'}`}>
+                              {getWeekdayStr(item.date)}
                             </p>
-                            <p className={`text-lg font-bold leading-tight ${overdue ? 'text-gray-400' : dueToday ? 'text-white' : 'text-primary'}`}>
+                            <p className="text-lg font-extrabold leading-tight">
                               {Number(item.date.slice(8, 10))}
                             </p>
-                            <p className={`text-[10px] ${overdue ? 'text-gray-300' : dueToday ? 'text-white/70' : 'text-text-muted'}`}>
+                            <p className={`text-[10px] ${dueToday ? 'text-white/80' : 'opacity-75'}`}>
                               {item.date.slice(5, 7)}月
                             </p>
                           </div>
@@ -543,36 +581,63 @@ export default function VaccinesPage() {
                           {/* Info */}
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-1.5 flex-wrap">
-                              <p className="text-sm font-semibold text-text-primary truncate">
+                              <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-primary-soft/70 text-primary font-bold shrink-0">
+                                {item.ageLabel}
+                              </span>
+                              <p className={`text-sm font-bold truncate ${completed ? 'line-through text-text-muted' : 'text-text-primary'}`}>
                                 {item.vaccineName}
                               </p>
-                              <span className="text-[10px] text-text-muted">{item.doseLabel}</span>
+                              <span className="text-[11px] text-text-muted shrink-0 font-medium">
+                                {item.doseLabel}
+                              </span>
                             </div>
-                            <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+
+                            <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
                               <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium border ${colors.bg} ${colors.text} ${colors.border}`}>
                                 {PROGRAM_LABELS[item.programType] || item.programType}
                               </span>
-                              <span className={`text-[10px] font-medium ${overdue ? 'text-gray-400' : dueToday ? 'text-primary' : 'text-text-muted'}`}>
-                                {countdownLabel}
-                              </span>
+
+                              {completed ? (
+                                <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                  <CheckCircle2 size={10} />
+                                  已接种
+                                </span>
+                              ) : overdue ? (
+                                <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                                  <AlertTriangle size={10} />
+                                  待补种 (已过 {Math.abs(item.diffDays)} 天)
+                                </span>
+                              ) : dueToday ? (
+                                <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-primary text-white shadow-xs">
+                                  今日应种
+                                </span>
+                              ) : (
+                                <span className="text-[10px] font-medium text-text-muted">
+                                  {item.diffDays === 1 ? '明天' : `${item.diffDays} 天后`}
+                                </span>
+                              )}
+
                               {item.action && (
-                                <span className="text-[10px] text-gray-400">{item.action}</span>
+                                <span className="text-[10px] text-text-muted truncate max-w-[150px]">
+                                  {item.action}
+                                </span>
                               )}
                             </div>
                           </div>
 
-                          {/* Selection toggle */}
+                          {/* Completion toggle button */}
                           <button
                             type="button"
-                            onClick={() => toggleSelection(item)}
-                            aria-label={selected ? '取消接种' : '选择接种'}
+                            onClick={() => toggleCompleted(item)}
+                            title={completed ? '点击撤销已接种状态' : '点击标记此针已接种'}
+                            aria-label={completed ? '点击撤销已接种状态' : '点击标记此针已接种'}
                             className={`flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center transition-all cursor-pointer ${
-                              selected
-                                ? 'bg-primary text-white shadow-button'
-                                : 'bg-gray-100 text-gray-300'
+                              completed
+                                ? 'bg-emerald-500 text-white shadow-sm ring-2 ring-emerald-200'
+                                : 'bg-primary-soft/40 hover:bg-primary-soft text-text-muted hover:text-primary'
                             }`}
                           >
-                            {selected ? <CheckCircle2 size={20} /> : <Circle size={20} />}
+                            {completed ? <CheckCircle2 size={20} /> : <Circle size={20} />}
                           </button>
                         </div>
                       </CuteCard>
