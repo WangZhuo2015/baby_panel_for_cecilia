@@ -159,22 +159,25 @@ export function getTodayUtcRange(date = new Date()): {
   return getLocalDayUtcRange(getLocalDateStr(date));
 }
 
-/** Combine today's local date with an HH:MM input and store as UTC ISO. */
-export function localTimeToUtcIso(hhmm: string): string {
+/** Combine a local date with an HH:MM input (Asia/Shanghai) and store as UTC ISO. */
+export function localTimeToUtcIso(hhmm: string, dateStr?: string): string {
+  const targetDate = typeof dateStr === "string" && isValidDateStr(dateStr.slice(0, 10))
+    ? dateStr.slice(0, 10)
+    : getLocalDateStr();
   if (!hhmm || typeof hhmm !== "string") {
-    return new Date().toISOString();
+    return new Date(`${targetDate}T00:00:00+08:00`).toISOString();
   }
   const parts = hhmm.trim().split(":");
   if (parts.length < 2) {
-    return new Date().toISOString();
+    return new Date(`${targetDate}T00:00:00+08:00`).toISOString();
   }
   const h = Number(parts[0]);
   const m = Number(parts[1]);
   if (Number.isNaN(h) || Number.isNaN(m) || h < 0 || h > 23 || m < 0 || m > 59) {
-    return new Date().toISOString();
+    return new Date(`${targetDate}T00:00:00+08:00`).toISOString();
   }
   const padded = `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
-  const isoStr = `${getLocalDateStr()}T${padded}:00+08:00`;
+  const isoStr = `${targetDate}T${padded}:00+08:00`;
   const parsed = new Date(isoStr);
   if (Number.isNaN(parsed.getTime())) {
     return new Date().toISOString();

@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth, requireBaby } from "@/lib/api-helpers";
 import { safeJsonParse } from "@/lib/json";
-import { calculateAge } from "@/lib/age";
+import { calculateCorrectedAge } from "@/lib/age";
+import { estimatePercentile } from "@/lib/who-growth-standards";
 import { isValidDateStr } from "@/lib/date";
 
 export async function GET(request: Request) {
@@ -138,18 +139,28 @@ export async function POST(request: Request) {
       });
 
       if (weightKg != null || heightCm != null || headCircumferenceCm != null) {
-        const { months, label } = calculateAge(baby.birthDate, cleanDate);
+        const ageSummary = calculateCorrectedAge(baby.birthDate, baby.gestationalAge, cleanDate);
+        const gender = baby.gender || "female";
+        let percentile: number | null = null;
+        if (weightKg != null) {
+          percentile = estimatePercentile(gender, "weight", ageSummary.correctedDecimalMonths, weightKg);
+        } else if (heightCm != null) {
+          percentile = estimatePercentile(gender, "height", ageSummary.correctedDecimalMonths, heightCm);
+        } else if (headCircumferenceCm != null) {
+          percentile = estimatePercentile(gender, "headCircumference", ageSummary.correctedDecimalMonths, headCircumferenceCm);
+        }
 
         await tx.growthMeasurement.create({
           data: {
             babyId: baby.id,
             recordedById: user.id,
             date: cleanDate,
-            ageInMonths: months,
-            ageLabel: label,
+            ageInMonths: ageSummary.correctedMonths,
+            ageLabel: ageSummary.label,
             weightKg,
             heightCm,
             headCircumferenceCm,
+            percentile,
             imageUrl: cleanImageUrl,
           },
         });

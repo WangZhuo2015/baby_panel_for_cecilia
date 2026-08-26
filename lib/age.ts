@@ -112,3 +112,58 @@ export function calculateAge(
   };
 }
 
+/**
+ * Calculates corrected age (矫正月龄) for preterm infants (gestationalAge < 37 weeks).
+ * According to WHO/AAP guidelines, corrected age is applied until 24-36 months of chronological age.
+ */
+export function calculateCorrectedAge(
+  birthDate: string,
+  gestationalAgeWeeks?: number | null,
+  targetDate?: string | Date
+): {
+  isPreterm: boolean;
+  chronologicalDetail: AgeDetail;
+  correctedTotalDays: number;
+  correctedDecimalMonths: number;
+  correctedMonths: number;
+  correctedDays: number;
+  label: string;
+} {
+  const detail = calculateAgeDetail(birthDate, targetDate);
+  const isPreterm = Boolean(
+    gestationalAgeWeeks != null &&
+    gestationalAgeWeeks > 20 &&
+    gestationalAgeWeeks < 37 &&
+    detail.months < 36
+  );
+
+  if (!isPreterm || gestationalAgeWeeks == null) {
+    const decimalMonths = detail.totalDays / 30.4375;
+    return {
+      isPreterm: false,
+      chronologicalDetail: detail,
+      correctedTotalDays: detail.totalDays,
+      correctedDecimalMonths: decimalMonths,
+      correctedMonths: detail.months,
+      correctedDays: detail.days,
+      label: detail.label,
+    };
+  }
+
+  const daysEarly = Math.max(0, (40 - gestationalAgeWeeks) * 7);
+  const correctedTotalDays = Math.max(0, detail.totalDays - daysEarly);
+  const correctedDecimalMonths = correctedTotalDays / 30.4375;
+  const correctedMonths = Math.floor(correctedDecimalMonths);
+  const correctedDays = Math.max(0, Math.floor(correctedTotalDays - correctedMonths * 30.4375));
+
+  return {
+    isPreterm: true,
+    chronologicalDetail: detail,
+    correctedTotalDays,
+    correctedDecimalMonths,
+    correctedMonths,
+    correctedDays,
+    label: `矫正 ${correctedMonths}个月${correctedDays}天 (实际 ${detail.months}月${detail.days}天)`,
+  };
+}
+

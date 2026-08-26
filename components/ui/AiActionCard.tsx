@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/components/ui/Toast";
 import { useBabyStore } from "@/stores/useBabyStore";
-import { localTimeToUtcIso, getLocalDateStr } from "@/lib/date";
+import { localTimeToUtcIso, getLocalDateStr, addDays } from "@/lib/date";
 import type { ActionCardData } from "@/lib/extract-actions";
 
 export type { ActionCardData } from "@/lib/extract-actions";
@@ -126,6 +126,7 @@ export const AiActionCard: React.FC<AiActionCardProps> = ({ action: initialActio
   const addGrowthMeasurement = useBabyStore((s) => s.addGrowthMeasurement);
   const addMedicalReport = useBabyStore((s) => s.addMedicalReport);
   const addFoodLogRecord = useBabyStore((s) => s.addFoodLogRecord);
+  const baby = useBabyStore((s) => s.baby);
 
   const [cardData, setCardData] = useState<any>(() => {
     const d = { ...(initialAction.data || {}) };
@@ -148,30 +149,40 @@ export const AiActionCard: React.FC<AiActionCardProps> = ({ action: initialActio
         showToast("化验单已成功存入宝宝健康档案 ✨");
       } else if (initialAction.type === "feeding") {
         const timestamp = cardData.timestamp
-          ? (cardData.timestamp.includes("T") ? cardData.timestamp : localTimeToUtcIso(cardData.timestamp))
-          : new Date().toISOString();
+          ? (cardData.timestamp.includes("T") ? cardData.timestamp : localTimeToUtcIso(cardData.timestamp, cardData.date))
+          : (cardData.date ? localTimeToUtcIso("12:00", cardData.date) : new Date().toISOString());
         await addFeedingRecord({
           ...cardData,
           timestamp,
         });
         showToast("喂养记录已存入 ✨");
       } else if (initialAction.type === "sleep") {
-        const startTime = cardData.startTime?.includes("T")
-          ? cardData.startTime
-          : localTimeToUtcIso(cardData.startTime || "12:00");
-        const endTime = cardData.endTime?.includes("T")
-          ? cardData.endTime
-          : localTimeToUtcIso(cardData.endTime || "13:30");
+        const baseDate = cardData.date || getLocalDateStr();
+        const startRaw = cardData.startTime || "12:00";
+        const endRaw = cardData.endTime || "13:30";
+
+        const startIso = startRaw.includes("T")
+          ? startRaw
+          : localTimeToUtcIso(startRaw, baseDate);
+
+        let endIso = endRaw.includes("T") ? endRaw : "";
+        if (!endIso) {
+          // If endTime <= startTime (e.g., overnight sleep 21:30 to 06:30), add 1 day to end date
+          const isCrossMidnight = !startRaw.includes("T") && !endRaw.includes("T") && endRaw <= startRaw;
+          const endDate = isCrossMidnight ? addDays(baseDate, 1) : baseDate;
+          endIso = localTimeToUtcIso(endRaw, endDate);
+        }
+
         await addSleepRecord({
           ...cardData,
-          startTime,
-          endTime,
+          startTime: startIso,
+          endTime: endIso,
         });
         showToast("睡眠记录已存入 ✨");
       } else if (initialAction.type === "diaper") {
         const timestamp = cardData.timestamp
-          ? (cardData.timestamp.includes("T") ? cardData.timestamp : localTimeToUtcIso(cardData.timestamp))
-          : new Date().toISOString();
+          ? (cardData.timestamp.includes("T") ? cardData.timestamp : localTimeToUtcIso(cardData.timestamp, cardData.date))
+          : (cardData.date ? localTimeToUtcIso("12:00", cardData.date) : new Date().toISOString());
         await addDiaperRecord({
           ...cardData,
           timestamp,
@@ -197,6 +208,7 @@ export const AiActionCard: React.FC<AiActionCardProps> = ({ action: initialActio
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
+            babyId: baby?.id,
             date: cardData.date || getLocalDateStr(),
             name: cardData.name || "辅食食谱",
             ingredients: Array.isArray(cardData.ingredients) ? cardData.ingredients : [],
@@ -212,6 +224,8 @@ export const AiActionCard: React.FC<AiActionCardProps> = ({ action: initialActio
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
+            babyId: baby?.id,
+            vaccineId: cardData.vaccineId,
             name: cardData.name,
             dose: cardData.dose || "第1剂",
             completedDate: cardData.completedDate || getLocalDateStr(),

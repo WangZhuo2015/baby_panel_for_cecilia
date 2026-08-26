@@ -1,13 +1,16 @@
 import assert from "node:assert/strict";
+import test from "node:test";
 import {
   isValidDateStr,
   addDays,
   addMonths,
   diffCalendarDays,
   getWeekdayStr,
+  formatIsoToLocalTime,
+  localTimeToUtcIso,
 } from "./date";
 
-function runDateTests() {
+test("Date arithmetic and month-end handling", () => {
   console.log("=== Testing isValidDateStr ===");
   assert.equal(isValidDateStr("2026-02-01"), true);
   assert.equal(isValidDateStr("2026-02-29"), false); // 2026 is not a leap year
@@ -60,7 +63,9 @@ function runDateTests() {
   assert.equal(getWeekdayStr("2026-08-26"), "周三");
   assert.equal(getWeekdayStr("2026-10-01"), "周四");
 
-  console.log("🎉 ALL DATE & VACCINE SCHEDULE ARITHMETIC UNIT TESTS PASSED!");
-}
+  const utcIso = localTimeToUtcIso("08:00", "2026-08-26");
+  assert.equal(utcIso, "2026-08-26T00:00:00.000Z");
+  assert.equal(formatIsoToLocalTime("2026-08-25T16:00:00.000Z"), "00:00");
 
-runDateTests();
+  console.log("🎉 ALL DATE & VACCINE SCHEDULE ARITHMETIC UNIT TESTS PASSED!");
+});

@@ -7,20 +7,19 @@ import { SegmentControl } from "@/components/ui/SegmentControl";
 import { QuickAiButton } from "@/components/ui/QuickAiButton";
 import { useBabyStore } from "@/stores/useBabyStore";
 import { calculateAge } from "@/lib/age";
-import { getLocalDateStr, addDays } from "@/lib/date";
+import { getLocalDateStr, addDays, getWeekdayStr } from "@/lib/date";
 import { Baby, Plus, Utensils, AlertCircle, Trash2, Heart, Smile, Meh, Frown, RefreshCw } from "lucide-react";
 import type { FoodLogRecord } from "@/types";
 
 function generateWeeklyDates() {
-  const weekdays = ["日", "一", "二", "三", "四", "五", "六"];
   const todayStr = getLocalDateStr();
   return Array.from({ length: 7 }, (_, i) => {
     const dateStr = addDays(todayStr, i - 3);
-    const d = new Date(`${dateStr}T00:00:00+08:00`);
+    const weekday = getWeekdayStr(dateStr).replace(/^周/, "");
     return {
       date: dateStr,
       day: Number(dateStr.slice(8, 10)),
-      weekday: weekdays[d.getDay()],
+      weekday,
       isToday: dateStr === todayStr,
     };
   });
@@ -166,11 +165,11 @@ export default function FoodPage() {
                 type="button"
                 onClick={() => setSelectedDate(dateItem.date)}
                 className={`flex-shrink-0 flex flex-col items-center justify-center w-14 h-18 rounded-2xl transition-all btn-press ${
-                  dateItem.isToday
-                    ? "bg-primary text-white shadow-button"
-                    : isSelected
-                    ? "bg-primary-light text-primary"
-                    : "bg-card text-text-secondary"
+                  isSelected
+                    ? "bg-primary text-white shadow-button ring-2 ring-primary/30 font-bold"
+                    : dateItem.isToday
+                    ? "bg-primary-light text-primary border border-primary/40 font-semibold"
+                    : "bg-card text-text-secondary hover:bg-card/80"
                 }`}
               >
                 <span className="text-xs font-medium mb-1">周{dateItem.weekday}</span>

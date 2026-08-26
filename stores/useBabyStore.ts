@@ -207,6 +207,14 @@ function dedup(key: string, fn: () => Promise<void>): Promise<void> {
   return p;
 }
 
+function toQuery(params: Record<string, string | undefined>): string {
+  const sp = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined && v !== "") sp.set(k, v);
+  }
+  const str = sp.toString();
+  return str ? `?${str}` : "";
+}
 
 export const useBabyStore = create<BabyStore>((set, get) => ({
   // Initial state
@@ -338,6 +346,9 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
         aiError: null,
         authLoading: false,
       });
+      try {
+        localStorage.removeItem(SNAPSHOT_KEY);
+      } catch {}
     }
   },
 
@@ -402,13 +413,14 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
 
   fetchFeedingRecords: async (date?: string, force?: boolean) => {
     if (!get().user && !get().authLoading) return;
-    const key = `feedingRecords:${date || ''}`;
+    const babyId = get().baby?.id;
+    const key = `feedingRecords:${babyId || ''}:${date || ''}`;
     if (!force && get().feedingRecords.length > 0 && isFresh(key)) return;
     if (force) invalidateCache(key);
     return dedup(key, async () => {
       try {
-        const params = date ? `?date=${date}` : "";
-        const data = await request<FeedingRecord[]>(`/api/records/feeding${params}`);
+        const query = toQuery({ date, babyId });
+        const data = await request<FeedingRecord[]>(`/api/records/feeding${query}`);
         set({ feedingRecords: data || [] });
         markFetched(key);
       } catch (e) {
@@ -419,13 +431,16 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
 
   fetchSleepRecords: async (force?: boolean) => {
     if (!get().user && !get().authLoading) return;
-    if (!force && get().sleepRecords.length > 0 && isFresh('sleepRecords')) return;
-    if (force) invalidateCache('sleepRecords');
-    return dedup('sleepRecords', async () => {
+    const babyId = get().baby?.id;
+    const key = `sleepRecords:${babyId || ''}`;
+    if (!force && get().sleepRecords.length > 0 && isFresh(key)) return;
+    if (force) invalidateCache(key);
+    return dedup(key, async () => {
       try {
-        const data = await request<SleepRecord[]>("/api/records/sleep");
+        const query = toQuery({ babyId });
+        const data = await request<SleepRecord[]>(`/api/records/sleep${query}`);
         set({ sleepRecords: data || [] });
-        markFetched('sleepRecords');
+        markFetched(key);
       } catch (e) {
         if (!isAuthError(e)) console.error("Failed to fetch sleep records:", e);
       }
@@ -434,13 +449,16 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
 
   fetchDiaperRecords: async (force?: boolean) => {
     if (!get().user && !get().authLoading) return;
-    if (!force && get().diaperRecords.length > 0 && isFresh('diaperRecords')) return;
-    if (force) invalidateCache('diaperRecords');
-    return dedup('diaperRecords', async () => {
+    const babyId = get().baby?.id;
+    const key = `diaperRecords:${babyId || ''}`;
+    if (!force && get().diaperRecords.length > 0 && isFresh(key)) return;
+    if (force) invalidateCache(key);
+    return dedup(key, async () => {
       try {
-        const data = await request<DiaperRecord[]>("/api/records/diaper");
+        const query = toQuery({ babyId });
+        const data = await request<DiaperRecord[]>(`/api/records/diaper${query}`);
         set({ diaperRecords: data || [] });
-        markFetched('diaperRecords');
+        markFetched(key);
       } catch (e) {
         if (!isAuthError(e)) console.error("Failed to fetch diaper records:", e);
       }
@@ -449,13 +467,14 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
 
   fetchFoodLogRecords: async (date?: string, force?: boolean) => {
     if (!get().user && !get().authLoading) return;
-    const key = `foodLogRecords:${date || ''}`;
+    const babyId = get().baby?.id;
+    const key = `foodLogRecords:${babyId || ''}:${date || ''}`;
     if (!force && get().foodLogRecords.length > 0 && isFresh(key)) return;
     if (force) invalidateCache(key);
     return dedup(key, async () => {
       try {
-        const params = date ? `?date=${date}` : "";
-        const data = await request<FoodLogRecord[]>(`/api/food/logs${params}`);
+        const query = toQuery({ date, babyId });
+        const data = await request<FoodLogRecord[]>(`/api/food/logs${query}`);
         set({ foodLogRecords: data || [] });
         markFetched(key);
       } catch (e) {
@@ -466,13 +485,16 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
 
   fetchGrowthMeasurements: async (force?: boolean) => {
     if (!get().user && !get().authLoading) return;
-    if (!force && get().growthMeasurements.length > 0 && isFresh('growthMeasurements')) return;
-    if (force) invalidateCache('growthMeasurements');
-    return dedup('growthMeasurements', async () => {
+    const babyId = get().baby?.id;
+    const key = `growthMeasurements:${babyId || ''}`;
+    if (!force && get().growthMeasurements.length > 0 && isFresh(key)) return;
+    if (force) invalidateCache(key);
+    return dedup(key, async () => {
       try {
-        const data = await request<GrowthMeasurement[]>("/api/growth");
+        const query = toQuery({ babyId });
+        const data = await request<GrowthMeasurement[]>(`/api/growth${query}`);
         set({ growthMeasurements: data || [] });
-        markFetched('growthMeasurements');
+        markFetched(key);
       } catch (e) {
         if (!isAuthError(e)) console.error("Failed to fetch growth measurements:", e);
       }
@@ -481,13 +503,14 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
 
   fetchDailySummary: async (date?: string, force?: boolean) => {
     if (!get().user && !get().authLoading) return;
-    const key = `dailySummary:${date || ''}`;
+    const babyId = get().baby?.id;
+    const key = `dailySummary:${babyId || ''}:${date || ''}`;
     if (!force && get().dailySummary && isFresh(key)) return;
     if (force) invalidateCache(key);
     return dedup(key, async () => {
       try {
-        const params = date ? `?date=${date}` : "";
-        const data = await request<DailySummary>(`/api/records/daily-summary${params}`);
+        const query = toQuery({ date, babyId });
+        const data = await request<DailySummary>(`/api/records/daily-summary${query}`);
         set({ dailySummary: data });
         markFetched(key);
       } catch (e) {
@@ -498,14 +521,14 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
 
   fetchTimeline: async (date?: string, force?: boolean) => {
     if (!get().user && !get().authLoading) return;
-
-    const key = `timeline:${date || ''}`;
+    const babyId = get().baby?.id;
+    const key = `timeline:${babyId || ''}:${date || ''}`;
     if (!force && get().timeline.length > 0 && isFresh(key)) return;
     if (force) invalidateCache(key);
     return dedup(key, async () => {
       try {
-        const params = date ? `?date=${date}` : "";
-        const data = await request<TimelineEntry[]>(`/api/records/timeline${params}`);
+        const query = toQuery({ date, babyId });
+        const data = await request<TimelineEntry[]>(`/api/records/timeline${query}`);
         set({ timeline: data || [] });
         markFetched(key);
       } catch (e) {
@@ -706,13 +729,17 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
 
   fetchMedicalReports: async (category?: string, force?: boolean) => {
     if (!get().user && !get().authLoading) return;
-    const key = `medicalReports:${category || ''}`;
+    const babyId = get().baby?.id;
+    const key = `medicalReports:${babyId || ''}:${category || ''}`;
     if (!force && get().medicalReports.length > 0 && isFresh(key)) return;
     if (force) invalidateCache(key);
     return dedup(key, async () => {
       try {
-        const params = category && category !== "all" ? `?category=${category}` : "";
-        const data = await request<MedicalReport[]>(`/api/medical/reports${params}`);
+        const query = toQuery({
+          category: category && category !== "all" ? category : undefined,
+          babyId,
+        });
+        const data = await request<MedicalReport[]>(`/api/medical/reports${query}`);
         set({ medicalReports: data || [] });
         markFetched(key);
       } catch (e) {
@@ -726,7 +753,14 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
   },
 
   refreshAll: async (date?: string) => {
-    invalidateCache();
+    invalidateCache("dailySummary");
+    invalidateCache("timeline");
+    invalidateCache("feedingRecords");
+    invalidateCache("sleepRecords");
+    invalidateCache("diaperRecords");
+    invalidateCache("foodLogRecords");
+    invalidateCache("growthMeasurements");
+    invalidateCache("medicalReports");
     await Promise.allSettled([
       get().fetchBaby(true),
       get().fetchDailySummary(date, true),
@@ -737,13 +771,6 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
       get().fetchFoodLogRecords(date, true),
       get().fetchGrowthMeasurements(true),
       get().fetchMedicalReports(undefined, true),
-      get().fetchVaccines(undefined, true),
-      get().fetchMilestones(undefined, undefined, true),
-      get().fetchWarningSigns(true),
-      get().fetchActivities(true),
-      get().fetchBooks(undefined, true),
-      get().fetchFoodPlans(date, true),
-      get().fetchFoodItems(undefined, true),
     ]);
   },
 

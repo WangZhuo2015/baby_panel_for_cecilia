@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth, requireBaby, getActiveBaby } from "@/lib/api-helpers";
 import { estimatePercentile } from "@/lib/who-growth-standards";
-import { calculateAgeDetail } from "@/lib/age";
+import { calculateCorrectedAge } from "@/lib/age";
 import { isValidDateStr, getLocalDateStr, addDays } from "@/lib/date";
 
 export async function GET(request: Request) {
@@ -110,21 +110,20 @@ export async function POST(request: Request) {
       );
     }
 
-    const ageDetail = calculateAgeDetail(baby.birthDate, date.trim());
-    const computedAgeMonths = ageDetail.months;
-    const computedAgeLabel = `${ageDetail.months}月${ageDetail.days}天`;
-
-
+    const ageSummary = calculateCorrectedAge(baby.birthDate, baby.gestationalAge, date.trim());
+    const computedAgeMonths = ageSummary.correctedMonths;
+    const computedAgeLabel = ageSummary.label;
+    const evaluationAgeMonths = ageSummary.correctedDecimalMonths;
 
     // Calculate percentile (priority: weight -> height -> headCircumference)
     let calculatedPercentile: number | null = null;
     const gender = baby.gender || "female";
-    if (parsedWeight !== null && computedAgeMonths !== null) {
-      calculatedPercentile = estimatePercentile(gender, "weight", computedAgeMonths, parsedWeight);
-    } else if (parsedHeight !== null && computedAgeMonths !== null) {
-      calculatedPercentile = estimatePercentile(gender, "height", computedAgeMonths, parsedHeight);
-    } else if (parsedHeadCirc !== null && computedAgeMonths !== null) {
-      calculatedPercentile = estimatePercentile(gender, "headCircumference", computedAgeMonths, parsedHeadCirc);
+    if (parsedWeight !== null) {
+      calculatedPercentile = estimatePercentile(gender, "weight", evaluationAgeMonths, parsedWeight);
+    } else if (parsedHeight !== null) {
+      calculatedPercentile = estimatePercentile(gender, "height", evaluationAgeMonths, parsedHeight);
+    } else if (parsedHeadCirc !== null) {
+      calculatedPercentile = estimatePercentile(gender, "headCircumference", evaluationAgeMonths, parsedHeadCirc);
     }
 
     const measurement = await prisma.growthMeasurement.create({

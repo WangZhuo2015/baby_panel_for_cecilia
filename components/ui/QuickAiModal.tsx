@@ -116,10 +116,13 @@ function WebSearchCitationCard({ results }: { results: SearchEvidenceItem[] }) {
             domain = new URL(r.url).hostname.replace(/^www\./, "");
           } catch {}
 
+          const rawUrl = r.url || "";
+          const safeUrl = /^https?:\/\//i.test(rawUrl) ? rawUrl : `https://${rawUrl}`;
+
           return (
             <a
               key={i}
-              href={r.url}
+              href={safeUrl}
               target="_blank"
               rel="noopener noreferrer"
               className="block p-2 rounded-xl bg-white/90 hover:bg-white border border-blue-100/80 shadow-2xs transition-all hover:border-blue-300 hover:shadow-xs group"
@@ -345,14 +348,16 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
   sessionIdRef.current = sessionId;
 
   const [showHistory, setShowHistory] = useState(false);
-  const [historyFilter, setHistoryFilter] = useState<"all" | "current">("all");
+  const [historyFilter, setHistoryFilter] = useState<"all" | "current">("current");
   const [sessionList, setSessionList] = useState<SessionSummary[]>([]);
   const [loadingSessions, setLoadingSessions] = useState(false);
 
   const fetchSessions = useCallback(async () => {
     setLoadingSessions(true);
     try {
-      const res = await fetch("/api/ai/sessions?limit=50");
+      const query = new URLSearchParams({ limit: "50" });
+      if (baby?.id) query.set("babyId", baby.id);
+      const res = await fetch(`/api/ai/sessions?${query.toString()}`);
       if (res.ok) {
         const data = await res.json();
         setSessionList(data.sessions || []);
@@ -362,11 +367,22 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
     } finally {
       setLoadingSessions(false);
     }
-  }, []);
+  }, [baby?.id]);
 
   const loadSessionDetail = async (targetId: string) => {
+    const summary = sessionList.find((session) => session.id === targetId);
+    if (
+      summary &&
+      (summary.babyId !== (baby?.id ?? null) || summary.contextType !== contextType)
+    ) {
+      showToast("请切换到该宝宝和对应领域后再打开这条历史对话");
+      return;
+    }
     try {
-      const res = await fetch(`/api/ai/sessions/${targetId}`);
+      const query = new URLSearchParams();
+      if (baby?.id) query.set("babyId", baby.id);
+      query.set("contextType", contextType);
+      const res = await fetch(`/api/ai/sessions/${targetId}?${query.toString()}`);
       if (!res.ok) throw new Error("加载历史对话失败");
       const data = await res.json();
       const s = data.session;
@@ -589,6 +605,7 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
                 const data = JSON.parse(trimmed.slice(6));
                 if (data.session && typeof data.session.id === "string") {
                   setSessionId(data.session.id);
+                  sessionIdRef.current = data.session.id;
                   setSessionTitle(data.session.title);
                 }
                 if (data.text) {
@@ -679,9 +696,30 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isOpen, onClose]);
 
+  const prevScopeRef = useRef<{ contextType: string; babyId: string | null }>({
+    contextType,
+    babyId: baby?.id ?? null,
+  });
+
   useEffect(() => {
     if (isOpen) {
-      if (messages.length === 0) {
+      const previousScope = prevScopeRef.current;
+      const isScopeChanged =
+        previousScope.contextType !== contextType ||
+        previousScope.babyId !== (baby?.id ?? null);
+      prevScopeRef.current = {
+        contextType,
+        babyId: baby?.id ?? null,
+      };
+
+      if (isScopeChanged) {
+        setSessionId(null);
+        sessionIdRef.current = null;
+        setSessionTitle(null);
+        setSelectedImage(null);
+      }
+
+      if (messages.length === 0 || isScopeChanged) {
         // Welcome message
         const welcome: Message = {
           id: "welcome",
@@ -700,7 +738,7 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
       // Trigger store refresh when closed
       useBabyStore.getState().refreshAll().catch(() => {});
     }
-  }, [isOpen, initialPrompt, displayTitle, baby?.nickname, age.label, messages.length, handleSend]);
+  }, [isOpen, contextType, initialPrompt, displayTitle, baby?.id, baby?.nickname, age.label, messages.length, handleSend]);
 
   useEffect(() => {
     if (!isOpen && abortControllerRef.current) {

@@ -72,7 +72,11 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json().catch(() => ({}));
-    const { messages, contextType = "general", contextDetail, babyId, image, sessionId } = body;
+    const { messages, contextDetail, babyId, image, sessionId } = body;
+    const contextType =
+      typeof body.contextType === "string" && body.contextType.trim()
+        ? body.contextType.trim()
+        : "general";
 
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
       return NextResponse.json({ error: "消息内容不能为空" }, { status: 400 });
@@ -116,7 +120,16 @@ export async function POST(request: Request) {
       const existing = await prisma.aiChatSession.findFirst({
         where: { id: sessionId, userId: user.id },
       });
-      if (existing) activeSession = existing;
+      if (!existing) {
+        return NextResponse.json({ error: "对话会话不存在或已删除" }, { status: 404 });
+      }
+      if (existing.babyId !== targetBaby.id || existing.contextType !== contextType) {
+        return NextResponse.json(
+          { error: "会话所属宝宝或领域与当前请求不匹配，请切换会话后重试" },
+          { status: 409 },
+        );
+      }
+      activeSession = existing;
     }
     if (!activeSession) {
       const generatedTitle = promptText.replace(/[\r\n\t]+/g, " ").trim().slice(0, 24) || "新对话";
@@ -208,16 +221,40 @@ export async function POST(request: Request) {
           }
 
           controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-        } catch (err) {
-          console.error("AI chat run error:", err);
-          const fallback =
-            assistantFull ||
-            "网络连接暂时超时，请稍后重新提问。若宝宝身体有明显不适，请以专业医生诊断为准。";
-          if (!assistantFull) send({ text: fallback });
+        } catch (err: any) {
+          const isAborted = request.signal.aborted || err?.name === "AbortError";
+          if (!isAborted) {
+            console.error("AI chat run error:", err);
+            const fallback =
+              assistantFull ||
+              "网络连接暂时超时，请稍后重新提问。若宝宝身体有明显不适，请以专业医生诊断为准。";
+            if (!assistantFull) send({ text: fallback });
 
-          // Persist on error as well
-          try {
-            if (activeSession) {
+            // Persist on error as well
+            try {
+              if (activeSession) {
+                const sid = activeSession.id;
+                await prisma.aiChatMessage.create({
+                  data: {
+                    sessionId: sid,
+                    role: "user",
+                    content: promptText,
+                    image: typeof image === "string" ? image : null,
+                  },
+                });
+                await prisma.aiChatMessage.create({
+                  data: {
+                    sessionId: sid,
+                    role: "assistant",
+                    content: fallback,
+                    toolsJson: toolTraces.length > 0 ? JSON.stringify(toolTraces) : null,
+                  },
+                });
+              }
+            } catch {}
+          } else if (assistantFull && activeSession) {
+            // Save whatever partial assistant message was generated before user cancelled
+            try {
               const sid = activeSession.id;
               await prisma.aiChatMessage.create({
                 data: {
@@ -231,16 +268,20 @@ export async function POST(request: Request) {
                 data: {
                   sessionId: sid,
                   role: "assistant",
-                  content: fallback,
+                  content: assistantFull,
                   toolsJson: toolTraces.length > 0 ? JSON.stringify(toolTraces) : null,
                 },
               });
-            }
-          } catch {}
+            } catch {}
+          }
 
-          controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+          try {
+            controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+          } catch {}
         } finally {
-          controller.close();
+          try {
+            controller.close();
+          } catch {}
         }
       },
     });

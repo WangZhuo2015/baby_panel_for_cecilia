@@ -15,6 +15,9 @@ export async function GET(
   const { user } = auth;
 
   const { id } = await params;
+  const url = new URL(request.url);
+  const requestedBabyId = url.searchParams.get("babyId");
+  const requestedContextType = url.searchParams.get("contextType")?.trim() || null;
   const session = await prisma.aiChatSession.findFirst({
     where: { id, userId: user.id },
     include: {
@@ -26,6 +29,15 @@ export async function GET(
 
   if (!session) {
     return NextResponse.json({ error: "对话会话不存在或已删除" }, { status: 404 });
+  }
+  if (
+    (requestedBabyId && session.babyId !== requestedBabyId) ||
+    (requestedContextType && session.contextType !== requestedContextType)
+  ) {
+    return NextResponse.json(
+      { error: "会话所属宝宝或领域与当前请求不匹配" },
+      { status: 409 },
+    );
   }
 
   const formatted = {

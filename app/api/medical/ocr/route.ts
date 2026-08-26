@@ -221,6 +221,29 @@ function unwrapOcrPayload(parsed: any): any {
   return parsed;
 }
 
+function normalizeMedicalItemStatus(rawStatus: unknown): string {
+  const str = String(rawStatus || "").trim().toLowerCase();
+  if (["high", "↑", "▲", "偏高", "升高", "增高"].includes(str) || str.includes("偏高") || str.includes("升高") || str.includes("↑")) {
+    return "high";
+  }
+  if (["low", "↓", "▼", "偏低", "降低", "减少"].includes(str) || str.includes("偏低") || str.includes("降低") || str.includes("↓")) {
+    return "low";
+  }
+  if (["positive", "阳性", "+", "++", "+++"].includes(str) || str === "+") {
+    return "positive";
+  }
+  if (["negative", "阴性"].includes(str)) {
+    return "negative";
+  }
+  if (["abnormal", "异常", "+-", "弱阳性"].includes(str)) {
+    return "abnormal";
+  }
+  if (["normal", "正常", "未见异常", "—", "-"].includes(str)) {
+    return "normal";
+  }
+  return ["normal", "high", "low", "abnormal", "positive", "negative"].includes(str) ? str : "normal";
+}
+
 function parseOcrSuccess(data: any, savedImageUrl: string | null) {
   const content = data.choices?.[0]?.message?.content ?? "";
   const jsonMatch = content.match(/\{[\s\S]*\}/);
@@ -235,9 +258,7 @@ function parseOcrSuccess(data: any, savedImageUrl: string | null) {
         value: item.value ?? "",
         unit: item.unit || "",
         referenceRange: item.referenceRange || "",
-        status: ["normal", "high", "low", "abnormal", "positive", "negative"].includes(item.status)
-          ? item.status
-          : "normal",
+        status: normalizeMedicalItemStatus(item.status),
         interpretation: item.interpretation || "",
       }))
     : [];

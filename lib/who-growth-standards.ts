@@ -74,26 +74,52 @@ export function getWhoStandard(gender: string = "female"): GrowthStandardSet {
   return gender === "male" ? WHO_STANDARDS_BOYS : WHO_STANDARDS_GIRLS;
 }
 
+/**
+ * Estimates the growth percentile (1–99) for a given gender, metric, age in months (can be fractional), and measurement value.
+ * Uses linear interpolation across month milestones to ensure smooth percentile transitions without discrete jumps.
+ */
 export function estimatePercentile(
   gender: string,
   metric: "weight" | "height" | "headCircumference",
   ageMonths: number,
   value: number
 ): number {
+  if (value == null || Number.isNaN(value) || value <= 0) return 50;
+
   const std = getWhoStandard(gender);
   const data = std[metric];
-  const idx = Math.min(Math.max(0, Math.round(ageMonths)), 36);
+  const clampedAge = Math.min(Math.max(0, ageMonths), 36);
 
-  const p3 = data.P3[idx];
-  const p15 = data.P15[idx];
-  const p50 = data.P50[idx];
-  const p85 = data.P85[idx];
-  const p97 = data.P97[idx];
+  const lowIdx = Math.floor(clampedAge);
+  const highIdx = Math.min(36, Math.ceil(clampedAge));
+  const fraction = clampedAge - lowIdx;
+
+  const lerp = (arr: number[]) => {
+    const vLow = arr[lowIdx] ?? arr[0];
+    const vHigh = arr[highIdx] ?? vLow;
+    return vLow + (vHigh - vLow) * fraction;
+  };
+
+  const p3 = lerp(data.P3);
+  const p15 = lerp(data.P15);
+  const p50 = lerp(data.P50);
+  const p85 = lerp(data.P85);
+  const p97 = lerp(data.P97);
 
   if (value >= p97) return 97;
   if (value <= p3) return 3;
-  if (value >= p85) return Math.round(85 + ((value - p85) / (p97 - p85)) * 12);
-  if (value >= p50) return Math.round(50 + ((value - p50) / (p85 - p50)) * 35);
-  if (value >= p15) return Math.round(15 + ((value - p15) / (p50 - p15)) * 35);
-  return Math.round(3 + ((value - p3) / (p15 - p3)) * 12);
+  if (value >= p85) {
+    const span = p97 - p85;
+    return span > 0 ? Math.min(97, Math.round(85 + ((value - p85) / span) * 12)) : 85;
+  }
+  if (value >= p50) {
+    const span = p85 - p50;
+    return span > 0 ? Math.min(85, Math.round(50 + ((value - p50) / span) * 35)) : 50;
+  }
+  if (value >= p15) {
+    const span = p50 - p15;
+    return span > 0 ? Math.min(50, Math.round(15 + ((value - p15) / span) * 35)) : 15;
+  }
+  const span = p15 - p3;
+  return span > 0 ? Math.min(15, Math.round(3 + ((value - p3) / span) * 12)) : 3;
 }

@@ -16,9 +16,16 @@ export async function GET(request: Request) {
   const limit = Math.min(50, Math.max(1, parseInt(url.searchParams.get("limit") || "30", 10)));
   const offset = Math.max(0, parseInt(url.searchParams.get("offset") || "0", 10));
 
+  if (babyId) {
+    const babyResult = await requireBaby(user.id, babyId);
+    if (babyResult.errorResponse) return babyResult.errorResponse;
+  }
+
+  const normalizedContextType =
+    typeof contextType === "string" && contextType.trim() ? contextType.trim() : null;
   const where: any = { userId: user.id };
   if (babyId) where.babyId = babyId;
-  if (contextType) where.contextType = contextType;
+  if (normalizedContextType) where.contextType = normalizedContextType;
 
   const [total, sessions] = await Promise.all([
     prisma.aiChatSession.count({ where }),
@@ -72,7 +79,11 @@ export async function POST(request: Request) {
   const { user } = auth;
 
   const body = await request.json().catch(() => ({}));
-  const { babyId, title, contextType = "general" } = body;
+  const { babyId, title } = body;
+  const contextType =
+    typeof body.contextType === "string" && body.contextType.trim()
+      ? body.contextType.trim()
+      : "general";
 
   let targetBabyId: string | null = null;
   if (babyId) {
@@ -91,7 +102,7 @@ export async function POST(request: Request) {
       userId: user.id,
       babyId: targetBabyId,
       title: typeof title === "string" && title.trim() ? title.trim().slice(0, 50) : "新对话",
-      contextType: typeof contextType === "string" ? contextType : "general",
+      contextType,
     },
   });
 

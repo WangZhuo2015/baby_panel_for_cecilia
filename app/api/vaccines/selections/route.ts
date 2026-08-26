@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth, requireBaby } from "@/lib/api-helpers";
+import { getLocalDateStr } from "@/lib/date";
 
 export async function GET(request: Request) {
   try {
@@ -65,25 +66,73 @@ export async function PUT(request: Request) {
       );
     }
 
-    const result = await prisma.vaccineSelection.upsert({
-      where: {
-        babyId_vaccineId_doseNumber: {
+    const result = await prisma.$transaction(async (tx) => {
+      const selection = await tx.vaccineSelection.upsert({
+        where: {
+          babyId_vaccineId_doseNumber: {
+            babyId: baby.id,
+            vaccineId: vaccineId.trim(),
+            doseNumber: dose,
+          },
+        },
+        update: {
+          selected: selected !== undefined ? selected : undefined,
+          completed: completed !== undefined ? completed : undefined,
+        },
+        create: {
           babyId: baby.id,
           vaccineId: vaccineId.trim(),
           doseNumber: dose,
+          selected: selected ?? true,
+          completed: completed ?? false,
         },
-      },
-      update: {
-        selected: selected !== undefined ? selected : undefined,
-        completed: completed !== undefined ? completed : undefined,
-      },
-      create: {
-        babyId: baby.id,
-        vaccineId: vaccineId.trim(),
-        doseNumber: dose,
-        selected: selected ?? true,
-        completed: completed ?? false,
-      },
+      });
+
+      if (completed === true) {
+        const vaccine = await tx.vaccine.findUnique({ where: { vaccineId: vaccineId.trim() } });
+        const vName = vaccine?.name || vaccineId.trim();
+        const doseStr = `第${dose}剂`;
+        const todayStr = getLocalDateStr();
+
+        const existingRecord = await tx.vaccineRecord.findFirst({
+          where: {
+            babyId: baby.id,
+            name: vName,
+            dose: doseStr,
+          },
+        });
+
+        if (existingRecord) {
+          await tx.vaccineRecord.update({
+            where: { id: existingRecord.id },
+            data: { isCompleted: true, completedDate: existingRecord.completedDate || todayStr },
+          });
+        } else {
+          await tx.vaccineRecord.create({
+            data: {
+              babyId: baby.id,
+              name: vName,
+              dose: doseStr,
+              scheduledDate: todayStr,
+              completedDate: todayStr,
+              isCompleted: true,
+            },
+          });
+        }
+      } else if (completed === false) {
+        const vaccine = await tx.vaccine.findUnique({ where: { vaccineId: vaccineId.trim() } });
+        const vName = vaccine?.name || vaccineId.trim();
+        const doseStr = `第${dose}剂`;
+        await tx.vaccineRecord.deleteMany({
+          where: {
+            babyId: baby.id,
+            name: vName,
+            dose: doseStr,
+          },
+        });
+      }
+
+      return selection;
     });
 
     return NextResponse.json(result);

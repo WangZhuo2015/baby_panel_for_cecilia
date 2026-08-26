@@ -4,6 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { calculateAgeDetail } from "@/lib/age";
 import {
   getLocalDateStr,
+  getLocalTimeStr,
+  formatIsoToLocalTime,
   getLocalDayUtcRange,
   isValidDateStr,
   addDays,
@@ -219,13 +221,12 @@ export function createBabyPanelTools(ctx: BabyToolContext): AgentTool[] {
           : getLocalDateStr();
 
       if (!TIME_RE.test(start) || !TIME_RE.test(end)) {
-        // Fallback for relative or duration-based sleep
+        // Fallback for relative or duration-based sleep (Shanghai TZ aware)
         const duration = Number(params.durationMinutes ?? params.duration_minutes ?? params.duration ?? 60);
         const now = new Date();
-        const endD = new Date(now);
         const startD = new Date(now.getTime() - duration * 60 * 1000);
-        start = `${String(startD.getHours()).padStart(2, "0")}:${String(startD.getMinutes()).padStart(2, "0")}`;
-        end = `${String(endD.getHours()).padStart(2, "0")}:${String(endD.getMinutes()).padStart(2, "0")}`;
+        start = getLocalTimeStr(startD);
+        end = getLocalTimeStr(now);
       }
 
       const startIso = hhmmToIso(start, date);
@@ -486,7 +487,7 @@ export function createBabyPanelTools(ctx: BabyToolContext): AgentTool[] {
       let time =
         typeof params.time === "string" && TIME_RE.test(params.time.trim())
           ? params.time.trim()
-          : new Date().toTimeString().slice(0, 5);
+          : getLocalTimeStr();
 
       let rawFoods = params.foods ?? params.food ?? params.foodName ?? params.food_name ?? params.name;
       let foods: string[] = [];
@@ -591,10 +592,18 @@ export function createBabyPanelTools(ctx: BabyToolContext): AgentTool[] {
           : [],
       ]);
 
-      const items: Array<{ type: string; time: string; summary: string; detail: unknown }> = [];
+      const items: Array<{ type: string; time: string; summary: string; detail: unknown; sortAt: number }> = [];
+      const timestampMs = (value: string): number => {
+        const ms = new Date(value).getTime();
+        return Number.isNaN(ms) ? 0 : ms;
+      };
+      const foodTimeMs = (value: string): number => {
+        const ms = new Date(`${date}T${value}:00+08:00`).getTime();
+        return Number.isNaN(ms) ? 0 : ms;
+      };
 
       for (const f of feedings) {
-        const time = new Date(f.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+        const time = formatIsoToLocalTime(f.timestamp);
         const typeLabel = f.type === "breast" ? "母乳亲喂" : f.type === "formula" ? "配方奶" : "母乳瓶喂";
         const amountStr = f.amountMl ? `${f.amountMl}ml` : f.leftMinutes || f.rightMinutes ? `左${f.leftMinutes || 0}分/右${f.rightMinutes || 0}分` : "";
         items.push({
@@ -602,23 +611,25 @@ export function createBabyPanelTools(ctx: BabyToolContext): AgentTool[] {
           time,
           summary: `${typeLabel} ${amountStr}${f.spitUp ? " (有吐奶)" : ""}`,
           detail: f,
+          sortAt: timestampMs(f.timestamp),
         });
       }
 
       for (const s of sleeps) {
-        const startT = new Date(s.startTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-        const endT = new Date(s.endTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+        const startT = formatIsoToLocalTime(s.startTime);
+        const endT = formatIsoToLocalTime(s.endTime);
         const durationMin = Math.round((new Date(s.endTime).getTime() - new Date(s.startTime).getTime()) / 60000);
         items.push({
           type: "sleep",
           time: startT,
           summary: `${s.type === "night" ? "夜间睡眠" : "白天小睡"} ${startT} - ${endT} (共${durationMin}分钟)${s.nightWakingCount > 0 ? ` 夜醒${s.nightWakingCount}次` : ""}`,
           detail: s,
+          sortAt: timestampMs(s.startTime),
         });
       }
 
       for (const d of diapers) {
-        const time = new Date(d.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+        const time = formatIsoToLocalTime(d.timestamp);
         const typeLabel = d.type === "pee" ? "仅嘘嘘" : d.type === "poop" ? "大便" : "嘘嘘+大便";
         const poopStr = d.poopColor || d.poopConsistency ? ` (${[d.poopColor, d.poopConsistency].filter(Boolean).join("/")})` : "";
         items.push({
@@ -626,6 +637,7 @@ export function createBabyPanelTools(ctx: BabyToolContext): AgentTool[] {
           time,
           summary: `换尿布: ${typeLabel}${poopStr}`,
           detail: d,
+          sortAt: timestampMs(d.timestamp),
         });
       }
 
@@ -640,15 +652,19 @@ export function createBabyPanelTools(ctx: BabyToolContext): AgentTool[] {
           time: fd.time,
           summary: `辅食: ${foodNames} (食量:${fd.portion}, 喜欢度:${fd.acceptance}星)${fd.hasAbnormal ? " ⚠️有异常" : ""}`,
           detail: fd,
+          sortAt: foodTimeMs(fd.time),
         });
       }
 
-      items.sort((a, b) => b.time.localeCompare(a.time));
+      items.sort((a, b) => b.sortAt - a.sortAt);
 
+      const records = items
+        .slice(0, limit)
+        .map(({ sortAt: _sortAt, ...record }) => record);
       return ok(
-        items.length === 0
+        records.length === 0
           ? `${date} 暂无${type === "all" ? "" : type}相关记录。`
-          : JSON.stringify({ date, totalCount: items.length, records: items.slice(0, limit) }, null, 2)
+          : JSON.stringify({ date, totalCount: items.length, records }, null, 2)
       );
     },
   };
@@ -864,8 +880,39 @@ export function createBabyPanelTools(ctx: BabyToolContext): AgentTool[] {
         },
       });
 
+      // Sync VaccineSelection so UI checklist updates immediately
+      const doseMatch = dose.match(/\d+/);
+      const doseNum = doseMatch ? parseInt(doseMatch[0], 10) : 1;
+      const allVaccines = await prisma.vaccine.findMany();
+      const matched = allVaccines.find(
+        (v) => v.name.includes(name) || name.includes(v.name)
+      );
+      if (matched) {
+        await prisma.vaccineSelection.upsert({
+          where: {
+            babyId_vaccineId_doseNumber: {
+              babyId,
+              vaccineId: matched.vaccineId,
+              doseNumber: doseNum,
+            },
+          },
+          create: {
+            babyId,
+            vaccineId: matched.vaccineId,
+            doseNumber: doseNum,
+            selected: true,
+            completed: true,
+          },
+          update: {
+            selected: true,
+            completed: true,
+          },
+        }).catch(() => {});
+      }
+
       return ok(`已记录【${name} ${dose}】于 ${completedDate} 完成接种 💉✨`, {
         id: record.id,
+        recordId: record.id,
         name,
         dose,
         completedDate,
@@ -982,7 +1029,10 @@ export function createBabyPanelTools(ctx: BabyToolContext): AgentTool[] {
         if (results.length === 0) {
           return ok(`未检索到与「${trimmed}」直接相关的网页结果，请根据专业儿科知识为家长解答。`);
         }
-        return ok(JSON.stringify({ query: trimmed, totalResults: results.length, results }, null, 2));
+        return ok(
+          JSON.stringify({ query: trimmed, totalResults: results.length, results }, null, 2),
+          { query: trimmed, totalResults: results.length, results }
+        );
       } catch (err: any) {
         return ok(`联网搜索暂时不可用（${err?.message || "网络波动"}），请结合既有专业医学知识解答。`);
       }

@@ -15,6 +15,7 @@ import {
   getWeekdayStr,
 } from '@/lib/date'
 import { calculateAge } from '@/lib/age'
+import { activeVaccineIds, buildExclusiveVaccineGroups } from '@/lib/vaccine-schedule'
 
 interface Vaccine {
   id: string
@@ -27,6 +28,7 @@ interface Vaccine {
   strategy?: string | null
   strategyGroup?: string | null
   strategyOptions?: { name: string; description: string }[]
+  substitutionRules?: string[] | null
   routineHealthyChildOption?: boolean | null
   manualReviewRequired?: boolean | null
   regionalOverrides?: {
@@ -59,6 +61,17 @@ interface ScheduleEntry {
   ageLabel: string | null
   isOptional: boolean
   action: string | null
+  selectionGroup?: string | null
+}
+
+interface StrategyGroupPayload {
+  optionsJson?: unknown
+}
+
+interface EngineRulePayload {
+  type?: string | null
+  vaccineIdsJson?: unknown
+  vaccineIds?: unknown
 }
 
 interface ScheduleItem {
@@ -192,6 +205,8 @@ export default function VaccinesPage() {
   const fetchUser = useBabyStore((s) => s.fetchUser)
   const [vaccines, setVaccines] = useState<Vaccine[]>([])
   const [schedule, setSchedule] = useState<ScheduleEntry[]>([])
+  const [strategyGroups, setStrategyGroups] = useState<StrategyGroupPayload[]>([])
+  const [engineRules, setEngineRules] = useState<EngineRulePayload[]>([])
   const [dataRelease, setDataRelease] = useState<{ asOf?: string | null; sources?: { organization?: string }[] } | null>(null)
   const [selections, setSelections] = useState<Record<string, { selected: boolean; completed: boolean }>>({})
   const [range, setRange] = useState('pending')
@@ -228,6 +243,8 @@ export default function VaccinesPage() {
         }
         setVaccines(list);
         setSchedule(data.schedule || []);
+        setStrategyGroups(Array.isArray(data.strategyGroups) ? data.strategyGroups : []);
+        setEngineRules(Array.isArray(data.engineRules) ? data.engineRules : []);
         setDataRelease(data.dataRelease ?? null);
       }
       if (selRes.ok) {
@@ -269,6 +286,8 @@ export default function VaccinesPage() {
         }
         setVaccines(list)
         setSchedule(data.schedule || [])
+        setStrategyGroups(Array.isArray(data.strategyGroups) ? data.strategyGroups : [])
+        setEngineRules(Array.isArray(data.engineRules) ? data.engineRules : [])
         setDataRelease(data.dataRelease ?? null)
 
         if (selRes.ok) {
@@ -301,10 +320,33 @@ export default function VaccinesPage() {
 
   const scheduleItems = useMemo<ScheduleItem[]>(() => {
     if (!birthDate) return []
+
+    // 互斥组完全由排期、策略模板和规则数据推导；用户已选/已完成的产品优先，
+    // 没有选择时使用数据中的首个候选，避免把同一策略的多套程序同时列为待接种。
+    const exclusiveGroups = buildExclusiveVaccineGroups(
+      schedule,
+      strategyGroups,
+      engineRules,
+      vaccines.map((v) => ({
+        vaccineId: v.vaccineId,
+        name: v.name,
+        substitutionRules: v.substitutionRules,
+      })),
+    )
+    const activeVaccineInGroup = activeVaccineIds(exclusiveGroups, selections)
+
     const items: ScheduleItem[] = []
     for (const entry of schedule) {
       const vaccine = vaccineById.get(entry.vaccineId)
       if (!vaccine || vaccine.routineHealthyChildOption === false) continue
+
+      // 互斥检查：仅隐藏明确属于某个互斥组但不是当前活动候选的产品。
+      if (
+        exclusiveGroups.some((group) => group.includes(entry.vaccineId)) &&
+        !activeVaccineInGroup.has(entry.vaccineId)
+      ) {
+        continue
+      }
 
       let date: string
       let ageLabel = ''
@@ -335,12 +377,12 @@ export default function VaccinesPage() {
       })
     }
     items.sort((a, b) => {
-      const diff = a.date.localeCompare(b.date);
-      if (diff !== 0) return diff;
-      return a.doseNumber - b.doseNumber;
+      const diff = a.date.localeCompare(b.date)
+      if (diff !== 0) return diff
+      return a.doseNumber - b.doseNumber
     })
     return items
-  }, [schedule, vaccineById, birthDate])
+  }, [schedule, strategyGroups, engineRules, vaccines, vaccineById, birthDate, selections])
 
   const isCompleted = useCallback(
     (item: ScheduleItem) => Boolean(selections[item.key]?.completed),

@@ -13,6 +13,21 @@ export async function GET(request: Request) {
     take: 10,
   });
 
+  // 超时兜底更新
+  const now = Date.now();
+  for (const j of jobs) {
+    if (j.status === "processing" && now - new Date(j.createdAt).getTime() > 180_000) {
+      j.status = "failed";
+      j.errorMessage = "AI 识别任务响应超时，请重新拍摄更清晰的照片并上传";
+      prisma.aiJob
+        .update({
+          where: { id: j.id },
+          data: { status: "failed", errorMessage: j.errorMessage, finishedAt: new Date() },
+        })
+        .catch(() => {});
+    }
+  }
+
   // 待领取 = done && !claimed；processing 也返回供前端恢复轮询
   return NextResponse.json({
     pendingClaim: jobs.filter((j) => j.status === "done" && !j.claimed).length,
