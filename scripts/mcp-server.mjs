@@ -211,6 +211,52 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         },
       },
       {
+        name: "record_food",
+        description: "记录宝宝一次辅食餐点（米粉、菜泥、果泥、肉泥、手指食物等）。",
+        inputSchema: {
+          type: "object",
+          required: ["session", "foods"],
+          properties: {
+            ...SESSION_PROP,
+            foods: {
+              type: "array",
+              items: { type: "string" },
+              description: "辅食食材名称列表（如 [\"高铁米粉\", \"胡萝卜泥\"]）",
+            },
+            date: {
+              type: "string",
+              description: "日期 (格式: YYYY-MM-DD，默认今天)",
+            },
+            time: {
+              type: "string",
+              description: "时间 (格式: HH:mm，如 12:30，默认当前时间)",
+            },
+            portion: {
+              type: "string",
+              enum: ["little", "half", "most", "all"],
+              description: "进食量: little(少量), half(半碗), most(大部分), all(全部)",
+            },
+            acceptance: {
+              type: "number",
+              description: "宝宝喜欢程度 (1-5 星)",
+            },
+            babyState: {
+              type: "string",
+              enum: ["happy", "neutral", "rejected"],
+              description: "进食状态: happy(开心), neutral(一般), rejected(抗拒)",
+            },
+            hasAbnormal: {
+              type: "boolean",
+              description: "是否有过敏或不适等异常",
+            },
+            abnormalNotes: {
+              type: "string",
+              description: "异常情况描述或备注",
+            },
+          },
+        },
+      },
+      {
         name: "record_sleep",
         description: "记录宝宝一次睡眠作息（入睡与醒来时间、白天小睡或夜间长睡眠）。",
         inputSchema: {
@@ -428,6 +474,19 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       return {
         content: [
           { type: "text", text: `✅ 喂养记录保存成功！\n${JSON.stringify(data, null, 2)}` },
+        ],
+      };
+    }
+
+    if (name === "record_food") {
+      const data = await postJson("/api/food/logs", bound, {
+        ...args,
+        date: args.date || new Date().toISOString().split("T")[0],
+        time: args.time || new Date().toTimeString().slice(0, 5),
+      });
+      return {
+        content: [
+          { type: "text", text: `✅ 辅食记录保存成功！\n${JSON.stringify(data, null, 2)}` },
         ],
       };
     }

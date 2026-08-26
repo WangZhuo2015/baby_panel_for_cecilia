@@ -196,6 +196,7 @@ export const AiActionCard: React.FC<AiActionCardProps> = ({ action: initialActio
 
       setSaved(true);
       setIsEditing(false);
+      useBabyStore.getState().refreshAll().catch(() => {});
       if (onSaved) onSaved();
     } catch (err: any) {
       showToast(err?.message || "保存失败，请稍后重试");

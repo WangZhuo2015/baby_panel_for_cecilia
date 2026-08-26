@@ -1,24 +1,41 @@
-import React from 'react';
-import { ChevronLeft } from 'lucide-react';
+import React, { useState } from 'react';
+import { ChevronLeft, RefreshCw } from 'lucide-react';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 
 interface AppHeaderProps {
   title: string;
   showBack?: boolean;
   rightAction?: React.ReactNode;
+  onRefresh?: () => Promise<void> | void;
+  refreshing?: boolean;
 }
 
 export const AppHeader: React.FC<AppHeaderProps> = ({
   title,
   showBack = false,
   rightAction,
+  onRefresh,
+  refreshing = false,
 }) => {
+  const [internalLoading, setInternalLoading] = useState(false);
+  const isSpinning = refreshing || internalLoading;
+
   const handleBack = () => {
     window.history.back();
   };
 
+  const handleRefreshClick = async () => {
+    if (!onRefresh || isSpinning) return;
+    setInternalLoading(true);
+    try {
+      await onRefresh();
+    } finally {
+      setTimeout(() => setInternalLoading(false), 450);
+    }
+  };
+
   return (
-    <header className="safe-top sticky top-0 z-50 bg-bg/90 backdrop-blur-md">
+    <header className="safe-top sticky top-0 z-50 bg-bg/90 backdrop-blur-md border-b border-primary/5">
       <div className="flex items-center justify-between h-12 px-4 relative">
         {/* Left: back button */}
         <div className="w-10 flex-shrink-0">
@@ -39,8 +56,20 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
           {title}
         </h1>
 
-        {/* Right: theme toggle + action */}
-        <div className="flex-shrink-0 flex items-center justify-end gap-0.5 min-w-[44px]">
+        {/* Right: theme toggle + refresh + action */}
+        <div className="flex-shrink-0 flex items-center justify-end gap-1 min-w-[44px]">
+          {onRefresh && (
+            <button
+              type="button"
+              onClick={handleRefreshClick}
+              disabled={isSpinning}
+              className="btn-press flex items-center justify-center w-9 h-9 rounded-full text-text-secondary hover:text-primary transition-colors cursor-pointer disabled:opacity-60"
+              title="刷新本页数据"
+              aria-label="刷新本页数据"
+            >
+              <RefreshCw size={17} className={isSpinning ? "animate-spin text-primary" : ""} />
+            </button>
+          )}
           <ThemeToggle />
           {rightAction}
         </div>

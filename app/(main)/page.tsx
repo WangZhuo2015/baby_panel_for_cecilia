@@ -107,14 +107,26 @@ export default function HomePage() {
   const fetchAiTips = useBabyStore((s) => s.fetchAiTips);
 
   const [aiLoading, setAiLoading] = useState(false);
+  const [pageRefreshing, setPageRefreshing] = useState(false);
   const [liveSleepStart, setLiveSleepStart] = useState<string | null>(null);
   const [liveSleepElapsed, setLiveSleepElapsed] = useState<string>("");
+
+  const refreshAll = useBabyStore((s) => s.refreshAll);
+
+  const handleManualRefresh = async () => {
+    if (pageRefreshing) return;
+    setPageRefreshing(true);
+    try {
+      await refreshAll();
+    } finally {
+      setTimeout(() => setPageRefreshing(false), 500);
+    }
+  };
 
   useEffect(() => {
     fetchWeather();
     fetchUser();
   }, [fetchUser, fetchWeather]);
-
 
   useEffect(() => {
     if (baby?.id) {
@@ -132,6 +144,20 @@ export default function HomePage() {
     fetchSleepRecords,
     fetchAiTips,
   ]);
+
+  // Tab visibility change: auto-refresh if baby is selected
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible" && baby?.id) {
+        fetchDailySummary(undefined, true);
+        fetchTimeline(undefined, true);
+        fetchFeedingRecords(undefined, true);
+        fetchSleepRecords(true);
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, [baby?.id, fetchDailySummary, fetchTimeline, fetchFeedingRecords, fetchSleepRecords]);
 
 
   // Safety fallback: if auth takes longer than 2s, stop blocking screen
@@ -306,6 +332,16 @@ export default function HomePage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handleManualRefresh}
+            disabled={pageRefreshing}
+            aria-label="刷新数据"
+            className="w-9 h-9 rounded-full bg-white shadow-soft flex items-center justify-center btn-press text-text-secondary hover:text-primary transition-colors cursor-pointer disabled:opacity-60"
+            title="刷新全部数据"
+          >
+            <RefreshCw size={15} className={pageRefreshing ? "animate-spin text-primary" : ""} />
+          </button>
           <button
             onClick={() => router.push("/family")}
             aria-label="家庭共享"

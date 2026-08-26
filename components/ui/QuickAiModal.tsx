@@ -467,6 +467,7 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
         );
       } finally {
         setLoading(false);
+        useBabyStore.getState().refreshAll().catch(() => {});
       }
     },
     [contextType, contextDetail, baby?.id]
@@ -502,6 +503,9 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
         }
       }
       setTimeout(() => inputRef.current?.focus(), 150);
+    } else {
+      // Trigger store refresh when closed
+      useBabyStore.getState().refreshAll().catch(() => {});
     }
   }, [isOpen, initialPrompt, displayTitle, baby?.nickname, age.label, messages.length, handleSend]);
 

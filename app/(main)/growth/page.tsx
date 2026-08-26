@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus, Baby, Sparkles } from 'lucide-react';
+import { Plus, Baby, Sparkles, RefreshCw } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import { useBabyStore } from '@/stores/useBabyStore';
 import { calculateAge } from '@/lib/age';
@@ -109,6 +109,27 @@ export default function GrowthPage() {
     ? Number((latest.weightKg / ((latest.heightCm / 100) ** 2)).toFixed(1))
     : undefined;
 
+  const [refreshing, setRefreshing] = useState(false);
+
+  const handleRefresh = async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    try {
+      await Promise.all([
+        fetchGrowthMeasurements(true),
+        fetch('/api/growth/chart')
+          .then((res) => res.json())
+          .then((data) => {
+            if (data.whoPercentiles) setWhoPercentiles(data.whoPercentiles);
+            if (data.monthLabels) setMonthLabels(data.monthLabels);
+          })
+          .catch(() => {}),
+      ]);
+    } finally {
+      setTimeout(() => setRefreshing(false), 500);
+    }
+  };
+
   return (
     <div className="px-4 pt-safe-12 pb-36 max-w-md mx-auto">
       {/* Baby header */}
@@ -131,16 +152,28 @@ export default function GrowthPage() {
           </div>
         </div>
 
-        <QuickAiButton
-          contextType="growth"
-          label="曲线解读"
-          contextTitle="生长发育曲线顾问"
-          contextDetail={{
-            latestTab: currentTabLabel,
-            latestValue: currentLatestValue != null ? `${currentLatestValue} ${currentUnit}` : undefined,
-            percentile: latest?.percentile != null ? `P${latest.percentile}` : undefined,
-          }}
-        />
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handleRefresh}
+            disabled={refreshing}
+            className="w-9 h-9 rounded-full bg-white shadow-soft flex items-center justify-center btn-press text-text-secondary hover:text-primary transition-colors cursor-pointer disabled:opacity-60"
+            title="刷新生长曲线数据"
+            aria-label="刷新生长曲线数据"
+          >
+            <RefreshCw size={15} className={refreshing ? "animate-spin text-primary" : ""} />
+          </button>
+          <QuickAiButton
+            contextType="growth"
+            label="曲线解读"
+            contextTitle="生长发育曲线顾问"
+            contextDetail={{
+              latestTab: currentTabLabel,
+              latestValue: currentLatestValue != null ? `${currentLatestValue} ${currentUnit}` : undefined,
+              percentile: latest?.percentile != null ? `P${latest.percentile}` : undefined,
+            }}
+          />
+        </div>
       </div>
 
       {/* Current stats */}

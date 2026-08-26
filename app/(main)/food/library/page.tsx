@@ -116,12 +116,35 @@ export default function FoodLibraryPage() {
     filteredItems = filteredItems.filter(f => f.category === selectedCategory)
   }
 
+  const [refreshing, setRefreshing] = useState(false);
+
+  const handleRefresh = async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    try {
+      const [itemsRes, guidelinesRes] = await Promise.all([
+        fetch('/api/food/items'),
+        fetch('/api/food/feeding-guidelines'),
+      ]);
+      if (itemsRes.ok) {
+        const json = await itemsRes.json();
+        setItems(Array.isArray(json) ? json : json.data || json.items || []);
+      }
+      if (guidelinesRes.ok) {
+        const json = await guidelinesRes.json();
+        setGuidelines(Array.isArray(json) ? json : json.data || json.guidelines || []);
+      }
+    } finally {
+      setTimeout(() => setRefreshing(false), 500);
+    }
+  };
+
   /* Data source */
   const dataSource = (items[0] as any)?.dataSource || (guidelines[0] as any)?.dataSource
 
   return (
     <div className="min-h-screen bg-bg pb-8">
-      <AppHeader title="食材图鉴" />
+      <AppHeader title="食材图鉴" onRefresh={handleRefresh} refreshing={refreshing} />
 
       <div className="px-4 pt-4 space-y-5">
         {/* Header info */}

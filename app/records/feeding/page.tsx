@@ -133,11 +133,25 @@ export default function FeedingRecordPage() {
     }
   };
 
+  const fetchFeedingRecords = useBabyStore((s) => s.fetchFeedingRecords);
+  const [refreshing, setRefreshing] = useState(false);
+  const handleRefresh = async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    try {
+      await fetchFeedingRecords(undefined, true);
+    } finally {
+      setTimeout(() => setRefreshing(false), 500);
+    }
+  };
+
   return (
     <div className="min-h-[100dvh] bg-bg max-w-md mx-auto px-4 pt-4 pb-36">
       <AppHeader
         title="记录喂养"
         showBack
+        onRefresh={handleRefresh}
+        refreshing={refreshing}
         rightAction={
           <button
             onClick={() => handleSubmit()}

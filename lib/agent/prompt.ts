@@ -26,8 +26,8 @@ const TOOL_PROTOCOL = `
 【工具使用（必须遵守）】
 你可以通过工具查询和写入宝宝档案，不要凭空编造已记录的数据。
 - 家长问今日奶量/睡眠/尿布/辅食时，先调用 get_daily_summary。
-- 家长口述喂养、睡眠、换尿布、生长测量时，必须调用对应 record_* 工具真正入库，不要只口头答应。
-- 一句话里有多件事就分别调用多次工具（例如睡了一觉又喝了奶 = record_sleep + record_feeding）。
+- 家长口述吃奶（母乳/配方奶/瓶喂）、辅食（米粉/菜泥/肉泥/果泥等餐点）、睡眠、换尿布、生长测量时，必须调用对应 record_* 工具（吃奶用 record_feeding，辅食餐点用 record_food，睡眠用 record_sleep，排便尿布用 record_diaper，身高体重头围用 record_growth）真正入库，不要只口头答应。
+- 一句话里有多件事就分别调用多次工具（例如吃了辅食又喝了奶 = record_food + record_feeding）。
 - 时间用 24 小时制 HH:mm，日期用 YYYY-MM-DD；不确定的字段省略，让工具用默认值。
 - 化验单/体检图：先从图片提取指标，再调用 save_medical_report 入库；生长数字同时出现则再调用 record_growth。
 - 查询疫苗规划用 get_vaccine_schedule。

@@ -71,13 +71,31 @@ export default function DiaperRecordPage() {
   };
 
 
+  const fetchDiaperRecords = useBabyStore((s) => s.fetchDiaperRecords);
+  const [refreshing, setRefreshing] = useState(false);
+  const handleRefresh = async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    try {
+      await fetchDiaperRecords(true);
+    } finally {
+      setTimeout(() => setRefreshing(false), 500);
+    }
+  };
+
   return (
     <div className="min-h-[100dvh] bg-bg">
-      <AppHeader title="尿布记录" showBack rightAction={
-        <button onClick={handleSubmit(onSubmit)} className="text-sm font-medium text-primary btn-press px-2">
-          保存
-        </button>
-      } />
+      <AppHeader
+        title="尿布记录"
+        showBack
+        onRefresh={handleRefresh}
+        refreshing={refreshing}
+        rightAction={
+          <button onClick={handleSubmit(onSubmit)} className="text-sm font-medium text-primary btn-press px-2">
+            保存
+          </button>
+        }
+      />
 
       <form onSubmit={handleSubmit(onSubmit)} className="px-4 pt-3 pb-8 space-y-4">
         {/* Quick AI Advisor */}

@@ -84,26 +84,30 @@ interface BabyStore {
   fetchFamilyMembers: () => Promise<void>;
 
   // Actions - fetch from API
-  fetchBaby: () => Promise<void>;
+  fetchBaby: (force?: boolean) => Promise<void>;
   saveBaby: (data: { nickname: string; birthDate: string; gender: string; gestationalAge?: number; avatarUrl?: string }) => Promise<void>;
-  fetchFeedingRecords: (date?: string) => Promise<void>;
-  fetchSleepRecords: () => Promise<void>;
-  fetchDiaperRecords: () => Promise<void>;
-  fetchFoodLogRecords: (date?: string) => Promise<void>;
-  fetchGrowthMeasurements: () => Promise<void>;
-  fetchDailySummary: (date?: string) => Promise<void>;
-  fetchTimeline: (date?: string) => Promise<void>;
-  fetchWeather: (lat?: number, lon?: number, city?: string) => Promise<void>;
-  fetchFoodItems: (status?: string) => Promise<void>;
-  fetchFeedingGuidelines: () => Promise<void>;
-  fetchFoodPlans: (date?: string) => Promise<void>;
-  fetchBooks: (tab?: string) => Promise<void>;
-  fetchVaccines: (regionCode?: string) => Promise<void>;
-  fetchMilestones: (category?: string, month?: number) => Promise<void>;
-  fetchWarningSigns: () => Promise<void>;
-  fetchActivities: () => Promise<void>;
-  fetchAiTips: () => Promise<void>;
-  fetchMedicalReports: (category?: string) => Promise<void>;
+  fetchFeedingRecords: (date?: string, force?: boolean) => Promise<void>;
+  fetchSleepRecords: (force?: boolean) => Promise<void>;
+  fetchDiaperRecords: (force?: boolean) => Promise<void>;
+  fetchFoodLogRecords: (date?: string, force?: boolean) => Promise<void>;
+  fetchGrowthMeasurements: (force?: boolean) => Promise<void>;
+  fetchDailySummary: (date?: string, force?: boolean) => Promise<void>;
+  fetchTimeline: (date?: string, force?: boolean) => Promise<void>;
+  fetchWeather: (lat?: number, lon?: number, city?: string, force?: boolean) => Promise<void>;
+  fetchFoodItems: (status?: string, force?: boolean) => Promise<void>;
+  fetchFeedingGuidelines: (force?: boolean) => Promise<void>;
+  fetchFoodPlans: (date?: string, force?: boolean) => Promise<void>;
+  fetchBooks: (tab?: string, force?: boolean) => Promise<void>;
+  fetchVaccines: (regionCode?: string, force?: boolean) => Promise<void>;
+  fetchMilestones: (category?: string, month?: number, force?: boolean) => Promise<void>;
+  fetchWarningSigns: (force?: boolean) => Promise<void>;
+  fetchActivities: (force?: boolean) => Promise<void>;
+  fetchAiTips: (force?: boolean) => Promise<void>;
+  fetchMedicalReports: (category?: string, force?: boolean) => Promise<void>;
+
+  // Actions - refresh & cache
+  invalidateCache: (prefix?: string) => void;
+  refreshAll: (date?: string) => Promise<void>;
 
   // Actions - update
   updateBook: (id: string, data: Partial<Book>) => Promise<void>;
@@ -183,7 +187,7 @@ function markFetched(key: string): void {
 }
 
 /** Explicitly invalidate cache keys */
-function invalidateCache(prefix?: string): void {
+export function invalidateCache(prefix?: string): void {
   if (!prefix) {
     for (const k in _fetchedAt) delete _fetchedAt[k];
     return;
@@ -365,9 +369,10 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
 
   // ===== Fetch actions =====
 
-  fetchBaby: async () => {
+  fetchBaby: async (force?: boolean) => {
     if (!get().user && !get().authLoading) return;
-    if (get().baby && isFresh('baby')) return;
+    if (!force && get().baby && isFresh('baby')) return;
+    if (force) invalidateCache('baby');
     return dedup('baby', async () => {
       try {
         const data = await request<Baby>("/api/baby");
@@ -388,16 +393,18 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
         body: JSON.stringify(data),
       });
       set({ baby: updated });
+      invalidateCache('baby');
     } catch (e) {
       console.error("Failed to save baby:", e);
       throw e;
     }
   },
 
-  fetchFeedingRecords: async (date?: string) => {
+  fetchFeedingRecords: async (date?: string, force?: boolean) => {
     if (!get().user && !get().authLoading) return;
     const key = `feedingRecords:${date || ''}`;
-    if (get().feedingRecords.length > 0 && isFresh(key)) return;
+    if (!force && get().feedingRecords.length > 0 && isFresh(key)) return;
+    if (force) invalidateCache(key);
     return dedup(key, async () => {
       try {
         const params = date ? `?date=${date}` : "";
@@ -410,9 +417,10 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
     });
   },
 
-  fetchSleepRecords: async () => {
+  fetchSleepRecords: async (force?: boolean) => {
     if (!get().user && !get().authLoading) return;
-    if (get().sleepRecords.length > 0 && isFresh('sleepRecords')) return;
+    if (!force && get().sleepRecords.length > 0 && isFresh('sleepRecords')) return;
+    if (force) invalidateCache('sleepRecords');
     return dedup('sleepRecords', async () => {
       try {
         const data = await request<SleepRecord[]>("/api/records/sleep");
@@ -424,9 +432,10 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
     });
   },
 
-  fetchDiaperRecords: async () => {
+  fetchDiaperRecords: async (force?: boolean) => {
     if (!get().user && !get().authLoading) return;
-    if (get().diaperRecords.length > 0 && isFresh('diaperRecords')) return;
+    if (!force && get().diaperRecords.length > 0 && isFresh('diaperRecords')) return;
+    if (force) invalidateCache('diaperRecords');
     return dedup('diaperRecords', async () => {
       try {
         const data = await request<DiaperRecord[]>("/api/records/diaper");
@@ -438,20 +447,27 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
     });
   },
 
-  fetchFoodLogRecords: async (date?: string) => {
+  fetchFoodLogRecords: async (date?: string, force?: boolean) => {
     if (!get().user && !get().authLoading) return;
-    try {
-      const params = date ? `?date=${date}` : "";
-      const data = await request<FoodLogRecord[]>(`/api/food/logs${params}`);
-      set({ foodLogRecords: data || [] });
-    } catch (e) {
-      if (!isAuthError(e)) console.error("Failed to fetch food log records:", e);
-    }
+    const key = `foodLogRecords:${date || ''}`;
+    if (!force && get().foodLogRecords.length > 0 && isFresh(key)) return;
+    if (force) invalidateCache(key);
+    return dedup(key, async () => {
+      try {
+        const params = date ? `?date=${date}` : "";
+        const data = await request<FoodLogRecord[]>(`/api/food/logs${params}`);
+        set({ foodLogRecords: data || [] });
+        markFetched(key);
+      } catch (e) {
+        if (!isAuthError(e)) console.error("Failed to fetch food log records:", e);
+      }
+    });
   },
 
-  fetchGrowthMeasurements: async () => {
+  fetchGrowthMeasurements: async (force?: boolean) => {
     if (!get().user && !get().authLoading) return;
-    if (get().growthMeasurements.length > 0 && isFresh('growthMeasurements')) return;
+    if (!force && get().growthMeasurements.length > 0 && isFresh('growthMeasurements')) return;
+    if (force) invalidateCache('growthMeasurements');
     return dedup('growthMeasurements', async () => {
       try {
         const data = await request<GrowthMeasurement[]>("/api/growth");
@@ -463,10 +479,11 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
     });
   },
 
-  fetchDailySummary: async (date?: string) => {
+  fetchDailySummary: async (date?: string, force?: boolean) => {
     if (!get().user && !get().authLoading) return;
     const key = `dailySummary:${date || ''}`;
-    if (get().dailySummary && isFresh(key)) return;
+    if (!force && get().dailySummary && isFresh(key)) return;
+    if (force) invalidateCache(key);
     return dedup(key, async () => {
       try {
         const params = date ? `?date=${date}` : "";
@@ -479,11 +496,12 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
     });
   },
 
-  fetchTimeline: async (date?: string) => {
+  fetchTimeline: async (date?: string, force?: boolean) => {
     if (!get().user && !get().authLoading) return;
 
     const key = `timeline:${date || ''}`;
-    if (get().timeline.length > 0 && isFresh(key)) return;
+    if (!force && get().timeline.length > 0 && isFresh(key)) return;
+    if (force) invalidateCache(key);
     return dedup(key, async () => {
       try {
         const params = date ? `?date=${date}` : "";
@@ -496,9 +514,10 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
     });
   },
 
-  fetchWeather: async (lat?: number, lon?: number, city?: string) => {
+  fetchWeather: async (lat?: number, lon?: number, city?: string, force?: boolean) => {
     // Weather changes slowly — cache for 5 minutes
-    if (get().weather && Date.now() - (_fetchedAt['weather'] || 0) < 300_000) return;
+    if (!force && get().weather && Date.now() - (_fetchedAt['weather'] || 0) < 300_000) return;
+    if (force) invalidateCache('weather');
     return dedup('weather', async () => {
       try {
         let finalLat = lat;
@@ -532,95 +551,141 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
     });
   },
 
-  fetchFoodItems: async (status?: string) => {
-    try {
-      const params = status ? `?status=${status}` : "";
-      const data = await request<FoodItem[]>(`/api/food/items${params}`);
-      set({ foodItems: data || [] });
-    } catch (e) {
-      if (!isAuthError(e)) console.error("Failed to fetch food items:", e);
-    }
+  fetchFoodItems: async (status?: string, force?: boolean) => {
+    const key = `foodItems:${status || ''}`;
+    if (!force && get().foodItems.length > 0 && isFresh(key)) return;
+    if (force) invalidateCache(key);
+    return dedup(key, async () => {
+      try {
+        const params = status ? `?status=${status}` : "";
+        const data = await request<FoodItem[]>(`/api/food/items${params}`);
+        set({ foodItems: data || [] });
+        markFetched(key);
+      } catch (e) {
+        if (!isAuthError(e)) console.error("Failed to fetch food items:", e);
+      }
+    });
   },
 
-  fetchFeedingGuidelines: async () => {
-    try {
-      const data = await request<FeedingGuideline[]>("/api/food/feeding-guidelines");
-      set({ feedingGuidelines: data || [] });
-    } catch (e) {
-      if (!isAuthError(e)) console.error("Failed to fetch feeding guidelines:", e);
-    }
+  fetchFeedingGuidelines: async (force?: boolean) => {
+    if (!force && get().feedingGuidelines.length > 0 && isFresh('feedingGuidelines')) return;
+    if (force) invalidateCache('feedingGuidelines');
+    return dedup('feedingGuidelines', async () => {
+      try {
+        const data = await request<FeedingGuideline[]>("/api/food/feeding-guidelines");
+        set({ feedingGuidelines: data || [] });
+        markFetched('feedingGuidelines');
+      } catch (e) {
+        if (!isAuthError(e)) console.error("Failed to fetch feeding guidelines:", e);
+      }
+    });
   },
 
-  fetchFoodPlans: async (date?: string) => {
-    try {
-      const params = date ? `?date=${date}` : "";
-      const data = await request<FoodPlan[]>(`/api/food/plans${params}`);
-      set({ foodPlans: data || [] });
-    } catch (e) {
-      if (!isAuthError(e)) console.error("Failed to fetch food plans:", e);
-    }
+  fetchFoodPlans: async (date?: string, force?: boolean) => {
+    const key = `foodPlans:${date || ''}`;
+    if (!force && isFresh(key)) return;
+    if (force) invalidateCache(key);
+    return dedup(key, async () => {
+      try {
+        const params = date ? `?date=${date}` : "";
+        const data = await request<FoodPlan[]>(`/api/food/plans${params}`);
+        set({ foodPlans: data || [] });
+        markFetched(key);
+      } catch (e) {
+        if (!isAuthError(e)) console.error("Failed to fetch food plans:", e);
+      }
+    });
   },
 
-  fetchBooks: async (tab?: string) => {
-    try {
-      const params = tab ? `?tab=${tab}` : "";
-      const data = await request<Book[]>(`/api/books${params}`);
-      set({ books: data || [] });
-    } catch (e) {
-      if (!isAuthError(e)) console.error("Failed to fetch books:", e);
-    }
+  fetchBooks: async (tab?: string, force?: boolean) => {
+    const key = `books:${tab || ''}`;
+    if (!force && get().books.length > 0 && isFresh(key)) return;
+    if (force) invalidateCache(key);
+    return dedup(key, async () => {
+      try {
+        const params = tab ? `?tab=${tab}` : "";
+        const data = await request<Book[]>(`/api/books${params}`);
+        set({ books: data || [] });
+        markFetched(key);
+      } catch (e) {
+        if (!isAuthError(e)) console.error("Failed to fetch books:", e);
+      }
+    });
   },
 
-  fetchVaccines: async (regionCode?: string) => {
-    try {
-      const params = regionCode ? `?regionCode=${regionCode}` : "";
-      const data = await request<BabyStore["vaccineData"]>(`/api/vaccines${params}`);
-      set({ vaccineData: data });
-    } catch (e) {
-      if (!isAuthError(e)) console.error("Failed to fetch vaccines:", e);
-    }
+  fetchVaccines: async (regionCode?: string, force?: boolean) => {
+    const key = `vaccines:${regionCode || ''}`;
+    if (!force && get().vaccineData && isFresh(key)) return;
+    if (force) invalidateCache(key);
+    return dedup(key, async () => {
+      try {
+        const params = regionCode ? `?regionCode=${regionCode}` : "";
+        const data = await request<BabyStore["vaccineData"]>(`/api/vaccines${params}`);
+        set({ vaccineData: data });
+        markFetched(key);
+      } catch (e) {
+        if (!isAuthError(e)) console.error("Failed to fetch vaccines:", e);
+      }
+    });
   },
 
-  fetchMilestones: async (category?: string, month?: number) => {
-    try {
-      const params = new URLSearchParams();
-      if (category) params.set("category", category);
-      if (month) params.set("month", String(month));
-      const qs = params.toString();
-      const data = await request<{ milestones: DevelopmentMilestone[] }>(
-        `/api/development/milestones${qs ? `?${qs}` : ""}`
-      );
-      set({ milestones: data?.milestones || [] });
-    } catch (e) {
-      if (!isAuthError(e)) console.error("Failed to fetch milestones:", e);
-    }
+  fetchMilestones: async (category?: string, month?: number, force?: boolean) => {
+    const key = `milestones:${category || ''}:${month || ''}`;
+    if (!force && get().milestones.length > 0 && isFresh(key)) return;
+    if (force) invalidateCache(key);
+    return dedup(key, async () => {
+      try {
+        const params = new URLSearchParams();
+        if (category) params.set("category", category);
+        if (month) params.set("month", String(month));
+        const qs = params.toString();
+        const data = await request<{ milestones: DevelopmentMilestone[] }>(
+          `/api/development/milestones${qs ? `?${qs}` : ""}`
+        );
+        set({ milestones: data?.milestones || [] });
+        markFetched(key);
+      } catch (e) {
+        if (!isAuthError(e)) console.error("Failed to fetch milestones:", e);
+      }
+    });
   },
 
-  fetchWarningSigns: async () => {
-    try {
-      const data = await request<DevelopmentWarningSign[]>(
-        "/api/development/warning-signs"
-      );
-      set({ warningSigns: Array.isArray(data) ? data : [] });
-    } catch (e) {
-      if (!isAuthError(e)) console.error("Failed to fetch warning signs:", e);
-    }
+  fetchWarningSigns: async (force?: boolean) => {
+    if (!force && get().warningSigns.length > 0 && isFresh('warningSigns')) return;
+    if (force) invalidateCache('warningSigns');
+    return dedup('warningSigns', async () => {
+      try {
+        const data = await request<DevelopmentWarningSign[]>(
+          "/api/development/warning-signs"
+        );
+        set({ warningSigns: Array.isArray(data) ? data : [] });
+        markFetched('warningSigns');
+      } catch (e) {
+        if (!isAuthError(e)) console.error("Failed to fetch warning signs:", e);
+      }
+    });
   },
 
-  fetchActivities: async () => {
-    try {
-      const data = await request<ActivityRecommendation[]>(
-        "/api/development/activities"
-      );
-      set({ activities: data || [] });
-    } catch (e) {
-      if (!isAuthError(e)) console.error("Failed to fetch activities:", e);
-    }
+  fetchActivities: async (force?: boolean) => {
+    if (!force && get().activities.length > 0 && isFresh('activities')) return;
+    if (force) invalidateCache('activities');
+    return dedup('activities', async () => {
+      try {
+        const data = await request<ActivityRecommendation[]>(
+          "/api/development/activities"
+        );
+        set({ activities: data || [] });
+        markFetched('activities');
+      } catch (e) {
+        if (!isAuthError(e)) console.error("Failed to fetch activities:", e);
+      }
+    });
   },
 
-  fetchAiTips: async () => {
-    // AI tips are expensive — cache for 2 minutes
-    if (get().aiTips.length > 0 && !get().aiError && Date.now() - (_fetchedAt['aiTips'] || 0) < 120_000) return;
+  fetchAiTips: async (force?: boolean) => {
+    // AI tips are expensive — cache for 2 minutes unless forced
+    if (!force && get().aiTips.length > 0 && !get().aiError && Date.now() - (_fetchedAt['aiTips'] || 0) < 120_000) return;
+    if (force) invalidateCache('aiTips');
     return dedup('aiTips', async () => {
       try {
         set({ aiError: null });
@@ -637,6 +702,49 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
         set({ aiTips: [], aiError: e?.message || "AI 育儿建议连接失败" });
       }
     });
+  },
+
+  fetchMedicalReports: async (category?: string, force?: boolean) => {
+    if (!get().user && !get().authLoading) return;
+    const key = `medicalReports:${category || ''}`;
+    if (!force && get().medicalReports.length > 0 && isFresh(key)) return;
+    if (force) invalidateCache(key);
+    return dedup(key, async () => {
+      try {
+        const params = category && category !== "all" ? `?category=${category}` : "";
+        const data = await request<MedicalReport[]>(`/api/medical/reports${params}`);
+        set({ medicalReports: data || [] });
+        markFetched(key);
+      } catch (e) {
+        if (!isAuthError(e)) console.error("Failed to fetch medical reports:", e);
+      }
+    });
+  },
+
+  invalidateCache: (prefix?: string) => {
+    invalidateCache(prefix);
+  },
+
+  refreshAll: async (date?: string) => {
+    invalidateCache();
+    await Promise.allSettled([
+      get().fetchBaby(true),
+      get().fetchDailySummary(date, true),
+      get().fetchTimeline(date, true),
+      get().fetchFeedingRecords(date, true),
+      get().fetchSleepRecords(true),
+      get().fetchDiaperRecords(true),
+      get().fetchFoodLogRecords(date, true),
+      get().fetchGrowthMeasurements(true),
+      get().fetchMedicalReports(undefined, true),
+      get().fetchVaccines(undefined, true),
+      get().fetchMilestones(undefined, undefined, true),
+      get().fetchWarningSigns(true),
+      get().fetchActivities(true),
+      get().fetchBooks(undefined, true),
+      get().fetchFoodPlans(date, true),
+      get().fetchFoodItems(undefined, true),
+    ]);
   },
 
   // ===== Update actions =====
@@ -668,13 +776,14 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       })) as FeedingRecord;
+      invalidateCache("feedingRecords");
       invalidateCache("dailySummary");
       invalidateCache("timeline");
       set((state) => ({
         feedingRecords: [newRecord, ...state.feedingRecords],
       }));
-      get().fetchDailySummary();
-      get().fetchTimeline();
+      get().fetchDailySummary(undefined, true);
+      get().fetchTimeline(undefined, true);
     } catch (e) {
       if (isRetryableSubmitError(e)) {
         await enqueueOutbox({ clientId, url: "/api/records/feeding", body: payload, createdAt: Date.now() });
@@ -694,13 +803,14 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       })) as SleepRecord;
+      invalidateCache("sleepRecords");
       invalidateCache("dailySummary");
       invalidateCache("timeline");
       set((state) => ({
         sleepRecords: [newRecord, ...state.sleepRecords],
       }));
-      get().fetchDailySummary();
-      get().fetchTimeline();
+      get().fetchDailySummary(undefined, true);
+      get().fetchTimeline(undefined, true);
     } catch (e) {
       if (isRetryableSubmitError(e)) {
         await enqueueOutbox({ clientId, url: "/api/records/sleep", body: payload, createdAt: Date.now() });
@@ -720,13 +830,14 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       })) as DiaperRecord;
+      invalidateCache("diaperRecords");
       invalidateCache("dailySummary");
       invalidateCache("timeline");
       set((state) => ({
         diaperRecords: [newRecord, ...state.diaperRecords],
       }));
-      get().fetchDailySummary();
-      get().fetchTimeline();
+      get().fetchDailySummary(undefined, true);
+      get().fetchTimeline(undefined, true);
     } catch (e) {
       if (isRetryableSubmitError(e)) {
         await enqueueOutbox({ clientId, url: "/api/records/diaper", body: payload, createdAt: Date.now() });
@@ -746,13 +857,15 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       })) as FoodLogRecord;
+      invalidateCache("foodLogRecords");
+      invalidateCache("foodPlans");
       invalidateCache("dailySummary");
       invalidateCache("timeline");
       set((state) => ({
         foodLogRecords: [newRecord, ...state.foodLogRecords],
       }));
-      get().fetchDailySummary();
-      get().fetchTimeline();
+      get().fetchDailySummary(undefined, true);
+      get().fetchTimeline(undefined, true);
     } catch (e) {
       if (isRetryableSubmitError(e)) {
         // 离线/服务不可用：入 outbox，联网后自动同步
@@ -764,19 +877,6 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
     }
   },
 
-
-  fetchMedicalReports: async (category?: string) => {
-    if (!get().user && !get().authLoading) return;
-    try {
-      const params = category && category !== "all" ? `?category=${category}` : "";
-      const data = await request<MedicalReport[]>(`/api/medical/reports${params}`);
-      set({ medicalReports: data || [] });
-    } catch (e) {
-      if (!isAuthError(e)) console.error("Failed to fetch medical reports:", e);
-    }
-  },
-
-
   addGrowthMeasurement: async (measurement) => {
     try {
       const newMeasurement = await request<GrowthMeasurement>("/api/growth", {
@@ -784,6 +884,7 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(measurement),
       });
+      invalidateCache("growthMeasurements");
       set((state) => ({
         growthMeasurements: [...state.growthMeasurements, newMeasurement].sort(
           (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
@@ -802,11 +903,15 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(report),
       });
+      invalidateCache("medicalReports");
+      if (report.growthData) {
+        invalidateCache("growthMeasurements");
+      }
       set((state) => ({
         medicalReports: [newReport, ...state.medicalReports.filter((r) => r.id !== newReport.id)],
       }));
       if (report.growthData) {
-        get().fetchGrowthMeasurements();
+        get().fetchGrowthMeasurements(true);
       }
       return newReport;
     } catch (e) {
@@ -820,6 +925,8 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
       await request<{ success: boolean }>(`/api/medical/reports/${id}`, {
         method: "DELETE",
       });
+      invalidateCache("medicalReports");
+      invalidateCache("growthMeasurements");
       set((state) => ({
         medicalReports: state.medicalReports.filter((r) => r.id !== id),
       }));
@@ -848,9 +955,13 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
           r.id === id ? { ...r, ...(updated as object) } : r
         ),
       } as any));
+      invalidateCache("feedingRecords");
+      invalidateCache("sleepRecords");
+      invalidateCache("diaperRecords");
+      invalidateCache("foodLogRecords");
       invalidateCache("dailySummary");
       invalidateCache("timeline");
-      await Promise.all([get().fetchDailySummary(), get().fetchTimeline()]);
+      await Promise.all([get().fetchDailySummary(undefined, true), get().fetchTimeline(undefined, true)]);
     } catch (e) {
       console.error("Failed to update timeline record:", e);
       throw e;
@@ -873,9 +984,13 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
       set((state) => ({
         [listKey]: (state as any)[listKey].filter((r: { id: string }) => r.id !== id),
       } as any));
+      invalidateCache("feedingRecords");
+      invalidateCache("sleepRecords");
+      invalidateCache("diaperRecords");
+      invalidateCache("foodLogRecords");
       invalidateCache("dailySummary");
       invalidateCache("timeline");
-      await Promise.all([get().fetchDailySummary(), get().fetchTimeline()]);
+      await Promise.all([get().fetchDailySummary(undefined, true), get().fetchTimeline(undefined, true)]);
     } catch (e) {
       console.error("Failed to delete timeline record:", e);
       throw e;

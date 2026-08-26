@@ -125,7 +125,7 @@ export default function DevelopmentPage() {
   }, [])
 
   /* Filter warning signs for current month */
-  const relevantWarningSigns = warningSigns.filter(ws => ws.ageMonths <= selectedMonth)
+  const relevantWarningSigns = warningSigns.filter((ws) => ws.ageMonths <= selectedMonth);
 
   /* Data source (from milestones if available) */
   const milestoneDataSource = (milestones[0] as any)?.dataSource
@@ -134,9 +134,38 @@ export default function DevelopmentPage() {
   const router = useRouter()
   const age = baby ? calculateAge(baby.birthDate) : { months: 0, days: 0, label: "0月0天" }
 
+  const [refreshing, setRefreshing] = useState(false);
+
+  const handleRefresh = async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    try {
+      const [msRes, actRes, wsRes] = await Promise.all([
+        fetch(`/api/development/milestones?category=${activeTab}&month=${selectedMonth}`),
+        fetch(`/api/development/activities?month=${selectedMonth}`).catch(() => null),
+        fetch('/api/development/warning-signs').catch(() => null),
+      ]);
+
+      if (msRes.ok) {
+        const msJson = await msRes.json();
+        setMilestones(Array.isArray(msJson) ? msJson : msJson.milestones || []);
+      }
+      if (actRes && actRes.ok) {
+        const actJson = await actRes.json();
+        setActivities(Array.isArray(actJson) ? actJson : actJson.activities || []);
+      }
+      if (wsRes && wsRes.ok) {
+        const wsJson = await wsRes.json();
+        setWarningSigns(Array.isArray(wsJson) ? wsJson : wsJson.warningSigns || []);
+      }
+    } finally {
+      setTimeout(() => setRefreshing(false), 500);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-bg pb-36">
-      <AppHeader title="发育里程碑" />
+      <AppHeader title="发育里程碑" onRefresh={handleRefresh} refreshing={refreshing} />
 
       <div className="px-4 pt-4 space-y-4">
         {/* Baby profile header */}

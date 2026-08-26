@@ -210,7 +210,47 @@ export default function VaccinesPage() {
   const [range, setRange] = useState('30')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [refreshing, setRefreshing] = useState(false)
   const baby = useBabyStore((s) => s.baby)
+
+  const handleRefresh = async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    try {
+      const [res, selRes] = await Promise.all([
+        fetch('/api/vaccines'),
+        fetch('/api/vaccines/selections'),
+      ]);
+      if (res.ok) {
+        const data = await res.json();
+        let list: Vaccine[] = [];
+        if (Array.isArray(data)) {
+          list = data;
+        } else if (data.national || data.nonProgram || data.provincial) {
+          list = [
+            ...(data.national || []),
+            ...(data.provincial || []),
+            ...(data.nonProgram || []),
+          ];
+        } else {
+          list = data.data || data.vaccines || [];
+        }
+        setVaccines(list);
+        setSchedule(data.schedule || []);
+        setDataRelease(data.dataRelease ?? null);
+      }
+      if (selRes.ok) {
+        const sels = await selRes.json();
+        const map: Record<string, boolean> = {};
+        for (const s of Array.isArray(sels) ? sels : []) {
+          map[`${s.vaccineId}-${s.doseNumber}`] = s.selected;
+        }
+        setSelections(map);
+      }
+    } finally {
+      setTimeout(() => setRefreshing(false), 500);
+    }
+  };
 
   useEffect(() => {
     async function fetchVaccines() {
@@ -376,11 +416,11 @@ export default function VaccinesPage() {
   const dataSource = {
     organization: dataRelease?.sources?.[0]?.organization,
     asOf: dataRelease?.asOf,
-  }
+  };
 
   return (
     <div className="min-h-screen bg-bg pb-36">
-      <AppHeader title="健康与预防管理" />
+      <AppHeader title="健康与预防管理" onRefresh={handleRefresh} refreshing={refreshing} />
 
       <div className="px-4 pt-2 space-y-4">
         {/* Top Switcher */}

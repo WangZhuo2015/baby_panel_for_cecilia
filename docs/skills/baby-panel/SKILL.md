@@ -34,7 +34,8 @@ metadata:
 | :--- | :--- | :--- |
 | `get_baby_profile` | 获取当前宝宝基本档案与精准月龄 | 无 |
 | `get_daily_summary` | 获取指定日期（默认今日）累计奶量、睡眠时长、换尿布汇总 | `date?: string` (YYYY-MM-DD) |
-| `record_feeding` | 记录一次喂养事件 | `type` (breast/formula/bottle_breast/mixed), `amountMl?`, `durationMinutes?`, `notes?` |
+| `record_feeding` | 记录一次吃奶喂养事件 | `type` (breast/formula/bottle_breast/mixed), `amountMl?`, `durationMinutes?`, `notes?` |
+| `record_food` | 记录一次辅食餐点 | `foods` (string[]), `date?`, `time?`, `portion?`, `acceptance?`, `babyState?`, `hasAbnormal?`, `abnormalNotes?` |
 | `record_sleep` | 记录一次睡眠事件 | `startTime` (HH:mm), `endTime` (HH:mm), `type` (day/night), `notes?` |
 | `record_diaper` | 记录一次排便/换尿布 | `type` (pee/poop/both), `poopColor?`, `poopConsistency?`, `notes?` |
 | `record_growth` | 记录生长测量数据 | `weightKg?`, `heightCm?`, `headCircumferenceCm?`, `date?`, `notes?` |
@@ -48,7 +49,7 @@ metadata:
 在 Web 聊天交互中，Agent 会输出自然语言儿科分析，并附带特制标准结构：
 \`\`\`json:action
 {
-  "type": "medical_report" | "feeding" | "sleep" | "diaper" | "growth",
+  "type": "medical_report" | "feeding" | "food" | "sleep" | "diaper" | "growth",
   "data": { ... }
 }
 \`\`\`

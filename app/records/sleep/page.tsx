@@ -194,11 +194,25 @@ function LiveSleepDuration({ startIso }: { startIso: string }) {
     }
   };
 
+  const fetchSleepRecords = useBabyStore((s) => s.fetchSleepRecords);
+  const [refreshing, setRefreshing] = useState(false);
+  const handleRefresh = async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    try {
+      await fetchSleepRecords(true);
+    } finally {
+      setTimeout(() => setRefreshing(false), 500);
+    }
+  };
+
   return (
     <div className="min-h-[100dvh] bg-bg max-w-md mx-auto px-4 pt-4 pb-36">
       <AppHeader
         title="记录睡眠"
         showBack
+        onRefresh={handleRefresh}
+        refreshing={refreshing}
         rightAction={
           <button
             onClick={() => handleSubmit()}

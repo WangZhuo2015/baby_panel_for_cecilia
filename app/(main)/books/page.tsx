@@ -96,9 +96,26 @@ export default function BooksPage() {
     }
   }
 
+  const [refreshing, setRefreshing] = useState(false);
+
+  const handleRefresh = async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    try {
+      const res = await fetch(`/api/books?tab=${activeTab}`);
+      if (res.ok) {
+        const data = await res.json();
+        const list = Array.isArray(data) ? data : data.data || data.books || [];
+        setBooks(list);
+      }
+    } finally {
+      setTimeout(() => setRefreshing(false), 500);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-bg pb-8">
-      <AppHeader title="绘本馆" />
+      <AppHeader title="绘本馆" onRefresh={handleRefresh} refreshing={refreshing} />
 
       <div className="px-4 pt-4 space-y-5">
         {/* Header */}

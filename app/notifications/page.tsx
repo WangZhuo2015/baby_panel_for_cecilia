@@ -185,6 +185,8 @@ export default function NotificationsPage() {
       <AppHeader
         title="通知中心"
         showBack
+        onRefresh={fetchNotifications}
+        refreshing={loading}
         rightAction={
           notifications.length > 0 ? (
             <button

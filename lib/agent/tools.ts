@@ -431,10 +431,91 @@ export function createBabyPanelTools(ctx: BabyToolContext): AgentTool[] {
     },
   };
 
+  const recordFood: AgentTool = {
+    name: "record_food",
+    label: "记录辅食",
+    description:
+      "记录一次辅食。foods 为食材名称数组（如 [\"高铁米粉\", \"胡萝卜泥\"]），portion: little(少量)/half(半碗)/most(大部分)/all(全部)，acceptance(喜欢程度 1-5)，babyState: happy(开心)/neutral(一般)/rejected(抗拒)，hasAbnormal(是否有过敏等异常)。",
+    parameters: Type.Object({
+      foods: Type.Array(Type.String({ description: "食材名称，如米粉、苹果泥、胡萝卜泥" })),
+      date: Type.Optional(Type.String({ description: "YYYY-MM-DD，默认今天" })),
+      time: Type.Optional(Type.String({ description: "HH:mm，如 12:30，默认当前时间" })),
+      portion: Type.Optional(
+        Type.Union([
+          Type.Literal("little"),
+          Type.Literal("half"),
+          Type.Literal("most"),
+          Type.Literal("all"),
+        ])
+      ),
+      acceptance: Type.Optional(Type.Number({ description: "喜欢程度 1-5" })),
+      babyState: Type.Optional(
+        Type.Union([
+          Type.Literal("happy"),
+          Type.Literal("neutral"),
+          Type.Literal("rejected"),
+        ])
+      ),
+      hasAbnormal: Type.Optional(Type.Boolean({ description: "是否有过敏或不适等异常" })),
+      abnormalNotes: Type.Optional(Type.String({ description: "异常情况或补充说明" })),
+    }),
+    executionMode: "sequential",
+    execute: async (_id, raw) => {
+      const params = raw as Params;
+      const date =
+        typeof params.date === "string" && isValidDateStr(params.date)
+          ? params.date
+          : getLocalDateStr();
+      let time =
+        typeof params.time === "string" && TIME_RE.test(params.time.trim())
+          ? params.time.trim()
+          : new Date().toTimeString().slice(0, 5);
+      const foods = Array.isArray(params.foods)
+        ? (params.foods as string[])
+            .map((f) => String(f || "").trim())
+            .filter(Boolean)
+        : [];
+      if (foods.length === 0) fail("请提供至少一种辅食食材（如米粉、胡萝卜泥等）");
+
+      const portion = typeof params.portion === "string" ? params.portion : "most";
+      const acceptance =
+        typeof params.acceptance === "number"
+          ? Math.min(5, Math.max(1, Math.round(params.acceptance)))
+          : 3;
+      const babyState = typeof params.babyState === "string" ? params.babyState : "happy";
+      const hasAbnormal = Boolean(params.hasAbnormal);
+      const abnormalNotes =
+        typeof params.abnormalNotes === "string" ? params.abnormalNotes.trim() : null;
+
+      const record = await prisma.foodLogRecord.create({
+        data: {
+          babyId,
+          recordedById: ctx.userId,
+          date,
+          time,
+          foods: JSON.stringify(foods),
+          portion,
+          acceptance,
+          babyState,
+          hasAbnormal,
+          abnormalNotes,
+        },
+      });
+
+      return ok(`已记录辅食：${foods.join("、")}（${date} ${time}）`, {
+        id: record.id,
+        foods,
+        date,
+        time,
+      });
+    },
+  };
+
   return [
     getBabyProfile,
     getDailySummary,
     recordFeeding,
+    recordFood,
     recordSleep,
     recordDiaper,
     recordGrowth,

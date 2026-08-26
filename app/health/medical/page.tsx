@@ -99,12 +99,26 @@ export default function MedicalReportsPage() {
     };
   }, [hasProcessing, fetchAiJobs]);
 
+  const [refreshing, setRefreshing] = useState(false);
+  const handleRefresh = async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    try {
+      await Promise.all([
+        fetchBaby(true),
+        fetchMedicalReports(activeCategory, true),
+        fetchAiJobs(),
+      ]);
+    } finally {
+      setTimeout(() => setRefreshing(false), 500);
+    }
+  };
 
   const pendingJobs = aiJobs.filter((j) => !j.claimed);
 
   return (
     <div className="min-h-[100dvh] bg-bg px-4 pb-28 max-w-md mx-auto">
-      <AppHeader title="化验与体检档案" showBack />
+      <AppHeader title="化验与体检档案" showBack onRefresh={handleRefresh} refreshing={refreshing} />
 
       {/* Top Switcher with Vaccines */}
       <div className="flex items-center gap-2 mt-3 mb-4 bg-primary-light/60 p-1 rounded-2xl">

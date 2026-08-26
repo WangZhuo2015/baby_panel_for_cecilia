@@ -84,9 +84,20 @@ export default function FamilyPage() {
     other: "家庭成员 👶",
   };
 
+  const [refreshing, setRefreshing] = useState(false);
+  const handleRefresh = async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    try {
+      await Promise.all([fetchBaby(true), fetchUser(), fetchFamilyMembers()]);
+    } finally {
+      setTimeout(() => setRefreshing(false), 500);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-bg-canvas px-4 pt-4 pb-28">
-      <AppHeader title="家庭成员与共享" showBack />
+      <AppHeader title="家庭成员与共享" showBack onRefresh={handleRefresh} refreshing={refreshing} />
 
       {/* Family Info & Invite Card */}
       <CuteCard variant="gradient" className="mt-4 mb-5 shadow-card">
