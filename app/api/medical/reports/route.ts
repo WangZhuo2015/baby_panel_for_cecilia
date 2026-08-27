@@ -4,7 +4,7 @@ import { requireAuth, requireBaby } from "@/lib/api-helpers";
 import { safeJsonParse } from "@/lib/json";
 import { calculateCorrectedAge } from "@/lib/age";
 import { estimatePercentile } from "@/lib/who-growth-standards";
-import { isValidDateStr } from "@/lib/date";
+import { isValidDateStr, getLocalDateStr } from "@/lib/date";
 
 export async function GET(request: Request) {
   try {
@@ -79,6 +79,9 @@ export async function POST(request: Request) {
       );
     }
 
+    if (cleanDate > getLocalDateStr()) {
+      return NextResponse.json({ error: "报告日期不能是未来" }, { status: 400 });
+    }
     if (baby.birthDate && cleanDate < baby.birthDate) {
       return NextResponse.json(
         { error: "报告日期不能早于宝宝出生日期" },

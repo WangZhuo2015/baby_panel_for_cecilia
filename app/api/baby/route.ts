@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth, getActiveBaby } from "@/lib/api-helpers";
 import { generateInviteCode } from "@/lib/auth";
-import { isValidDateStr } from "@/lib/date";
+import { isValidDateStr, getLocalDateStr } from "@/lib/date";
 
 export async function GET(request: Request) {
   try {
@@ -33,8 +33,19 @@ function validateBody(body: any): { nickname: string; birthDate: string; gender:
   if (typeof body.birthDate !== "string" || !isValidDateStr(body.birthDate.trim())) {
     return "birthDate 必填且必须为有效的 YYYY-MM-DD 日期";
   }
+  if (body.birthDate.trim() > getLocalDateStr()) {
+    return "birthDate 不能是未来日期";
+  }
   const gender = body.gender === "male" ? "male" : "female";
-  const gestationalAge = typeof body.gestationalAge === "number" ? body.gestationalAge : undefined;
+  let gestationalAge: number | undefined;
+  if (body.gestationalAge !== undefined && body.gestationalAge !== null && body.gestationalAge !== "") {
+    const ga = Number(body.gestationalAge);
+    if (Number.isNaN(ga) || ga < 20 || ga > 44) return "gestationalAge 必须在 20-44 周之间";
+    gestationalAge = ga;
+  }
+  if (typeof body.avatarUrl === "string" && body.avatarUrl.trim() !== "" && !/^\/uploads\/(avatars|medical)\/[^/]+\.(jpg|jpeg|png|webp|heic)$/i.test(body.avatarUrl.trim())) {
+    return "avatarUrl 仅支持本站 /uploads/ 路径的图片";
+  }
   return { nickname: body.nickname.trim(), birthDate: body.birthDate, gender, gestationalAge };
 }
 
@@ -88,7 +99,7 @@ export async function POST(request: Request) {
           birthDate: validated.birthDate,
           gender: validated.gender,
           gestationalAge: validated.gestationalAge,
-          ...(typeof body.avatarUrl === "string" ? { avatarUrl: body.avatarUrl } : {}),
+          ...(typeof body.avatarUrl === "string" && body.avatarUrl.trim() !== "" ? { avatarUrl: body.avatarUrl.trim() } : {}),
         },
       });
     });
@@ -135,7 +146,7 @@ export async function PUT(request: Request) {
         birthDate: validated.birthDate,
         gender: validated.gender,
         gestationalAge: validated.gestationalAge,
-        ...(typeof body.avatarUrl === "string" ? { avatarUrl: body.avatarUrl } : {}),
+        ...(typeof body.avatarUrl === "string" && body.avatarUrl.trim() !== "" ? { avatarUrl: body.avatarUrl.trim() } : {}),
       },
     });
 

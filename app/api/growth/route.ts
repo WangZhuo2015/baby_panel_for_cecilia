@@ -129,6 +129,9 @@ export async function POST(request: Request) {
       calculatedPercentile = estimatePercentile(gender, "headCircumference", evaluationAgeMonths, parsedHeadCirc);
     }
 
+    if (imageUrl !== undefined && imageUrl !== null && String(imageUrl).trim() !== "" && !/^\/uploads\/(avatars|medical|growth)\/[^/]+\.(jpg|jpeg|png|webp|heic)$/i.test(String(imageUrl).trim())) {
+      return NextResponse.json({ error: "imageUrl 仅支持本站 /uploads/ 路径的图片" }, { status: 400 });
+    }
     const clientId = typeof body.clientId === "string" && body.clientId.length > 0 && body.clientId.length <= 64 ? body.clientId : null;
     const baseData = {
       babyId: baby.id,

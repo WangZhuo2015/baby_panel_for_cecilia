@@ -88,33 +88,44 @@ export async function POST(request: Request) {
         },
       });
 
-      let family;
+      let family: any;
       if (familyToJoinId) {
         family = await tx.family.findUniqueOrThrow({
           where: { id: familyToJoinId },
           include: { babies: true },
         });
       } else {
-        const newInviteCode = generateInviteCode(6);
-        family = await tx.family.create({
-          data: {
-            name: `${cleanDisplayName}的家`,
-            inviteCode: newInviteCode,
-          },
-          include: { babies: true },
-        });
+        let created = false;
+        for (let attempt = 0; attempt < 5; attempt++) {
+          const newInviteCode = generateInviteCode(6);
+          try {
+            family = await tx.family.create({
+              data: {
+                name: `${cleanDisplayName}的家`,
+                inviteCode: newInviteCode,
+              },
+              include: { babies: true },
+            });
+            created = true;
+            break;
+          } catch (e: any) {
+            if (e?.code === "P2002" && attempt < 4) continue;
+            throw e;
+          }
+        }
+        if (!created) throw new Error("Failed to generate unique inviteCode after retries");
       }
 
       await tx.familyMember.create({
         data: {
-          familyId: family.id,
+          familyId: family!.id,
           userId: user.id,
           role: memberRole,
           relation: normalizeRelation(relation),
         },
       });
 
-      return { user, family };
+      return { user, family: family! };
     });
 
     const token = await signAuthToken({
@@ -130,11 +141,11 @@ export async function POST(request: Request) {
           displayName: result.user.displayName,
         },
         family: {
-          id: result.family.id,
-          name: result.family.name,
-          inviteCode: result.family.inviteCode,
+          id: result.family!.id,
+          name: result.family!.name,
+          inviteCode: result.family!.inviteCode,
         },
-        baby: result.family.babies[0] || null,
+        baby: result.family!.babies[0] || null,
       },
       { status: 201 }
     );
