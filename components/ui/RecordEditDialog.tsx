@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import type { TimelineEntry } from "@/types";
+import { getLocalDateStr } from "@/lib/date";
 
 interface RecordEditDialogProps {
   item: TimelineEntry | null;
@@ -59,22 +60,36 @@ export const RecordEditDialog: React.FC<RecordEditDialogProps> = ({ item, onClos
   const labelCls = "block text-xs text-text-secondary mb-1";
 
   const buildPatch = (): Record<string, unknown> => {
-    // 时间统一换算为当天（上海时区）ISO
-    const toIso = (hhmm: string): string => {
-      const dateStr = new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Shanghai" }).format(new Date());
+    const toIso = (hhmm: string, originalIso?: string): string => {
+      const dateStr = originalIso
+        ? getLocalDateStr(new Date(originalIso))
+        : new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Shanghai" }).format(new Date());
+      return new Date(`${dateStr}T${hhmm}:00+08:00`).toISOString();
+    };
+    const toSleepIso = (hhmm: string, originalIso: string): string => {
+      const dateStr = getLocalDateStr(new Date(originalIso));
       return new Date(`${dateStr}T${hhmm}:00+08:00`).toISOString();
     };
 
     if (item.type === "feeding") {
-      return { id: item.id, timestamp: toIso(form.time), type: form.type,
+      const orig = (item as any).timestamp as string | undefined;
+      return { id: item.id, timestamp: toIso(form.time, orig), type: form.type,
         amountMl: form.amountMl === "" ? null : Number(form.amountMl), notes: form.notes };
     }
     if (item.type === "sleep") {
-      return { id: item.id, startTime: form.startTime, endTime: form.endTime,
+      const origStart = (item as any).startTime as string;
+      const origEnd = (item as any).endTime as string;
+      let startIso = toSleepIso(form.startTime, origStart);
+      let endIso = toSleepIso(form.endTime, origStart);
+      if (new Date(endIso).getTime() <= new Date(startIso).getTime()) {
+        endIso = new Date(new Date(endIso).getTime() + 24*60*60*1000).toISOString();
+      }
+      return { id: item.id, startTime: startIso, endTime: endIso,
         nightWakingCount: Number(form.nightWakingCount || 0), notes: form.notes };
     }
     if (item.type === "diaper") {
-      return { id: item.id, timestamp: toIso(form.time), type: form.type, notes: form.notes };
+      const orig = (item as any).timestamp as string | undefined;
+      return { id: item.id, timestamp: toIso(form.time, orig), type: form.type, notes: form.notes };
     }
     return { id: item.id, time: form.time, portion: form.portion,
       acceptance: Number(form.acceptance), babyState: form.babyState };

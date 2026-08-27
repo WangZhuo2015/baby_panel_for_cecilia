@@ -134,6 +134,7 @@ model GrowthMeasurement {
   id                  String   @id @default(uuid())
   babyId              String
   baby                Baby     @relation(fields: [babyId], references: [id], onDelete: Cascade)
+  clientId            String? // 离线幂等
   recordedById        String?
   date                String
   ageInMonths         Int?
@@ -146,6 +147,7 @@ model GrowthMeasurement {
   createdAt           DateTime @default(now())
 
   @@index([babyId, date])
+  @@unique([babyId, clientId])
 }
 
 model MedicalReport {

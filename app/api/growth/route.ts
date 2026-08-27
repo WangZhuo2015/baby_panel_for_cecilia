@@ -21,7 +21,7 @@ export async function GET(request: Request) {
 
     const measurements = await prisma.growthMeasurement.findMany({
       where: { babyId: babyResult.baby.id },
-      orderBy: [{ date: "asc" }, { createdAt: "asc" }],
+      orderBy: [{ date: "desc" }, { createdAt: "desc" }],
       take: limit,
     });
 
@@ -129,20 +129,26 @@ export async function POST(request: Request) {
       calculatedPercentile = estimatePercentile(gender, "headCircumference", evaluationAgeMonths, parsedHeadCirc);
     }
 
-    const measurement = await prisma.growthMeasurement.create({
-      data: {
-        babyId: baby.id,
-        recordedById: user.id,
-        date: date.trim(),
-        ageInMonths: computedAgeMonths,
-        ageLabel: computedAgeLabel,
-        weightKg: parsedWeight,
-        heightCm: parsedHeight,
-        headCircumferenceCm: parsedHeadCirc,
-        percentile: calculatedPercentile,
-        imageUrl: imageUrl ? String(imageUrl).trim() : null,
-      },
-    });
+    const clientId = typeof body.clientId === "string" && body.clientId.length > 0 && body.clientId.length <= 64 ? body.clientId : null;
+    const baseData = {
+      babyId: baby.id,
+      recordedById: user.id,
+      date: date.trim(),
+      ageInMonths: computedAgeMonths,
+      ageLabel: computedAgeLabel,
+      weightKg: parsedWeight,
+      heightCm: parsedHeight,
+      headCircumferenceCm: parsedHeadCirc,
+      percentile: calculatedPercentile,
+      imageUrl: imageUrl ? String(imageUrl).trim().slice(0, 500) : null,
+    };
+    const measurement = clientId
+      ? await prisma.growthMeasurement.upsert({
+          where: { babyId_clientId: { babyId: baby.id, clientId } },
+          create: { ...baseData, clientId },
+          update: {},
+        })
+      : await prisma.growthMeasurement.create({ data: baseData });
 
     return NextResponse.json(measurement, { status: 201 });
   } catch (error) {

@@ -905,11 +905,13 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
   },
 
   addGrowthMeasurement: async (measurement) => {
+    const clientId = crypto.randomUUID();
+    const payload = { ...measurement, clientId };
     try {
       const newMeasurement = await request<GrowthMeasurement>("/api/growth", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(measurement),
+        body: JSON.stringify(payload),
       });
       invalidateCache("growthMeasurements");
       set((state) => ({
@@ -918,6 +920,10 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
         ),
       }));
     } catch (e) {
+      if (isRetryableSubmitError(e)) {
+        await enqueueOutbox({ clientId, url: "/api/growth", body: payload, createdAt: Date.now() });
+        throw new Error("当前离线，记录已保存，联网后自动同步 ⏳");
+      }
       console.error("Failed to add growth measurement:", e);
       throw e;
     }

@@ -79,6 +79,7 @@ export async function POST(request: Request) {
         await mkdir(uploadDir, { recursive: true });
         await writeFile(path.join(uploadDir, filename), buf);
         savedImageUrl = `/uploads/medical/${filename}`;
+        imageBase64 = buf.toString('base64');
       } else {
         const json = await request.json();
         if (json.imageBase64) {

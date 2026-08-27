@@ -120,6 +120,15 @@ export async function POST(request: Request) {
       recordTimestamp = parsedTime.toISOString();
     }
 
+    // 未来时间与早于出生日期守卫
+    const baby = babyResult.baby;
+    if (new Date(recordTimestamp).getTime() > Date.now() + 24 * 60 * 60 * 1000) {
+      return NextResponse.json({ error: "记录时间不能是未来" }, { status: 400 });
+    }
+    if (baby.birthDate && recordTimestamp.slice(0, 10) < baby.birthDate) {
+      return NextResponse.json({ error: "记录时间不能早于宝宝出生日期" }, { status: 400 });
+    }
+
     if (notes !== undefined && notes !== null && String(notes).trim().length > 1000) {
       return NextResponse.json({ error: "notes 不能超过 1000 个字符" }, { status: 400 });
     }
