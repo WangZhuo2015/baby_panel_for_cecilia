@@ -79,13 +79,14 @@ export default function DevelopmentPage() {
   const correctedMonthOffset = isPreterm ? Math.round(correctionWeeks / 4.345) : 0
 
   useEffect(() => {
+    const controller = new AbortController()
     async function fetchData() {
       setLoading(true)
       setError(null)
       try {
         const [msRes, actRes] = await Promise.all([
-          fetch(`/api/development/milestones?category=${activeTab}&month=${selectedMonth}`),
-          fetch(`/api/development/activities?month=${selectedMonth}`).catch(() => null),
+          fetch(`/api/development/milestones?category=${activeTab}&month=${selectedMonth}`, { signal: controller.signal }),
+          fetch(`/api/development/activities?month=${selectedMonth}`, { signal: controller.signal }).catch(() => null),
         ])
 
         let msData: Milestone[] = []
@@ -93,19 +94,21 @@ export default function DevelopmentPage() {
           const msJson = await msRes.json()
           msData = Array.isArray(msJson) ? msJson : msJson.milestones || []
         }
-        setMilestones(msData)
+        if (!controller.signal.aborted) setMilestones(msData)
 
         if (actRes && actRes.ok) {
           const actJson = await actRes.json()
-          setActivities(Array.isArray(actJson) ? actJson : actJson.activities || [])
+          if (!controller.signal.aborted) setActivities(Array.isArray(actJson) ? actJson : actJson.activities || [])
         }
       } catch (err: any) {
+        if (err?.name === 'AbortError') return
         setError(err.message || '加载失败')
       } finally {
-        setLoading(false)
+        if (!controller.signal.aborted) setLoading(false)
       }
     }
     fetchData()
+    return () => controller.abort()
   }, [activeTab, selectedMonth])
 
   /* Warning signs are independent of category and month — fetch once */

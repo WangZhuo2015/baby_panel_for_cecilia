@@ -36,6 +36,26 @@ const WAKE_MOODS = [
   { id: "crying", label: "哭闹烦躁 😭", color: "text-red-500 bg-red-50 border-red-200" },
 ];
 
+/** 睡眠计时叶子组件：interval 收敛在此，避免整页每秒重渲染 — 提升至模块顶层以避免重建 */
+function LiveSleepDuration({ startIso }: { startIso: string }) {
+  const [sec, setSec] = useState(() =>
+    Math.max(0, Math.floor((Date.now() - new Date(startIso).getTime()) / 1000))
+  );
+  useEffect(() => {
+    const tick = () =>
+      setSec(Math.max(0, Math.floor((Date.now() - new Date(startIso).getTime()) / 1000)));
+    tick();
+    const t = setInterval(tick, 1000);
+    return () => clearInterval(t);
+  }, [startIso]);
+
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const ss = sec % 60;
+  const text = h > 0 ? `${h}小时${String(m).padStart(2, "0")}分` : `${m}分${String(ss).padStart(2, "0")}秒`;
+  return <>{text}</>;
+}
+
 export default function SleepRecordPage() {
   const router = useRouter();
   const { showToast } = useToast();
@@ -121,27 +141,6 @@ export default function SleepRecordPage() {
       // Ignore
     }
   };
-
-
-/** 睡眠计时叶子组件：interval 收敛在此，避免整页每秒重渲染 */
-function LiveSleepDuration({ startIso }: { startIso: string }) {
-  const [sec, setSec] = useState(() =>
-    Math.max(0, Math.floor((Date.now() - new Date(startIso).getTime()) / 1000))
-  );
-  useEffect(() => {
-    const tick = () =>
-      setSec(Math.max(0, Math.floor((Date.now() - new Date(startIso).getTime()) / 1000)));
-    tick();
-    const t = setInterval(tick, 1000);
-    return () => clearInterval(t);
-  }, [startIso]);
-
-  const h = Math.floor(sec / 3600);
-  const m = Math.floor((sec % 3600) / 60);
-  const ss = sec % 60;
-  const text = h > 0 ? `${h}小时${String(m).padStart(2, "0")}分` : `${m}分${String(ss).padStart(2, "0")}秒`;
-  return <>{text}</>;
-}
 
   // Duration calculation for manual form
   const durationText = useMemo(() => {

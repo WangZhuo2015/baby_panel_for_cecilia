@@ -1,14 +1,10 @@
 import React from 'react';
 
-interface CuteButtonProps {
+interface CuteButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   children: React.ReactNode;
-  onClick?: () => void;
   variant?: 'primary' | 'secondary' | 'ghost';
   size?: 'sm' | 'md' | 'lg';
   fullWidth?: boolean;
-  disabled?: boolean;
-  type?: 'button' | 'submit';
-  className?: string;
 }
 
 export const CuteButton: React.FC<CuteButtonProps> = ({
@@ -20,6 +16,7 @@ export const CuteButton: React.FC<CuteButtonProps> = ({
   disabled = false,
   type = 'button',
   className = '',
+  ...props
 }) => {
   const sizeStyles = {
     sm: 'py-2 px-4 text-sm min-h-[36px]',
@@ -38,6 +35,7 @@ export const CuteButton: React.FC<CuteButtonProps> = ({
       type={type}
       onClick={onClick}
       disabled={disabled}
+      {...props}
       className={`btn-press inline-flex items-center justify-center whitespace-nowrap select-none rounded-[20px] font-medium transition-all cursor-pointer
         ${sizeStyles[size]}
         ${variantStyles[variant]}

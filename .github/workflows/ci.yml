@@ -8,6 +8,13 @@ on:
     branches:
       - main
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     name: Lint, Typecheck & Build
@@ -51,11 +58,17 @@ jobs:
           DATABASE_URL="file:/tmp/ci-fresh.db" npx prisma migrate deploy
           rm -f /tmp/ci-fresh.db*
 
+      - name: Run unit tests
+        run: npm run test:unit
+
       - name: Dependency audit (critical)
         run: npm audit --audit-level=critical
 
       - name: Run Next.js build
         run: npm run build
+
+      - name: Verify Docker build
+        run: docker build -t baby-panel:ci .
 
       - name: Verify version consistency (package.json = lib/version.ts = sw.js)
         run: |
