@@ -49,11 +49,30 @@ function toolResultSummary(result: unknown): string | undefined {
   return text.length > 160 ? `${text.slice(0, 157)}…` : text;
 }
 
+export function isRateLimitError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const e = error as { status?: number; message?: string; cause?: unknown };
+  if (e.status === 429) return true;
+  if (typeof e.message === "string" && (e.message.includes("429") || e.message.toLowerCase().includes("rate limit") || e.message.toLowerCase().includes("too many requests"))) return true;
+  if (e.cause && typeof e.cause === "object" && (e.cause as { status?: number }).status === 429) return true;
+  return false;
+}
+
+export function getRetryAfterMs(error: unknown): number | null {
+  const e = error as { headers?: Record<string, string>; response?: { headers?: { get: (k:string)=>string|null } } };
+  const raw = e.headers?.["retry-after"] || e.headers?.["Retry-After"] || e.response?.headers?.get?.("retry-after") || null;
+  if (raw) {
+    const secs = parseInt(raw, 10);
+    if (!Number.isNaN(secs)) return secs * 1000;
+  }
+  return null;
+}
+
 export async function runBabyAgent(opts: RunBabyAgentOptions): Promise<void> {
   const created = opts.streamFn && opts.model ? null : createLlmBackend(opts.backend ?? "openrouter");
   const model = opts.model ?? created!.model;
   const innerStream = opts.streamFn ?? created!.models.streamSimple.bind(created!.models);
-  const streamFn: StreamFn = (m, context, options) =>
+  const baseStreamFn: StreamFn = (m, context, options) =>
     innerStream(m, context, {
       ...options,
       toolChoice: options?.toolChoice ?? "auto",
@@ -62,6 +81,24 @@ export async function runBabyAgent(opts: RunBabyAgentOptions): Promise<void> {
         ...options?.headers,
       },
     });
+  // Wrap with 429 retry (10 times)
+  const streamFn: StreamFn = async (m, context, options) => {
+    let lastError: unknown;
+    for (let attempt = 0; attempt <= 10; attempt++) {
+      try {
+        return await baseStreamFn(m, context, options);
+      } catch (error) {
+        lastError = error;
+        if (attempt === 10 || !isRateLimitError(error)) throw error;
+        const retryAfter = getRetryAfterMs(error);
+        const backoff = retryAfter ?? Math.min(1000 * Math.pow(2, attempt), 10000);
+        // Add jitter
+        const jitter = Math.random() * 500;
+        await new Promise((r) => setTimeout(r, backoff + jitter));
+      }
+    }
+    throw lastError;
+  };
   let turns = 0;
 
   const agent = new Agent({

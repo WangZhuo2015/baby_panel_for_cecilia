@@ -35,14 +35,14 @@ function openrouterApiKey(): string {
 }
 
 function openrouterModelId(): string {
-  return process.env.OPENROUTER_MODEL || "stealth/ox-alpha";
+  return process.env.OPENROUTER_MODEL || "z-ai/glm-5.2";
 }
 
 export function listLlmBackends(): LlmBackendPublic[] {
   return [
     {
       id: "openrouter",
-      label: "OX Alpha",
+      label: "GLM 5.2",
       model: openrouterModelId(),
       available: Boolean(openrouterApiKey()),
     },
