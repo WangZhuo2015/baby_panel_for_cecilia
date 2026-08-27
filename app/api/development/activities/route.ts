@@ -2,9 +2,22 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { safeJsonParse } from '@/lib/json'
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const { searchParams } = new URL(request.url);
+    const monthParam = searchParams.get("month");
+    const month = monthParam ? parseInt(monthParam, 10) : null;
+    const where = month !== null && !Number.isNaN(month)
+      ? {
+          AND: [
+            { OR: [{ ageMinMonths: null }, { ageMinMonths: { lte: month } }] },
+            { OR: [{ ageMaxMonths: null }, { ageMaxMonths: { gte: month } }] },
+          ],
+        }
+      : undefined;
+
     const activities = await prisma.activityRecommendation.findMany({
+      where,
       orderBy: { ageMinMonths: 'asc' }
     })
 

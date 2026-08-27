@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth, requireBaby, getActiveBaby } from "@/lib/api-helpers";
 import { safeJsonParse } from "@/lib/json";
-import { isValidDateStr } from "@/lib/date";
+import { isValidDateStr, getLocalDateStr, getLocalTimeStr } from "@/lib/date";
 
 export async function GET(request: Request) {
   try {
@@ -73,6 +73,32 @@ export async function POST(request: Request) {
     if (babyResult.errorResponse) return babyResult.errorResponse;
     const babyId = babyResult.baby.id;
 
+    // 校验 date/time/portion/acceptance/babyState
+    const validatedDate = typeof date === "string" && isValidDateStr(date.trim()) ? date.trim() : getLocalDateStr();
+    if (typeof date === "string" && date.trim() !== "" && !isValidDateStr(date.trim())) {
+      return NextResponse.json({ error: "date 必须为有效的 YYYY-MM-DD" }, { status: 400 });
+    }
+    const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+    const validatedTime = typeof time === "string" && TIME_RE.test(time.trim()) ? time.trim() : getLocalTimeStr();
+    if (typeof time === "string" && time.trim() !== "" && !TIME_RE.test(time.trim())) {
+      return NextResponse.json({ error: "time 必须为 HH:MM 格式" }, { status: 400 });
+    }
+    const validPortions = ["little", "half", "most", "all"];
+    const validatedPortion = typeof portion === "string" && validPortions.includes(portion) ? portion : "most";
+    if (typeof portion === "string" && portion.trim() !== "" && !validPortions.includes(portion)) {
+      return NextResponse.json({ error: "portion 必须为 little/half/most/all 之一" }, { status: 400 });
+    }
+    const accNum = typeof acceptance === "number" ? Math.round(acceptance) : 3;
+    if (acceptance !== undefined && acceptance !== null && acceptance !== "" && (!Number.isInteger(accNum) || accNum < 1 || accNum > 5)) {
+      return NextResponse.json({ error: "acceptance 必须为 1-5 的整数" }, { status: 400 });
+    }
+    const validatedAcceptance = Number.isInteger(accNum) && accNum >= 1 && accNum <= 5 ? accNum : 3;
+    const validBabyStates = ["happy", "neutral", "rejected"];
+    const validatedBabyState = typeof babyState === "string" && validBabyStates.includes(babyState) ? babyState : "happy";
+    if (typeof babyState === "string" && babyState.trim() !== "" && !validBabyStates.includes(babyState)) {
+      return NextResponse.json({ error: "babyState 必须为 happy/neutral/rejected 之一" }, { status: 400 });
+    }
+
     if (Array.isArray(foods) && foods.length > 20) {
       return NextResponse.json({ error: "foods 不能超过 20 项" }, { status: 400 });
     }
@@ -86,12 +112,12 @@ export async function POST(request: Request) {
         : null;
     const data = {
       recordedById: user.id,
-      date: date || new Date().toISOString().slice(0, 10),
-      time: time || new Date().toTimeString().slice(0, 5),
+      date: validatedDate,
+      time: validatedTime,
       foods: Array.isArray(foods) ? JSON.stringify(foods) : String(foods || "[]"),
-      portion: portion || "most",
-      acceptance: typeof acceptance === "number" ? acceptance : 3,
-      babyState: babyState || "happy",
+      portion: validatedPortion,
+      acceptance: validatedAcceptance,
+      babyState: validatedBabyState,
       hasAbnormal: hasAbnormal ?? false,
       abnormalNotes: abnormalNotes ? String(abnormalNotes).trim() : null,
     };
