@@ -35,7 +35,7 @@ function openrouterApiKey(): string {
 }
 
 function openrouterModelId(): string {
-  return process.env.OPENROUTER_MODEL || "z-ai/glm-5.2";
+  return process.env.OPENROUTER_MODEL || "z-ai/glm-5.2:free";
 }
 
 export function listLlmBackends(): LlmBackendPublic[] {
