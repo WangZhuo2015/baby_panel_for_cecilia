@@ -1,5 +1,6 @@
-/** Curated free models - GLM/MiniMax first, no paid */
+/** Curated models - Muse Spark 1.2 contributor default, then GLM/MiniMax free */
 export const FREE_MODEL_LIST = [
+  { id: "muse-spark-1.2-contributor", label: "Muse Spark 1.2", provider: "OpenCode" },
   { id: "z-ai/glm-5.2:free", label: "GLM 5.2", provider: "Z.ai" },
   { id: "minimax/minimax-m3:free", label: "MiniMax M3", provider: "MiniMax" },
   { id: "minimax/minimax-m2.7:free", label: "MiniMax M2.7", provider: "MiniMax" },

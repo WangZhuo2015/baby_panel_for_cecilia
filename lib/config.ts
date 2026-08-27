@@ -100,9 +100,9 @@ export const AI_CONFIG = {
     return process.env.AI_API_KEY || process.env.OPENAI_API_KEY || "";
   },
   get model() {
-    if (preferOpenRouter()) return process.env.OPENROUTER_MODEL || "z-ai/glm-5.2:free";
+    if (preferOpenRouter()) return process.env.OPENROUTER_MODEL || "muse-spark-1.2-contributor";
     const model = process.env.AI_MODEL || process.env.OPENAI_MODEL || "";
-    if (!model || model === "hermes-agent") return process.env.OPENROUTER_MODEL || "z-ai/glm-5.2:free";
+    if (!model || model === "hermes-agent") return process.env.OPENROUTER_MODEL || "muse-spark-1.2-contributor";
     return model;
   },
   get visionModel() {

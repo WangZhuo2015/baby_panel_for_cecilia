@@ -1,48 +1,22 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { requireAuth, requireBaby, getActiveBaby } from "@/lib/api-helpers";
-import { getLocalDayUtcRange, isValidDateStr } from "@/lib/date";
+import * as records from "@/lib/records/service";
+import { ValidationError, NotFoundError, ForbiddenError } from "@/lib/records/service";
 
 export async function GET(request: Request) {
   try {
     const auth = await requireAuth(request);
     if (auth.errorResponse) return auth.errorResponse;
-    const { user } = auth;
-
     const { searchParams } = new URL(request.url);
-    const requestedBabyId = searchParams.get("babyId");
-    const date = searchParams.get("date");
-
-    const babyResult = await requireBaby(user.id, requestedBabyId);
+    const babyResult = await requireBaby(auth.user.id, searchParams.get("babyId"));
     if (babyResult.errorResponse) return babyResult.errorResponse;
-
-    const where: any = { babyId: babyResult.baby.id };
-    if (date) {
-      if (!isValidDateStr(date)) {
-        return NextResponse.json({ error: "Invalid date format, expected YYYY-MM-DD" }, { status: 400 });
-      }
-      const { start, end } = getLocalDayUtcRange(date);
-      if (start && end) {
-        where.timestamp = { gte: start, lt: end };
-      }
-    }
-
-
-    const limit = Math.min(100, Math.max(1, parseInt(searchParams.get("limit") || "50", 10) || 50));
-
-    const records = await prisma.diaperRecord.findMany({
-      where,
-      orderBy: { timestamp: "desc" },
-      take: limit,
-    });
-
-    return NextResponse.json(records);
-  } catch (error) {
-    console.error("GET /api/records/diaper error:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch diaper records" },
-      { status: 500 }
-    );
+    const ctx = { userId: auth.user.id, babyId: babyResult.baby.id, baby: babyResult.baby };
+    const data = await records.getDiaperRecords(ctx, { date: searchParams.get("date") || undefined, limit: searchParams.get("limit") || undefined });
+    return NextResponse.json(data);
+  } catch (e) {
+    if (e instanceof ValidationError) return NextResponse.json({ error: e.message }, { status: 400 });
+    console.error("GET /api/records/diaper error:", e);
+    return NextResponse.json({ error: "Failed to fetch diaper records" }, { status: 500 });
   }
 }
 
@@ -50,77 +24,23 @@ export async function POST(request: Request) {
   try {
     const auth = await requireAuth(request);
     if (auth.errorResponse) return auth.errorResponse;
-    const { user } = auth;
-
-    const body = await request.json().catch(() => ({}));
-    const {
-      babyId: reqBabyId,
-      timestamp,
-      type,
-      poopColor,
-      poopConsistency,
-      notes,
-    } = body;
-
-    const babyResult = await requireBaby(user.id, reqBabyId);
+    const body = await request.json().catch(() => ({} as any));
+    const babyResult = await requireBaby(auth.user.id, body.babyId);
     if (babyResult.errorResponse) return babyResult.errorResponse;
-
-    if (!type || !["pee", "poop", "both"].includes(type)) {
-      return NextResponse.json(
-        { error: "type 必填且只能为 pee、poop 或 both" },
-        { status: 400 }
-      );
-    }
-
-    let recordTimestamp = new Date().toISOString();
-    if (timestamp) {
-      const parsedTime = new Date(timestamp);
-      if (Number.isNaN(parsedTime.getTime())) {
-        return NextResponse.json(
-          { error: "timestamp 格式无效" },
-          { status: 400 }
-        );
-      }
-      recordTimestamp = parsedTime.toISOString();
-    }
-
-    if (notes !== undefined && notes !== null && String(notes).trim().length > 1000) {
-      return NextResponse.json({ error: "notes 不能超过 1000 个字符" }, { status: 400 });
-    }
-    if (poopColor !== undefined && poopColor !== null && String(poopColor).trim().length > 100) {
-      return NextResponse.json({ error: "poopColor 不能超过 100 个字符" }, { status: 400 });
-    }
-    if (poopConsistency !== undefined && poopConsistency !== null && String(poopConsistency).trim().length > 100) {
-      return NextResponse.json({ error: "poopConsistency 不能超过 100 个字符" }, { status: 400 });
-    }
-
-    const clientId =
-      typeof body.clientId === "string" && body.clientId.length > 0 && body.clientId.length <= 64
-        ? body.clientId
-        : null;
-    const data = {
-      recordedById: user.id,
-      timestamp: recordTimestamp,
-      type,
-      poopColor: poopColor ? String(poopColor).trim() : null,
-      poopConsistency: poopConsistency ? String(poopConsistency).trim() : null,
-      notes: notes ? String(notes).trim() : null,
-    };
-    const record = clientId
-      ? await prisma.diaperRecord.upsert({
-          where: { babyId_clientId: { babyId: babyResult.baby.id, clientId } },
-          create: { ...data, babyId: babyResult.baby.id, clientId },
-          update: {},
-        })
-      : await prisma.diaperRecord.create({ data: { ...data, babyId: babyResult.baby.id } });
-
-    return NextResponse.json(record, { status: 201 });
-  } catch (error) {
-    console.error("POST /api/records/diaper error:", error);
-    return NextResponse.json(
-      { error: "Failed to create diaper record" },
-      { status: 500 }
-    );
+    const ctx = { userId: auth.user.id, babyId: babyResult.baby.id, baby: babyResult.baby };
+    const rec = await records.createDiaper(ctx, {
+      type: body.type,
+      timestamp: body.timestamp,
+      poopColor: body.poopColor,
+      poopConsistency: body.poopConsistency,
+      notes: body.notes,
+      clientId: body.clientId,
+    });
+    return NextResponse.json(rec, { status: 201 });
+  } catch (e) {
+    if (e instanceof ValidationError) return NextResponse.json({ error: (e as Error).message }, { status: 400 });
+    console.error("POST /api/records/diaper error:", e);
+    return NextResponse.json({ error: "Failed to create diaper record" }, { status: 500 });
   }
 }
 
@@ -128,49 +48,23 @@ export async function DELETE(request: Request) {
   try {
     const auth = await requireAuth(request);
     if (auth.errorResponse) return auth.errorResponse;
-    const { user } = auth;
-
     const { searchParams } = new URL(request.url);
     let id = searchParams.get("id");
-
-    if (!id) {
-      const body = await request.json().catch(() => ({}));
-      id = body?.id;
-    }
-
-    if (!id || typeof id !== "string") {
-      return NextResponse.json(
-        { error: "请提供要删除的记录 ID" },
-        { status: 400 }
-      );
-    }
-
-    const record = await prisma.diaperRecord.findUnique({
-      where: { id },
-    });
-
-    if (!record) {
-      return NextResponse.json(
-        { error: "未找到指定的排便/尿布记录" },
-        { status: 404 }
-      );
-    }
-
-    // Verify ownership of the baby associated with the record
-    const babyCheck = await getActiveBaby(user.id, record.babyId);
+    if (!id) { const body = await request.json().catch(() => ({} as any)); id = body?.id; }
+    if (!id || typeof id !== "string") return NextResponse.json({ error: "请提供要删除的记录 ID" }, { status: 400 });
+    const { prisma } = await import("@/lib/prisma");
+    const rec = await prisma.diaperRecord.findUnique({ where: { id } });
+    if (!rec) return NextResponse.json({ error: "未找到指定的排便/尿布记录" }, { status: 404 });
+    const babyCheck = await getActiveBaby(auth.user.id, rec.babyId);
     if (babyCheck.errorResponse) return babyCheck.errorResponse;
-
-    await prisma.diaperRecord.delete({
-      where: { id },
-    });
-
+    await records.deleteRecord({ userId: auth.user.id, babyId: rec.babyId }, "diaper", id);
     return NextResponse.json({ success: true, id });
-  } catch (error) {
-    console.error("DELETE /api/records/diaper error:", error);
-    return NextResponse.json(
-      { error: "Failed to delete diaper record" },
-      { status: 500 }
-    );
+  } catch (e) {
+    if (e instanceof ValidationError) return NextResponse.json({ error: e.message }, { status: 400 });
+    if (e instanceof NotFoundError) return NextResponse.json({ error: e.message }, { status: 404 });
+    if (e instanceof ForbiddenError) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    console.error("DELETE /api/records/diaper error:", e);
+    return NextResponse.json({ error: "Failed to delete diaper record" }, { status: 500 });
   }
 }
 
@@ -178,70 +72,22 @@ export async function PUT(request: Request) {
   try {
     const auth = await requireAuth(request);
     if (auth.errorResponse) return auth.errorResponse;
-    const { user } = auth;
-
-    const body = await request.json().catch(() => ({}));
+    const body = await request.json().catch(() => ({} as any));
     const id = body?.id;
-    if (!id || typeof id !== "string") {
-      return NextResponse.json({ error: "请提供要修改的记录 ID" }, { status: 400 });
-    }
-
-    const record = await prisma.diaperRecord.findUnique({ where: { id } });
-    if (!record) {
-      return NextResponse.json({ error: "未找到指定的换尿布记录" }, { status: 404 });
-    }
-    const babyCheck = await getActiveBaby(user.id, record.babyId);
+    if (!id || typeof id !== "string") return NextResponse.json({ error: "请提供要修改的记录 ID" }, { status: 400 });
+    const { prisma } = await import("@/lib/prisma");
+    const existing = await prisma.diaperRecord.findUnique({ where: { id } });
+    if (!existing) return NextResponse.json({ error: "未找到指定的换尿布记录" }, { status: 404 });
+    const babyCheck = await getActiveBaby(auth.user.id, existing.babyId);
     if (babyCheck.errorResponse) return babyCheck.errorResponse;
-
-    const merged = {
-      type: body.type ?? record.type,
-      poopColor: body.poopColor !== undefined
-        ? (body.poopColor ? String(body.poopColor).trim() : null)
-        : record.poopColor,
-      poopConsistency: body.poopConsistency !== undefined
-        ? (body.poopConsistency ? String(body.poopConsistency).trim() : null)
-        : record.poopConsistency,
-      notes: body.notes !== undefined
-        ? (body.notes ? String(body.notes).trim() : null)
-        : record.notes,
-      timestamp: body.timestamp ?? record.timestamp,
-    };
-
-    if (!["pee", "poop", "both"].includes(merged.type)) {
-      return NextResponse.json({ error: "type 只能为 pee、poop 或 both" }, { status: 400 });
-    }
-    if (merged.notes !== null && merged.notes !== undefined && String(merged.notes).length > 1000) {
-      return NextResponse.json({ error: "notes 不能超过 1000 个字符" }, { status: 400 });
-    }
-    if (merged.poopColor !== null && merged.poopColor !== undefined && String(merged.poopColor).length > 100) {
-      return NextResponse.json({ error: "poopColor 不能超过 100 个字符" }, { status: 400 });
-    }
-    if (merged.poopConsistency !== null && merged.poopConsistency !== undefined && String(merged.poopConsistency).length > 100) {
-      return NextResponse.json({ error: "poopConsistency 不能超过 100 个字符" }, { status: 400 });
-    }
-
-    let recordTimestamp: string;
-    try {
-      const parsed = new Date(merged.timestamp as string);
-      if (Number.isNaN(parsed.getTime())) throw new Error();
-      recordTimestamp = parsed.toISOString();
-    } catch {
-      return NextResponse.json({ error: "timestamp 格式无效" }, { status: 400 });
-    }
-
-    const updated = await prisma.diaperRecord.update({
-      where: { id },
-      data: {
-        type: merged.type,
-        poopColor: merged.poopColor,
-        poopConsistency: merged.poopConsistency,
-        notes: merged.notes,
-        timestamp: recordTimestamp,
-      },
-    });
+    const ctx = { userId: auth.user.id, babyId: existing.babyId };
+    const updated = await records.updateDiaper(ctx, id, body);
     return NextResponse.json(updated);
-  } catch (error) {
-    console.error("PUT /api/records/diaper error:", error);
+  } catch (e) {
+    if (e instanceof ValidationError) return NextResponse.json({ error: e.message }, { status: 400 });
+    if (e instanceof NotFoundError) return NextResponse.json({ error: e.message }, { status: 404 });
+    if (e instanceof ForbiddenError) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    console.error("PUT /api/records/diaper error:", e);
     return NextResponse.json({ error: "Failed to update diaper record" }, { status: 500 });
   }
 }

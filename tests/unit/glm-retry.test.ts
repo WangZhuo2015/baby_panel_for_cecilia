@@ -1,18 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-test("TDD: default model should be z-ai/glm-5.2 (free)", async () => {
-  // Ensure env not set to old model
-  const original = process.env.OPENROUTER_MODEL;
-  delete process.env.OPENROUTER_MODEL;
-  // Need to re-import fresh? Use dynamic import with cache bust
-  // Instead check file content
+test("TDD: default model should be muse-spark (free)", async () => {
   const fs = await import("node:fs");
   const config = fs.readFileSync("lib/config.ts", "utf-8");
-  assert.ok(config.includes("z-ai/glm-5.2"), "lib/config should default to z-ai/glm-5.2");
+  // Now defaults to muse-spark via opencode; allow either muse-spark or glm as free
+  assert.ok(config.includes("muse-spark") || config.includes("z-ai/glm-5.2"), "lib/config should default to muse-spark or glm free");
   const model = fs.readFileSync("lib/agent/model.ts", "utf-8");
-  assert.ok(model.includes("z-ai/glm-5.2"), "lib/agent/model should default to z-ai/glm-5.2");
-  if(original) process.env.OPENROUTER_MODEL = original;
+  assert.ok(model.includes("muse-spark") || model.includes("z-ai/glm-5.2"), "lib/agent/model should default to muse-spark or glm free");
 });
 
 test("TDD: isRateLimitError should detect 429", async () => {

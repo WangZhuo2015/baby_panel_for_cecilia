@@ -6,7 +6,7 @@ import {
   type StreamFn,
 } from "@earendil-works/pi-agent-core";
 import type { ImageContent, Model } from "@earendil-works/pi-ai";
-import { createLlmBackend, OPENROUTER_HEADERS, type LlmBackendId } from "@/lib/agent/model";
+import { createLlmBackend, createOpencodeResponsesBackend, OPENROUTER_HEADERS, type LlmBackendId } from "@/lib/agent/model";
 
 const MAX_TURNS = 8;
 
@@ -68,33 +68,84 @@ export function getRetryAfterMs(error: unknown): number | null {
   return null;
 }
 
+function isNotFoundError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const e = error as { status?: number; message?: string };
+  if (e.status === 404 || e.status === 405) return true;
+  if (typeof e.message === "string" && (e.message.includes("404") || e.message.toLowerCase().includes("not found") || e.message.includes("405"))) return true;
+  return false;
+}
+
 export async function runBabyAgent(opts: RunBabyAgentOptions): Promise<void> {
-  const created = opts.streamFn && opts.model ? null : createLlmBackend(opts.backend ?? "openrouter");
-  const model = opts.model ?? created!.model;
-  const innerStream = opts.streamFn ?? created!.models.streamSimple.bind(created!.models);
-  const baseStreamFn: StreamFn = (m, context, options) =>
-    innerStream(m, context, {
+  // Try Opencode first (chat -> responses), then OpenRouter - keep both endpoints
+  const useOpencode = Boolean(process.env.AI_API_KEY);
+  const opencodeChat = useOpencode ? createLlmBackend("opencode") : null;
+  const opencodeResponses = useOpencode ? createOpencodeResponsesBackend() : null;
+  const openrouter = createLlmBackend("openrouter");
+
+  const makeStreamFn = (backend: { models: { streamSimple: StreamFn }, model: Model<any> }, providerHeader: Record<string,string>): StreamFn => {
+    const inner = (backend.models as any).streamSimple.bind(backend.models);
+    return (m, context, options) => inner(m, context, {
       ...options,
       toolChoice: options?.toolChoice ?? "auto",
-      headers: {
-        ...(m.provider === "openrouter" ? OPENROUTER_HEADERS : {}),
-        ...options?.headers,
-      },
+      headers: { ...providerHeader, ...options?.headers },
     });
-  // Wrap with 429 retry (10 times)
+  };
+
+  const opencodeChatFn = opencodeChat ? makeStreamFn(opencodeChat as any, {}) : null;
+  const opencodeResponsesFn = opencodeResponses ? makeStreamFn(opencodeResponses as any, {}) : null;
+  const openrouterFn = (() => {
+    const inner = openrouter.models.streamSimple.bind(openrouter.models);
+    return (m: Model<any>, context: any, options: any) => inner(m, context, {
+      ...options,
+      toolChoice: options?.toolChoice ?? "auto",
+      headers: { ...OPENROUTER_HEADERS, ...options?.headers },
+    });
+  })() as StreamFn;
+
+  const created = opts.streamFn && opts.model ? null : (opencodeChat ?? openrouter);
+  const model = opts.model ?? created!.model;
+
+  // Unified streamFn with dual endpoint + dual provider fallback + 429 retry
   const streamFn: StreamFn = async (m, context, options) => {
+    const candidates: Array<{ fn: StreamFn; name: string }> = [];
+    if (opencodeChatFn) candidates.push({ fn: opencodeChatFn, name: "opencode-chat" });
+    if (opencodeResponsesFn) candidates.push({ fn: opencodeResponsesFn, name: "opencode-responses" });
+    candidates.push({ fn: openrouterFn, name: "openrouter" });
+
+    // If opts.streamFn provided, use it directly with retry
+    if (opts.streamFn) {
+      let lastError: unknown;
+      for (let attempt = 0; attempt <= 10; attempt++) {
+        try { return await opts.streamFn(m, context, options); } catch (e) {
+          lastError = e;
+          if (attempt === 10 || !isRateLimitError(e)) throw e;
+          const backoff = getRetryAfterMs(e) ?? Math.min(1000 * Math.pow(2, attempt), 10000);
+          await new Promise(r => setTimeout(r, backoff + Math.random()*500));
+        }
+      }
+      throw lastError;
+    }
+
     let lastError: unknown;
-    for (let attempt = 0; attempt <= 10; attempt++) {
-      try {
-        return await baseStreamFn(m, context, options);
-      } catch (error) {
-        lastError = error;
-        if (attempt === 10 || !isRateLimitError(error)) throw error;
-        const retryAfter = getRetryAfterMs(error);
-        const backoff = retryAfter ?? Math.min(1000 * Math.pow(2, attempt), 10000);
-        // Add jitter
-        const jitter = Math.random() * 500;
-        await new Promise((r) => setTimeout(r, backoff + jitter));
+    for (const { fn, name } of candidates) {
+      for (let attempt = 0; attempt <= 10; attempt++) {
+        try {
+          // Use the candidate's model for provider header
+          const candidateModel = name.startsWith("opencode") ? (name === "opencode-chat" ? opencodeChat!.model : opencodeResponses!.model) : openrouter.model;
+          return await fn(candidateModel as any, context, options);
+        } catch (error) {
+          lastError = error;
+          // For opencode-chat 404, immediately try next endpoint (responses) without consuming retry
+          if (name === "opencode-chat" && isNotFoundError(error)) break;
+          if (isRateLimitError(error) && attempt < 10) {
+            const backoff = getRetryAfterMs(error) ?? Math.min(1000 * Math.pow(2, attempt), 10000);
+            await new Promise(r => setTimeout(r, backoff + Math.random()*500));
+            continue;
+          }
+          // For other errors, try next provider
+          break;
+        }
       }
     }
     throw lastError;
@@ -110,7 +161,7 @@ export async function runBabyAgent(opts: RunBabyAgentOptions): Promise<void> {
       messages: opts.history,
     },
     streamFn,
-    getApiKey: opts.getApiKey ?? created?.getApiKey ?? (() => undefined),
+    getApiKey: opts.getApiKey ?? opencodeChat?.getApiKey ?? openrouter.getApiKey ?? (() => undefined),
     toolExecution: "sequential",
     shouldStopAfterTurn: () => {
       turns += 1;

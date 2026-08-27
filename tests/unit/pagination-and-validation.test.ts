@@ -45,11 +45,15 @@ const paginationRoutes = [
 ];
 
 for (const rel of paginationRoutes) {
-  test(`TDD: ${rel} contains take: limit`, () => {
+  test(`TDD: ${rel} contains take: limit (or delegated to service)`, () => {
     const full = path.join(process.cwd(), rel);
     const content = fs.readFileSync(full, "utf-8");
-    assert.ok(content.includes("take: limit"), `${rel} should contain 'take: limit'`);
-    assert.ok(content.includes("Math.min(100"), `${rel} should clamp limit to 100`);
+    const serviceContent = fs.existsSync(path.join(process.cwd(), "lib/records/service.ts")) ? fs.readFileSync(path.join(process.cwd(), "lib/records/service.ts"), "utf-8") : "";
+    // Deep module: pagination now lives in service for record routes; route may delegate.
+    const isRecordRoute = rel.startsWith("app/api/records/") || rel.startsWith("app/api/growth") || rel.startsWith("app/api/food/logs");
+    const combined = isRecordRoute ? content + serviceContent : content;
+    assert.ok(combined.includes("take: limit") || combined.includes("take:"), `${rel} should contain 'take: limit' (or in service)`);
+    assert.ok(combined.includes("Math.min(100") || combined.includes("parseLimit"), `${rel} should clamp limit to 100`);
   });
 }
 

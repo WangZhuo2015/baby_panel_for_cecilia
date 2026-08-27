@@ -23,7 +23,9 @@ test("TDD: family avatarUrl should validate /uploads/ (BUG-04)", () => {
   const babyRoute = fs.readFileSync(path.join(process.cwd(), "app/api/baby/route.ts"), "utf-8");
   assert.ok(babyRoute.includes("/uploads/") && babyRoute.includes("avatarUrl"), "baby route should validate avatarUrl");
   const growthRoute = fs.readFileSync(path.join(process.cwd(), "app/api/growth/route.ts"), "utf-8");
-  assert.ok(growthRoute.includes("imageUrl") && (growthRoute.includes("/uploads/") || growthRoute.includes("startsWith")), "growth imageUrl should validate");
+  const serviceContent = fs.existsSync(path.join(process.cwd(), "lib/records/service.ts")) ? fs.readFileSync(path.join(process.cwd(), "lib/records/service.ts"), "utf-8") : "";
+  const combinedGrowth = growthRoute + serviceContent;
+  assert.ok(combinedGrowth.includes("imageUrl") && (combinedGrowth.includes("/uploads/") || combinedGrowth.includes("startsWith")), "growth imageUrl should validate (now in service)");
 });
 
 test("TDD: invite code should retry on collision (BUG-01)", () => {
@@ -33,10 +35,10 @@ test("TDD: invite code should retry on collision (BUG-01)", () => {
 });
 
 test("TDD: growth percentile should handle separate fields or BMI note (B5)", () => {
-  const c = fs.readFileSync(path.join(process.cwd(), "app/api/growth/route.ts"), "utf-8");
-  // After fix, should compute percentile per metric or have BMI handling
-  // At least should not just store single percentile for all tabs without note
-  // We check that file contains comment or handling for BMI
+  const routeContent = fs.readFileSync(path.join(process.cwd(), "app/api/growth/route.ts"), "utf-8");
+  const serviceContent = fs.existsSync(path.join(process.cwd(), "lib/records/service.ts")) ? fs.readFileSync(path.join(process.cwd(), "lib/records/service.ts"), "utf-8") : "";
+  const c = routeContent + serviceContent;
+  // After fix, should compute percentile per metric or have BMI handling (now in service)
   assert.ok(c.includes("percentile") , "should handle percentile");
 });
 
