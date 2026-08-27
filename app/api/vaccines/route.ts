@@ -165,16 +165,17 @@ export async function POST(request: Request) {
     }
 
     const result = await prisma.$transaction(async (tx) => {
-      const matched = typeof requestedVaccineId === "string"
-        ? await tx.vaccine.findUnique({
-            where: { vaccineId: requestedVaccineId.trim() },
-            select: { vaccineId: true, name: true },
-          })
-        : (
-            await tx.vaccine.findMany({
-              select: { vaccineId: true, name: true },
-            })
-          ).find((v) => v.name.includes(name.trim()) || name.trim().includes(v.name)) ?? null;
+      const trimmedName = name.trim();
+      let matched: { vaccineId: string; name: string } | null = null;
+      if (typeof requestedVaccineId === "string") {
+        matched = await tx.vaccine.findUnique({
+          where: { vaccineId: requestedVaccineId.trim() },
+          select: { vaccineId: true, name: true },
+        });
+      } else {
+        const all = await tx.vaccine.findMany({ select: { vaccineId: true, name: true } });
+        matched = all.find((v) => v.name === trimmedName) ?? all.find((v) => trimmedName.length >= 3 && (v.name.includes(trimmedName) || trimmedName.includes(v.name))) ?? null;
+      }
 
       const record = await tx.vaccineRecord.create({
         data: {

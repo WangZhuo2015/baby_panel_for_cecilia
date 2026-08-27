@@ -91,8 +91,8 @@ export async function POST(request: Request) {
     }
 
     const itemsJson = JSON.stringify(Array.isArray(items) ? items : []);
-    if (Array.isArray(items) && items.length > 20) {
-      return NextResponse.json({ error: "items 不能超过 20 项" }, { status: 400 });
+    if (Array.isArray(items) && items.length > 40) {
+      return NextResponse.json({ error: "items 不能超过 40 项" }, { status: 400 });
     }
     const cleanHospital = (hospital && typeof hospital === "string" && hospital.trim()) || null;
     if (cleanHospital && cleanHospital.length > 100) {
@@ -107,6 +107,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "aiSummary 不能超过 5000 个字符" }, { status: 400 });
     }
     const cleanImageUrl = (imageUrl && typeof imageUrl === "string" && imageUrl.trim()) || null;
+    if (cleanImageUrl && !/^\/uploads\/medical\/[^/]+\.(jpg|jpeg|png|webp|heic)$/i.test(cleanImageUrl)) {
+      return NextResponse.json({ error: "imageUrl 仅支持本站 /uploads/medical/ 路径的图片" }, { status: 400 });
+    }
 
     // 校验必须先于任何写入：越界直接 400，避免孤儿报告
     let weightKg: number | null = null;

@@ -64,7 +64,13 @@ async function handleUpdate(
     if (body.doctorNotes !== undefined) updateData.doctorNotes = body.doctorNotes;
     if (body.aiSummary !== undefined) updateData.aiSummary = body.aiSummary;
     if (body.items !== undefined) updateData.itemsJson = JSON.stringify(Array.isArray(body.items) ? body.items : []);
-    if (body.imageUrl !== undefined) updateData.imageUrl = body.imageUrl;
+    if (body.imageUrl !== undefined) {
+      const trimmed = typeof body.imageUrl === "string" ? body.imageUrl.trim() : "";
+      if (trimmed && !/^\/uploads\/medical\/[^/]+\.(jpg|jpeg|png|webp|heic)$/i.test(trimmed)) {
+        return NextResponse.json({ error: "imageUrl 仅支持本站 /uploads/medical/ 路径的图片" }, { status: 400 });
+      }
+      updateData.imageUrl = trimmed || null;
+    }
 
     const updated = await prisma.medicalReport.update({
       where: { id },

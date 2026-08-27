@@ -31,6 +31,7 @@ interface Vaccine {
   substitutionRules?: string[] | null
   routineHealthyChildOption?: boolean | null
   manualReviewRequired?: boolean | null
+  sexRestriction?: string | null
   regionalOverrides?: {
     regionCode: string
     regionName: string
@@ -339,6 +340,9 @@ export default function VaccinesPage() {
     for (const entry of schedule) {
       const vaccine = vaccineById.get(entry.vaccineId)
       if (!vaccine || vaccine.routineHealthyChildOption === false) continue
+      // 性别限制过滤：如 HPV 仅女性
+      if (vaccine.sexRestriction === "female" && baby?.gender !== "female") continue
+      if (vaccine.sexRestriction === "male" && baby?.gender !== "male") continue
 
       // 互斥检查：仅隐藏明确属于某个互斥组但不是当前活动候选的产品。
       if (

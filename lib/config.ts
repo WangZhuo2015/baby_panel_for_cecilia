@@ -15,8 +15,13 @@ export const DATABASE_URL = process.env.DATABASE_URL || "file:./dev.db";
 export function resolveDatabaseUrl(url: string): string {
   if (!url.startsWith("file:")) return url;
   const relativePath = url.slice("file:".length);
-  // path.resolve correctly handles both relative and absolute - ignore for turbopack tracing
-  return `file:${path.resolve(/* turbopackIgnore: true */ process.cwd(), relativePath)}`;
+  // Handle standalone build where cwd is .next/standalone: resolve to project root
+  let cwd = process.cwd();
+  // turbopackIgnore for static tracing
+  if (cwd.endsWith(`${path.sep}.next${path.sep}standalone`) || cwd.endsWith(".next/standalone")) {
+    cwd = path.resolve(cwd, "..", "..");
+  }
+  return `file:${path.resolve(/* turbopackIgnore: true */ cwd, relativePath)}`;
 }
 
 /**
