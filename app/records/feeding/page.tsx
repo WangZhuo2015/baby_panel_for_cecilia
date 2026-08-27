@@ -51,8 +51,8 @@ export default function FeedingRecordPage() {
 
   // Breastfeeding stopwatch —— 使用组件内 state 避免跨路由泄漏，定时器通过 useEffect 驱动
   const [activeSide, setActiveSide] = useState<"left" | "right" | null>(null);
-  const [leftSec, setLeftSec] = useState(600);
-  const [rightSec, setRightSec] = useState(480);
+  const [leftSec, setLeftSec] = useState(0);
+  const [rightSec, setRightSec] = useState(0);
 
   const [spitUp, setSpitUp] = useState(false);
   const [tookVitaminD, setTookVitaminD] = useState(false);

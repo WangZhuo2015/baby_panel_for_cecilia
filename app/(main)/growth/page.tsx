@@ -42,7 +42,7 @@ export default function GrowthPage() {
       .catch(() => {});
   }, [fetchGrowthMeasurements]);
 
-  const latest = measurements[measurements.length - 1];
+  const latest = measurements[0];
 
   const tabs = [
     { value: 'weight', label: '体重' },
@@ -219,7 +219,7 @@ export default function GrowthPage() {
           <p className="text-xs text-text-muted text-center py-4">暂无生长测量记录，点击下方按钮添加</p>
         ) : (
           <div className="space-y-3">
-            {[...measurements].reverse().slice(0, 8).map((m) => (
+            {measurements.slice(0, 8).map((m) => (
               <div key={m.id} className="flex items-center justify-between py-1.5 border-b border-primary-soft/30 last:border-0">
                 <div>
                   <p className="text-xs text-text-muted">{m.date}</p>

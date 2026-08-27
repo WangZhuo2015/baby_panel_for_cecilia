@@ -2,6 +2,8 @@
 
 import { create } from "zustand";
 import { enqueueOutbox, isRetryableSubmitError } from "@/lib/outbox";
+import { STALE_MS, _fetchedAt, isFresh, markFetched, invalidateCache, dedup, toQuery } from "@/lib/fetch-cache";
+export { invalidateCache } from "@/lib/fetch-cache";
 import type {
   User,
   Family,
@@ -171,50 +173,7 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
 
 
 
-/* ── Fetch caching / deduplication ────────────────────────── */
-const STALE_MS = 30_000; // 30 seconds before data is considered stale
-const _fetchedAt: Record<string, number> = {};
-const _inflight: Record<string, Promise<void> | undefined> = {};
-
-/** Returns true if the key was fetched less than STALE_MS ago */
-function isFresh(key: string): boolean {
-  return Date.now() - (_fetchedAt[key] || 0) < STALE_MS;
-}
-
-/** Mark a key as freshly fetched */
-function markFetched(key: string): void {
-  _fetchedAt[key] = Date.now();
-}
-
-/** Explicitly invalidate cache keys */
-export function invalidateCache(prefix?: string): void {
-  if (!prefix) {
-    for (const k in _fetchedAt) delete _fetchedAt[k];
-    return;
-  }
-  for (const k in _fetchedAt) {
-    if (k === prefix || k.startsWith(`${prefix}:`)) {
-      delete _fetchedAt[k];
-    }
-  }
-}
-
-/** Deduplicate: if an identical request is already in-flight, return it */
-function dedup(key: string, fn: () => Promise<void>): Promise<void> {
-  if (_inflight[key]) return _inflight[key]!;
-  const p = fn().finally(() => { _inflight[key] = undefined; });
-  _inflight[key] = p;
-  return p;
-}
-
-function toQuery(params: Record<string, string | undefined>): string {
-  const sp = new URLSearchParams();
-  for (const [k, v] of Object.entries(params)) {
-    if (v !== undefined && v !== "") sp.set(k, v);
-  }
-  const str = sp.toString();
-  return str ? `?${str}` : "";
-}
+// Fetch caching extracted to lib/fetch-cache.ts - re-exported above for compat
 
 export const useBabyStore = create<BabyStore>((set, get) => ({
   // Initial state
@@ -916,7 +875,7 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
       invalidateCache("growthMeasurements");
       set((state) => ({
         growthMeasurements: [...state.growthMeasurements, newMeasurement].sort(
-          (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+          (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
         ),
       }));
     } catch (e) {

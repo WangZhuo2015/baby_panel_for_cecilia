@@ -473,8 +473,10 @@ export default function VaccinesPage() {
     )
   }
 
-  // Filter: hide vaccines with routineHealthyChildOption === false
-  const timelineVaccines = vaccines.filter(v => v.routineHealthyChildOption !== false)
+  // Filter: hide vaccines with routineHealthyChildOption === false and gender mismatch
+  const timelineVaccines = vaccines.filter(v => v.routineHealthyChildOption !== false
+    && !(v.sexRestriction === "female" && baby?.gender !== "female")
+    && !(v.sexRestriction === "male" && baby?.gender !== "male"))
 
   // Group by program type
   const grouped: Record<string, Vaccine[]> = {}

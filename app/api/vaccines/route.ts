@@ -173,8 +173,10 @@ export async function POST(request: Request) {
           select: { vaccineId: true, name: true },
         });
       } else {
-        const all = await tx.vaccine.findMany({ select: { vaccineId: true, name: true } });
-        matched = all.find((v) => v.name === trimmedName) ?? all.find((v) => trimmedName.length >= 3 && (v.name.includes(trimmedName) || trimmedName.includes(v.name))) ?? null;
+        const all = await tx.vaccine.findMany({ select: { vaccineId: true, name: true, shortName: true } });
+        const lower = trimmedName.toLowerCase();
+        matched = all.find((v) => v.name === trimmedName || (v as any).shortName === trimmedName || (v as any).shortName?.toLowerCase() === lower) 
+          ?? all.find((v) => trimmedName.length >= 3 && (v.name.includes(trimmedName) || trimmedName.includes(v.name) || (v as any).shortName?.toLowerCase().includes(lower) || lower.includes((v as any).shortName?.toLowerCase() || ""))) ?? null;
       }
 
       const record = await tx.vaccineRecord.create({
