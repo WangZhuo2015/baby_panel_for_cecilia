@@ -40,14 +40,22 @@ export async function POST(request: Request) {
       );
     }
 
+    const endpoint = subscription.endpoint.trim();
+    const existing = await prisma.pushSubscription.findUnique({ where: { endpoint } });
+    if (existing && existing.userId && existing.userId !== user.id) {
+      return NextResponse.json(
+        { error: "该推送订阅已归属其他用户" },
+        { status: 409 }
+      );
+    }
     const record = await prisma.pushSubscription.upsert({
-      where: { endpoint: subscription.endpoint },
+      where: { endpoint },
       update: {
         keysJson: JSON.stringify(subscription.keys),
         userId: user.id,
       },
       create: {
-        endpoint: subscription.endpoint,
+        endpoint,
         keysJson: JSON.stringify(subscription.keys),
         userId: user.id,
       },

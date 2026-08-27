@@ -25,9 +25,12 @@ export async function GET(request: Request) {
       whereClause.category = category;
     }
 
+    const limit = Math.min(100, Math.max(1, parseInt(searchParams.get("limit") || "50", 10) || 50));
+
     const reports = await prisma.medicalReport.findMany({
       where: whereClause,
       orderBy: { date: "desc" },
+      take: limit,
     });
 
     const formatted = reports.map((r) => ({
@@ -83,10 +86,26 @@ export async function POST(request: Request) {
       );
     }
 
+    if (cleanTitle.length > 100) {
+      return NextResponse.json({ error: "title 不能超过 100 个字符" }, { status: 400 });
+    }
+
     const itemsJson = JSON.stringify(Array.isArray(items) ? items : []);
+    if (Array.isArray(items) && items.length > 20) {
+      return NextResponse.json({ error: "items 不能超过 20 项" }, { status: 400 });
+    }
     const cleanHospital = (hospital && typeof hospital === "string" && hospital.trim()) || null;
+    if (cleanHospital && cleanHospital.length > 100) {
+      return NextResponse.json({ error: "hospital 不能超过 100 个字符" }, { status: 400 });
+    }
     const cleanDoctorNotes = (doctorNotes && typeof doctorNotes === "string" && doctorNotes.trim()) || null;
+    if (cleanDoctorNotes && cleanDoctorNotes.length > 1000) {
+      return NextResponse.json({ error: "doctorNotes 不能超过 1000 个字符" }, { status: 400 });
+    }
     const cleanAiSummary = (aiSummary && typeof aiSummary === "string" && aiSummary.trim()) || null;
+    if (cleanAiSummary && cleanAiSummary.length > 5000) {
+      return NextResponse.json({ error: "aiSummary 不能超过 5000 个字符" }, { status: 400 });
+    }
     const cleanImageUrl = (imageUrl && typeof imageUrl === "string" && imageUrl.trim()) || null;
 
     // 校验必须先于任何写入：越界直接 400，避免孤儿报告

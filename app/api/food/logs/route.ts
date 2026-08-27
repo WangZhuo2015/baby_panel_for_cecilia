@@ -27,9 +27,12 @@ export async function GET(request: Request) {
     }
 
 
+    const limit = Math.min(100, Math.max(1, parseInt(searchParams.get("limit") || "50", 10) || 50));
+
     const records = await prisma.foodLogRecord.findMany({
       where,
       orderBy: [{ date: "desc" }, { time: "desc" }],
+      take: limit,
     });
 
     const parsed = records.map((r) => ({
@@ -70,6 +73,13 @@ export async function POST(request: Request) {
     if (babyResult.errorResponse) return babyResult.errorResponse;
     const babyId = babyResult.baby.id;
 
+    if (Array.isArray(foods) && foods.length > 20) {
+      return NextResponse.json({ error: "foods 不能超过 20 项" }, { status: 400 });
+    }
+    if (abnormalNotes !== undefined && abnormalNotes !== null && String(abnormalNotes).trim().length > 1000) {
+      return NextResponse.json({ error: "abnormalNotes 不能超过 1000 个字符" }, { status: 400 });
+    }
+
     const clientId =
       typeof body.clientId === "string" && body.clientId.length > 0 && body.clientId.length <= 64
         ? body.clientId
@@ -83,7 +93,7 @@ export async function POST(request: Request) {
       acceptance: typeof acceptance === "number" ? acceptance : 3,
       babyState: babyState || "happy",
       hasAbnormal: hasAbnormal ?? false,
-      abnormalNotes: abnormalNotes ?? null,
+      abnormalNotes: abnormalNotes ? String(abnormalNotes).trim() : null,
     };
     const record = clientId
       ? await prisma.foodLogRecord.upsert({
@@ -183,6 +193,18 @@ export async function PUT(request: Request) {
     const acc = Number(merged.acceptance);
     if (!Number.isInteger(acc) || acc < 1 || acc > 5) {
       return NextResponse.json({ error: "acceptance 必须为 1-5 的整数" }, { status: 400 });
+    }
+    if (body.foods !== undefined && Array.isArray(body.foods) && body.foods.length > 20) {
+      return NextResponse.json({ error: "foods 不能超过 20 项" }, { status: 400 });
+    }
+    try {
+      const foodsParsed = safeJsonParse(merged.foods as string, []);
+      if (Array.isArray(foodsParsed) && foodsParsed.length > 20) {
+        return NextResponse.json({ error: "foods 不能超过 20 项" }, { status: 400 });
+      }
+    } catch {}
+    if (merged.abnormalNotes !== null && merged.abnormalNotes !== undefined && String(merged.abnormalNotes).length > 1000) {
+      return NextResponse.json({ error: "abnormalNotes 不能超过 1000 个字符" }, { status: 400 });
     }
 
     const updated = await prisma.foodLogRecord.update({

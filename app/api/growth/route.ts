@@ -17,9 +17,12 @@ export async function GET(request: Request) {
     const babyResult = await requireBaby(user.id, requestedBabyId);
     if (babyResult.errorResponse) return babyResult.errorResponse;
 
+    const limit = Math.min(100, Math.max(1, parseInt(searchParams.get("limit") || "50", 10) || 50));
+
     const measurements = await prisma.growthMeasurement.findMany({
       where: { babyId: babyResult.baby.id },
       orderBy: [{ date: "asc" }, { createdAt: "asc" }],
+      take: limit,
     });
 
     return NextResponse.json(measurements);

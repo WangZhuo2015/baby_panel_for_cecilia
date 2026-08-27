@@ -28,9 +28,12 @@ export async function GET(request: Request) {
     }
 
 
+    const limit = Math.min(100, Math.max(1, parseInt(searchParams.get("limit") || "50", 10) || 50));
+
     const records = await prisma.feedingRecord.findMany({
       where,
       orderBy: { timestamp: "desc" },
+      take: limit,
     });
 
     return NextResponse.json(records);
@@ -115,6 +118,10 @@ export async function POST(request: Request) {
         );
       }
       recordTimestamp = parsedTime.toISOString();
+    }
+
+    if (notes !== undefined && notes !== null && String(notes).trim().length > 1000) {
+      return NextResponse.json({ error: "notes 不能超过 1000 个字符" }, { status: 400 });
     }
 
     // 离线 outbox 幂等：携带 clientId 的重放请求不会产生第二条记录
@@ -238,6 +245,9 @@ export async function PUT(request: Request) {
         { error: "type 只能为 breast、formula、bottle_breast、mixed 或 solid" },
         { status: 400 }
       );
+    }
+    if (merged.notes !== null && merged.notes !== undefined && String(merged.notes).length > 1000) {
+      return NextResponse.json({ error: "notes 不能超过 1000 个字符" }, { status: 400 });
     }
 
     const numOrNull = (v: unknown, min: number, max: number, label: string): number | null => {

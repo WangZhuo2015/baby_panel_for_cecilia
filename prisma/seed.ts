@@ -5,7 +5,14 @@ import * as path from 'path';
 import bcrypt from 'bcryptjs';
 
 
-const DATA_DIR = path.join(process.cwd(), 'data');
+function getDataDir(): string {
+  const primary = path.join(process.cwd(), 'data');
+  if (fs.existsSync(primary)) return primary;
+  const fallback = path.join(process.cwd(), 'seed-data');
+  if (fs.existsSync(fallback)) return fallback;
+  return primary;
+}
+const DATA_DIR = getDataDir();
 
 function readJson<T>(filename: string): T {
   const filePath = path.join(DATA_DIR, filename);
@@ -29,6 +36,7 @@ async function main() {
   // Configure SQLite WAL mode and busy timeout for concurrent safety and query performance
   await prisma.$queryRawUnsafe("PRAGMA journal_mode = WAL;").catch(() => {});
   await prisma.$queryRawUnsafe("PRAGMA busy_timeout = 5000;").catch(() => {});
+  await prisma.$queryRawUnsafe("PRAGMA foreign_keys = ON;").catch(() => {});
 
   console.log('🗑️  Refreshing reference knowledge base data (vaccines, food items, milestones, books)...');
   await prisma.$transaction([
@@ -65,7 +73,7 @@ async function main() {
 
   // ── 1. DataRelease ──────────────────────────────────────────────────
   console.log('📅 Creating DataRelease...');
-  await prisma.dataRelease.create({
+  const dataRelease = await prisma.dataRelease.create({
     data: {
       title: sourcesData.datasetMeta?.title ?? '0–3岁中国婴幼儿育儿数据库',
       asOf: sourcesData.datasetMeta?.asOf ?? '2026-08-03',
@@ -86,6 +94,7 @@ async function main() {
       sourceType: s.sourceType ?? null,
       accessedDate: s.accessedDate ?? null,
       notes: s.notes ?? null,
+      dataReleaseId: dataRelease.id,
     })),
   });
 

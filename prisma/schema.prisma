@@ -109,6 +109,7 @@ model SleepRecord {
   createdAt        DateTime @default(now())
 
   @@index([babyId, startTime])
+  @@index([babyId, endTime])
   @@unique([babyId, clientId])
 }
 
@@ -241,6 +242,8 @@ model SourceRef {
   dataRelease         DataRelease?         @relation(fields: [dataReleaseId], references: [id])
   vaccineSourceRefs   VaccineSourceRef[]   @relation("vaccineSourceRefs")
   milestoneSourceRefs MilestoneSourceRef[] @relation("milestoneSourceRefs")
+
+  @@index([dataReleaseId])
 }
 
 // ─── Vaccine Models (Shared Static Reference) ───────────────────────────────

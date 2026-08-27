@@ -80,7 +80,31 @@ export async function POST(request: Request) {
       );
     }
 
-    const foodId = body.foodId || `user_${Date.now()}`;
+    // Enforce isolated custom foodId namespace; system foodIds require admin
+    let foodId: string;
+    if (typeof body.foodId === "string" && body.foodId.trim() !== "") {
+      const requested = body.foodId.trim();
+      // user_ prefix is isolated namespace; otherwise require admin
+      if (!requested.startsWith("user_")) {
+        const membership = await prisma.familyMember.findFirst({
+          where: { familyId, userId: user.id },
+          select: { role: true },
+        });
+        if (membership?.role !== "admin") {
+          return NextResponse.json(
+            { error: "仅管理员可创建或覆盖系统食材，普通成员仅可创建自定义食材" },
+            { status: 403 }
+          );
+        }
+        // admin may specify system id, but prevent overwrite via upsert update:{}
+        foodId = requested;
+      } else {
+        // Ensure user_ id is scoped to current user to avoid cross-user collision
+        foodId = requested.startsWith(`user_${user.id}_`) ? requested : `user_${user.id}_${Date.now()}`;
+      }
+    } else {
+      foodId = `user_${user.id}_${Date.now()}`;
+    }
 
     // Upsert or create food item
     const foodItem = await prisma.foodItem.upsert({
@@ -88,25 +112,25 @@ export async function POST(request: Request) {
       update: {},
       create: {
         foodId,
-        name: body.name.trim(),
+        name: body.name.trim().slice(0, 100),
         icon: body.icon || "🍽️",
         category: body.category || "other",
         foodGroup: body.foodGroup ?? null,
         recommendedFromMonth: body.recommendedFromMonth ?? null,
         recommendedToMonth: body.recommendedToMonth ?? null,
         exactMonthEvidence: body.exactMonthEvidence ?? false,
-        guidance: body.guidance ?? null,
+        guidance: body.guidance ? String(body.guidance).slice(0, 2000) : null,
         isCommonAllergen: body.isCommonAllergen ?? null,
         allergenIntroductionGuidance: body.allergenIntroductionGuidance ?? null,
         highRiskInfantNeedsMedicalAdvice: body.highRiskInfantNeedsMedicalAdvice ?? null,
         chokingRisk: body.chokingRisk ?? false,
-        chokingNotes: body.chokingNotes ?? null,
-        preparationJson: body.preparation ? JSON.stringify(body.preparation) : "[]",
+        chokingNotes: body.chokingNotes ? String(body.chokingNotes).slice(0, 1000) : null,
+        preparationJson: body.preparation ? JSON.stringify(body.preparation).slice(0, 10000) : "[]",
         avoidBeforeMonths: body.avoidBeforeMonths ?? null,
-        nutritionJson: body.nutrition ? JSON.stringify(body.nutrition) : "[]",
-        textureByAgeJson: body.textureByAge ? JSON.stringify(body.textureByAge) : "[]",
-        notes: body.notes ?? null,
-        sourceRefsJson: body.sourceRefs ? JSON.stringify(body.sourceRefs) : "[]",
+        nutritionJson: body.nutrition ? JSON.stringify(body.nutrition).slice(0, 10000) : "[]",
+        textureByAgeJson: body.textureByAge ? JSON.stringify(body.textureByAge).slice(0, 10000) : "[]",
+        notes: body.notes ? String(body.notes).slice(0, 2000) : null,
+        sourceRefsJson: body.sourceRefs ? JSON.stringify(body.sourceRefs).slice(0, 10000) : "[]",
       },
     });
 

@@ -1,6 +1,6 @@
 FROM node:20-alpine AS base
 WORKDIR /app
-RUN apk add --no-cache libc6-compat openssl
+RUN apk add --no-cache libc6-compat openssl wget
 
 # 1. Install dependencies
 # ⚠️ 必须安装 devDependencies：prisma CLI 与 dotenv（prisma.config.ts 依赖）均为 devDep，
@@ -33,6 +33,7 @@ RUN mkdir -p /app/data && chown -R nextjs:nodejs /app/data
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/generated ./generated
+COPY --from=builder /app/data ./data
 COPY --from=builder /app/data ./seed-data
 COPY --from=builder /app/package.json ./package.json
 

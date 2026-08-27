@@ -23,6 +23,12 @@ services:
       - VAPID_PRIVATE_KEY=${VAPID_PRIVATE_KEY}
       - VAPID_SUBJECT=${VAPID_SUBJECT:-mailto:admin@example.com}
       - PUSH_SEND_TOKEN=${PUSH_SEND_TOKEN}
+      - TAVILY_API_KEY=${TAVILY_API_KEY:-}
+      - SERPER_API_KEY=${SERPER_API_KEY:-}
+      - BRAVE_API_KEY=${BRAVE_API_KEY:-}
+      - TRUST_PROXY=${TRUST_PROXY:-true}
+      - SEED_DEMO=${SEED_DEMO:-}
+      - ASR_COMMAND=${ASR_COMMAND:-}
 
     volumes:
       - baby-data:/app/data

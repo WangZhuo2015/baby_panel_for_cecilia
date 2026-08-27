@@ -28,9 +28,12 @@ export async function GET(request: Request) {
       }
     }
 
+    const limit = Math.min(100, Math.max(1, parseInt(searchParams.get("limit") || "50", 10) || 50));
+
     const records = await prisma.sleepRecord.findMany({
       where,
       orderBy: { startTime: "desc" },
+      take: limit,
     });
 
     return NextResponse.json(records);
@@ -114,6 +117,10 @@ export async function POST(request: Request) {
     }
     if (new Date(finalStartIso).getTime() > Date.now() + 48 * 60 * 60 * 1000) {
       return NextResponse.json({ error: "睡眠开始时间不能在未来两天以后" }, { status: 400 });
+    }
+
+    if (notes !== undefined && notes !== null && String(notes).trim().length > 1000) {
+      return NextResponse.json({ error: "notes 不能超过 1000 个字符" }, { status: 400 });
     }
 
     const sleepType = type === "night" ? "night" : "day";
@@ -267,6 +274,9 @@ export async function PUT(request: Request) {
     const notes = body.notes !== undefined
       ? (body.notes ? String(body.notes).trim() : null)
       : record.notes;
+    if (notes !== null && notes !== undefined && String(notes).length > 1000) {
+      return NextResponse.json({ error: "notes 不能超过 1000 个字符" }, { status: 400 });
+    }
 
     const updated = await prisma.sleepRecord.update({
       where: { id },

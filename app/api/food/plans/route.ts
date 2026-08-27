@@ -27,9 +27,12 @@ export async function GET(request: Request) {
     }
 
 
+    const limit = Math.min(100, Math.max(1, parseInt(searchParams.get("limit") || "50", 10) || 50));
+
     const plans = await prisma.foodPlan.findMany({
       where,
       orderBy: { date: "desc" },
+      take: limit,
     });
 
     const parsed = plans.map((p) => ({
@@ -77,6 +80,9 @@ export async function POST(request: Request) {
       value.every((item) => typeof item === "string" && item.trim().length > 0 && item.length <= 500);
     if (!isStringArray(tags) || !isStringArray(ingredients) || !isStringArray(steps)) {
       return NextResponse.json({ error: "tags、ingredients、steps 必须为非空字符串数组" }, { status: 400 });
+    }
+    if (tags.length > 20 || ingredients.length > 20 || steps.length > 20) {
+      return NextResponse.json({ error: "tags、ingredients、steps 均不能超过 20 项" }, { status: 400 });
     }
     if (typeof nutrition !== "string" || nutrition.trim().length > 500) {
       return NextResponse.json({ error: "nutrition 必须为不超过 500 个字符的文本" }, { status: 400 });

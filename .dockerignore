@@ -10,5 +10,14 @@ scratch/
 docs/
 dev.db
 dev.db-journal
+dev.db-wal
+dev.db-shm
+*.db-wal
+*.db-shm
 backups/
 database_backup_full.*
+data/archive/
+data/*.db*
+generated/
+.next/cache
+coverage/

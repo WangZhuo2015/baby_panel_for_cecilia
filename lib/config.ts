@@ -1,6 +1,7 @@
 /**
  * Centralized Application Configuration and Environment Variable Management
  */
+import path from "node:path";
 
 export const NODE_ENV = process.env.NODE_ENV || "development";
 export const IS_PRODUCTION = NODE_ENV === "production";
@@ -9,6 +10,14 @@ export const IS_TEST = NODE_ENV === "test";
 
 export const PORT = parseInt(process.env.PORT || "3000", 10);
 export const DATABASE_URL = process.env.DATABASE_URL || "file:./dev.db";
+
+/** Resolve file: URLs to absolute paths to avoid dual-DB when cwd differs (migrate vs runtime) */
+export function resolveDatabaseUrl(url: string): string {
+  if (!url.startsWith("file:")) return url;
+  const relativePath = url.slice("file:".length);
+  // path.resolve correctly handles both relative and absolute - ignore for turbopack tracing
+  return `file:${path.resolve(/* turbopackIgnore: true */ process.cwd(), relativePath)}`;
+}
 
 /**
  * Validates and resolves the JWT secret.

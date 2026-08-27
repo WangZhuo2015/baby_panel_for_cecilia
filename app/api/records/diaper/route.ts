@@ -28,9 +28,12 @@ export async function GET(request: Request) {
     }
 
 
+    const limit = Math.min(100, Math.max(1, parseInt(searchParams.get("limit") || "50", 10) || 50));
+
     const records = await prisma.diaperRecord.findMany({
       where,
       orderBy: { timestamp: "desc" },
+      take: limit,
     });
 
     return NextResponse.json(records);
@@ -79,6 +82,16 @@ export async function POST(request: Request) {
         );
       }
       recordTimestamp = parsedTime.toISOString();
+    }
+
+    if (notes !== undefined && notes !== null && String(notes).trim().length > 1000) {
+      return NextResponse.json({ error: "notes 不能超过 1000 个字符" }, { status: 400 });
+    }
+    if (poopColor !== undefined && poopColor !== null && String(poopColor).trim().length > 100) {
+      return NextResponse.json({ error: "poopColor 不能超过 100 个字符" }, { status: 400 });
+    }
+    if (poopConsistency !== undefined && poopConsistency !== null && String(poopConsistency).trim().length > 100) {
+      return NextResponse.json({ error: "poopConsistency 不能超过 100 个字符" }, { status: 400 });
     }
 
     const clientId =
@@ -196,6 +209,15 @@ export async function PUT(request: Request) {
 
     if (!["pee", "poop", "both"].includes(merged.type)) {
       return NextResponse.json({ error: "type 只能为 pee、poop 或 both" }, { status: 400 });
+    }
+    if (merged.notes !== null && merged.notes !== undefined && String(merged.notes).length > 1000) {
+      return NextResponse.json({ error: "notes 不能超过 1000 个字符" }, { status: 400 });
+    }
+    if (merged.poopColor !== null && merged.poopColor !== undefined && String(merged.poopColor).length > 100) {
+      return NextResponse.json({ error: "poopColor 不能超过 100 个字符" }, { status: 400 });
+    }
+    if (merged.poopConsistency !== null && merged.poopConsistency !== undefined && String(merged.poopConsistency).length > 100) {
+      return NextResponse.json({ error: "poopConsistency 不能超过 100 个字符" }, { status: 400 });
     }
 
     let recordTimestamp: string;

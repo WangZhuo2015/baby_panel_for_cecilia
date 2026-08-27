@@ -26,6 +26,8 @@ export async function signAuthToken(payload: { userId: string; username: string 
 export async function verifyAuthToken(token: string): Promise<{ userId: string; username: string } | null> {
   try {
     const { payload } = await jwtVerify(token, getJwtSecretBytes());
+    // Reject MCP session tokens (typ=mcp) to prevent cross-use
+    if ((payload as Record<string, unknown>).typ === "mcp") return null;
     if (typeof payload.userId === "string" && typeof payload.username === "string") {
       return { userId: payload.userId, username: payload.username };
     }
