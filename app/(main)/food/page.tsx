@@ -334,7 +334,7 @@ export default function FoodPage() {
                   {todayFoodPlan.tags.map((tag) => (
                     <span
                       key={tag}
-                      className="px-2.5 py-0.5 bg-white/60 dark:bg-card/60 text-primary text-xs font-medium rounded-full"
+                      className="px-2.5 py-0.5 bg-white dark:bg-card border border-primary/15 text-primary text-xs font-medium rounded-full shadow-2xs"
                     >
                       {tag}
                     </span>
@@ -343,8 +343,8 @@ export default function FoodPage() {
               </div>
 
               {/* Nutrition */}
-              <div className="bg-white/50 dark:bg-card/50 rounded-xl p-3">
-                <p className="text-xs text-text-secondary font-medium mb-1">营养价值</p>
+              <div className="bg-white dark:bg-card rounded-2xl p-3.5 border border-primary/15 shadow-xs">
+                <p className="text-xs text-text-secondary font-bold mb-1">营养价值</p>
                 <p className="text-xs font-medium text-text-primary leading-relaxed">
                   {todayFoodPlan.nutrition}
                 </p>
@@ -357,7 +357,7 @@ export default function FoodPage() {
                   {todayFoodPlan.ingredients.map((ingredient) => (
                     <span
                       key={ingredient}
-                      className="px-2.5 py-1 bg-white/60 dark:bg-card/60 text-xs text-text-primary rounded-xl"
+                      className="px-2.5 py-1 bg-white dark:bg-card border border-primary/15 text-xs font-medium text-text-primary rounded-xl shadow-2xs"
                     >
                       {ingredient}
                     </span>

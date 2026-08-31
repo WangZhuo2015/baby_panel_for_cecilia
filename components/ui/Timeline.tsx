@@ -25,7 +25,7 @@ const colorMap: Record<TimelineEntry['type'], string> = {
 const TimelineImpl: React.FC<TimelineProps> = ({ items, onItemTap }) => {
   if (items.length === 0) {
     return (
-      <div className="py-6 px-4 rounded-2xl bg-white/60 border border-primary-soft/40 text-center space-y-1">
+      <div className="py-6 px-4 rounded-2xl bg-white dark:bg-card border border-primary-soft/40 text-center space-y-1 shadow-xs">
         <span className="text-2xl">🍼💤</span>
         <p className="text-xs font-semibold text-text-secondary">今天还没有记录作息流水哦</p>
         <p className="text-[11px] text-text-muted">点击上方快捷卡片，轻松记下宝宝的每一餐与每一觉</p>

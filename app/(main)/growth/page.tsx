@@ -273,7 +273,7 @@ export default function GrowthPage() {
                 {measurements.slice(0, 15).map((m) => (
                   <div
                     key={m.id}
-                    className="flex items-center justify-between p-2.5 rounded-xl bg-white/60 dark:bg-card/60 border border-primary/10 hover:border-primary/30 transition-all"
+                    className="flex items-center justify-between p-2.5 rounded-xl bg-white dark:bg-card border border-primary/15 hover:border-primary/30 transition-all shadow-2xs"
                   >
                     <div>
                       <p className="text-[11px] text-text-muted">{m.date}</p>

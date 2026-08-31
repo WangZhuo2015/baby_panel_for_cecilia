@@ -343,9 +343,9 @@ export default function MedicalReportsPage() {
       {/* Detail Modal */}
       {selectedReport && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
-          <div className="bg-bg-card w-full max-w-lg rounded-t-3xl sm:rounded-3xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden animate-slide-up">
+          <div className="bg-white dark:bg-[#1E171E] text-text-primary dark:text-gray-100 w-full max-w-lg rounded-t-3xl sm:rounded-3xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden animate-slide-up border border-primary/20">
             {/* Modal Header */}
-            <div className="p-4 border-b border-divider flex items-center justify-between bg-white sticky top-0 z-10">
+            <div className="p-4 border-b border-divider flex items-center justify-between bg-white dark:bg-[#251D25] sticky top-0 z-10">
               <div className="flex items-center gap-2">
                 <span className="text-xl">
                   {CATEGORY_MAP[selectedReport.category]?.emoji || "📑"}
@@ -500,7 +500,7 @@ export default function MedicalReportsPage() {
             </div>
 
             {/* Modal Footer */}
-            <div className="p-3 bg-gray-50 border-t border-divider flex items-center justify-between">
+            <div className="p-3 bg-gray-50 dark:bg-[#251D25] border-t border-divider flex items-center justify-between">
               <button
                 onClick={(e) => handleDelete(selectedReport.id, e)}
                 className="text-xs text-red-500 hover:text-red-700 flex items-center gap-1 px-3 py-2 rounded-xl hover:bg-red-50 transition-colors"

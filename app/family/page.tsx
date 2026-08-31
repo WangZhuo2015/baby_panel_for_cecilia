@@ -108,7 +108,7 @@ export default function FamilyPage() {
               {family?.name || "家庭育儿空间"}
             </h2>
           </div>
-          <span className="text-xs px-2.5 py-0.5 rounded-full bg-white/70 text-primary font-medium">
+          <span className="text-xs px-2.5 py-0.5 rounded-full bg-white dark:bg-card border border-primary/20 text-primary font-medium shadow-2xs">
             {familyMembers.length} 位成员
           </span>
         </div>
@@ -117,9 +117,9 @@ export default function FamilyPage() {
           把下方邀请码分享给宝爸、爷爷奶奶或看护人员，即可共享宝宝的全部喂奶、睡眠、成长与疫苗记录。
         </p>
 
-        <div className="bg-white/80 backdrop-blur rounded-2xl p-3.5 flex items-center justify-between border border-primary/20">
+        <div className="bg-white dark:bg-card rounded-2xl p-3.5 flex items-center justify-between border border-primary/25 shadow-xs">
           <div>
-            <span className="text-[11px] text-text-muted block">家庭专属邀请码</span>
+            <span className="text-[11px] text-text-secondary dark:text-gray-400 block font-medium">家庭专属邀请码</span>
             <span className="text-xl font-mono font-bold tracking-widest text-primary">
               {family?.inviteCode || "------"}
             </span>

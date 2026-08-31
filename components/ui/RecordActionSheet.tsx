@@ -31,7 +31,7 @@ export const RecordActionSheet: React.FC<RecordActionSheetProps> = ({
       aria-label="记录操作"
     >
       <div
-        className="w-full sm:max-w-sm sm:mx-auto sm:mb-6 bg-card rounded-t-[24px] sm:rounded-[24px] p-4 pb-[max(16px,env(safe-area-inset-bottom))]"
+        className="w-full sm:max-w-sm sm:mx-auto sm:mb-6 bg-white dark:bg-[#1E171E] text-text-primary dark:text-gray-100 rounded-t-[24px] sm:rounded-[24px] p-4 pb-[max(16px,env(safe-area-inset-bottom))] shadow-2xl border border-primary/20"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-1 pb-2">

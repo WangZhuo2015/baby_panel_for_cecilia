@@ -221,8 +221,8 @@ export function SupplementQuickCheckIn({ babyId, onRecordSuccess, className = ""
 
       {/* ⚠️ 补剂冲突与过量拦截弹窗 */}
       {conflictModal.isOpen && conflictModal.product && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fadeIn">
-          <div className="bg-white rounded-3xl p-5 max-w-sm w-full shadow-card border border-amber-300 space-y-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/65 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-white dark:bg-[#1E171E] text-text-primary dark:text-gray-100 rounded-3xl p-5 max-w-sm w-full shadow-2xl border border-amber-400 space-y-4">
             <div className="flex items-start justify-between">
               <div className="flex items-center gap-2">
                 <div className="w-10 h-10 rounded-2xl bg-amber-100 text-amber-600 flex items-center justify-center shrink-0">

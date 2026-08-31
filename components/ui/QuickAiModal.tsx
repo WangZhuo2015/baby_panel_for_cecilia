@@ -1151,7 +1151,7 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
           )}
 
           {/* Quick Suggestion Chips */}
-          <div className="px-3.5 py-2.5 bg-white/60 backdrop-blur-xs border-b border-primary/10 overflow-x-auto scrollbar-hide flex gap-2 shrink-0">
+          <div className="px-3.5 py-2.5 bg-white dark:bg-[#251D25] border-b border-primary/10 overflow-x-auto scrollbar-hide flex gap-2 shrink-0">
             {meta.chips.map((chip, idx) => (
               <button
                 key={idx}

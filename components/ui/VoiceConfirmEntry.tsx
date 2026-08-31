@@ -143,7 +143,7 @@ export function VoiceConfirmEntry({ contextType }: VoiceConfirmEntryProps) {
           aria-label="确认语音记录"
         >
           <div
-            className="w-full max-w-md bg-bg rounded-t-3xl sm:rounded-3xl max-h-[85vh] overflow-y-auto p-4 pb-[max(16px,env(safe-area-inset-bottom))]"
+            className="w-full max-w-md bg-white dark:bg-[#1E171E] text-text-primary dark:text-gray-100 rounded-t-3xl sm:rounded-3xl max-h-[85vh] overflow-y-auto p-4 pb-[max(16px,env(safe-area-inset-bottom))] shadow-2xl border border-primary/20"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start justify-between gap-3 mb-3">

@@ -1164,6 +1164,430 @@
       "sourceRefs": [
         "src_cdc_food_avoid_2026"
       ]
+    },
+    {
+      "id": "food_little_freddie_iron_rice_cereal",
+      "name": "小皮有机高铁大米粉",
+      "icon": "🥣",
+      "category": "grain",
+      "foodGroup": "grain",
+      "introduction": {
+        "recommendedFromMonth": 6,
+        "recommendedToMonth": null,
+        "exactMonthEvidence": true,
+        "guidance": "小皮经典有机大米粉，专为6月龄+初次添加辅食宝宝设计。强化富马酸亚铁（二价铁好吸收，每100g含铁约5.8mg），质地细腻顺滑好吞咽，单一大米无敏温和配方。"
+      },
+      "allergen": {
+        "isCommonAllergen": false,
+        "introductionGuidance": "单一大米配方，极低致敏性，非常适合作为辅食第一口尝试。",
+        "highRiskInfantNeedsMedicalAdvice": false
+      },
+      "nutrition": [
+        "铁",
+        "碳水化合物",
+        "维生素B1"
+      ],
+      "textureByAge": [
+        {
+          "ageMinMonths": 6,
+          "ageMaxMonths": 7,
+          "texture": "初次冲调建议偏稀薄如流质糊状，逐渐过渡至浓稠糊状。"
+        },
+        {
+          "ageMinMonths": 8,
+          "ageMaxMonths": 12,
+          "texture": "可调得稍稠，并搭配肉泥、菜泥或辅食油一同进食。"
+        }
+      ],
+      "chokingRisk": false,
+      "chokingNotes": null,
+      "avoidBeforeMonths": null,
+      "preparation": [
+        "取适量米粉（约5-10g）倒入宝宝小碗中",
+        "加入约60-70℃温开水或配方奶（粉水比约1:5~1:6）",
+        "静置30秒后顺时针搅拌均匀呈细腻糊状即可喂食"
+      ],
+      "notes": "欧盟与中国双有机认证，强化二价铁好吸收。",
+      "sourceRefs": [
+        "src_nhc_feeding_2022",
+        "src_cdc_food_intro_2026"
+      ]
+    },
+    {
+      "id": "food_little_freddie_quinoa_rice_cereal",
+      "name": "小皮有机大米藜麦粉",
+      "icon": "🥣",
+      "category": "grain",
+      "foodGroup": "grain",
+      "introduction": {
+        "recommendedFromMonth": 6,
+        "recommendedToMonth": null,
+        "exactMonthEvidence": false,
+        "guidance": "小皮有机大米藜麦粉（6月龄+），添加全谷物有机白藜麦，富含植物蛋白、膳食纤维与必需氨基酸，强化二价铁。"
+      },
+      "allergen": {
+        "isCommonAllergen": false,
+        "introductionGuidance": "在大米粉适应良好后引入，谷物多样化。",
+        "highRiskInfantNeedsMedicalAdvice": false
+      },
+      "nutrition": [
+        "铁",
+        "膳食纤维",
+        "植物蛋白",
+        "维生素B1"
+      ],
+      "textureByAge": [
+        {
+          "ageMinMonths": 6,
+          "ageMaxMonths": 12,
+          "texture": "细腻泥糊状，略带天然藜麦坚果清香。"
+        }
+      ],
+      "chokingRisk": false,
+      "chokingNotes": null,
+      "avoidBeforeMonths": null,
+      "preparation": [
+        "温开水或母乳/配方奶冲调，搅拌均匀后喂哺。"
+      ],
+      "notes": null,
+      "sourceRefs": [
+        "src_nhc_feeding_2022"
+      ]
+    },
+    {
+      "id": "food_little_freddie_oatmeal_cereal",
+      "name": "小皮有机大米燕麦粉",
+      "icon": "🌾",
+      "category": "grain",
+      "foodGroup": "grain",
+      "introduction": {
+        "recommendedFromMonth": 6,
+        "recommendedToMonth": null,
+        "exactMonthEvidence": false,
+        "guidance": "小皮有机燕麦粉（6月龄+），精选优质有机燕麦，富含β-葡聚糖与水溶性膳食纤维，有助于软化便便、促进肠道舒适。"
+      },
+      "allergen": {
+        "isCommonAllergen": false,
+        "introductionGuidance": "含有燕麦谷物，初次尝试建议少量观察。",
+        "highRiskInfantNeedsMedicalAdvice": false
+      },
+      "nutrition": [
+        "铁",
+        "β-葡聚糖",
+        "膳食纤维",
+        "维生素B1"
+      ],
+      "textureByAge": [
+        {
+          "ageMinMonths": 6,
+          "ageMaxMonths": 12,
+          "texture": "软糯糊状，稠度随月龄调整。"
+        }
+      ],
+      "chokingRisk": false,
+      "chokingNotes": null,
+      "avoidBeforeMonths": null,
+      "preparation": [
+        "按推荐比例冲调，易冲泡不结块。"
+      ],
+      "notes": null,
+      "sourceRefs": [
+        "src_nhc_feeding_2022"
+      ]
+    },
+    {
+      "id": "food_little_freddie_prune_apple_cereal",
+      "name": "小皮有机大米西梅苹果米粉",
+      "icon": "🥣",
+      "category": "grain",
+      "foodGroup": "grain",
+      "introduction": {
+        "recommendedFromMonth": 6,
+        "recommendedToMonth": null,
+        "exactMonthEvidence": false,
+        "guidance": "小皮果蔬系列米粉（6月龄+），有机大米搭配真实西梅与苹果果粉，富含天然果胶与膳食纤维，口感酸甜清新，适合便便干燥宝宝。"
+      },
+      "allergen": {
+        "isCommonAllergen": false,
+        "introductionGuidance": "含水果成分，初次尝试观察消化吸收。",
+        "highRiskInfantNeedsMedicalAdvice": false
+      },
+      "nutrition": [
+        "铁",
+        "果胶",
+        "膳食纤维",
+        "维生素C"
+      ],
+      "textureByAge": [
+        {
+          "ageMinMonths": 6,
+          "ageMaxMonths": 12,
+          "texture": "细腻果香米糊。"
+        }
+      ],
+      "chokingRisk": false,
+      "chokingNotes": null,
+      "avoidBeforeMonths": null,
+      "preparation": [
+        "温开水冲调，酸甜适口，增进食欲。"
+      ],
+      "notes": null,
+      "sourceRefs": [
+        "src_nhc_feeding_2022"
+      ]
+    },
+    {
+      "id": "food_little_freddie_multigrain_blueberry_cereal",
+      "name": "小皮有机蓝莓香蕉七种谷物米粉",
+      "icon": "🥣",
+      "category": "grain",
+      "foodGroup": "grain",
+      "introduction": {
+        "recommendedFromMonth": 6,
+        "recommendedToMonth": null,
+        "exactMonthEvidence": false,
+        "guidance": "小皮7重谷物蓝莓香蕉粉（6月龄+），涵盖大米、燕麦、小麦、大麦、黑麦、玉米、小米等7种有机全谷物，搭配蓝莓香蕉果粉与二价铁。"
+      },
+      "allergen": {
+        "isCommonAllergen": false,
+        "introductionGuidance": "含多谷物配方（含麸质谷物），建议在单一谷物耐受后再行添加。",
+        "highRiskInfantNeedsMedicalAdvice": false
+      },
+      "nutrition": [
+        "铁",
+        "花青素",
+        "多谷物复合膳食纤维",
+        "维生素B群"
+      ],
+      "textureByAge": [
+        {
+          "ageMinMonths": 7,
+          "ageMaxMonths": 18,
+          "texture": "稠厚多谷物糊，层次丰富。"
+        }
+      ],
+      "chokingRisk": false,
+      "chokingNotes": null,
+      "avoidBeforeMonths": null,
+      "preparation": [
+        "温开水冲调，建议7月龄及以上宝宝建立咀嚼吞咽后进食。"
+      ],
+      "notes": null,
+      "sourceRefs": [
+        "src_nhc_feeding_2022"
+      ]
+    },
+    {
+      "id": "food_little_freddie_spinach_beef_cereal",
+      "name": "小皮有机大米菠菜牛肉米粉",
+      "icon": "🥣",
+      "category": "grain",
+      "foodGroup": "grain",
+      "introduction": {
+        "recommendedFromMonth": 7,
+        "recommendedToMonth": null,
+        "exactMonthEvidence": false,
+        "guidance": "小皮大米菠菜牛肉粉（7月龄+），采用真实有机草饲牛肉与菠菜，荤素均衡搭配，双重铁源补充，香浓咸香口感。"
+      },
+      "allergen": {
+        "isCommonAllergen": false,
+        "introductionGuidance": "含有牛肉成分，请确保已单独尝试过牛肉与菠菜。",
+        "highRiskInfantNeedsMedicalAdvice": false
+      },
+      "nutrition": [
+        "铁",
+        "优质蛋白质",
+        "叶绿素",
+        "锌",
+        "维生素A"
+      ],
+      "textureByAge": [
+        {
+          "ageMinMonths": 7,
+          "ageMaxMonths": 18,
+          "texture": "浓香肉菜泥糊状。"
+        }
+      ],
+      "chokingRisk": false,
+      "chokingNotes": null,
+      "avoidBeforeMonths": null,
+      "preparation": [
+        "温开水冲调，可作为一顿营养正餐。"
+      ],
+      "notes": null,
+      "sourceRefs": [
+        "src_nhc_feeding_2022"
+      ]
+    },
+    {
+      "id": "food_little_freddie_walnut_oil",
+      "name": "小皮特级初榨有机核桃油",
+      "icon": "🫒",
+      "category": "oil",
+      "foodGroup": "oil",
+      "introduction": {
+        "recommendedFromMonth": 6,
+        "recommendedToMonth": null,
+        "exactMonthEvidence": false,
+        "guidance": "小皮第一道冷榨有机核桃油（6月龄+），富含α-亚麻酸、亚油酸及Omega-3多不饱和脂肪酸，有助于婴幼儿大脑神经与视网膜发育。适合滴入温热的米粉、菜泥或面条中拌食。"
+      },
+      "allergen": {
+        "isCommonAllergen": false,
+        "introductionGuidance": "精炼冷榨植物油致敏蛋白极低，初次添加先给1-2滴观察。",
+        "highRiskInfantNeedsMedicalAdvice": false
+      },
+      "nutrition": [
+        "α-亚麻酸(Omega-3)",
+        "亚油酸(Omega-6)",
+        "维生素E",
+        "不饱和脂肪酸"
+      ],
+      "textureByAge": [
+        {
+          "ageMinMonths": 6,
+          "ageMaxMonths": 12,
+          "texture": "液体油脂，每次滴入2-5滴（约1-2ml）拌入辅食即可。"
+        },
+        {
+          "ageMinMonths": 12,
+          "ageMaxMonths": 36,
+          "texture": "每次约3-5ml，拌面、拌饭或制作软辅食。"
+        }
+      ],
+      "chokingRisk": false,
+      "chokingNotes": null,
+      "avoidBeforeMonths": null,
+      "preparation": [
+        "建议辅食出锅微温时滴入拌匀食用",
+        "不耐高温煎炸，请勿长时间高温加热",
+        "开封后避光密封保存，建议2个月内食用完"
+      ],
+      "notes": "100%有机核桃物理冷榨，富含健脑亚麻酸。",
+      "sourceRefs": [
+        "src_nhc_feeding_2022"
+      ]
+    },
+    {
+      "id": "food_little_freddie_flaxseed_oil",
+      "name": "小皮特级初榨有机亚麻籽油",
+      "icon": "🫒",
+      "category": "oil",
+      "foodGroup": "oil",
+      "introduction": {
+        "recommendedFromMonth": 6,
+        "recommendedToMonth": null,
+        "exactMonthEvidence": false,
+        "guidance": "小皮冷榨有机亚麻籽油（6月龄+），α-亚麻酸含量高达50%以上，是极佳的植物性Omega-3来源，可在体内转化为DHA/EPA，促进大脑发育与智力成长。"
+      },
+      "allergen": {
+        "isCommonAllergen": false,
+        "introductionGuidance": "植物油无明显过敏性，适合搭配米粉或泥糊添加。",
+        "highRiskInfantNeedsMedicalAdvice": false
+      },
+      "nutrition": [
+        "α-亚麻酸(高达50%+)",
+        "Omega-3多不饱和脂肪酸",
+        "木酚素"
+      ],
+      "textureByAge": [
+        {
+          "ageMinMonths": 6,
+          "ageMaxMonths": 12,
+          "texture": "金黄澄澈液体，滴入辅食拌食。"
+        }
+      ],
+      "chokingRisk": false,
+      "chokingNotes": null,
+      "avoidBeforeMonths": null,
+      "preparation": [
+        "滴入米粉、蛋羹、烂面条等温热食物中拌食，请勿高温热炒。"
+      ],
+      "notes": null,
+      "sourceRefs": [
+        "src_nhc_feeding_2022"
+      ]
+    },
+    {
+      "id": "food_little_freddie_avocado_oil",
+      "name": "小皮特级初榨有机牛油果油",
+      "icon": "🥑",
+      "category": "oil",
+      "foodGroup": "oil",
+      "introduction": {
+        "recommendedFromMonth": 6,
+        "recommendedToMonth": null,
+        "exactMonthEvidence": false,
+        "guidance": "小皮特级初榨牛油果油（6月龄+），单不饱和脂肪酸（油酸）含量高，亲和肠胃好消化。烟点高（约200℃以上），既可凉拌辅食，也可用于宝宝轻煎热炒、蒸糕等多种烹饪场景。"
+      },
+      "allergen": {
+        "isCommonAllergen": false,
+        "introductionGuidance": "天然牛油果冷榨，温和耐受性好。",
+        "highRiskInfantNeedsMedicalAdvice": false
+      },
+      "nutrition": [
+        "油酸(单不饱和脂肪酸)",
+        "维生素E",
+        "叶黄素",
+        "植物甾醇"
+      ],
+      "textureByAge": [
+        {
+          "ageMinMonths": 6,
+          "ageMaxMonths": 36,
+          "texture": "清亮翠绿液体，口感温和清香。"
+        }
+      ],
+      "chokingRisk": false,
+      "chokingNotes": null,
+      "avoidBeforeMonths": null,
+      "preparation": [
+        "凉拌、蒸蛋羹滴油，或轻微热炒小松饼、宝宝蔬菜肉粒均可。"
+      ],
+      "notes": "高烟点全能辅食油，耐热耐煎炒。",
+      "sourceRefs": [
+        "src_nhc_feeding_2022"
+      ]
+    },
+    {
+      "id": "food_little_freddie_olive_oil",
+      "name": "小皮有机特级初榨热炒橄榄油",
+      "icon": "🫒",
+      "category": "oil",
+      "foodGroup": "oil",
+      "introduction": {
+        "recommendedFromMonth": 6,
+        "recommendedToMonth": null,
+        "exactMonthEvidence": false,
+        "guidance": "小皮特级初榨橄榄油（6月龄+），采用地中海有机鲜果24小时内第一道物理冷榨，酸度≤0.5%，富含橄榄多酚与油酸，口感柔和不辛辣，适合辅食日常烹饪。"
+      },
+      "allergen": {
+        "isCommonAllergen": false,
+        "introductionGuidance": "单不饱和脂肪酸丰富，易吸收好代谢。",
+        "highRiskInfantNeedsMedicalAdvice": false
+      },
+      "nutrition": [
+        "单不饱和脂肪酸",
+        "橄榄多酚",
+        "维生素E",
+        "角鲨烯"
+      ],
+      "textureByAge": [
+        {
+          "ageMinMonths": 6,
+          "ageMaxMonths": 36,
+          "texture": "清香液体油。"
+        }
+      ],
+      "chokingRisk": false,
+      "chokingNotes": null,
+      "avoidBeforeMonths": null,
+      "preparation": [
+        "可直接滴入泥糊凉拌，也可进行低温中温热炒辅食。"
+      ],
+      "notes": null,
+      "sourceRefs": [
+        "src_nhc_feeding_2022"
+      ]
     }
   ],
   "feedingGuidelines": [

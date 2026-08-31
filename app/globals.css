@@ -27,8 +27,10 @@
 
   /* Backgrounds */
   --color-bg: #FFF9FB;
+  --color-bg-canvas: #FFF9FB;
   --color-bg-warm: #FFF5F8;
   --color-card: #FFFFFF;
+  --color-bg-card: #FFFFFF;
 
   /* Shadows */
   --shadow-soft: 0 8px 24px rgba(180, 100, 125, 0.08);
@@ -289,8 +291,10 @@ html {
 
   /* Backgrounds */
   --color-bg: #171216;
+  --color-bg-canvas: #171216;
   --color-bg-warm: #1D151B;
   --color-card: #211A21;
+  --color-bg-card: #211A21;
 
   /* Borders */
   --color-divider: #352B34;

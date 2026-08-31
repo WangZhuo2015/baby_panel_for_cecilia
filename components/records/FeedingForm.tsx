@@ -185,7 +185,7 @@ export function FeedingForm({
       {/* Quick AI Advisor & Voice (Only in Create Mode) */}
       {!isEdit && (
         <>
-          <div className="flex items-center justify-between bg-white/70 px-3.5 py-2.5 rounded-2xl border border-primary/20 shadow-2xs">
+          <div className="flex items-center justify-between bg-white dark:bg-card px-3.5 py-2.5 rounded-2xl border border-primary/20 shadow-2xs">
             <div className="flex items-center gap-2">
               <span className="text-base">🍼</span>
               <span className="text-xs font-medium text-text-primary">遇到吐奶/胀气或奶量疑问？</span>

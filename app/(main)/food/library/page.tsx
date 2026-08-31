@@ -58,6 +58,7 @@ function getFoodCategoryLabel(cat?: string | null): string {
     dairy: '乳制品',
     legume: '豆类',
     nut: '坚果',
+    oil: '辅食油',
     other: '其他',
   }
   return map[cat] || cat
@@ -74,6 +75,7 @@ const CATEGORY_COLORS: Record<string, string> = {
   dairy: 'bg-blue-50 border-blue-200 text-blue-700',
   legume: 'bg-lime-50 border-lime-200 text-lime-700',
   nut: 'bg-orange-50 border-orange-200 text-orange-700',
+  oil: 'bg-yellow-50/90 border-yellow-300 text-yellow-800',
   other: 'bg-gray-50 border-gray-200 text-gray-700',
 }
 
@@ -504,7 +506,7 @@ export default function FoodLibraryPage() {
           aria-label={`${detailItem.name}详情`}
         >
           <div
-            className="w-full sm:max-w-md sm:mx-auto sm:mb-6 max-h-[82dvh] overflow-y-auto bg-card rounded-t-[24px] sm:rounded-[24px] p-4 pb-[max(16px,env(safe-area-inset-bottom))] space-y-3"
+            className="w-full sm:max-w-md sm:mx-auto sm:mb-6 max-h-[82dvh] overflow-y-auto bg-white dark:bg-[#1E171E] text-text-primary dark:text-gray-100 rounded-t-[24px] sm:rounded-[24px] p-4 pb-[max(16px,env(safe-area-inset-bottom))] space-y-3 shadow-2xl border border-primary/20"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}

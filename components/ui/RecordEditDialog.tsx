@@ -62,7 +62,7 @@ export const RecordEditDialog: React.FC<RecordEditDialogProps> = ({ item, onClos
       aria-label="编辑记录"
     >
       <div
-        className="w-full sm:max-w-md bg-card rounded-t-[28px] sm:rounded-[28px] max-h-[90dvh] flex flex-col shadow-2xl animate-slide-up"
+        className="w-full sm:max-w-md bg-white dark:bg-[#1E171E] text-text-primary dark:text-gray-100 rounded-t-[28px] sm:rounded-[28px] max-h-[90dvh] flex flex-col shadow-2xl border border-primary/20 animate-slide-up"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}

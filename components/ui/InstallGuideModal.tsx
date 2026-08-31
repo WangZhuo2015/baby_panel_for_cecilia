@@ -70,7 +70,7 @@ export const InstallGuideModal: React.FC<InstallGuideModalProps> = ({
       onClick={onClose}
     >
       <div
-        className="bg-white w-full max-w-md rounded-t-[32px] sm:rounded-3xl max-h-[88vh] flex flex-col shadow-2xl overflow-hidden animate-slide-up pb-[max(12px,env(safe-area-inset-bottom,0px))]"
+        className="bg-white dark:bg-[#1E171E] text-text-primary dark:text-gray-100 w-full max-w-md rounded-t-[32px] sm:rounded-3xl max-h-[88vh] flex flex-col shadow-2xl overflow-hidden animate-slide-up pb-[max(12px,env(safe-area-inset-bottom,0px))] border border-primary/20"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
