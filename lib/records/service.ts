@@ -521,7 +521,26 @@ export async function getTimeline(ctx: RecordContext, date?: string) {
     }
     if (r.spitUp) detail += detail ? " · 吐奶" : "吐奶";
     if (r.notes) detail += detail ? ` · ${r.notes}` : r.notes;
-    timeline.push({ id: r.id, time, sortMs: new Date(r.timestamp).getTime(), type: "feeding" as const, title: typeLabels[r.type] || "喂奶", detail: detail || undefined, icon: typeIcons[r.type] || "🍼", recorderName: recorderOf(r.recordedById) });
+    timeline.push({
+      id: r.id,
+      time,
+      sortMs: new Date(r.timestamp).getTime(),
+      type: "feeding" as const,
+      title: typeLabels[r.type] || "喂奶",
+      detail: detail || undefined,
+      icon: typeIcons[r.type] || "🍼",
+      recorderName: recorderOf(r.recordedById),
+      rawRecord: {
+        id: r.id,
+        timestamp: r.timestamp,
+        type: r.type,
+        amountMl: r.amountMl,
+        leftMinutes: r.leftMinutes,
+        rightMinutes: r.rightMinutes,
+        spitUp: r.spitUp,
+        notes: r.notes,
+      },
+    });
   }
   for (const r of sleepRecords) {
     const startStr = formatIsoToLocalTime(r.startTime);
@@ -536,7 +555,24 @@ export async function getTimeline(ctx: RecordContext, date?: string) {
     let detail = `${durationText}（${startStr}–${endStr}）`;
     if (r.nightWakingCount > 0) detail += ` · 夜醒 ${r.nightWakingCount}次`;
     if (r.notes) detail += ` · ${r.notes}`;
-    timeline.push({ id: r.id, time: isOvernight ? "00:00" : startStr, sortMs: isOvernight ? dayStartMs : startMs, type: "sleep" as const, title: isOvernight ? "跨夜睡眠 (接昨日)" : (typeLabels[r.type] || "睡觉"), detail, icon: typeIcons[r.type] || "🌙", recorderName: recorderOf(r.recordedById) });
+    timeline.push({
+      id: r.id,
+      time: isOvernight ? "00:00" : startStr,
+      sortMs: isOvernight ? dayStartMs : startMs,
+      type: "sleep" as const,
+      title: isOvernight ? "跨夜睡眠 (接昨日)" : (typeLabels[r.type] || "睡觉"),
+      detail,
+      icon: typeIcons[r.type] || "🌙",
+      recorderName: recorderOf(r.recordedById),
+      rawRecord: {
+        id: r.id,
+        startTime: r.startTime,
+        endTime: r.endTime,
+        type: r.type,
+        nightWakingCount: r.nightWakingCount,
+        notes: r.notes,
+      },
+    });
   }
   for (const r of diaperRecords) {
     const time = formatIsoToLocalTime(r.timestamp);
@@ -544,12 +580,49 @@ export async function getTimeline(ctx: RecordContext, date?: string) {
     if (r.poopColor) { const colorMap: Record<string,string>={ yellow:"黄色", green:"绿色", brown:"棕色", other:"其他"}; detail += ` · ${colorMap[r.poopColor]||r.poopColor}`; }
     if (r.poopConsistency) { const consMap: Record<string,string>={ loose:"稀便", paste:"糊状", formed:"成形"}; detail += ` · ${consMap[r.poopConsistency]||r.poopConsistency}`; }
     if (r.notes) detail += ` · ${r.notes}`;
-    timeline.push({ id: r.id, time, sortMs: new Date(r.timestamp).getTime(), type: "diaper" as const, title: "换尿布", detail: detail || undefined, icon: typeIcons[r.type] || "💧", recorderName: recorderOf(r.recordedById) });
+    timeline.push({
+      id: r.id,
+      time,
+      sortMs: new Date(r.timestamp).getTime(),
+      type: "diaper" as const,
+      title: "换尿布",
+      detail: detail || undefined,
+      icon: typeIcons[r.type] || "💧",
+      recorderName: recorderOf(r.recordedById),
+      rawRecord: {
+        id: r.id,
+        timestamp: r.timestamp,
+        type: r.type,
+        poopColor: r.poopColor,
+        poopConsistency: r.poopConsistency,
+        notes: r.notes,
+      },
+    });
   }
   for (const r of foodLogs) {
     const foods = safeJsonParse<string[]>(r.foods, []);
     const foodMs = new Date(`${targetDate}T${(r.time || "12:00").padStart(5,"0")}:00+08:00`).getTime();
-    timeline.push({ id: r.id, time: r.time, sortMs: Number.isNaN(foodMs)?dayStartMs:foodMs, type: "food" as const, title: "辅食餐点", detail: Array.isArray(foods)&&foods.length>0?foods.join("、"):undefined, icon:"🥣", recorderName: recorderOf(r.recordedById) });
+    timeline.push({
+      id: r.id,
+      time: r.time,
+      sortMs: Number.isNaN(foodMs)?dayStartMs:foodMs,
+      type: "food" as const,
+      title: "辅食餐点",
+      detail: Array.isArray(foods)&&foods.length>0?foods.join("、"):undefined,
+      icon:"🥣",
+      recorderName: recorderOf(r.recordedById),
+      rawRecord: {
+        id: r.id,
+        date: r.date,
+        time: r.time,
+        foods,
+        portion: r.portion,
+        acceptance: r.acceptance,
+        babyState: r.babyState,
+        hasAbnormal: r.hasAbnormal,
+        abnormalNotes: r.abnormalNotes,
+      },
+    });
   }
   timeline.sort((a: any, b: any) => (b.sortMs ?? 0) - (a.sortMs ?? 0));
   return timeline.map(({ sortMs: _s, ...rest }: any) => rest);

@@ -402,6 +402,8 @@ export interface TimelineEntry {
   icon: string;
   /** 记录人显示名（家庭成员），旧数据可能为 null */
   recorderName?: string | null;
+  /** 原始记录详情数据（用于精准回填与编辑） */
+  rawRecord?: any;
 }
 
 // ===== Daily Summary =====

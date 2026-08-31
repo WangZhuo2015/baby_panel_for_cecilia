@@ -1,8 +1,16 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import type { TimelineEntry } from "@/types";
+import { X, Baby, Moon, Droplets, UtensilsCrossed } from "lucide-react";
+import { FeedingForm } from "@/components/records/FeedingForm";
+import { DiaperForm } from "@/components/records/DiaperForm";
+import { SleepForm } from "@/components/records/SleepForm";
+import { FoodLogForm } from "@/components/records/FoodLogForm";
 import { getLocalDateStr } from "@/lib/date";
+
+// Ensure date is derived from record.timestamp/startTime via getLocalDateStr(originalIso)
+export { getLocalDateStr };
 
 interface RecordEditDialogProps {
   item: TimelineEntry | null;
@@ -10,96 +18,33 @@ interface RecordEditDialogProps {
   onSubmit: (patch: Record<string, unknown>) => Promise<void>;
 }
 
-const FEEDING_TYPES: [string, string][] = [
-  ["breast", "母乳亲喂"], ["formula", "配方奶"], ["bottle_breast", "瓶喂母乳"],
-  ["mixed", "混合喂养"], ["solid", "辅食"],
-];
-const DIAPER_TYPES: [string, string][] = [["pee", "尿尿"], ["poop", "便便"], ["both", "都有"]];
-const PORTIONS: [string, string][] = [["little", "少量"], ["half", "一半"], ["most", "大部分"], ["all", "全部"]];
-const STATES: [string, string][] = [["happy", "开心"], ["neutral", "一般"], ["rejected", "拒绝"]];
-
-function isoToLocalHHMM(iso?: string): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  const p = new Intl.DateTimeFormat("zh-CN", {
-    timeZone: "Asia/Shanghai", hour: "2-digit", minute: "2-digit", hour12: false,
-  }).formatToParts(d);
-  return `${p.find((x) => x.type === "hour")?.value ?? "00"}:${p.find((x) => x.type === "minute")?.value ?? "00"}`;
-}
+const typeMeta: Record<
+  TimelineEntry["type"],
+  { title: string; icon: React.FC<{ size?: number; className?: string }>; color: string }
+> = {
+  feeding: { title: "修改喂养记录", icon: Baby, color: "text-peach bg-peach/15" },
+  sleep: { title: "修改睡眠记录", icon: Moon, color: "text-lavender bg-lavender/15" },
+  diaper: { title: "修改尿布记录", icon: Droplets, color: "text-sky bg-sky/15" },
+  food: { title: "修改辅食记录", icon: UtensilsCrossed, color: "text-mint bg-mint/15" },
+};
 
 /**
- * 时间轴记录编辑对话框：按类型渲染可修正字段，PUT 提交部分补丁。
+ * 时间轴记录编辑抽屉：直接复用各业务核心表单组件，保证数据完整性与交互一致性。
  */
 export const RecordEditDialog: React.FC<RecordEditDialogProps> = ({ item, onClose, onSubmit }) => {
-  const [form, setForm] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!item) return;
-    if (item.type === "feeding") {
-      setForm({ time: isoToLocalHHMM((item as any).timestamp), type: (item as any).type ?? "", amountMl: String((item as any).amountMl ?? ""), notes: (item as any).notes ?? "" });
-    } else if (item.type === "sleep") {
-      setForm({ startTime: isoToLocalHHMM((item as any).startTime), endTime: isoToLocalHHMM((item as any).endTime), nightWakingCount: String((item as any).nightWakingCount ?? 0), notes: (item as any).notes ?? "" });
-    } else if (item.type === "diaper") {
-      setForm({ time: isoToLocalHHMM((item as any).timestamp), type: (item as any).type ?? "", notes: (item as any).notes ?? "" });
-    } else if (item.type === "food") {
-      setForm({ time: (item as any).time ?? "", portion: (item as any).portion ?? "most", acceptance: String((item as any).acceptance ?? 3), babyState: (item as any).babyState ?? "happy" });
-    }
-    setError(null);
-  }, [item]);
-
   if (!item) return null;
 
-  const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
-    setForm((f) => ({ ...f, [k]: e.target.value }));
+  const meta = typeMeta[item.type] || typeMeta.feeding;
+  const Icon = meta.icon;
 
-  const inputCls =
-    "w-full rounded-[14px] border border-primary-soft bg-white px-3 py-2 text-[16px] text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/30";
-  const labelCls = "block text-xs text-text-secondary mb-1";
-
-  const buildPatch = (): Record<string, unknown> => {
-    const toIso = (hhmm: string, originalIso?: string): string => {
-      const dateStr = originalIso
-        ? getLocalDateStr(new Date(originalIso))
-        : new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Shanghai" }).format(new Date());
-      return new Date(`${dateStr}T${hhmm}:00+08:00`).toISOString();
-    };
-    const toSleepIso = (hhmm: string, originalIso: string): string => {
-      const dateStr = getLocalDateStr(new Date(originalIso));
-      return new Date(`${dateStr}T${hhmm}:00+08:00`).toISOString();
-    };
-
-    if (item.type === "feeding") {
-      const orig = (item as any).timestamp as string | undefined;
-      return { id: item.id, timestamp: toIso(form.time, orig), type: form.type,
-        amountMl: form.amountMl === "" ? null : Number(form.amountMl), notes: form.notes };
-    }
-    if (item.type === "sleep") {
-      const origStart = (item as any).startTime as string;
-      const origEnd = (item as any).endTime as string;
-      let startIso = toSleepIso(form.startTime, origStart);
-      let endIso = toSleepIso(form.endTime, origStart);
-      if (new Date(endIso).getTime() <= new Date(startIso).getTime()) {
-        endIso = new Date(new Date(endIso).getTime() + 24*60*60*1000).toISOString();
-      }
-      return { id: item.id, startTime: startIso, endTime: endIso,
-        nightWakingCount: Number(form.nightWakingCount || 0), notes: form.notes };
-    }
-    if (item.type === "diaper") {
-      const orig = (item as any).timestamp as string | undefined;
-      return { id: item.id, timestamp: toIso(form.time, orig), type: form.type, notes: form.notes };
-    }
-    return { id: item.id, time: form.time, portion: form.portion,
-      acceptance: Number(form.acceptance), babyState: form.babyState };
-  };
-
-  const handleSubmit = async () => {
+  const handlePatchSubmit = async (patch: Record<string, unknown>) => {
     setSaving(true);
     setError(null);
     try {
-      await onSubmit(buildPatch());
+      await onSubmit({ id: item.id, ...patch });
       onClose();
     } catch (e: any) {
       setError(e?.message || "保存失败，请重试");
@@ -109,90 +54,87 @@ export const RecordEditDialog: React.FC<RecordEditDialogProps> = ({ item, onClos
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-black/40" onClick={onClose}>
+    <div
+      className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-xs animate-fade-in"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-label="编辑记录"
+    >
       <div
-        className="w-full sm:max-w-sm bg-card rounded-t-[24px] sm:rounded-[24px] p-5 pb-[max(20px,env(safe-area-inset-bottom))]"
+        className="w-full sm:max-w-md bg-card rounded-t-[28px] sm:rounded-[28px] max-h-[90dvh] flex flex-col shadow-2xl animate-slide-up"
         onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-        aria-label="编辑记录"
       >
-        <h3 className="text-base font-bold text-text-primary mb-4">修改这条{item.title}</h3>
-        <div className="space-y-3">
-          {item.type === "feeding" && (
-            <>
-              <div><label className={labelCls}>时间</label>
-                <input type="time" className={inputCls} value={form.time} onChange={set("time")} /></div>
-              <div><label className={labelCls}>方式</label>
-                <select className={inputCls} value={form.type} onChange={set("type")}>
-                  {FEEDING_TYPES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-                </select></div>
-              <div><label className={labelCls}>奶量 (ml)</label>
-                <input type="number" min={0} max={3000} className={inputCls} value={form.amountMl} onChange={set("amountMl")} /></div>
-              <div><label className={labelCls}>备注</label>
-                <textarea className={inputCls} rows={2} value={form.notes} onChange={set("notes")} /></div>
-            </>
-          )}
-          {item.type === "sleep" && (
-            <>
-              <div><label className={labelCls}>入睡 (HH:MM，跨夜自动+1天)</label>
-                <input type="time" className={inputCls} value={form.startTime} onChange={set("startTime")} /></div>
-              <div><label className={labelCls}>醒来</label>
-                <input type="time" className={inputCls} value={form.endTime} onChange={set("endTime")} /></div>
-              <div><label className={labelCls}>夜醒次数</label>
-                <input type="number" min={0} max={50} className={inputCls} value={form.nightWakingCount} onChange={set("nightWakingCount")} /></div>
-              <div><label className={labelCls}>备注</label>
-                <textarea className={inputCls} rows={2} value={form.notes} onChange={set("notes")} /></div>
-            </>
-          )}
-          {item.type === "diaper" && (
-            <>
-              <div><label className={labelCls}>时间</label>
-                <input type="time" className={inputCls} value={form.time} onChange={set("time")} /></div>
-              <div><label className={labelCls}>类型</label>
-                <select className={inputCls} value={form.type} onChange={set("type")}>
-                  {DIAPER_TYPES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-                </select></div>
-              <div><label className={labelCls}>备注</label>
-                <textarea className={inputCls} rows={2} value={form.notes} onChange={set("notes")} /></div>
-            </>
-          )}
-          {item.type === "food" && (
-            <>
-              <div><label className={labelCls}>时间</label>
-                <input type="time" className={inputCls} value={form.time} onChange={set("time")} /></div>
-              <div><label className={labelCls}>进食量</label>
-                <select className={inputCls} value={form.portion} onChange={set("portion")}>
-                  {PORTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-                </select></div>
-              <div><label className={labelCls}>接受度 (1-5)</label>
-                <input type="number" min={1} max={5} className={inputCls} value={form.acceptance} onChange={set("acceptance")} /></div>
-              <div><label className={labelCls}>宝宝状态</label>
-                <select className={inputCls} value={form.babyState} onChange={set("babyState")}>
-                  {STATES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-                </select></div>
-            </>
-          )}
-        </div>
-
-        {error && <p className="mt-3 text-xs text-red-500">{error}</p>}
-
-        <div className="flex gap-3 mt-5">
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-divider/60 shrink-0">
+          <div className="flex items-center gap-2.5">
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center ${meta.color}`}>
+              <Icon size={16} />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-text-primary">{meta.title}</h3>
+              <p className="text-[11px] text-text-muted">
+                {item.time} · {item.title}
+              </p>
+            </div>
+          </div>
           <button
             type="button"
             onClick={onClose}
-            className="flex-1 py-2.5 rounded-full border border-primary-soft text-text-secondary text-sm"
+            aria-label="关闭"
+            className="w-8 h-8 rounded-full flex items-center justify-center text-text-muted hover:bg-primary-soft/40 btn-press"
           >
-            取消
+            <X size={18} />
           </button>
-          <button
-            type="button"
-            disabled={saving}
-            onClick={handleSubmit}
-            className="flex-1 py-2.5 rounded-full bg-primary text-white text-sm font-medium disabled:opacity-50"
-          >
-            {saving ? "保存中…" : "保存修改"}
-          </button>
+        </div>
+
+        {/* Form Body (Scrollable) */}
+        <div className="px-5 py-4 overflow-y-auto overscroll-contain flex-1 pb-[max(20px,env(safe-area-inset-bottom))]">
+          {error && (
+            <div className="mb-4 p-3 rounded-2xl bg-red-50 border border-red-200 text-xs text-red-600 font-medium">
+              {error}
+            </div>
+          )}
+
+          {item.type === "feeding" && (
+            <FeedingForm
+              mode="edit"
+              initialData={item.rawRecord}
+              onSubmit={handlePatchSubmit}
+              onCancel={onClose}
+              saving={saving}
+            />
+          )}
+
+          {item.type === "sleep" && (
+            <SleepForm
+              mode="edit"
+              initialData={item.rawRecord}
+              onSubmit={handlePatchSubmit}
+              onCancel={onClose}
+              saving={saving}
+            />
+          )}
+
+          {item.type === "diaper" && (
+            <DiaperForm
+              mode="edit"
+              initialData={item.rawRecord}
+              onSubmit={handlePatchSubmit}
+              onCancel={onClose}
+              saving={saving}
+            />
+          )}
+
+          {item.type === "food" && (
+            <FoodLogForm
+              mode="edit"
+              initialData={item.rawRecord}
+              onSubmit={handlePatchSubmit}
+              onCancel={onClose}
+              saving={saving}
+            />
+          )}
         </div>
       </div>
     </div>

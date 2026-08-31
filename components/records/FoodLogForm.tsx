@@ -1,0 +1,393 @@
+"use client";
+
+import { useState, useEffect } from "react";
+import { CheckCircle2 } from "lucide-react";
+import { CuteButton } from "@/components/ui/CuteButton";
+import { CuteInput } from "@/components/ui/CuteInput";
+import { CuteTextarea } from "@/components/ui/CuteTextarea";
+import { FormSection } from "@/components/ui/FormSection";
+import { HeartRating } from "@/components/ui/HeartRating";
+import { VoiceConfirmEntry } from "@/components/ui/VoiceConfirmEntry";
+import { useToast } from "@/components/ui/Toast";
+import { useBabyStore } from "@/stores/useBabyStore";
+import { getLocalDateStr } from "@/lib/date";
+import type { FoodLogRecord } from "@/types";
+
+const FOOD_ICON_OPTIONS = ["🍽️", "🥩", "🐟", "🥚", "🥛", "🍚", "🥕", "🍎", "🥦", "🍠", "🥬", "🌽", "🍌", "🍇", "🍗", "🍤"];
+
+const portionOptions = [
+  { value: "little" as const, label: "少量" },
+  { value: "half" as const, label: "半碗" },
+  { value: "most" as const, label: "大部分" },
+  { value: "all" as const, label: "全部" },
+];
+
+const stateOptions = [
+  { value: "happy" as const, emoji: "😊", label: "开心" },
+  { value: "neutral" as const, emoji: "😐", label: "一般" },
+  { value: "rejected" as const, emoji: "😣", label: "拒绝" },
+];
+
+export interface FoodLogFormProps {
+  mode?: "create" | "edit";
+  initialData?: Partial<FoodLogRecord> | any;
+  onSubmit: (data: {
+    date: string;
+    time: string;
+    foods: string[];
+    portion: FoodLogRecord["portion"];
+    acceptance: number;
+    babyState: FoodLogRecord["babyState"];
+    hasAbnormal: boolean;
+    abnormalNotes?: string;
+  }) => Promise<void>;
+  onCancel?: () => void;
+  saving?: boolean;
+}
+
+export function FoodLogForm({
+  mode = "create",
+  initialData,
+  onSubmit,
+  onCancel,
+  saving = false,
+}: FoodLogFormProps) {
+  const isEdit = mode === "edit";
+  const { showToast } = useToast();
+
+  const foodItems = useBabyStore((s) => s.foodItems) ?? [];
+  const fetchFoodItems = useBabyStore((s) => s.fetchFoodItems);
+
+  useEffect(() => {
+    fetchFoodItems("tried");
+  }, [fetchFoodItems]);
+
+  const triedFoods = foodItems.filter((item) => item.status === "tried");
+
+  // Form state
+  const [date, setDate] = useState<string>(() => {
+    return initialData?.date || getLocalDateStr();
+  });
+
+  const [time, setTime] = useState<string>(() => {
+    return initialData?.time || new Date().toTimeString().slice(0, 5);
+  });
+
+  const [selectedFoods, setSelectedFoods] = useState<string[]>(() => {
+    if (Array.isArray(initialData?.foods)) return initialData.foods;
+    return [];
+  });
+
+  const [portion, setPortion] = useState<FoodLogRecord["portion"]>(() => {
+    return initialData?.portion || "most";
+  });
+
+  const [acceptance, setAcceptance] = useState<number>(() => {
+    return typeof initialData?.acceptance === "number" ? initialData.acceptance : 3;
+  });
+
+  const [babyState, setBabyState] = useState<FoodLogRecord["babyState"]>(() => {
+    return initialData?.babyState || "happy";
+  });
+
+  const [hasAbnormal, setHasAbnormal] = useState<boolean>(() => {
+    return Boolean(initialData?.hasAbnormal);
+  });
+
+  const [abnormalNotes, setAbnormalNotes] = useState<string>(() => {
+    return initialData?.abnormalNotes || "";
+  });
+
+  const handleFoodToggle = (foodName: string) => {
+    setSelectedFoods((prev) =>
+      prev.includes(foodName) ? prev.filter((f) => f !== foodName) : [...prev, foodName]
+    );
+  };
+
+  const [showAddFood, setShowAddFood] = useState(false);
+  const [newFoodName, setNewFoodName] = useState("");
+  const [newFoodIcon, setNewFoodIcon] = useState("🍽️");
+  const [addingFood, setAddingFood] = useState(false);
+
+  const handleAddCustomFood = async () => {
+    const name = newFoodName.trim();
+    if (!name) {
+      showToast("请输入食材名称");
+      return;
+    }
+    setAddingFood(true);
+    try {
+      const res = await fetch("/api/food/items", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name,
+          icon: newFoodIcon,
+          category: "other",
+          status: "tried",
+          firstAddedDate: getLocalDateStr(),
+        }),
+      });
+      if (!res.ok) throw new Error("创建失败");
+      const created = await res.json();
+      setSelectedFoods((prev) =>
+        prev.includes(created.name) ? prev : [...prev, created.name]
+      );
+      setShowAddFood(false);
+      setNewFoodName("");
+      showToast("已添加到食材库 ✅");
+      fetchFoodItems("tried");
+    } catch {
+      showToast("添加失败，请重试");
+    } finally {
+      setAddingFood(false);
+    }
+  };
+
+  const handleFormSubmit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (selectedFoods.length === 0) {
+      showToast("请至少选择一种食材");
+      return;
+    }
+
+    await onSubmit({
+      date,
+      time,
+      foods: selectedFoods,
+      portion,
+      acceptance,
+      babyState,
+      hasAbnormal,
+      abnormalNotes: hasAbnormal ? abnormalNotes.trim() : undefined,
+    });
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Voice entry (Create mode only) */}
+      {!isEdit && <VoiceConfirmEntry contextType="food" />}
+
+      {/* Date and time */}
+      <FormSection title="记录时间">
+        <div className="flex gap-3">
+          <div className="flex-1">
+            <CuteInput
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+            />
+          </div>
+          <div className="flex-1">
+            <CuteInput
+              type="time"
+              value={time}
+              onChange={(e) => setTime(e.target.value)}
+            />
+          </div>
+        </div>
+      </FormSection>
+
+      {/* Food selection */}
+      <FormSection title="宝宝吃了什么？">
+        <div className="flex flex-wrap gap-2">
+          {triedFoods.map((food) => {
+            const isSelected = selectedFoods.includes(food.name);
+            return (
+              <button
+                key={food.id}
+                type="button"
+                onClick={() => handleFoodToggle(food.name)}
+                className={`btn-press px-3.5 py-1.5 rounded-full text-xs font-medium transition-all ${
+                  isSelected
+                    ? "bg-primary text-white shadow-button"
+                    : "bg-primary-light/50 text-text-primary hover:bg-primary-light"
+                }`}
+              >
+                {food.icon} {food.name}
+              </button>
+            );
+          })}
+
+          {/* Any selected food not in triedFoods (e.g. from custom edit) */}
+          {selectedFoods
+            .filter((name) => !triedFoods.some((f) => f.name === name))
+            .map((customName) => (
+              <button
+                key={customName}
+                type="button"
+                onClick={() => handleFoodToggle(customName)}
+                className="btn-press px-3.5 py-1.5 rounded-full text-xs font-medium bg-primary text-white shadow-button transition-all"
+              >
+                🥣 {customName}
+              </button>
+            ))}
+
+          <button
+            type="button"
+            onClick={() => setShowAddFood((v) => !v)}
+            className="btn-press px-3.5 py-1.5 rounded-full text-xs font-medium bg-primary-light/30 text-primary border-2 border-dashed border-primary/30 hover:bg-primary-light/50"
+          >
+            {showAddFood ? "收起" : "+ 添加新食材"}
+          </button>
+        </div>
+
+        {showAddFood && (
+          <div className="mt-3 bg-card rounded-2xl border border-primary-soft p-3.5 space-y-3">
+            <p className="text-xs text-text-secondary">
+              食材会加入食材库并立即标记为"已尝试"
+            </p>
+            <CuteInput
+              placeholder="输入食材名称，如：山药、猪肝…"
+              value={newFoodName}
+              onChange={(e) => setNewFoodName(e.target.value)}
+              autoFocus
+            />
+            <div>
+              <p className="text-xs text-text-secondary mb-1.5 pl-1">选择图标</p>
+              <div className="flex flex-wrap gap-1.5">
+                {FOOD_ICON_OPTIONS.map((icon) => (
+                  <button
+                    key={icon}
+                    type="button"
+                    onClick={() => setNewFoodIcon(icon)}
+                    className={`w-8 h-8 rounded-xl text-base flex items-center justify-center transition-all ${
+                      newFoodIcon === icon
+                        ? "bg-primary/15 ring-2 ring-primary"
+                        : "bg-primary-light/40 hover:bg-primary-light"
+                    }`}
+                  >
+                    {icon}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <CuteButton size="sm" fullWidth onClick={handleAddCustomFood} disabled={addingFood}>
+                {addingFood ? "添加中..." : "确认添加"}
+              </CuteButton>
+              <CuteButton
+                size="sm"
+                variant="secondary"
+                fullWidth
+                onClick={() => setShowAddFood(false)}
+              >
+                取消
+              </CuteButton>
+            </div>
+          </div>
+        )}
+      </FormSection>
+
+      {/* Portion */}
+      <FormSection title="吃了多少？">
+        <div className="grid grid-cols-2 gap-2">
+          {portionOptions.map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => setPortion(opt.value)}
+              className={`btn-press py-2.5 rounded-2xl text-xs font-medium transition-all ${
+                portion === opt.value
+                  ? "bg-primary text-white shadow-button font-bold"
+                  : "bg-card text-text-secondary border border-divider hover:bg-gray-50"
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      </FormSection>
+
+      {/* Acceptance rating */}
+      <FormSection title="宝宝喜欢程度">
+        <div className="flex justify-center py-1">
+          <HeartRating value={acceptance} onChange={setAcceptance} size={28} />
+        </div>
+      </FormSection>
+
+      {/* Baby state */}
+      <FormSection title="进食情绪状态">
+        <div className="flex gap-3">
+          {stateOptions.map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => setBabyState(opt.value)}
+              className={`btn-press flex-1 flex flex-col items-center gap-1 py-3 rounded-2xl transition-all ${
+                babyState === opt.value
+                  ? "bg-primary text-white shadow-button font-bold"
+                  : "bg-card text-text-secondary border border-divider hover:bg-gray-50"
+              }`}
+            >
+              <span className="text-2xl">{opt.emoji}</span>
+              <span className="text-xs">{opt.label}</span>
+            </button>
+          ))}
+        </div>
+      </FormSection>
+
+      {/* Abnormal toggle */}
+      <FormSection title="是否有明显过敏 / 异常反应">
+        <div className="flex gap-3">
+          <button
+            type="button"
+            onClick={() => setHasAbnormal(false)}
+            className={`btn-press flex-1 py-2.5 rounded-2xl text-xs font-medium transition-all ${
+              !hasAbnormal
+                ? "bg-primary text-white shadow-button font-bold"
+                : "bg-card text-text-secondary border border-divider hover:bg-gray-50"
+            }`}
+          >
+            正常无异常 ✨
+          </button>
+          <button
+            type="button"
+            onClick={() => setHasAbnormal(true)}
+            className={`btn-press flex-1 py-2.5 rounded-2xl text-xs font-medium transition-all ${
+              hasAbnormal
+                ? "bg-red-500 text-white shadow-button font-bold"
+                : "bg-card text-text-secondary border border-divider hover:bg-gray-50"
+            }`}
+          >
+            有异常 / 泛红 🚨
+          </button>
+        </div>
+
+        {hasAbnormal && (
+          <div className="mt-3">
+            <CuteTextarea
+              placeholder="请详细描述异常情况，如嘴周泛红、起疹子、腹泻等..."
+              value={abnormalNotes}
+              onChange={(e) => setAbnormalNotes(e.target.value)}
+              rows={2}
+            />
+          </div>
+        )}
+      </FormSection>
+
+      {/* Buttons */}
+      <div className="pt-2 flex gap-3">
+        {isEdit && onCancel && (
+          <button
+            type="button"
+            onClick={onCancel}
+            className="flex-1 py-3 rounded-full border border-primary-soft text-text-secondary text-sm font-medium btn-press hover:bg-gray-50"
+          >
+            取消
+          </button>
+        )}
+        <CuteButton
+          fullWidth={!isEdit}
+          size="lg"
+          onClick={() => handleFormSubmit()}
+          disabled={saving}
+          className={`flex items-center justify-center gap-2 ${isEdit ? "flex-1" : ""}`}
+        >
+          <CheckCircle2 size={18} />
+          {saving ? "保存中..." : isEdit ? "保存修改" : "保存辅食记录"}
+        </CuteButton>
+      </div>
+    </div>
+  );
+}
