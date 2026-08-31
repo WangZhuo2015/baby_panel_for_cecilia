@@ -113,11 +113,42 @@ test("AI Tools: Direct invocation of agent tools", async () => {
   const searchResult: any = await searchTool.execute("call-8", { query: "婴儿辅食添加顺序" });
   assert.ok(searchResult.content[0].text.length > 0, "web_search should return text response");
 
+  // 9. Tool: query_nutrition_products
+  console.log("-> Testing query_nutrition_products tool...");
+  const productsTool = toolMap.get("query_nutrition_products");
+  assert.ok(productsTool, "query_nutrition_products tool must exist");
+  const productsResult: any = await productsTool.execute("call-9", { type: "all" });
+  assert.ok(productsResult.content[0].text.length > 0);
+
+  // 10. Tool: record_supplement
+  console.log("-> Testing record_supplement tool...");
+  const suppTool = toolMap.get("record_supplement");
+  assert.ok(suppTool, "record_supplement tool must exist");
+  const suppResult: any = await suppTool.execute("call-10", {
+    name: "星鲨 维生素D3",
+    dose: 1,
+    notes: "AI测试打卡D3",
+    forceOverride: true,
+  });
+  const suppText = suppResult.content[0].text;
+  assert.ok(suppText.includes("成功记录补剂打卡") || suppText.includes("星鲨"));
+  if (suppResult.details?.id) {
+    createdRecordIds.push({ type: "supplement", id: suppResult.details.id });
+  }
+
+  // 11. Tool: get_nutrition_analysis
+  console.log("-> Testing get_nutrition_analysis tool...");
+  const analysisTool = toolMap.get("get_nutrition_analysis");
+  assert.ok(analysisTool, "get_nutrition_analysis tool must exist");
+  const analysisResult: any = await analysisTool.execute("call-11", { date: today, days: 1 });
+  assert.ok(analysisResult.content[0].text.includes("totalFeedingMl") || analysisResult.content[0].text.includes("coreMetrics"));
+
   // Clean up created records
   for (const item of createdRecordIds) {
     if (item.type === "feeding") await prisma.feedingRecord.delete({ where: { id: item.id } }).catch(() => {});
     if (item.type === "sleep") await prisma.sleepRecord.delete({ where: { id: item.id } }).catch(() => {});
     if (item.type === "diaper") await prisma.diaperRecord.delete({ where: { id: item.id } }).catch(() => {});
     if (item.type === "food") await prisma.foodLogRecord.delete({ where: { id: item.id } }).catch(() => {});
+    if (item.type === "supplement") await prisma.supplementRecord.delete({ where: { id: item.id } }).catch(() => {});
   }
 });

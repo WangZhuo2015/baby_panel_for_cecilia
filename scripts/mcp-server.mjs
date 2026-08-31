@@ -539,6 +539,47 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           },
         },
       },
+      {
+        name: "record_supplement",
+        description: "为宝宝打卡补充剂（如维生素D3滴剂、伊可新AD、液体钙/乳钙、补铁滴剂、锌剂、DHA等），内置儿科安全上限与防过量冲突检测。",
+        inputSchema: {
+          type: "object",
+          required: ["session", "name"],
+          properties: {
+            ...SESSION_PROP,
+            name: { type: "string", description: "补剂名称（如'维生素D3'、'伊可新AD'、'液体钙'）" },
+            units: { type: "number", description: "服用剂量单位数（如 1 粒、2 滴、5 ml），默认 1.0" },
+            timestamp: { type: "string", description: "服用时间 (ISO 8601 字符串或 HH:mm，默认当前时间)" },
+            notes: { type: "string", description: "备注说明" },
+            forceOverride: { type: "boolean", description: "如检测到同日成分冲突或超量警告，是否遵医嘱强制打卡，默认 false" },
+          },
+        },
+      },
+      {
+        name: "get_nutrition_analysis",
+        description: "查询宝宝单日或近7天/30天全量营养素摄入汇总（包含总奶量、维生素D、维生素A、钙、铁、锌、DHA、能量、蛋白质等）、DRIs 2023 推荐量达标率与安全上限 (UL) 状态。",
+        inputSchema: {
+          type: "object",
+          required: ["session"],
+          properties: {
+            ...SESSION_PROP,
+            date: { type: "string", description: "查询日期 (YYYY-MM-DD)，默认今天" },
+            days: { type: "number", description: "分析时间跨度天数: 1 (单日详情), 7 (近7天趋势), 30 (近30天趋势)，默认 1" },
+          },
+        },
+      },
+      {
+        name: "query_nutrition_products",
+        description: "查询家庭当前正在使用 (Active) 或已录入的配方奶粉与补剂档案详情（包含冲调浓度、成分表、单次剂量等）。",
+        inputSchema: {
+          type: "object",
+          required: ["session"],
+          properties: {
+            ...SESSION_PROP,
+            type: { type: "string", enum: ["all", "formula", "supplement"], description: "筛选类型" },
+          },
+        },
+      },
     ],
   };
 });
@@ -764,6 +805,40 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const extra = { q: args.query };
       if (args.limit) extra.limit = args.limit;
       const res = await fetch(apiUrl("/api/ai/search", "", extra), { headers });
+      const data = await res.json();
+      return {
+        content: [{ type: "text", text: JSON.stringify(data, null, 2) }],
+      };
+    }
+
+    if (name === "record_supplement") {
+      const data = await postJson("/api/nutrition/records", bound, {
+        ...args,
+        units: args.units || 1.0,
+        timestamp: args.timestamp || new Date().toISOString(),
+      });
+      return {
+        content: [
+          { type: "text", text: `✅ 补剂打卡记录成功！\n${JSON.stringify(data, null, 2)}` },
+        ],
+      };
+    }
+
+    if (name === "get_nutrition_analysis") {
+      const extra = {};
+      if (args.date) extra.date = args.date;
+      if (args.days) extra.days = args.days;
+      const res = await fetch(apiUrl("/api/nutrition/analysis", bound.babyId || "", extra), { headers });
+      const data = await res.json();
+      return {
+        content: [{ type: "text", text: JSON.stringify(data, null, 2) }],
+      };
+    }
+
+    if (name === "query_nutrition_products") {
+      const extra = {};
+      if (args.type) extra.type = args.type;
+      const res = await fetch(apiUrl("/api/nutrition/products", bound.babyId || "", extra), { headers });
       const data = await res.json();
       return {
         content: [{ type: "text", text: JSON.stringify(data, null, 2) }],

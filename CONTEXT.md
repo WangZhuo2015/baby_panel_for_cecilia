@@ -31,3 +31,22 @@ Terms used in product and architecture talk. Prefer these names over file-level 
 **MCP Session Token** — short-lived JWT (`typ=mcp`, `userId` + `babyId`, 15m). Required on MCP calls unless `MCP_ALLOW_STATIC_USER=1` (single-user CLI debug only).
 
 **Hermes** — an external stateful agent (gateway, nested tool loop, process-scoped MCP). Not a web-app LLM backend. See [docs/adr/0001-no-hermes-for-web-chat.md](docs/adr/0001-no-hermes-for-web-chat.md).
+
+## Formula, Supplements & Nutrition Intake
+
+**Formula Product (奶粉档案)** — A specific formula milk product profile owned by or shared with a Family, capturing brand, stage, standard scoop weight, reconstitution ratio (冲调比例), and a full nutrition fact table (per 100g or per 100kJ/100ml).
+
+**Standard Reconstitution (标准冲调浓度)** — The default concentration ratio configured for a Formula Product (e.g. 1 scoop = 4.3g into 30ml water ≈ 13.5% concentration). The system prompts the caregiver on first setup to confirm standard vs custom concentration.
+
+**Supplement Product (补剂档案)** — A dietary supplement profile (e.g. Vitamin AD, D3, Liquid Calcium with D3/K2, Iron drops, DHA, Probiotics, Multivitamins) defining brand, dosage form (drops/capsule/liquid ml/sachet), and a flexible multi-nutrient specification (capturing compound nutrients such as Calcium + Vit D3 within a single supplement).
+
+**Supplement Schedule (补剂计划)** — A baby's configured administration regimen (daily, alternate days like AD/D3 rotation, or specific days of week) with target dosage units.
+
+**Conflict Guard & Overdose Alert (冲突与防过量守护)** — A proactive atomic nutrient-level check in the Supplement Record flow and Nutrition Engine that sums cumulative intakes across all products (e.g. Formula + D3 drops + Liquid Calcium containing D3) and alerts against China DRIs (WS/T 578) Upper Intake Levels (UL) and redundant administration.
+
+
+**Supplement Record (补剂打卡记录)** — A first-class timeline event logging when a specific supplement was administered to a Baby, how many units/doses were given, and by whom.
+
+**Nutrient Intake Engine (营养素摄入计算引擎)** — Deterministic aggregation engine that computes total daily and historical nutrient intakes across formula milk, supplements, and solid food, comparing against China DRIs (WS/T 578) with AI/RNI achievement rates and UL (Upper Intake Level) overdose safety alerts.
+
+

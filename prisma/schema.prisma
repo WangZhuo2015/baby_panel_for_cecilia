@@ -29,8 +29,10 @@ model Family {
   updatedAt    DateTime           @updatedAt
   members      FamilyMember[]
   babies       Baby[]
-  foodStatuses FamilyFoodStatus[]
-  bookStatuses FamilyBookStatus[]
+  foodStatuses       FamilyFoodStatus[]
+  bookStatuses       FamilyBookStatus[]
+  formulaProducts    FormulaProduct[]
+  supplementProducts SupplementProduct[]
 }
 
 model FamilyMember {
@@ -51,47 +53,135 @@ model FamilyMember {
 // ─── Core Baby Tracking Models ──────────────────────────────────────────────
 
 model Baby {
-  id                 String              @id @default(uuid())
-  familyId           String
-  family             Family              @relation(fields: [familyId], references: [id], onDelete: Cascade)
-  nickname           String
-  gender             String              @default("female")
-  birthDate          String
-  gestationalAge     Int?
-  avatarUrl          String?
-  createdAt          DateTime            @default(now())
-  updatedAt          DateTime            @updatedAt
-  feedingRecords     FeedingRecord[]
-  sleepRecords       SleepRecord[]
-  diaperRecords      DiaperRecord[]
-  growthMeasurements GrowthMeasurement[]
-  foodLogRecords     FoodLogRecord[]
-  foodPlans          FoodPlan[]
-  vaccineRecords     VaccineRecord[]
-  vaccineSelections  VaccineSelection[]
-  medicalReports     MedicalReport[]
-  aiChatSessions     AiChatSession[]
+  id                  String               @id @default(uuid())
+  familyId            String
+  family              Family               @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  nickname            String
+  gender              String               @default("female")
+  birthDate           String
+  gestationalAge      Int?
+  avatarUrl           String?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  feedingRecords      FeedingRecord[]
+  sleepRecords        SleepRecord[]
+  diaperRecords       DiaperRecord[]
+  growthMeasurements  GrowthMeasurement[]
+  foodLogRecords      FoodLogRecord[]
+  foodPlans           FoodPlan[]
+  vaccineRecords      VaccineRecord[]
+  vaccineSelections   VaccineSelection[]
+  medicalReports      MedicalReport[]
+  aiChatSessions      AiChatSession[]
+  supplementSchedules SupplementSchedule[]
+  supplementRecords   SupplementRecord[]
 
   @@index([familyId])
 }
 
 
 model FeedingRecord {
-  id           String   @id @default(uuid())
-  babyId       String
-  baby         Baby     @relation(fields: [babyId], references: [id], onDelete: Cascade)
-  clientId       String? // 离线提交幂等键（outbox 重放防重）
-  recordedById String?
-  timestamp    String
-  type         String   // breast, formula, mixed
-  amountMl     Int?
-  leftMinutes  Int?
-  rightMinutes Int?
-  spitUp       Boolean  @default(false)
-  notes        String?
-  createdAt    DateTime @default(now())
+  id               String          @id @default(uuid())
+  babyId           String
+  baby             Baby            @relation(fields: [babyId], references: [id], onDelete: Cascade)
+  formulaProductId String?
+  formulaProduct   FormulaProduct? @relation(fields: [formulaProductId], references: [id], onDelete: SetNull)
+  clientId         String? // 离线提交幂等键（outbox 重放防重）
+  recordedById     String?
+  timestamp        String
+  type             String   // breast, formula, mixed
+  amountMl         Int?
+  leftMinutes      Int?
+  rightMinutes     Int?
+  spitUp           Boolean  @default(false)
+  notes            String?
+  createdAt        DateTime @default(now())
 
   @@index([babyId, timestamp])
+  @@index([formulaProductId])
+  @@unique([babyId, clientId])
+}
+
+// ─── Formula & Supplement Products & Nutrition Models ───────────────────────
+
+model FormulaProduct {
+  id                  String          @id @default(uuid())
+  familyId            String
+  family              Family          @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  name                String
+  brand               String
+  stage               Int?
+  scoopWeightG        Float           @default(4.3)
+  waterPerScoopMl     Float           @default(30.0)
+  reconstitutionRatio Float           @default(0.135)
+  servingSizeUnit     String          @default("per_100g") // "per_100g" | "per_100ml" | "per_100kJ"
+  nutrientsJson       String          // JSON map: Record<string, { amount: number, unit: string }>
+  notes               String?
+  isActive            Boolean         @default(true)
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+  feedingRecords      FeedingRecord[]
+
+  @@index([familyId])
+}
+
+model SupplementProduct {
+  id            String               @id @default(uuid())
+  familyId      String
+  family        Family               @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  name          String
+  brand         String
+  dosageForm    String               // "drops" | "capsule" | "liquid_ml" | "sachet" | "tablet"
+  unitName      String               // "滴" | "粒" | "ml" | "袋" | "片"
+  defaultDose   Float                @default(1.0)
+  nutrientsJson String               // JSON map: Record<string, { amount: number, unit: string }>
+  notes         String?
+  isActive      Boolean              @default(true)
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+  schedules     SupplementSchedule[]
+  records       SupplementRecord[]
+
+  @@index([familyId])
+}
+
+model SupplementSchedule {
+  id             String            @id @default(uuid())
+  babyId         String
+  baby           Baby              @relation(fields: [babyId], references: [id], onDelete: Cascade)
+  productId      String
+  product        SupplementProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+  frequency      String            @default("daily") // "daily" | "alternate_day" | "specific_days"
+  customDaysJson String?           // JSON array e.g. [1, 3, 5] (Mon, Wed, Fri) or anchor date
+  targetDose     Float             @default(1.0)
+  reminderTime   String?           // "09:00"
+  isActive       Boolean           @default(true)
+  startDate      String?           // "YYYY-MM-DD"
+  notes          String?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  @@index([babyId])
+  @@index([productId])
+}
+
+model SupplementRecord {
+  id           String            @id @default(uuid())
+  babyId       String
+  baby         Baby              @relation(fields: [babyId], references: [id], onDelete: Cascade)
+  productId    String
+  product      SupplementProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+  clientId     String?           // 离线提交幂等键
+  recordedById String?
+  date         String            // YYYY-MM-DD
+  time         String            // HH:mm
+  dose         Float             @default(1.0)
+  unitName     String?
+  notes        String?
+  createdAt    DateTime          @default(now())
+
+  @@index([babyId, date])
+  @@index([productId])
   @@unique([babyId, clientId])
 }
 

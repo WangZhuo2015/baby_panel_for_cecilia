@@ -22,7 +22,8 @@ metadata:
    - 🍑 **排便**：大小便频次、大便性状（软糊、水样、奶瓣）与颜色；
 3. **生长发育监测**：记录体重 (kg)、身长 (cm)、头围 (cm)，评估 WHO 0-3 岁生长曲线百分位（P3-P97）；
 4. **医学化验与体检**：血常规（WBC/CRP/HGB）、微量元素、儿保体检、过敏原等指标结构化建档与解读；
-5. **疫苗接种规划**：国家一类免疫规划与二类自费疫苗（13价肺炎、轮状病毒、手足口EV71、水痘等）接种日程与禁忌查询。
+5. **疫苗接种规划**：国家一类免疫规划与二类自费疫苗（13价肺炎、轮状病毒、手足口EV71、水痘等）接种日程与禁忌查询；
+6. **营养素与补剂中枢**：配方奶干粉浓度折算、补剂打卡（AD/D3/液体钙含D3/铁剂/锌/DHA等复合补剂穿透）、中国 DRIs 2023 达标度评估与 UL 防过量冲突守护。
 
 ---
 
@@ -34,21 +35,15 @@ metadata:
 | :--- | :--- | :--- |
 | `get_baby_profile` | 获取当前宝宝基本档案与精准月龄 | 无 |
 | `get_daily_summary` | 获取指定日期（默认今日）累计奶量、睡眠时长、换尿布汇总 | `date?: string` (YYYY-MM-DD) |
-| `get_recent_records` | 查询具体活动时间轴明细（每次吃奶/睡眠/排便/辅食详情） | `date?`, `type?` (all/feeding/sleep/diaper/food), `limit?` |
-| `record_feeding` | 记录一次吃奶喂养事件 | `type` (breast/formula/bottle_breast/mixed), `amountMl?`, `durationMinutes?`, `notes?` |
+| `record_feeding` | 记录一次喂养事件（支持指定配方奶品牌） | `type` (breast/formula/bottle_breast/mixed), `amountMl?`, `formulaName?`, `durationMinutes?`, `notes?` |
+| `record_supplement` | 记录补剂打卡（内置同日重复/过量冲突拦截） | `name` (如'维生素D3'/'伊可新AD'/'液体钙'), `units?`, `timestamp?`, `notes?`, `forceOverride?` |
+| `get_nutrition_analysis` | 查询全量营养素摄入汇总、DRIs 达标率与安全状态 | `date?: string` (YYYY-MM-DD), `days?: number` (1, 7, 30) |
+| `query_nutrition_products` | 查询家庭正在使用或已登记的奶粉与补剂库 | `type?: string` (all/formula/supplement) |
 | `record_food` | 记录一次辅食餐点 | `foods` (string[]), `date?`, `time?`, `portion?`, `acceptance?`, `babyState?`, `hasAbnormal?`, `abnormalNotes?` |
-| `record_food_plan` | 制定并保存一日辅食食谱日程计划 | `name`, `ingredients`, `steps`, `nutrition`, `date?`, `tags?` |
-| `query_food_item` | 查询食材库适龄推荐、防噎处理与过敏原指引 | `name` (食材名称) |
 | `record_sleep` | 记录一次睡眠事件 | `startTime` (HH:mm), `endTime` (HH:mm), `type` (day/night), `notes?` |
 | `record_diaper` | 记录一次排便/换尿布 | `type` (pee/poop/both), `poopColor?`, `poopConsistency?`, `notes?` |
 | `record_growth` | 记录生长测量数据 | `weightKg?`, `heightCm?`, `headCircumferenceCm?`, `date?`, `notes?` |
-| `get_vaccine_schedule` | 查询疫苗接种时间表与临近接种项 | `regionCode?`, `maxMonthsAhead?` |
-| `record_vaccine` | 记录宝宝已接种疫苗剂次 | `name`, `dose`, `completedDate?` |
-| `get_development_milestones` | 查询国家卫健委儿童发育里程碑指标 | `month?`, `category?` |
-| `get_warning_signs` | 查询儿童发育预警红线与就医指征 | `month?`, `category?` |
-| `get_recommended_books` | 适龄精选绘本推荐与亲子共读要点 | `tag?`, `month?` |
-| `get_activity_recommendations` | 适龄早教与亲子互动游戏建议 | `month?`, `category?` |
-| `web_search` | 互联网实时搜索最新儿科指南、药品说明与育儿科普 | `query` (关键词), `limit?` |
+| `get_vaccine_schedule` | 查询疫苗接种时间表与临近接种项 | 无 |
 | `save_medical_report` | 保存医学化验单/体检档案 | `title`, `category`, `date`, `hospital?`, `items`, `growthData?`, `aiSummary?` |
 
 ---
@@ -58,7 +53,7 @@ metadata:
 在 Web 聊天交互中，Agent 会输出自然语言儿科分析，并附带特制标准结构：
 ```json:action
 {
-  "type": "medical_report" | "feeding" | "food" | "food_plan" | "sleep" | "diaper" | "growth" | "vaccine",
+  "type": "medical_report" | "feeding" | "food" | "sleep" | "diaper" | "growth",
   "data": { ... }
 }
 ```

@@ -29,6 +29,7 @@ import { CuteCard } from "@/components/ui/CuteCard";
 import { CuteButton } from "@/components/ui/CuteButton";
 import { QuickAiButton } from "@/components/ui/QuickAiButton";
 import { InstallGuideBanner } from "@/components/ui/InstallGuideBanner";
+import { SupplementQuickCheckIn } from "@/components/nutrition/SupplementQuickCheckIn";
 import { formatIsoToLocalTime } from "@/lib/date";
 import { APP_VERSION } from "@/lib/version";
 
@@ -451,14 +452,18 @@ export default function HomePage() {
         </div>
       </div>
 
+      {/* 💊 今日补剂快速打卡 */}
+      <SupplementQuickCheckIn babyId={baby?.id} />
+
       {/* Quick Action Grid */}
       <div>
         <h3 className="text-xs font-bold text-text-secondary uppercase tracking-wider mb-2 px-1">快捷记录</h3>
-        <div className="grid grid-cols-4 gap-2">
+        <div className="grid grid-cols-3 gap-2">
           <QuickActionCard icon={<Droplets size={22} />} label="记喂奶" color="#8DCBFF" onClick={() => router.push("/records/feeding")} />
           <QuickActionCard icon={<Moon size={22} />} label="记睡眠" color="#B98AF5" onClick={() => router.push("/records/sleep")} />
           <QuickActionCard icon={<Wind size={22} />} label="换尿布" color="#78DDB5" onClick={() => router.push("/records/diaper")} />
           <QuickActionCard icon={<UtensilsCrossed size={22} />} label="吃辅食" color="#FFB38A" onClick={() => router.push("/food/log")} />
+          <QuickActionCard icon={<Sparkles size={22} />} label="营养素分析" color="#FF6F9F" onClick={() => router.push("/nutrition")} />
           <QuickActionCard icon={<Star size={22} />} label="发育里程" color="#B98AF5" onClick={() => router.push("/development")} />
         </div>
       </div>

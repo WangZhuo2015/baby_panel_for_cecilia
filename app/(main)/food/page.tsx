@@ -184,13 +184,16 @@ export default function FoodPage() {
       <div className="px-4 mb-4">
         <SegmentControl
           options={[
-            { value: "today", label: "辅食日记与食谱" },
+            { value: "today", label: "辅食日记" },
             { value: "library", label: "食材库" },
+            { value: "nutrition", label: "🍼 全量营养" },
           ]}
           value={activeTab}
           onChange={(v) => {
             if (v === "library") {
               router.push("/food/library");
+            } else if (v === "nutrition") {
+              router.push("/nutrition");
             } else {
               setActiveTab("today");
             }

@@ -1,6 +1,7 @@
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { Type } from "@earendil-works/pi-ai";
 import { getLocalDateStr } from "@/lib/date";
+import { prisma } from "@/lib/prisma";
 import * as records from "@/lib/records/service";
 import type { Baby } from "@/generated/prisma/client";
 import { TIME_RE, hhmmToIso, optionalNumber, ok, type Params } from "./helpers";
@@ -16,6 +17,8 @@ export function makeRecordFeedingTool(ctx: { userId: string; baby: Baby }): Agen
       durationMinutes: Type.Optional(Type.Number({ description: "喂养时长分钟" })),
       leftMinutes: Type.Optional(Type.Number({ description: "左侧亲喂分钟" })),
       rightMinutes: Type.Optional(Type.Number({ description: "右侧亲喂分钟" })),
+      formulaName: Type.Optional(Type.String({ description: "配方奶粉名称或品牌，如'爱他美'、'飞鹤'" })),
+      formulaProductId: Type.Optional(Type.String({ description: "指定的奶粉档案 ID" })),
       notes: Type.Optional(Type.String()),
       timestamp: Type.Optional(Type.String({ description: "HH:mm 或 ISO 时间，默认现在" })),
     }),
@@ -44,6 +47,30 @@ export function makeRecordFeedingTool(ctx: { userId: string; baby: Baby }): Agen
       if (typeStr === "breast_milk" || typeStr === "bottle_breast_milk") typeStr = "bottle_breast";
       if (!["breast", "formula", "bottle_breast", "mixed"].includes(typeStr)) typeStr = "formula";
 
+      // Match formula product if formula / mixed
+      let matchedFormulaId: string | undefined = typeof params.formulaProductId === "string" ? params.formulaProductId : undefined;
+      if (!matchedFormulaId && (typeStr === "formula" || typeStr === "mixed") && typeof params.formulaName === "string" && params.formulaName.trim()) {
+        const formulaName = params.formulaName.trim();
+        const f = await prisma.formulaProduct.findFirst({
+          where: {
+            familyId: ctx.baby.familyId,
+            isActive: true,
+            OR: [
+              { name: { contains: formulaName } },
+              { brand: { contains: formulaName } },
+            ],
+          },
+        });
+        if (f) matchedFormulaId = f.id;
+      }
+      if (!matchedFormulaId && (typeStr === "formula" || typeStr === "mixed")) {
+        // Use active default formula
+        const activeF = await prisma.formulaProduct.findFirst({
+          where: { familyId: ctx.baby.familyId, isActive: true },
+        });
+        if (activeF) matchedFormulaId = activeF.id;
+      }
+
       const record = await records.createFeeding(
         { userId: ctx.userId, babyId: ctx.baby.id, baby: ctx.baby },
         {
@@ -54,6 +81,7 @@ export function makeRecordFeedingTool(ctx: { userId: string; baby: Baby }): Agen
           spitUp: false,
           notes: typeof params.notes === "string" ? params.notes.trim() : null,
           timestamp: recordTimestamp,
+          formulaProductId: matchedFormulaId,
         }
       );
       return ok(`已记录喂养：${typeStr}${amountMl != null ? ` ${amountMl}ml` : ""}`, { id: (record as any).id, recordId: (record as any).id });

@@ -52,6 +52,7 @@ export interface FeedingFormProps {
     spitUp: boolean;
     notes?: string;
     timestamp: string;
+    formulaProductId?: string | null;
   }) => Promise<void>;
   onCancel?: () => void;
   saving?: boolean;
@@ -110,6 +111,24 @@ export function FeedingForm({
 
   const [isNow, setIsNow] = useState<boolean>(() => !isEdit && !initialData?.timestamp);
 
+  const [formulaProducts, setFormulaProducts] = useState<any[]>([]);
+  const [selectedFormulaId, setSelectedFormulaId] = useState<string | null>(() => {
+    return initialData?.formulaProductId || (typeof window !== "undefined" ? localStorage.getItem("last_selected_formula_id") : null);
+  });
+
+  useEffect(() => {
+    fetch("/api/nutrition/products?type=formula")
+      .then((res) => res.json())
+      .then((data) => {
+        const list = data.formulas || [];
+        setFormulaProducts(list);
+        if (!selectedFormulaId && list.length > 0) {
+          setSelectedFormulaId(list[0].id);
+        }
+      })
+      .catch(() => {});
+  }, [selectedFormulaId]);
+
   // Stopwatch timer interval
   useEffect(() => {
     if (!activeSide) return;
@@ -140,6 +159,12 @@ export function FeedingForm({
       timestamp = isNow ? new Date().toISOString() : localTimeToUtcIso(time);
     }
 
+    if (selectedFormulaId && typeof window !== "undefined") {
+      try {
+        localStorage.setItem("last_selected_formula_id", selectedFormulaId);
+      } catch {}
+    }
+
     await onSubmit({
       type: feedingType,
       amountMl:
@@ -151,6 +176,7 @@ export function FeedingForm({
       spitUp,
       notes: finalNotes || undefined,
       timestamp,
+      formulaProductId: (feedingType === "formula" || feedingType === "mixed") ? selectedFormulaId : null,
     });
   };
 
@@ -388,6 +414,36 @@ export function FeedingForm({
             </h3>
             <span className="text-xs text-text-muted">点击或微调奶量</span>
           </div>
+
+          {/* 配方奶档案选择 (仅在配方奶或混合喂养时展示) */}
+          {(feedingType === "formula" || feedingType === "mixed") && formulaProducts.length > 0 && (
+            <div className="p-2 bg-primary-light/40 rounded-2xl space-y-1.5 border border-primary/20">
+              <div className="flex items-center justify-between px-1">
+                <span className="text-[11px] font-bold text-text-secondary">使用奶粉档案</span>
+                {formulaProducts.find((f) => f.id === selectedFormulaId) && (
+                  <span className="text-[10px] text-primary font-bold">
+                    冲调浓度: {((formulaProducts.find((f) => f.id === selectedFormulaId)?.reconstitutionRatio || 0.135) * 100).toFixed(1)}%
+                  </span>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {formulaProducts.map((f) => (
+                  <button
+                    key={f.id}
+                    type="button"
+                    onClick={() => setSelectedFormulaId(f.id)}
+                    className={`px-2.5 py-1 rounded-xl text-xs font-bold transition-all truncate max-w-[180px] btn-press ${
+                      selectedFormulaId === f.id
+                        ? "bg-primary text-white shadow-button"
+                        : "bg-white text-text-secondary hover:bg-gray-50 border border-divider"
+                    }`}
+                  >
+                    {f.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Big Amount Display */}
           <div className="flex items-center justify-center gap-4 py-2">

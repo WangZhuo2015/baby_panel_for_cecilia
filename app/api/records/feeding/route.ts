@@ -55,6 +55,7 @@ export async function POST(request: Request) {
       spitUp: body.spitUp === true || body.spitUp === "true" || body.spitUp === 1,
       notes: body.notes,
       clientId: body.clientId,
+      formulaProductId: body.formulaProductId ? String(body.formulaProductId) : null,
     });
     return NextResponse.json(rec, { status: 201 });
   } catch (e) {

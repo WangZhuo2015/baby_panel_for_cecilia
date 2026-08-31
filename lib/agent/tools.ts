@@ -20,6 +20,7 @@ import { makeRecordSleepTool } from "./tools/sleep";
 import { makeRecordDiaperTool } from "./tools/diaper";
 import { makeRecordGrowthTool } from "./tools/growth";
 import { makeRecordFoodTool, makeRecordFoodPlanTool } from "./tools/food";
+import { makeNutritionTools } from "./tools/nutrition";
 import { TIME_RE, hhmmToIso, optionalNumber, ok, fail, type Params } from "./tools/helpers";
 export { hhmmToIso } from "./tools/helpers";
 
@@ -647,5 +648,6 @@ export function createBabyPanelTools(ctx: BabyToolContext): AgentTool[] {
     getActivityRecommendations,
     webSearch,
     saveMedicalReport,
+    ...makeNutritionTools(ctx),
   ];
 }

@@ -33,6 +33,7 @@ export interface CreateFeedingInput {
   spitUp?: boolean;
   notes?: string | null;
   clientId?: string | null;
+  formulaProductId?: string | null;
 }
 
 export interface CreateSleepInput {
@@ -141,6 +142,7 @@ export async function createFeeding(ctx: RecordContext, input: CreateFeedingInpu
     rightMinutes: input.rightMinutes ?? null,
     spitUp: !!input.spitUp,
     notes: input.notes?.trim() || null,
+    formulaProductId: input.formulaProductId || null,
   };
   if (clientId) {
     return prisma.feedingRecord.upsert({
@@ -659,6 +661,7 @@ export async function updateFeeding(ctx: RecordContext, id: string, patch: Recor
     spitUp: patch.spitUp !== undefined ? patch.spitUp === true || patch.spitUp === "true" || patch.spitUp === 1 : record.spitUp,
     notes: patch.notes !== undefined ? (patch.notes ? String(patch.notes).trim() : null) : record.notes,
     timestamp: (patch.timestamp ?? record.timestamp) as string,
+    formulaProductId: patch.formulaProductId !== undefined ? patch.formulaProductId : record.formulaProductId,
   };
   const validTypes = ["breast", "formula", "bottle_breast", "mixed", "solid"];
   if (!validTypes.includes(merged.type)) throw new ValidationError("type 只能为 breast、formula、bottle_breast、mixed 或 solid");
@@ -678,6 +681,7 @@ export async function updateFeeding(ctx: RecordContext, id: string, patch: Recor
     spitUp: !!merged.spitUp,
     notes: merged.notes,
     timestamp: parsedTs.toISOString(),
+    formulaProductId: merged.formulaProductId ? String(merged.formulaProductId) : null,
   };
   return prisma.feedingRecord.update({ where: { id }, data });
 }

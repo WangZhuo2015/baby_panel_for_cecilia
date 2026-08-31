@@ -43,13 +43,14 @@ export interface FeedingRecord {
   id: string;
   timestamp: string;
   type: FeedingType;
-  amountMl?: number;
-  leftMinutes?: number;
-  rightMinutes?: number;
+  amountMl?: number | null;
+  leftMinutes?: number | null;
+  rightMinutes?: number | null;
   spitUp: boolean;
-  notes?: string;
-  foodName?: string;
-  foodAmount?: string;
+  notes?: string | null;
+  foodName?: string | null;
+  foodAmount?: string | null;
+  formulaProductId?: string | null;
 }
 
 export interface SleepRecord {
@@ -465,3 +466,7 @@ export interface MedicalOcrResponse {
   };
   rawText?: string;
 }
+
+// ===== Nutrition & Supplement Export =====
+export * from "./nutrition";
+
