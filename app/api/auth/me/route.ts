@@ -9,7 +9,9 @@ export async function GET(request: Request) {
     }
 
 
-    const primaryMembership = user.memberships[0];
+    const primaryMembership =
+      user.memberships.find((m) => m.family.babies.length > 0) ||
+      user.memberships[0];
     const family = primaryMembership?.family;
     const activeBaby = family?.babies[0] || null;
 

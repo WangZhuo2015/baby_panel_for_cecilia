@@ -91,10 +91,13 @@ export async function getAuthSession(request?: Request) {
       displayName: true,
       createdAt: true,
       memberships: {
+        orderBy: { createdAt: "asc" },
         include: {
           family: {
             include: {
-              babies: true,
+              babies: {
+                orderBy: { createdAt: "asc" },
+              },
             },
           },
         },

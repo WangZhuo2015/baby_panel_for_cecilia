@@ -69,7 +69,9 @@ export async function POST(request: Request) {
       username: user.username,
     });
 
-    const primaryFamily = user.memberships[0]?.family;
+    const primaryFamily =
+      user.memberships.find((m) => m.family.babies.length > 0)?.family ||
+      user.memberships[0]?.family;
     const activeBaby = primaryFamily?.babies[0] || null;
 
     const response = NextResponse.json({
