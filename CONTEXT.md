@@ -49,4 +49,15 @@ Terms used in product and architecture talk. Prefer these names over file-level 
 
 **Nutrient Intake Engine (营养素摄入计算引擎)** — Deterministic aggregation engine that computes total daily and historical nutrient intakes across formula milk, supplements, and solid food, comparing against China DRIs (WS/T 578) with AI/RNI achievement rates and UL (Upper Intake Level) overdose safety alerts.
 
+## Responsive Workbench & Device Adaptation
+
+**Responsive Parenting Workbench (双模响应式育儿工作台)** — Unified frontend architecture adapting seamlessly between mobile phone hand-held mode (<1024px) and tablet/iPad/desktop wide-screen mode (≥1024px), with Apple iPad (touch + pencil/keyboard) treated as the primary large-screen target.
+
+**Desktop/Tablet Sidebar (侧边中枢导航栏)** — Fixed or collapsible navigation rail on wide screens (≥1024px) surfacing high-frequency modules (Today, Growth, Food, Vaccines, Nutrition, Development, Books, Family) and quick AI actions.
+
+**Slide-over Record Drawer & In-Context Modal (抽屉与模态快速录入)** — Touch-first quick entry overlays on iPad/Desktop enabling caregivers to record feeding, sleep, diaper, or complementary foods without full-page navigation away from the active dashboard.
+
+**Dual-Pane AI Workspace (双栏 AI 协同工作区)** — Multi-panel conversational interface presenting session history alongside multimodal streaming tools, optimized for both iPad touch scrolling and desktop viewports.
+
+_Avoid_: Desktop-only mouse hover traps, fixed non-responsive widths, and sub-44px touch targets that degrade iPad touch ergonomics.
 

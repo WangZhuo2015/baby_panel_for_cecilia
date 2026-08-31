@@ -17,19 +17,20 @@ interface GrowthLineChartProps {
 
 export default function GrowthLineChart({ data }: GrowthLineChartProps) {
   return (
-    <div className="h-[240px] -mx-2">
+    <div className="h-[260px] sm:h-[320px] lg:h-[360px] -mx-2">
       <ResponsiveContainer width="100%" height="100%">
         <LineChart data={data} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#FFD9E6" opacity={0.5} />
+          <CartesianGrid strokeDasharray="3 3" stroke="#FFD9E6" opacity={0.4} />
           <XAxis dataKey="month" tick={{ fontSize: 10, fill: "#B6A0A5" }} axisLine={false} tickLine={false} />
           <YAxis tick={{ fontSize: 10, fill: "#B6A0A5" }} axisLine={false} tickLine={false} />
           <Tooltip
             contentStyle={{
-              background: "white",
-              border: "1px solid #FFD9E6",
+              background: "var(--color-card, #FFFFFF)",
+              border: "1px solid rgba(255, 111, 159, 0.2)",
               borderRadius: "16px",
               boxShadow: "0 4px 16px rgba(180, 100, 125, 0.1)",
               fontSize: "12px",
+              color: "var(--color-text-primary, #4A252B)",
             }}
           />
           {/* WHO Percentile reference lines */}

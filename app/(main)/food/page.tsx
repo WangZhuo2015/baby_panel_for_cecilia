@@ -1,4 +1,5 @@
 "use client";
+
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { CuteCard } from "@/components/ui/CuteCard";
@@ -10,6 +11,7 @@ import { calculateAge } from "@/lib/age";
 import { getLocalDateStr, addDays, getWeekdayStr } from "@/lib/date";
 import { Baby, Plus, Utensils, AlertCircle, Trash2, Heart, Smile, Meh, Frown, RefreshCw } from "lucide-react";
 import type { FoodLogRecord } from "@/types";
+import { openRecordDrawer } from "@/lib/drawer-bus";
 
 function generateWeeklyDates() {
   const todayStr = getLocalDateStr();
@@ -111,10 +113,18 @@ export default function FoodPage() {
     }
   };
 
+  const handleOpenFoodLog = () => {
+    if (typeof window !== "undefined" && window.innerWidth >= 1024) {
+      openRecordDrawer("food");
+    } else {
+      router.push("/food/log");
+    }
+  };
+
   return (
-    <div className="min-h-[100dvh] bg-bg pb-36">
+    <div className="min-h-[100dvh] bg-bg pb-36 px-4 max-w-md md:max-w-xl lg:max-w-6xl mx-auto space-y-5">
       {/* Baby info header */}
-      <div className="pt-safe-4 px-4 pb-3 flex items-center justify-between">
+      <div className="pt-safe-4 flex items-center justify-between">
         <div
           className="flex items-center gap-3 cursor-pointer group"
           onClick={() => router.push("/onboarding")}
@@ -128,10 +138,10 @@ export default function FoodPage() {
             )}
           </div>
           <div>
-            <h2 className="text-lg font-bold text-text-primary group-hover:text-primary transition-colors">
+            <h2 className="text-base font-bold text-text-primary group-hover:text-primary transition-colors">
               {baby?.nickname ?? "宝宝"}
             </h2>
-            <p className="text-sm text-text-secondary">{age.label}</p>
+            <p className="text-xs text-text-secondary">{age.label}</p>
           </div>
         </div>
 
@@ -155,8 +165,8 @@ export default function FoodPage() {
       </div>
 
       {/* 7-day date picker */}
-      <div className="px-4 mb-4">
-        <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+      <div>
+        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
           {weeklyDates.map((dateItem) => {
             const isSelected = dateItem.date === selectedDate;
             return (
@@ -164,7 +174,7 @@ export default function FoodPage() {
                 key={dateItem.date}
                 type="button"
                 onClick={() => setSelectedDate(dateItem.date)}
-                className={`flex-shrink-0 flex flex-col items-center justify-center w-14 h-18 rounded-2xl transition-all btn-press ${
+                className={`flex-shrink-0 flex flex-col items-center justify-center w-14 h-18 rounded-2xl transition-all btn-press cursor-pointer ${
                   isSelected
                     ? "bg-primary text-white shadow-button ring-2 ring-primary/30 font-bold"
                     : dateItem.isToday
@@ -181,11 +191,11 @@ export default function FoodPage() {
       </div>
 
       {/* Tabs */}
-      <div className="px-4 mb-4">
+      <div>
         <SegmentControl
           options={[
-            { value: "today", label: "辅食日记" },
-            { value: "library", label: "食材库" },
+            { value: "today", label: "🥣 辅食日记" },
+            { value: "library", label: "🥕 食材库" },
             { value: "nutrition", label: "🍼 全量营养" },
           ]}
           value={activeTab}
@@ -201,208 +211,199 @@ export default function FoodPage() {
         />
       </div>
 
-      {/* Content */}
-      <div className="px-4 space-y-4">
-        {activeTab === "today" && (
-          <>
-            {/* 1. 已吃辅食记录（实际打卡日志） */}
-            <div>
-              <div className="flex items-center justify-between mb-2.5 px-1">
-                <div className="flex items-center gap-1.5">
-                  <Utensils size={15} className="text-primary" />
-                  <h3 className="text-xs font-bold text-text-secondary uppercase tracking-wider">
-                    进食记录 ({dateFoodLogs.length})
-                  </h3>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => router.push("/food/log")}
-                  className="text-xs text-primary font-bold hover:underline flex items-center gap-0.5"
-                >
-                  <Plus size={14} />
-                  <span>记辅食</span>
-                </button>
-              </div>
-
-              {dateFoodLogs.length > 0 ? (
-                <div className="space-y-2.5">
-                  {dateFoodLogs.map((log) => {
-                    const foods = Array.isArray(log.foods) ? log.foods : [];
-                    const stateObj = STATE_ICONS[log.babyState] || STATE_ICONS.happy;
-                    const StateIcon = stateObj.icon;
-
-                    return (
-                      <CuteCard key={log.id} className="p-3.5 border border-primary/15 hover:border-primary/30 transition-all">
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="space-y-1.5 flex-1 min-w-0">
-                            <div className="flex items-center gap-2">
-                              <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary font-bold text-xs">
-                                🥣 {log.time}
-                              </span>
-                              <div className="flex items-center gap-1 text-[11px] text-text-muted">
-                                <span>分量:</span>
-                                <span className="font-semibold text-text-secondary">
-                                  {PORTION_LABELS[log.portion] || log.portion}
-                                </span>
-                              </div>
-                            </div>
-
-                            {/* 食材列表 */}
-                            <div className="flex flex-wrap gap-1.5 pt-1">
-                              {foods.map((food, idx) => (
-                                <span
-                                  key={idx}
-                                  className="px-2.5 py-1 bg-amber-50 text-amber-900 border border-amber-200/60 text-xs font-bold rounded-xl"
-                                >
-                                  {food}
-                                </span>
-                              ))}
-                            </div>
-
-                            {/* 喜欢程度与状态 */}
-                            <div className="flex items-center gap-3 pt-1 text-xs text-text-secondary">
-                              <div className="flex items-center gap-1">
-                                <Heart size={12} className="text-red-500 fill-red-500" />
-                                <span className="text-[11px]">{log.acceptance} / 5 星</span>
-                              </div>
-                              <div className="flex items-center gap-1">
-                                <StateIcon size={13} className={stateObj.color} />
-                                <span className="text-[11px]">{stateObj.label}</span>
-                              </div>
-                            </div>
-
-                            {/* 异常提示 */}
-                            {log.hasAbnormal && (
-                              <div className="mt-2 p-2 bg-red-50 rounded-xl border border-red-100 flex items-start gap-1.5 text-xs text-red-700">
-                                <AlertCircle size={14} className="text-red-500 shrink-0 mt-0.5" />
-                                <div>
-                                  <p className="font-bold">有异常反馈</p>
-                                  {log.abnormalNotes && <p className="text-[11px]">{log.abnormalNotes}</p>}
-                                </div>
-                              </div>
-                            )}
-                          </div>
-
-                          {/* 删除操作 */}
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteRecord(log)}
-                            className="p-1.5 text-text-muted hover:text-red-500 rounded-lg hover:bg-red-50 transition-colors"
-                            title="删除该条辅食记录"
-                          >
-                            <Trash2 size={15} />
-                          </button>
-                        </div>
-                      </CuteCard>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="bg-card rounded-2xl p-5 text-center border border-dashed border-primary/20 space-y-2">
-                  <p className="text-2xl">🥣</p>
-                  <p className="text-xs text-text-muted">该日期暂无辅食进食记录</p>
-                  <CuteButton size="sm" onClick={() => router.push("/food/log")}>
-                    + 记录本餐辅食
-                  </CuteButton>
-                </div>
-              )}
+      {/* 🌟 iPad / PC 双栏响应式布局 */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+        {/* ===== 左栏：已吃辅食记录 (Col 7) ===== */}
+        <div className="lg:col-span-7 space-y-4">
+          <div className="flex items-center justify-between px-1">
+            <div className="flex items-center gap-1.5">
+              <Utensils size={15} className="text-primary" />
+              <h3 className="text-xs font-bold text-text-secondary uppercase tracking-wider">
+                进食打卡日志 ({dateFoodLogs.length})
+              </h3>
             </div>
+            <button
+              type="button"
+              onClick={handleOpenFoodLog}
+              className="text-xs text-primary font-bold hover:underline flex items-center gap-0.5 cursor-pointer"
+            >
+              <Plus size={14} />
+              <span>记辅食</span>
+            </button>
+          </div>
 
-            {/* 2. 今日辅食食谱与制作推荐 */}
-            <div>
-              <div className="flex items-center justify-between mb-2.5 px-1">
-                <h3 className="text-xs font-bold text-text-secondary uppercase tracking-wider">
-                  推荐食谱与制作
-                </h3>
-              </div>
+          {dateFoodLogs.length > 0 ? (
+            <div className="space-y-3">
+              {dateFoodLogs.map((log) => {
+                const foods = Array.isArray(log.foods) ? log.foods : [];
+                const stateObj = STATE_ICONS[log.babyState] || STATE_ICONS.happy;
+                const StateIcon = stateObj.icon;
 
-              {todayFoodPlan ? (
-                <CuteCard variant="gradient" className="mb-2">
-                  <div className="flex flex-col gap-3">
-                    {/* Meal name and tags */}
-                    <div>
-                      <h3 className="text-lg font-bold text-text-primary mb-2">
-                        {todayFoodPlan.name}
-                      </h3>
-                      <div className="flex flex-wrap gap-2">
-                        {todayFoodPlan.tags.map((tag) => (
-                          <span
-                            key={tag}
-                            className="px-3 py-1 bg-white/60 text-primary text-xs font-medium rounded-full"
-                          >
-                            {tag}
+                return (
+                  <CuteCard key={log.id} className="p-4 border border-primary/15 hover:border-primary/30 transition-all">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="space-y-2 flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="px-2.5 py-0.5 rounded-full bg-primary/10 text-primary font-bold text-xs">
+                            🥣 {log.time}
                           </span>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Nutrition */}
-                    <div className="bg-white/40 rounded-xl p-3">
-                      <p className="text-xs text-text-secondary mb-1">营养价值</p>
-                      <p className="text-sm font-medium text-text-primary">
-                        {todayFoodPlan.nutrition}
-                      </p>
-                    </div>
-
-                    {/* Ingredients */}
-                    <div>
-                      <p className="text-sm font-semibold text-text-secondary mb-2">食材</p>
-                      <div className="flex flex-wrap gap-2">
-                        {todayFoodPlan.ingredients.map((ingredient) => (
-                          <span
-                            key={ingredient}
-                            className="px-3 py-1.5 bg-white/50 text-sm text-text-primary rounded-full"
-                          >
-                            {ingredient}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Steps */}
-                    <div>
-                      <p className="text-sm font-semibold text-text-secondary mb-2">步骤</p>
-                      <ol className="flex flex-col gap-2">
-                        {todayFoodPlan.steps.map((step, idx) => (
-                          <li key={idx} className="flex gap-2 text-sm text-text-primary">
-                            <span className="flex-shrink-0 w-5 h-5 rounded-full bg-primary text-white text-xs font-bold flex items-center justify-center">
-                              {idx + 1}
+                          <div className="flex items-center gap-1 text-[11px] text-text-muted">
+                            <span>分量:</span>
+                            <span className="font-semibold text-text-secondary">
+                              {PORTION_LABELS[log.portion] || log.portion}
                             </span>
-                            <span className="pt-0.5">{step}</span>
-                          </li>
-                        ))}
-                      </ol>
+                          </div>
+                        </div>
+
+                        {/* 食材列表 */}
+                        <div className="flex flex-wrap gap-1.5 pt-0.5">
+                          {foods.map((food, idx) => (
+                            <span
+                              key={idx}
+                              className="px-2.5 py-1 bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200 border border-amber-200/60 text-xs font-bold rounded-xl"
+                            >
+                              {food}
+                            </span>
+                          ))}
+                        </div>
+
+                        {/* 喜欢程度与状态 */}
+                        <div className="flex items-center gap-3 pt-0.5 text-xs text-text-secondary">
+                          <div className="flex items-center gap-1">
+                            <Heart size={12} className="text-red-500 fill-red-500" />
+                            <span className="text-[11px]">{log.acceptance} / 5 星</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <StateIcon size={13} className={stateObj.color} />
+                            <span className="text-[11px]">{stateObj.label}</span>
+                          </div>
+                        </div>
+
+                        {/* 异常提示 */}
+                        {log.hasAbnormal && (
+                          <div className="mt-2 p-2.5 bg-red-50 dark:bg-red-950/40 rounded-xl border border-red-100 dark:border-red-900/40 flex items-start gap-1.5 text-xs text-red-700 dark:text-red-300">
+                            <AlertCircle size={14} className="text-red-500 shrink-0 mt-0.5" />
+                            <div>
+                              <p className="font-bold">有异常反馈</p>
+                              {log.abnormalNotes && <p className="text-[11px] mt-0.5">{log.abnormalNotes}</p>}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* 删除操作 */}
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteRecord(log)}
+                        className="p-2 text-text-muted hover:text-red-500 rounded-xl hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors cursor-pointer tap-hotzone"
+                        title="删除该条辅食记录"
+                      >
+                        <Trash2 size={16} />
+                      </button>
                     </div>
-                  </div>
-                </CuteCard>
-              ) : (
-                <CuteCard className="mb-2">
-                  <div className="text-center py-6">
-                    <p className="text-3xl mb-1.5">🍽️</p>
-                    <p className="text-xs text-text-secondary">该日期暂无推荐食谱计划</p>
-                  </div>
-                </CuteCard>
-              )}
+                  </CuteCard>
+                );
+              })}
             </div>
-
-            {/* 3. Action buttons */}
-            <div className="flex flex-col gap-2.5 pt-1">
-              <CuteButton fullWidth onClick={() => router.push("/food/log")}>
-                记录辅食餐点
-              </CuteButton>
-              <CuteButton fullWidth variant="secondary" onClick={() => router.push("/food/library")}>
-                查看食材库
+          ) : (
+            <div className="bg-card rounded-2xl p-6 text-center border border-dashed border-primary/20 space-y-2.5">
+              <p className="text-3xl">🥣</p>
+              <p className="text-xs text-text-muted">该日期暂无辅食进食记录</p>
+              <CuteButton size="sm" onClick={handleOpenFoodLog}>
+                + 记录本餐辅食
               </CuteButton>
             </div>
+          )}
+        </div>
 
-            {/* 4. Tip */}
-            <div className="bg-primary-light/30 rounded-2xl p-4">
-              <p className="text-xs text-text-secondary leading-relaxed">
-                💡 首次添加新食材，建议持续观察 3 天排便与过敏反应。
-              </p>
-            </div>
-          </>
-        )}
+        {/* ===== 右栏：推荐食谱与制作 (Col 5) ===== */}
+        <div className="lg:col-span-5 space-y-4">
+          <div className="px-1">
+            <h3 className="text-xs font-bold text-text-secondary uppercase tracking-wider">
+              推荐食谱与制作指南
+            </h3>
+          </div>
+
+          {todayFoodPlan ? (
+            <CuteCard variant="gradient" className="p-4 space-y-3">
+              <div>
+                <h3 className="text-base font-bold text-text-primary mb-2">
+                  {todayFoodPlan.name}
+                </h3>
+                <div className="flex flex-wrap gap-1.5">
+                  {todayFoodPlan.tags.map((tag) => (
+                    <span
+                      key={tag}
+                      className="px-2.5 py-0.5 bg-white/60 dark:bg-card/60 text-primary text-xs font-medium rounded-full"
+                    >
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              {/* Nutrition */}
+              <div className="bg-white/50 dark:bg-card/50 rounded-xl p-3">
+                <p className="text-xs text-text-secondary font-medium mb-1">营养价值</p>
+                <p className="text-xs font-medium text-text-primary leading-relaxed">
+                  {todayFoodPlan.nutrition}
+                </p>
+              </div>
+
+              {/* Ingredients */}
+              <div>
+                <p className="text-xs font-bold text-text-secondary mb-1.5">食材清单</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {todayFoodPlan.ingredients.map((ingredient) => (
+                    <span
+                      key={ingredient}
+                      className="px-2.5 py-1 bg-white/60 dark:bg-card/60 text-xs text-text-primary rounded-xl"
+                    >
+                      {ingredient}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              {/* Steps */}
+              <div>
+                <p className="text-xs font-bold text-text-secondary mb-1.5">制作步骤</p>
+                <ol className="flex flex-col gap-2">
+                  {todayFoodPlan.steps.map((step, idx) => (
+                    <li key={idx} className="flex gap-2 text-xs text-text-primary leading-relaxed">
+                      <span className="shrink-0 w-4 h-4 rounded-full bg-primary text-white text-[10px] font-bold flex items-center justify-center mt-0.5">
+                        {idx + 1}
+                      </span>
+                      <span>{step}</span>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            </CuteCard>
+          ) : (
+            <CuteCard className="p-6 text-center">
+              <p className="text-3xl mb-1.5">🍽️</p>
+              <p className="text-xs text-text-secondary">该日期暂无推荐食谱计划</p>
+            </CuteCard>
+          )}
+
+          {/* Action buttons */}
+          <div className="flex flex-col gap-2.5 pt-1">
+            <CuteButton fullWidth onClick={handleOpenFoodLog}>
+              记录辅食餐点
+            </CuteButton>
+            <CuteButton fullWidth variant="secondary" onClick={() => router.push("/food/library")}>
+              查看食材库
+            </CuteButton>
+          </div>
+
+          {/* Tip */}
+          <div className="bg-primary-light/30 rounded-2xl p-4">
+            <p className="text-xs text-text-secondary leading-relaxed">
+              💡 首次添加新食材，建议持续观察 3 天排便与过敏反应。
+            </p>
+          </div>
+        </div>
       </div>
     </div>
   );

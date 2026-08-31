@@ -719,6 +719,8 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
         setSelectedImage(null);
       }
 
+      fetchSessions();
+
       if (messages.length === 0 || isScopeChanged) {
         // Welcome message
         const welcome: Message = {
@@ -738,7 +740,7 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
       // Trigger store refresh when closed
       useBabyStore.getState().refreshAll().catch(() => {});
     }
-  }, [isOpen, contextType, initialPrompt, displayTitle, baby?.id, baby?.nickname, age.label, messages.length, handleSend]);
+  }, [isOpen, contextType, initialPrompt, displayTitle, baby?.id, baby?.nickname, age.label, messages.length, handleSend, fetchSessions]);
 
   useEffect(() => {
     if (!isOpen && abortControllerRef.current) {
@@ -816,229 +818,359 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
         onClick={onClose}
       />
 
-      {/* Sheet / Modal Container - Full screen on mobile, elegant dialog on desktop */}
-      <div className="relative w-full max-w-lg bg-card h-full sm:h-[680px] max-h-full sm:max-h-[90vh] rounded-none sm:rounded-[28px] shadow-2xl overflow-hidden flex flex-col border-0 sm:border sm:border-primary/15 animate-in slide-in-from-bottom-6 duration-200 z-10">
+      {/* Sheet / Modal Container - Full screen on mobile, elegant dual-pane dialog on iPad/desktop */}
+      <div className="relative w-full max-w-full sm:max-w-4xl lg:max-w-5xl bg-card h-full sm:h-[720px] lg:h-[760px] max-h-full sm:max-h-[92vh] rounded-none sm:rounded-[28px] shadow-2xl overflow-hidden flex flex-row border-0 sm:border sm:border-primary/15 animate-in slide-in-from-bottom-6 duration-200 z-10">
         
-        {/* Header - Frosted pastel navbar with notch safe area */}
-        <div className="flex items-center justify-between px-4 py-3 pt-[max(12px,env(safe-area-inset-top))] bg-white/95 backdrop-blur-md border-b border-primary/10 shrink-0">
-          <div className="flex items-center gap-2.5 min-w-0 flex-1 mr-2">
-            <div className="w-9 h-9 rounded-2xl bg-gradient-to-br from-primary to-pink-500 text-white flex items-center justify-center text-lg shadow-sm shadow-primary/25 shrink-0">
-              {meta.emoji}
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-1.5">
-                <h3 id="quick-ai-title" className="font-bold text-text-primary text-sm sm:text-base truncate">
-                  {sessionTitle || displayTitle}
-                </h3>
+        {/* ===== 左侧常驻历史会话边栏 (md / lg 视口常驻) ===== */}
+        <div className="w-72 border-r border-primary/10 hidden md:flex flex-col bg-white/50 dark:bg-card/50 shrink-0 select-none">
+          {/* 边栏 Header */}
+          <div className="flex items-center justify-between px-3.5 py-3 pt-[max(12px,env(safe-area-inset-top))] bg-white/90 dark:bg-card/90 backdrop-blur-md border-b border-primary/10 shrink-0">
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-xl bg-primary-soft/50 text-primary flex items-center justify-center">
+                <History size={15} />
               </div>
-              <p className="text-[11px] text-text-muted flex items-center gap-1 mt-0.5 truncate">
-                <span className="font-medium text-text-secondary">{baby?.nickname || "宝宝"}</span>
-                <span>·</span>
-                <span>{age.label}</span>
-                {sessionTitle && (
-                  <>
-                    <span>·</span>
-                    <span className="text-primary font-medium">{meta.title}</span>
-                  </>
-                )}
-              </p>
+              <span className="font-bold text-xs sm:text-sm text-text-primary">历史对话</span>
             </div>
-          </div>
-          <div className="flex items-center gap-1 shrink-0">
-            <button
-              type="button"
-              onClick={() => {
-                setShowHistory(true);
-                fetchSessions();
-              }}
-              className="w-8 h-8 rounded-full bg-primary-soft/40 hover:bg-primary-soft text-text-muted hover:text-primary flex items-center justify-center transition-colors cursor-pointer"
-              title="历史对话记录"
-              aria-label="历史对话记录"
-            >
-              <History size={16} />
-            </button>
             <button
               type="button"
               onClick={startNewSession}
-              className="w-8 h-8 rounded-full bg-primary-soft/40 hover:bg-primary-soft text-text-muted hover:text-primary flex items-center justify-center transition-colors cursor-pointer"
-              title="新建对话"
-              aria-label="新建对话"
+              className="px-2.5 py-1 rounded-xl bg-gradient-to-r from-primary to-pink-500 text-white text-xs font-bold shadow-xs hover:opacity-95 flex items-center gap-1 cursor-pointer transition-all active:scale-95"
+              title="新建会话"
             >
-              <Plus size={16} />
+              <Plus size={13} />
+              <span>新对话</span>
+            </button>
+          </div>
+
+          {/* 边栏过滤 Chips */}
+          <div className="px-3 py-2 bg-white/40 dark:bg-card/40 border-b border-primary/10 flex gap-1.5 shrink-0">
+            <button
+              type="button"
+              onClick={() => setHistoryFilter("all")}
+              className={`text-[11px] px-2.5 py-1 rounded-full font-medium transition-all cursor-pointer ${
+                historyFilter === "all"
+                  ? "bg-primary text-white shadow-xs"
+                  : "bg-card text-text-secondary border border-primary/15 hover:bg-primary-light/40"
+              }`}
+            >
+              全部 ({sessionList.length})
             </button>
             <button
-              onClick={onClose}
-              className="w-8 h-8 rounded-full bg-primary-soft/40 hover:bg-primary-soft text-text-muted hover:text-text-primary flex items-center justify-center transition-colors cursor-pointer"
-              title="关闭"
-              aria-label="关闭"
+              type="button"
+              onClick={() => setHistoryFilter("current")}
+              className={`text-[11px] px-2.5 py-1 rounded-full font-medium transition-all cursor-pointer ${
+                historyFilter === "current"
+                  ? "bg-primary text-white shadow-xs"
+                  : "bg-card text-text-secondary border border-primary/15 hover:bg-primary-light/40"
+              }`}
             >
-              <X size={16} />
+              当前领域 ({sessionList.filter((s) => s.contextType === contextType).length})
             </button>
+          </div>
+
+          {/* 滚动会话列表 */}
+          <div className="flex-1 min-h-0 overflow-y-auto p-2.5 space-y-2 scrollbar-thin">
+            {loadingSessions ? (
+              <div className="flex flex-col items-center justify-center py-12 text-text-muted gap-2">
+                <Loader2 size={20} className="animate-spin text-primary" />
+                <span className="text-[11px]">加载历史中...</span>
+              </div>
+            ) : sessionList.filter((s) => (historyFilter === "current" ? s.contextType === contextType : true)).length === 0 ? (
+              <div className="text-center py-12 space-y-1.5">
+                <p className="text-2xl">💬</p>
+                <p className="text-[11px] text-text-muted">暂无历史对话记录</p>
+                <button
+                  type="button"
+                  onClick={startNewSession}
+                  className="text-xs text-primary font-bold hover:underline cursor-pointer"
+                >
+                  开启新对话
+                </button>
+              </div>
+            ) : (
+              sessionList
+                .filter((s) => (historyFilter === "current" ? s.contextType === contextType : true))
+                .map((s) => {
+                  const sMeta = CONTEXT_META[s.contextType as AiContextType] || CONTEXT_META.general;
+                  const isCurrentActive = s.id === sessionId;
+
+                  return (
+                    <div
+                      key={s.id}
+                      onClick={() => loadSessionDetail(s.id)}
+                      className={`p-2.5 rounded-2xl border transition-all cursor-pointer group flex items-start justify-between gap-2 ${
+                        isCurrentActive
+                          ? "bg-primary-light/50 dark:bg-primary-950/40 border-primary shadow-xs ring-1 ring-primary/20"
+                          : "bg-card hover:bg-white dark:hover:bg-white/5 border-primary/10 hover:border-primary/30 shadow-2xs"
+                      }`}
+                    >
+                      <div className="flex items-start gap-2 flex-1 min-w-0">
+                        <div className="w-7 h-7 rounded-xl bg-primary-soft/50 text-sm flex items-center justify-center shrink-0 mt-0.5">
+                          {sMeta.emoji}
+                        </div>
+                        <div className="flex-1 min-w-0 space-y-0.5">
+                          <div className="flex items-center gap-1">
+                            <h4 className="font-bold text-xs text-text-primary truncate group-hover:text-primary transition-colors">
+                              {s.title}
+                            </h4>
+                            {isCurrentActive && (
+                              <span className="text-[8px] px-1 py-0.2 rounded bg-primary text-white font-bold shrink-0">
+                                当前
+                              </span>
+                            )}
+                          </div>
+                          {s.lastMessage && (
+                            <p className="text-[10px] text-text-muted truncate">
+                              {s.lastMessage.role === "user" ? "问：" : "AI："}{s.lastMessage.content}
+                            </p>
+                          )}
+                          <div className="flex items-center gap-1 text-[9px] text-text-muted pt-0.5">
+                            <Clock size={9} />
+                            <span>{new Date(s.updatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+                            <span>·</span>
+                            <span>{s.messageCount} 条</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={(e) => handleDeleteSession(e, s.id)}
+                        className="p-1 text-text-muted hover:text-red-500 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors shrink-0 opacity-0 group-hover:opacity-100"
+                        title="删除会话"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  );
+                })
+            )}
           </div>
         </div>
 
-        {/* History Drawer Overlay */}
-        {showHistory && (
-          <div className="absolute inset-0 bg-card z-30 flex flex-col animate-in fade-in slide-in-from-right-4 duration-200">
-            {/* History Header */}
-            <div className="flex items-center justify-between px-4 py-3 pt-[max(12px,env(safe-area-inset-top))] bg-white/95 backdrop-blur-md border-b border-primary/10 shrink-0">
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setShowHistory(false)}
-                  className="w-8 h-8 rounded-full bg-primary-soft/40 hover:bg-primary-soft text-text-muted hover:text-text-primary flex items-center justify-center transition-colors cursor-pointer"
-                  title="返回当前对话"
-                >
-                  <ChevronLeft size={18} />
-                </button>
-                <div>
-                  <h3 className="font-bold text-text-primary text-sm sm:text-base">历史对话记录</h3>
-                  <p className="text-[11px] text-text-muted">按主题回溯与随时续聊</p>
-                </div>
+        {/* ===== 右侧主对话与工具链展示区域 ===== */}
+        <div className="flex-1 flex flex-col min-w-0 h-full relative">
+          {/* Header - Frosted pastel navbar with notch safe area */}
+          <div className="flex items-center justify-between px-4 py-3 pt-[max(12px,env(safe-area-inset-top))] bg-white/95 backdrop-blur-md border-b border-primary/10 shrink-0">
+            <div className="flex items-center gap-2.5 min-w-0 flex-1 mr-2">
+              <div className="w-9 h-9 rounded-2xl bg-gradient-to-br from-primary to-pink-500 text-white flex items-center justify-center text-lg shadow-sm shadow-primary/25 shrink-0">
+                {meta.emoji}
               </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5">
+                  <h3 id="quick-ai-title" className="font-bold text-text-primary text-sm sm:text-base truncate">
+                    {sessionTitle || displayTitle}
+                  </h3>
+                </div>
+                <p className="text-[11px] text-text-muted flex items-center gap-1 mt-0.5 truncate">
+                  <span className="font-medium text-text-secondary">{baby?.nickname || "宝宝"}</span>
+                  <span>·</span>
+                  <span>{age.label}</span>
+                  {sessionTitle && (
+                    <>
+                      <span>·</span>
+                      <span className="text-primary font-medium">{meta.title}</span>
+                    </>
+                  )}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-1 shrink-0">
+              {/* 移动端历史记录抽屉触发按钮 */}
+              <button
+                type="button"
+                onClick={() => {
+                  setShowHistory(true);
+                  fetchSessions();
+                }}
+                className="md:hidden w-8 h-8 rounded-full bg-primary-soft/40 hover:bg-primary-soft text-text-muted hover:text-primary flex items-center justify-center transition-colors cursor-pointer"
+                title="历史对话记录"
+                aria-label="历史对话记录"
+              >
+                <History size={16} />
+              </button>
               <button
                 type="button"
                 onClick={startNewSession}
-                className="px-3 py-1.5 rounded-full bg-gradient-to-r from-primary to-pink-500 text-white text-xs font-bold shadow-xs hover:opacity-95 flex items-center gap-1 cursor-pointer"
+                className="w-8 h-8 rounded-full bg-primary-soft/40 hover:bg-primary-soft text-text-muted hover:text-primary flex items-center justify-center transition-colors cursor-pointer"
+                title="新建对话"
+                aria-label="新建对话"
               >
-                <Plus size={14} />
-                <span>新对话</span>
-              </button>
-            </div>
-
-            {/* Filter Chips */}
-            <div className="px-3.5 py-2 bg-white/60 border-b border-primary/10 flex gap-2 shrink-0">
-              <button
-                type="button"
-                onClick={() => setHistoryFilter("all")}
-                className={`text-xs px-3 py-1 rounded-full font-medium transition-all ${
-                  historyFilter === "all"
-                    ? "bg-primary text-white shadow-xs"
-                    : "bg-card text-text-secondary border border-primary/15 hover:bg-primary-light/40"
-                }`}
-              >
-                全部历史 ({sessionList.length})
+                <Plus size={16} />
               </button>
               <button
-                type="button"
-                onClick={() => setHistoryFilter("current")}
-                className={`text-xs px-3 py-1 rounded-full font-medium transition-all ${
-                  historyFilter === "current"
-                    ? "bg-primary text-white shadow-xs"
-                    : "bg-card text-text-secondary border border-primary/15 hover:bg-primary-light/40"
-                }`}
+                onClick={onClose}
+                className="w-8 h-8 rounded-full bg-primary-soft/40 hover:bg-primary-soft text-text-muted hover:text-text-primary flex items-center justify-center transition-colors cursor-pointer"
+                title="关闭"
+                aria-label="关闭"
               >
-                当前领域 ({sessionList.filter((s) => s.contextType === contextType).length})
+                <X size={16} />
               </button>
-            </div>
-
-            {/* Session List */}
-            <div className="flex-1 min-h-0 overflow-y-auto p-3.5 space-y-2.5">
-              {loadingSessions ? (
-                <div className="flex flex-col items-center justify-center py-16 text-text-muted gap-2">
-                  <Loader2 size={24} className="animate-spin text-primary" />
-                  <span className="text-xs">加载历史记录中...</span>
-                </div>
-              ) : sessionList.filter((s) => (historyFilter === "current" ? s.contextType === contextType : true)).length === 0 ? (
-                <div className="text-center py-16 space-y-2">
-                  <p className="text-3xl">💬</p>
-                  <p className="text-xs text-text-muted">暂无历史对话记录</p>
-                  <button
-                    type="button"
-                    onClick={startNewSession}
-                    className="text-xs text-primary font-bold hover:underline"
-                  >
-                    开启一次新对话
-                  </button>
-                </div>
-              ) : (
-                sessionList
-                  .filter((s) => (historyFilter === "current" ? s.contextType === contextType : true))
-                  .map((s) => {
-                    const sMeta = CONTEXT_META[s.contextType as AiContextType] || CONTEXT_META.general;
-                    const isCurrentActive = s.id === sessionId;
-
-                    return (
-                      <div
-                        key={s.id}
-                        onClick={() => loadSessionDetail(s.id)}
-                        className={`p-3 rounded-2xl border transition-all cursor-pointer group flex items-start justify-between gap-2.5 ${
-                          isCurrentActive
-                            ? "bg-primary-light/40 border-primary shadow-xs ring-1 ring-primary/20"
-                            : "bg-card hover:bg-white border-primary/10 hover:border-primary/30 shadow-2xs"
-                        }`}
-                      >
-                        <div className="flex items-start gap-2.5 flex-1 min-w-0">
-                          <div className="w-8 h-8 rounded-xl bg-primary-soft/50 text-base flex items-center justify-center shrink-0 mt-0.5">
-                            {sMeta.emoji}
-                          </div>
-                          <div className="flex-1 min-w-0 space-y-1">
-                            <div className="flex items-center gap-1.5">
-                              <h4 className="font-bold text-xs sm:text-sm text-text-primary truncate group-hover:text-primary transition-colors">
-                                {s.title}
-                              </h4>
-                              {isCurrentActive && (
-                                <span className="text-[9px] px-1.5 py-0.5 rounded bg-primary text-white font-bold shrink-0">
-                                  当前
-                                </span>
-                              )}
-                            </div>
-                            {s.lastMessage && (
-                              <p className="text-[11px] text-text-muted truncate">
-                                {s.lastMessage.role === "user" ? "家长：" : "AI："}{s.lastMessage.content}
-                              </p>
-                            )}
-                            <div className="flex items-center gap-2 text-[10px] text-text-muted">
-                              <span className="flex items-center gap-0.5">
-                                <Clock size={10} />
-                                <span>{new Date(s.updatedAt).toLocaleDateString()} {new Date(s.updatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
-                              </span>
-                              <span>·</span>
-                              <span className="flex items-center gap-0.5">
-                                <MessageSquare size={10} />
-                                <span>{s.messageCount} 条</span>
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-
-                        <button
-                          type="button"
-                          onClick={(e) => handleDeleteSession(e, s.id)}
-                          className="p-1.5 text-text-muted hover:text-red-500 rounded-lg hover:bg-red-50 transition-colors shrink-0"
-                          title="删除会话"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
-                    );
-                  })
-              )}
             </div>
           </div>
-        )}
 
-        {/* Quick Suggestion Chips */}
-        <div className="px-3.5 py-2.5 bg-white/60 backdrop-blur-xs border-b border-primary/10 overflow-x-auto scrollbar-hide flex gap-2 shrink-0">
-          {meta.chips.map((chip, idx) => (
-            <button
-              key={idx}
-              type="button"
-              disabled={loading}
-              onClick={() => {
-                if (chip.startsWith("📷")) {
-                  fileInputRef.current?.click();
-                } else {
-                  handleSend(chip);
-                }
-              }}
-              className="text-xs bg-card text-text-secondary hover:text-primary hover:bg-primary-light/50 border border-primary/15 rounded-full px-3 py-1.5 shrink-0 shadow-xs transition-all active:scale-95 text-left flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
-            >
-              <Sparkles size={11} className="text-primary shrink-0" />
-              <span>{chip}</span>
-            </button>
-          ))}
-        </div>
+          {/* 移动端历史抽屉浮层 (md 屏幕以上隐藏) */}
+          {showHistory && (
+            <div className="absolute inset-0 bg-card z-30 flex flex-col md:hidden animate-in fade-in slide-in-from-right-4 duration-200">
+              {/* History Header */}
+              <div className="flex items-center justify-between px-4 py-3 pt-[max(12px,env(safe-area-inset-top))] bg-white/95 backdrop-blur-md border-b border-primary/10 shrink-0">
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowHistory(false)}
+                    className="w-8 h-8 rounded-full bg-primary-soft/40 hover:bg-primary-soft text-text-muted hover:text-text-primary flex items-center justify-center transition-colors cursor-pointer"
+                    title="返回当前对话"
+                  >
+                    <ChevronLeft size={18} />
+                  </button>
+                  <div>
+                    <h3 className="font-bold text-text-primary text-sm sm:text-base">历史对话记录</h3>
+                    <p className="text-[11px] text-text-muted">按主题回溯与随时续聊</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={startNewSession}
+                  className="px-3 py-1.5 rounded-full bg-gradient-to-r from-primary to-pink-500 text-white text-xs font-bold shadow-xs hover:opacity-95 flex items-center gap-1 cursor-pointer"
+                >
+                  <Plus size={14} />
+                  <span>新对话</span>
+                </button>
+              </div>
+
+              {/* Filter Chips */}
+              <div className="px-3.5 py-2 bg-white/60 border-b border-primary/10 flex gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setHistoryFilter("all")}
+                  className={`text-xs px-3 py-1 rounded-full font-medium transition-all ${
+                    historyFilter === "all"
+                      ? "bg-primary text-white shadow-xs"
+                      : "bg-card text-text-secondary border border-primary/15 hover:bg-primary-light/40"
+                  }`}
+                >
+                  全部历史 ({sessionList.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setHistoryFilter("current")}
+                  className={`text-xs px-3 py-1 rounded-full font-medium transition-all ${
+                    historyFilter === "current"
+                      ? "bg-primary text-white shadow-xs"
+                      : "bg-card text-text-secondary border border-primary/15 hover:bg-primary-light/40"
+                  }`}
+                >
+                  当前领域 ({sessionList.filter((s) => s.contextType === contextType).length})
+                </button>
+              </div>
+
+              {/* Session List */}
+              <div className="flex-1 min-h-0 overflow-y-auto p-3.5 space-y-2.5">
+                {loadingSessions ? (
+                  <div className="flex flex-col items-center justify-center py-16 text-text-muted gap-2">
+                    <Loader2 size={24} className="animate-spin text-primary" />
+                    <span className="text-xs">加载历史记录中...</span>
+                  </div>
+                ) : sessionList.filter((s) => (historyFilter === "current" ? s.contextType === contextType : true)).length === 0 ? (
+                  <div className="text-center py-16 space-y-2">
+                    <p className="text-3xl">💬</p>
+                    <p className="text-xs text-text-muted">暂无历史对话记录</p>
+                    <button
+                      type="button"
+                      onClick={startNewSession}
+                      className="text-xs text-primary font-bold hover:underline"
+                    >
+                      开启一次新对话
+                    </button>
+                  </div>
+                ) : (
+                  sessionList
+                    .filter((s) => (historyFilter === "current" ? s.contextType === contextType : true))
+                    .map((s) => {
+                      const sMeta = CONTEXT_META[s.contextType as AiContextType] || CONTEXT_META.general;
+                      const isCurrentActive = s.id === sessionId;
+
+                      return (
+                        <div
+                          key={s.id}
+                          onClick={() => loadSessionDetail(s.id)}
+                          className={`p-3 rounded-2xl border transition-all cursor-pointer group flex items-start justify-between gap-2.5 ${
+                            isCurrentActive
+                              ? "bg-primary-light/40 border-primary shadow-xs ring-1 ring-primary/20"
+                              : "bg-card hover:bg-white border-primary/10 hover:border-primary/30 shadow-2xs"
+                          }`}
+                        >
+                          <div className="flex items-start gap-2.5 flex-1 min-w-0">
+                            <div className="w-8 h-8 rounded-xl bg-primary-soft/50 text-base flex items-center justify-center shrink-0 mt-0.5">
+                              {sMeta.emoji}
+                            </div>
+                            <div className="flex-1 min-w-0 space-y-1">
+                              <div className="flex items-center gap-1.5">
+                                <h4 className="font-bold text-xs sm:text-sm text-text-primary truncate group-hover:text-primary transition-colors">
+                                  {s.title}
+                                </h4>
+                                {isCurrentActive && (
+                                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-primary text-white font-bold shrink-0">
+                                    当前
+                                  </span>
+                                )}
+                              </div>
+                              {s.lastMessage && (
+                                <p className="text-[11px] text-text-muted truncate">
+                                  {s.lastMessage.role === "user" ? "家长：" : "AI："}{s.lastMessage.content}
+                                </p>
+                              )}
+                              <div className="flex items-center gap-2 text-[10px] text-text-muted">
+                                <span className="flex items-center gap-0.5">
+                                  <Clock size={10} />
+                                  <span>{new Date(s.updatedAt).toLocaleDateString()} {new Date(s.updatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+                                </span>
+                                <span>·</span>
+                                <span className="flex items-center gap-0.5">
+                                  <MessageSquare size={10} />
+                                  <span>{s.messageCount} 条</span>
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={(e) => handleDeleteSession(e, s.id)}
+                            className="p-1.5 text-text-muted hover:text-red-500 rounded-lg hover:bg-red-50 transition-colors shrink-0"
+                            title="删除会话"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      );
+                    })
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Quick Suggestion Chips */}
+          <div className="px-3.5 py-2.5 bg-white/60 backdrop-blur-xs border-b border-primary/10 overflow-x-auto scrollbar-hide flex gap-2 shrink-0">
+            {meta.chips.map((chip, idx) => (
+              <button
+                key={idx}
+                type="button"
+                disabled={loading}
+                onClick={() => {
+                  if (chip.startsWith("📷")) {
+                    fileInputRef.current?.click();
+                  } else {
+                    handleSend(chip);
+                  }
+                }}
+                className="text-xs bg-card text-text-secondary hover:text-primary hover:bg-primary-light/50 border border-primary/15 rounded-full px-3 py-1.5 shrink-0 shadow-xs transition-all active:scale-95 text-left flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+              >
+                <Sparkles size={11} className="text-primary shrink-0" />
+                <span>{chip}</span>
+              </button>
+            ))}
+          </div>
 
         {/* Message History */}
         <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4 bg-gradient-to-b from-transparent to-primary-light/10">
@@ -1394,5 +1526,6 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
         </div>
       </div>
     </div>
+  </div>
   );
 };

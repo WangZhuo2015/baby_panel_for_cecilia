@@ -86,7 +86,19 @@ body {
 }
 
 :root {
-  --app-max-width: 430px;
+  --app-max-width: 100%;
+}
+
+@media (min-width: 640px) and (max-width: 1023px) {
+  :root {
+    --app-max-width: 768px;
+  }
+}
+
+@media (min-width: 1024px) {
+  :root {
+    --app-max-width: 100%;
+  }
 }
 
 .app-wrapper {
@@ -118,20 +130,38 @@ body {
   pointer-events: none;
 }
 
-/* 真机全宽铺满，避免 430px 卡片在刘海/指示条处收成硬边矩形 */
-@media (max-width: 639px) {
-  :root {
-    --app-max-width: 100%;
-  }
-}
-
-/* 宽屏才出现桌面「手机列」外框；高度仍铺满视口（含不安全区） */
-@media (min-width: 640px) {
+@media (min-width: 640px) and (max-width: 1023px) {
   body {
     background: #F5E8ED;
   }
   .app-wrapper {
     box-shadow: 0 0 40px rgba(180, 100, 125, 0.1);
+  }
+}
+
+@media (min-width: 1024px) {
+  body {
+    background: #F5E8ED;
+  }
+  .app-wrapper {
+    box-shadow: none;
+  }
+}
+
+/* 桌面与 iPad 横屏工作台 (≥ 1024px)：完全放开为 max-w-7xl 宽屏，无多余背景列截断 */
+@media (min-width: 1024px) {
+  :root {
+    --app-max-width: 80rem; /* 1280px = max-w-7xl */
+  }
+  body {
+    background: var(--color-bg);
+  }
+  .app-wrapper {
+    max-width: 80rem;
+    box-shadow: none;
+  }
+  .app-wrapper::before {
+    display: none;
   }
 }
 
@@ -281,12 +311,21 @@ html.dark {
   background: var(--color-bg);
 }
 
-@media (min-width: 640px) {
+@media (min-width: 640px) and (max-width: 1023px) {
   .dark body {
     background: #0F0B10;
   }
   .dark .app-wrapper {
     box-shadow: 0 0 40px rgba(0, 0, 0, 0.5);
+  }
+}
+
+@media (min-width: 1024px) {
+  .dark body {
+    background: var(--color-bg);
+  }
+  .dark .app-wrapper {
+    box-shadow: none;
   }
 }
 

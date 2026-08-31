@@ -104,7 +104,7 @@ export default function NutritionPage() {
   const age = calculateAge(baby.birthDate);
 
   return (
-    <div className="px-4 pt-safe-6 pb-36 max-w-md mx-auto space-y-4">
+    <div className="px-4 pt-safe-6 pb-36 max-w-md md:max-w-xl lg:max-w-6xl mx-auto space-y-5">
       {/* 头部导航与宝宝信息 */}
       <div className="flex items-center justify-between">
         <div
@@ -124,8 +124,8 @@ export default function NutritionPage() {
               <span className="text-base font-bold text-text-primary group-hover:text-primary transition-colors">
                 {baby.nickname}
               </span>
-              <span className="text-xs bg-primary/10 text-primary px-1.5 py-0.2 rounded-full font-bold">
-                营养分析
+              <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full font-bold">
+                DRIs 营养分析
               </span>
             </div>
             <span className="text-xs text-text-secondary">{age.label}</span>
@@ -145,7 +145,7 @@ export default function NutritionPage() {
           <button
             type="button"
             onClick={() => setIsCatalogOpen(true)}
-            className="w-9 h-9 rounded-full bg-white shadow-soft flex items-center justify-center btn-press text-text-secondary hover:text-primary relative"
+            className="w-9 h-9 rounded-full bg-white shadow-soft flex items-center justify-center btn-press text-text-secondary hover:text-primary relative cursor-pointer"
             title="配方奶粉与补剂库"
           >
             <Package size={16} />
@@ -168,12 +168,12 @@ export default function NutritionPage() {
               key={dateItem.date}
               type="button"
               onClick={() => setSelectedDate(dateItem.date)}
-              className={`flex-shrink-0 flex flex-col items-center justify-center w-13 h-16 rounded-2xl transition-all btn-press ${
+              className={`flex-shrink-0 flex flex-col items-center justify-center w-13 h-16 rounded-2xl transition-all btn-press cursor-pointer ${
                 isSelected
                   ? "bg-primary text-white shadow-button ring-2 ring-primary/30 font-bold"
                   : dateItem.isToday
                   ? "bg-primary-light text-primary border border-primary/40 font-semibold"
-                  : "bg-white text-text-secondary hover:bg-gray-50 border border-divider/60"
+                  : "bg-white dark:bg-card text-text-secondary hover:bg-gray-50 border border-divider/60"
               }`}
             >
               <span className="text-[10px] font-medium mb-0.5">周{dateItem.weekday}</span>
@@ -200,12 +200,12 @@ export default function NutritionPage() {
           {dailyAnalysis.alerts.map((alert, idx) => (
             <div
               key={idx}
-              className={`p-3 rounded-2xl border flex items-start gap-2.5 shadow-2xs ${
+              className={`p-3.5 rounded-2xl border flex items-start gap-2.5 shadow-2xs ${
                 alert.type === "danger"
-                  ? "bg-red-50/90 border-red-200 text-red-900"
+                  ? "bg-red-50/90 dark:bg-red-950/40 border-red-200 dark:border-red-900/50 text-red-900 dark:text-red-200"
                   : alert.type === "warning"
-                  ? "bg-amber-50/90 border-amber-200 text-amber-900"
-                  : "bg-sky-50/90 border-sky-200 text-sky-900"
+                  ? "bg-amber-50/90 dark:bg-amber-950/40 border-amber-200 dark:border-amber-900/50 text-amber-900 dark:text-amber-200"
+                  : "bg-sky-50/90 dark:bg-sky-950/40 border-sky-200 dark:border-sky-900/50 text-sky-900 dark:text-sky-200"
               }`}
             >
               {alert.type === "danger" ? (
@@ -226,7 +226,7 @@ export default function NutritionPage() {
 
       {/* 🍼 今日概况横幅 */}
       {dailyAnalysis && (
-        <CuteCard className="p-3.5 bg-gradient-to-r from-primary-light via-pink-50/40 to-lavender/20 border border-primary/20">
+        <CuteCard className="p-4 bg-gradient-to-r from-primary-light via-pink-50/40 to-lavender/20 border border-primary/20">
           <div className="flex items-center justify-between">
             <div>
               <span className="text-[11px] font-bold text-text-secondary uppercase block">
@@ -244,68 +244,77 @@ export default function NutritionPage() {
         </CuteCard>
       )}
 
-      {/* 💊 今日补剂快速打卡与安全守护 */}
-      <SupplementQuickCheckIn babyId={baby.id} onRecordSuccess={loadData} />
+      {/* 🌟 iPad / PC 宽屏多列响应式网格 */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+        {/* ===== 左栏：补剂打卡、核心指标与趋势 (Col 7) ===== */}
+        <div className="lg:col-span-7 space-y-5">
+          {/* 💊 今日补剂快速打卡与安全守护 */}
+          <SupplementQuickCheckIn babyId={baby.id} onRecordSuccess={loadData} />
 
-      {/* 🌟 核心指标卡片矩阵 (Progress Rings & Target Rate) */}
-      {dailyAnalysis && (
-        <div className="space-y-2">
-          <div className="flex items-center justify-between px-1">
-            <h3 className="text-xs font-bold text-text-secondary uppercase tracking-wider">
-              核心指标达标评估 (DRIs 2023)
-            </h3>
-            <span className="text-[10px] text-text-muted">
-              适龄基准: {dailyAnalysis.ageGroup}
-            </span>
-          </div>
+          {/* 🌟 核心指标卡片矩阵 (Progress Rings & Target Rate) */}
+          {dailyAnalysis && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between px-1">
+                <h3 className="text-xs font-bold text-text-secondary uppercase tracking-wider">
+                  核心指标达标评估 (DRIs 2023)
+                </h3>
+                <span className="text-[10px] text-text-muted">
+                  适龄基准: {dailyAnalysis.ageGroup}
+                </span>
+              </div>
 
-          <div className="grid grid-cols-2 gap-2.5">
-            <CoreNutrientCard item={dailyAnalysis.coreMetrics.vitaminD} icon="☀️" />
-            <CoreNutrientCard item={dailyAnalysis.coreMetrics.calcium} icon="🦴" />
-            <CoreNutrientCard item={dailyAnalysis.coreMetrics.iron} icon="🩸" />
-            <CoreNutrientCard item={dailyAnalysis.coreMetrics.vitaminA} icon="🥕" />
-            <CoreNutrientCard item={dailyAnalysis.coreMetrics.zinc} icon="🛡️" />
-            <CoreNutrientCard item={dailyAnalysis.coreMetrics.dha} icon="🐟" />
-          </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3 gap-2.5">
+                <CoreNutrientCard item={dailyAnalysis.coreMetrics.vitaminD} icon="☀️" />
+                <CoreNutrientCard item={dailyAnalysis.coreMetrics.calcium} icon="🦴" />
+                <CoreNutrientCard item={dailyAnalysis.coreMetrics.iron} icon="🩸" />
+                <CoreNutrientCard item={dailyAnalysis.coreMetrics.vitaminA} icon="🥕" />
+                <CoreNutrientCard item={dailyAnalysis.coreMetrics.zinc} icon="🛡️" />
+                <CoreNutrientCard item={dailyAnalysis.coreMetrics.dha} icon="🐟" />
+              </div>
+            </div>
+          )}
+
+          {/* 📊 7天 / 30天 周期趋势图 */}
+          {multiDaySummary && multiDaySummary.dailyTrends.length > 0 && (
+            <NutritionTrendChart
+              trends={multiDaySummary.dailyTrends}
+              daysCount={timeScale === "30d" ? 30 : 7}
+            />
+          )}
         </div>
-      )}
 
-      {/* 📊 7天 / 30天 周期趋势图 (在切到趋势视图或多日模式时优先呈现) */}
-      {multiDaySummary && multiDaySummary.dailyTrends.length > 0 && (
-        <NutritionTrendChart
-          trends={multiDaySummary.dailyTrends}
-          daysCount={timeScale === "30d" ? 30 : 7}
-        />
-      )}
+        {/* ===== 右栏：产品库快捷、多源穿透与明细表 (Col 5) ===== */}
+        <div className="lg:col-span-5 space-y-5">
+          {/* 快捷产品库与 OCR 管理按钮 */}
+          <CuteCard
+            className="p-3.5 bg-gradient-to-r from-sky-50 to-blue-50/40 border border-sky-200/80 flex items-center justify-between cursor-pointer hover:shadow-md transition-all"
+            onClick={() => setIsCatalogOpen(true)}
+          >
+            <div className="flex items-center gap-2.5">
+              <div className="w-10 h-10 rounded-2xl bg-sky-100 dark:bg-sky-950 text-sky-600 dark:text-sky-400 flex items-center justify-center">
+                <Package size={20} />
+              </div>
+              <div>
+                <h4 className="text-xs font-bold text-sky-950 dark:text-sky-200">配方奶粉与补剂库管理</h4>
+                <p className="text-[10px] text-sky-800 dark:text-sky-300 mt-0.5">
+                  支持冲调浓度配置、预置库导入与 📸 拍照 OCR 成分表
+                </p>
+              </div>
+            </div>
+            <ChevronRight size={16} className="text-sky-600 dark:text-sky-400" />
+          </CuteCard>
 
-      {/* 🔬 复合补剂多源穿透分解 */}
-      {dailyAnalysis?.allNutrients && (
-        <CompoundSourceBreakdown items={dailyAnalysis.allNutrients} />
-      )}
+          {/* 🔬 复合补剂多源穿透分解 */}
+          {dailyAnalysis?.allNutrients && (
+            <CompoundSourceBreakdown items={dailyAnalysis.allNutrients} />
+          )}
 
-      {/* 📋 可展开的全量 30+ 营养素明细表 */}
-      {dailyAnalysis?.allNutrients && (
-        <FullNutrientTable items={dailyAnalysis.allNutrients} />
-      )}
-
-      {/* 快捷产品库与 OCR 管理按钮 */}
-      <CuteCard
-        className="p-3.5 bg-gradient-to-r from-sky-50 to-blue-50/40 border border-sky-200/80 flex items-center justify-between cursor-pointer hover:shadow-md transition-all"
-        onClick={() => setIsCatalogOpen(true)}
-      >
-        <div className="flex items-center gap-2.5">
-          <div className="w-10 h-10 rounded-2xl bg-sky-100 text-sky-600 flex items-center justify-center">
-            <Package size={20} />
-          </div>
-          <div>
-            <h4 className="text-xs font-bold text-sky-950">配方奶粉与补剂库管理</h4>
-            <p className="text-[10px] text-sky-800 mt-0.5">
-              支持冲调浓度配置、预置库导入与 📸 拍照 OCR 成分表
-            </p>
-          </div>
+          {/* 📋 可展开的全量 30+ 营养素明细表 */}
+          {dailyAnalysis?.allNutrients && (
+            <FullNutrientTable items={dailyAnalysis.allNutrients} />
+          )}
         </div>
-        <ChevronRight size={16} className="text-sky-600" />
-      </CuteCard>
+      </div>
 
       {/* 产品库管理弹窗 */}
       <ProductCatalogModal

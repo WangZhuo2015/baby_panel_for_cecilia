@@ -32,6 +32,7 @@ import { InstallGuideBanner } from "@/components/ui/InstallGuideBanner";
 import { SupplementQuickCheckIn } from "@/components/nutrition/SupplementQuickCheckIn";
 import { formatIsoToLocalTime } from "@/lib/date";
 import { APP_VERSION } from "@/lib/version";
+import { openRecordDrawer, RecordDrawerType } from "@/lib/drawer-bus";
 
 function NotificationBell() {
   const [unreadCount, setUnreadCount] = useState(0);
@@ -66,7 +67,7 @@ function NotificationBell() {
     <button
       onClick={() => router.push("/notifications")}
       aria-label="通知"
-      className="w-10 h-10 rounded-full bg-white shadow-soft flex items-center justify-center btn-press relative"
+      className="w-10 h-10 rounded-full bg-white shadow-soft flex items-center justify-center btn-press relative cursor-pointer"
     >
       <Bell size={18} className="text-text-secondary" />
       {unreadCount > 0 && (
@@ -100,7 +101,6 @@ export default function HomePage() {
 
   const fetchUser = useBabyStore((s) => s.fetchUser);
   const fetchDailySummary = useBabyStore((s) => s.fetchDailySummary);
-
   const fetchTimeline = useBabyStore((s) => s.fetchTimeline);
   const fetchWeather = useBabyStore((s) => s.fetchWeather);
   const fetchFeedingRecords = useBabyStore((s) => s.fetchFeedingRecords);
@@ -121,6 +121,14 @@ export default function HomePage() {
       await refreshAll();
     } finally {
       setTimeout(() => setPageRefreshing(false), 500);
+    }
+  };
+
+  const handleQuickRecord = (type: RecordDrawerType, fallbackUrl: string) => {
+    if (typeof window !== "undefined" && window.innerWidth >= 1024) {
+      openRecordDrawer(type);
+    } else {
+      router.push(fallbackUrl);
     }
   };
 
@@ -160,7 +168,6 @@ export default function HomePage() {
     return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
   }, [baby?.id, fetchDailySummary, fetchTimeline, fetchFeedingRecords, fetchSleepRecords]);
 
-
   // Safety fallback: if auth takes longer than 2s, stop blocking screen
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -173,7 +180,6 @@ export default function HomePage() {
 
   // Check live sleep session
   useEffect(() => {
-
     const checkLiveSleep = () => {
       try {
         const stored = localStorage.getItem("baby_active_sleep_start");
@@ -301,8 +307,8 @@ export default function HomePage() {
   };
 
   return (
-    <div className="px-4 pt-safe-6 pb-36 max-w-md mx-auto space-y-4">
-      {/* Header */}
+    <div className="px-4 pt-safe-6 pb-36 max-w-md md:max-w-xl lg:max-w-6xl mx-auto space-y-5">
+      {/* 1. Header (Mobile & Tablet Bar) */}
       <div className="flex items-center justify-between">
         <div
           className="flex items-center gap-3 cursor-pointer group"
@@ -323,7 +329,9 @@ export default function HomePage() {
           </div>
           <div>
             <div className="flex items-center gap-1.5">
-              <span className="text-base font-bold text-text-primary group-hover:text-primary transition-colors">{baby.nickname}</span>
+              <span className="text-base font-bold text-text-primary group-hover:text-primary transition-colors">
+                {baby.nickname}
+              </span>
               <span className="text-sm">{baby.gender === "male" ? "👦" : "🎀"}</span>
             </div>
             <span className="text-xs text-text-secondary flex items-center gap-1">
@@ -346,7 +354,7 @@ export default function HomePage() {
           <button
             onClick={() => router.push("/family")}
             aria-label="家庭共享"
-            className="w-9 h-9 rounded-full bg-white shadow-soft flex items-center justify-center btn-press text-text-secondary hover:text-primary relative"
+            className="w-9 h-9 rounded-full bg-white shadow-soft flex items-center justify-center btn-press text-text-secondary hover:text-primary relative cursor-pointer"
             title="家庭成员与邀请码"
           >
             <Users size={16} />
@@ -358,125 +366,195 @@ export default function HomePage() {
       {/* 📱 PWA 保存到桌面引导 Banner */}
       <InstallGuideBanner />
 
-      {/* 🌟 核心功能看板：实时喂养与睡眠即时状态 */}
-      <div className="grid grid-cols-2 gap-2.5">
-        {/* 🍼 上次喂养状态 */}
-        <CuteCard
-          className="p-3 bg-gradient-to-br from-sky-50 to-blue-50/50 border border-sky-100 cursor-pointer hover:shadow-md transition-all"
-          onClick={() => router.push("/records/feeding")}
-        >
-          <div className="flex items-center justify-between mb-1.5">
-            <span className="text-[11px] font-bold text-sky-900 flex items-center gap-1">
-              <Droplets size={13} className="text-sky-500" />
-              上次喂奶
-            </span>
-            <span className="text-[10px] text-sky-600 bg-sky-100/70 px-1.5 py-0.5 rounded-full font-bold">
-              {feedingElapsedText || "今日未记"}
-            </span>
-          </div>
-          <p className="text-xs font-semibold text-text-primary truncate">
-            {latestFeedingDetail || "点击记录本餐喂养"}
-          </p>
-          <div className="mt-2 pt-1.5 border-t border-sky-100 flex items-center justify-between text-[10px] text-sky-700 font-medium">
-            <span>+ 记录喂奶</span>
-            <ChevronRight size={12} />
-          </div>
-        </CuteCard>
-
-        {/* 🌙 睡眠与清醒状态 */}
-        <CuteCard
-          className={`p-3 cursor-pointer hover:shadow-md transition-all border ${
-            liveSleepStart
-              ? "bg-gradient-to-br from-purple-900 to-indigo-900 text-white border-purple-800 shadow-md animate-pulse"
-              : "bg-gradient-to-br from-purple-50 to-pink-50/50 border-purple-100"
-          }`}
-          onClick={() => router.push("/records/sleep")}
-        >
-          <div className="flex items-center justify-between mb-1.5">
-            <span className={`text-[11px] font-bold flex items-center gap-1 ${liveSleepStart ? "text-yellow-300" : "text-purple-900"}`}>
-              <Moon size={13} className={liveSleepStart ? "text-yellow-300" : "text-purple-500"} />
-              {liveSleepStart ? "正在睡觉中" : "清醒时长"}
-            </span>
-            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${liveSleepStart ? "bg-yellow-400 text-purple-950" : "text-purple-600 bg-purple-100/70"}`}>
-              {liveSleepStart ? liveSleepElapsed : awakeElapsedText ? `已清醒 ${awakeElapsedText}` : "点击记录"}
-            </span>
-          </div>
-          <p className={`text-xs font-semibold truncate ${liveSleepStart ? "text-purple-100" : "text-text-primary"}`}>
-            {liveSleepStart ? "点击结算唤醒 ☀️" : latestSleep ? `上次睡了 ${formatIsoToLocalTime(latestSleep.startTime)}~${formatIsoToLocalTime(latestSleep.endTime)}` : "点击开始入睡计时"}
-          </p>
-          <div className={`mt-2 pt-1.5 flex items-center justify-between text-[10px] font-medium ${liveSleepStart ? "border-t border-purple-800 text-yellow-300" : "border-t border-purple-100 text-purple-700"}`}>
-            <span>{liveSleepStart ? "结算本次睡眠" : "+ 记录入睡"}</span>
-            <ChevronRight size={12} />
-          </div>
-        </CuteCard>
-      </div>
-
-      {/* Weather */}
-      {weather && (
-        <CuteCard className="p-3.5 cursor-pointer" onClick={() => router.push("/weather")}>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-sky/15 flex items-center justify-center text-xl">
-                {weather.condition.includes("晴") ? "☀️" : weather.condition.includes("雨") ? "🌧️" : "⛅"}
+      {/* 🌟 2. iPad / PC 6:4 双栏响应式工作台网格 */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+        {/* ===== 左栏：实时看板与作息主线 (60% / Col 7) ===== */}
+        <div className="lg:col-span-7 space-y-5">
+          {/* 🍼 上次喂养与睡眠即时状态卡片 */}
+          <div className="grid grid-cols-2 gap-2.5">
+            {/* 🍼 上次喂养状态 */}
+            <CuteCard
+              className="p-3.5 bg-gradient-to-br from-sky-50 to-blue-50/50 border border-sky-100 cursor-pointer hover:shadow-md transition-all"
+              onClick={() => handleQuickRecord("feeding", "/records/feeding")}
+            >
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-[11px] font-bold text-sky-900 flex items-center gap-1">
+                  <Droplets size={13} className="text-sky-500" />
+                  上次喂奶
+                </span>
+                <span className="text-[10px] text-sky-600 bg-sky-100/70 px-1.5 py-0.5 rounded-full font-bold">
+                  {feedingElapsedText || "今日未记"}
+                </span>
               </div>
-              <div>
-                <div className="flex items-baseline gap-1.5">
-                  <span className="text-xl font-bold text-text-primary">{weather.temperature}°C</span>
-                  <span className="text-xs text-text-secondary">({weather.city}) {weather.condition}</span>
+              <p className="text-xs font-semibold text-text-primary truncate">
+                {latestFeedingDetail || "点击记录本餐喂养"}
+              </p>
+              <div className="mt-2.5 pt-1.5 border-t border-sky-100 flex items-center justify-between text-[10px] text-sky-700 font-medium">
+                <span>+ 记录喂奶</span>
+                <ChevronRight size={12} />
+              </div>
+            </CuteCard>
+
+            {/* 🌙 睡眠与清醒状态 */}
+            <CuteCard
+              className={`p-3.5 cursor-pointer hover:shadow-md transition-all border ${
+                liveSleepStart
+                  ? "bg-gradient-to-br from-purple-900 to-indigo-900 text-white border-purple-800 shadow-md animate-pulse"
+                  : "bg-gradient-to-br from-purple-50 to-pink-50/50 border-purple-100"
+              }`}
+              onClick={() => handleQuickRecord("sleep", "/records/sleep")}
+            >
+              <div className="flex items-center justify-between mb-1.5">
+                <span className={`text-[11px] font-bold flex items-center gap-1 ${liveSleepStart ? "text-yellow-300" : "text-purple-900"}`}>
+                  <Moon size={13} className={liveSleepStart ? "text-yellow-300" : "text-purple-500"} />
+                  {liveSleepStart ? "正在睡觉中" : "清醒时长"}
+                </span>
+                <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${liveSleepStart ? "bg-yellow-400 text-purple-950" : "text-purple-600 bg-purple-100/70"}`}>
+                  {liveSleepStart ? liveSleepElapsed : awakeElapsedText ? `已清醒 ${awakeElapsedText}` : "点击记录"}
+                </span>
+              </div>
+              <p className={`text-xs font-semibold truncate ${liveSleepStart ? "text-purple-100" : "text-text-primary"}`}>
+                {liveSleepStart ? "点击结算唤醒 ☀️" : latestSleep ? `上次睡了 ${formatIsoToLocalTime(latestSleep.startTime)}~${formatIsoToLocalTime(latestSleep.endTime)}` : "点击开始入睡计时"}
+              </p>
+              <div className={`mt-2.5 pt-1.5 flex items-center justify-between text-[10px] font-medium ${liveSleepStart ? "border-t border-purple-800 text-yellow-300" : "border-t border-purple-100 text-purple-700"}`}>
+                <span>{liveSleepStart ? "结算本次睡眠" : "+ 记录入睡"}</span>
+                <ChevronRight size={12} />
+              </div>
+            </CuteCard>
+          </div>
+
+          {/* Daily Summary Stats */}
+          <div>
+            <div className="flex items-center justify-between mb-2 px-1">
+              <h3 className="text-xs font-bold text-text-secondary uppercase tracking-wider">今日累计概况</h3>
+              <span className="text-[10px] text-text-muted">实时统计</span>
+            </div>
+            <div className="grid grid-cols-4 gap-2">
+              <StatCard icon={<Droplets size={16} className="text-sky" />} label="奶量" value={String(summary.totalFeedingMl)} unit="ml" color="bg-sky/10" />
+              <StatCard icon={<Moon size={16} className="text-lavender" />} label="睡眠" value={formatSleep(summary.totalSleepMinutes)} color="bg-lavender/10" />
+              <StatCard icon={<Wind size={16} className="text-mint" />} label="尿布" value={String(summary.diaperCount)} unit="次" color="bg-mint/10" />
+              <StatCard icon={<UtensilsCrossed size={16} className="text-peach" />} label="辅食" value={String(summary.foodCount)} unit="顿" color="bg-peach/10" />
+            </div>
+          </div>
+
+          {/* Quick Action Grid */}
+          <div>
+            <h3 className="text-xs font-bold text-text-secondary uppercase tracking-wider mb-2 px-1">快捷记录</h3>
+            <div className="grid grid-cols-3 sm:grid-cols-6 lg:grid-cols-3 gap-2">
+              <QuickActionCard icon={<Droplets size={22} />} label="记喂奶" color="#8DCBFF" onClick={() => handleQuickRecord("feeding", "/records/feeding")} />
+              <QuickActionCard icon={<Moon size={22} />} label="记睡眠" color="#B98AF5" onClick={() => handleQuickRecord("sleep", "/records/sleep")} />
+              <QuickActionCard icon={<Wind size={22} />} label="换尿布" color="#78DDB5" onClick={() => handleQuickRecord("diaper", "/records/diaper")} />
+              <QuickActionCard icon={<UtensilsCrossed size={22} />} label="吃辅食" color="#FFB38A" onClick={() => handleQuickRecord("food", "/food/log")} />
+              <QuickActionCard icon={<Sparkles size={22} />} label="营养素分析" color="#FF6F9F" onClick={() => router.push("/nutrition")} />
+              <QuickActionCard icon={<Star size={22} />} label="发育里程" color="#B98AF5" onClick={() => router.push("/development")} />
+            </div>
+          </div>
+
+          {/* 24-Hour Timeline */}
+          <div>
+            <div className="flex items-center justify-between mb-2 px-1">
+              <h3 className="text-xs font-bold text-text-secondary uppercase tracking-wider">今日作息时间轴</h3>
+              <span className="text-[10px] text-text-muted">按时间倒序</span>
+            </div>
+            <Timeline items={timeline} onItemTap={(item) => setActionItem(item)} />
+          </div>
+        </div>
+
+        {/* ===== 右栏：智能顾问、补剂打卡与环境分析 (40% / Col 5) ===== */}
+        <div className="lg:col-span-5 space-y-5">
+          {/* AI Assistant Advice */}
+          <CuteCard className="bg-gradient-to-br from-primary-light to-lavender/10 border border-lavender/25 p-4.5">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-1.5">
+                <Sparkles size={16} className="text-primary" />
+                <h4 className="text-xs font-bold text-text-primary">AI 育儿温馨建议</h4>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleRefreshAi}
+                  disabled={aiLoading}
+                  className="text-[11px] text-text-muted hover:text-primary flex items-center gap-1 btn-press disabled:opacity-50 cursor-pointer"
+                  title="刷新 AI 建议"
+                >
+                  <RefreshCw size={11} className={aiLoading ? "animate-spin" : ""} />
+                  刷新
+                </button>
+                <QuickAiButton
+                  contextType="general"
+                  label="深度问答"
+                  contextTitle="AI 育儿专属顾问"
+                  variant="compact"
+                />
+              </div>
+            </div>
+
+            {aiLoading ? (
+              <div className="space-y-2 py-2 animate-pulse">
+                <div className="h-3 bg-primary-soft/50 rounded-full w-full" />
+                <div className="h-3 bg-primary-soft/30 rounded-full w-5/6" />
+              </div>
+            ) : aiError ? (
+              <div className="p-2.5 rounded-xl bg-red-50/70 border border-red-100 flex items-start gap-2">
+                <AlertCircle size={14} className="text-red-500 shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <p className="text-xs font-medium text-red-700">{aiError}</p>
+                  <button
+                    onClick={handleRefreshAi}
+                    className="mt-1 text-[11px] text-red-600 underline font-semibold cursor-pointer"
+                  >
+                    重试加载
+                  </button>
                 </div>
-                <p className="text-[11px] text-text-muted mt-0.5">
-                  UV {weather.uv} · 降雨 {weather.rainProbability}% · 空气{weather.airQuality}
-                </p>
               </div>
-            </div>
-            <div className="text-right">
-              <span className="inline-block px-2.5 py-1 rounded-full bg-mint/15 text-[11px] font-medium text-mint whitespace-nowrap">
-                {weather.outdoorAdvice}
-              </span>
-            </div>
-          </div>
-        </CuteCard>
-      )}
+            ) : aiTips && aiTips.length > 0 ? (
+              <ul className="space-y-2 text-xs text-text-primary leading-relaxed">
+                {aiTips.map((tip, idx) => (
+                  <li key={idx} className="flex items-start gap-2">
+                    <span className="w-4 h-4 rounded-full bg-primary/20 text-primary text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">
+                      {idx + 1}
+                    </span>
+                    <span>{tip}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-xs text-text-muted">暂无育儿建议，请点击刷新获取</p>
+            )}
+          </CuteCard>
 
-      {/* Daily Summary Stats */}
-      <div>
-        <div className="flex items-center justify-between mb-2 px-1">
-          <h3 className="text-xs font-bold text-text-secondary uppercase tracking-wider">今日累计概况</h3>
-          <span className="text-[10px] text-text-muted">实时统计</span>
-        </div>
-        <div className="grid grid-cols-4 gap-2">
-          <StatCard icon={<Droplets size={16} className="text-sky" />} label="奶量" value={String(summary.totalFeedingMl)} unit="ml" color="bg-sky/10" />
-          <StatCard icon={<Moon size={16} className="text-lavender" />} label="睡眠" value={formatSleep(summary.totalSleepMinutes)} color="bg-lavender/10" />
-          <StatCard icon={<Wind size={16} className="text-mint" />} label="尿布" value={String(summary.diaperCount)} unit="次" color="bg-mint/10" />
-          <StatCard icon={<UtensilsCrossed size={16} className="text-peach" />} label="辅食" value={String(summary.foodCount)} unit="顿" color="bg-peach/10" />
+          {/* 💊 今日补剂快速打卡与安全守护 */}
+          <SupplementQuickCheckIn babyId={baby?.id} />
+
+          {/* ⛅ Weather Card */}
+          {weather && (
+            <CuteCard className="p-4 cursor-pointer hover:shadow-md transition-all" onClick={() => router.push("/weather")}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-11 h-11 rounded-2xl bg-sky/15 flex items-center justify-center text-2xl">
+                    {weather.condition.includes("晴") ? "☀️" : weather.condition.includes("雨") ? "🌧️" : "⛅"}
+                  </div>
+                  <div>
+                    <div className="flex items-baseline gap-1.5">
+                      <span className="text-xl font-bold text-text-primary">{weather.temperature}°C</span>
+                      <span className="text-xs text-text-secondary">({weather.city}) {weather.condition}</span>
+                    </div>
+                    <p className="text-[11px] text-text-muted mt-0.5">
+                      UV {weather.uv} · 降雨 {weather.rainProbability}% · 空气{weather.airQuality}
+                    </p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <span className="inline-block px-2.5 py-1 rounded-full bg-mint/15 text-[11px] font-medium text-mint whitespace-nowrap">
+                    {weather.outdoorAdvice}
+                  </span>
+                </div>
+              </div>
+            </CuteCard>
+          )}
         </div>
       </div>
 
-      {/* 💊 今日补剂快速打卡 */}
-      <SupplementQuickCheckIn babyId={baby?.id} />
-
-      {/* Quick Action Grid */}
-      <div>
-        <h3 className="text-xs font-bold text-text-secondary uppercase tracking-wider mb-2 px-1">快捷记录</h3>
-        <div className="grid grid-cols-3 gap-2">
-          <QuickActionCard icon={<Droplets size={22} />} label="记喂奶" color="#8DCBFF" onClick={() => router.push("/records/feeding")} />
-          <QuickActionCard icon={<Moon size={22} />} label="记睡眠" color="#B98AF5" onClick={() => router.push("/records/sleep")} />
-          <QuickActionCard icon={<Wind size={22} />} label="换尿布" color="#78DDB5" onClick={() => router.push("/records/diaper")} />
-          <QuickActionCard icon={<UtensilsCrossed size={22} />} label="吃辅食" color="#FFB38A" onClick={() => router.push("/food/log")} />
-          <QuickActionCard icon={<Sparkles size={22} />} label="营养素分析" color="#FF6F9F" onClick={() => router.push("/nutrition")} />
-          <QuickActionCard icon={<Star size={22} />} label="发育里程" color="#B98AF5" onClick={() => router.push("/development")} />
-        </div>
-      </div>
-
-      {/* 24-Hour Timeline */}
-      <div>
-        <div className="flex items-center justify-between mb-2 px-1">
-          <h3 className="text-xs font-bold text-text-secondary uppercase tracking-wider">今日作息时间轴</h3>
-          <span className="text-[10px] text-text-muted">按时间倒序</span>
-        </div>
-        <Timeline items={timeline} onItemTap={(item) => setActionItem(item)} />
-      </div>
-
+      {/* Record Action Sheet & Edit Dialog */}
       <RecordActionSheet
         item={actionItem}
         onClose={() => setActionItem(null)}
@@ -503,68 +581,8 @@ export default function HomePage() {
         }}
       />
 
-      {/* AI Assistant Advice */}
-      <CuteCard className="bg-gradient-to-br from-primary-light to-lavender/10 border border-lavender/25 p-4">
-        <div className="flex items-center justify-between mb-2.5">
-          <div className="flex items-center gap-1.5">
-            <Sparkles size={16} className="text-primary" />
-            <h4 className="text-xs font-bold text-text-primary">AI 育儿温馨建议</h4>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleRefreshAi}
-              disabled={aiLoading}
-              className="text-[11px] text-text-muted hover:text-primary flex items-center gap-1 btn-press disabled:opacity-50"
-              title="刷新 AI 建议"
-            >
-              <RefreshCw size={11} className={aiLoading ? "animate-spin" : ""} />
-              刷新
-            </button>
-            <QuickAiButton
-              contextType="general"
-              label="深度问答"
-              contextTitle="AI 育儿专属顾问"
-              variant="compact"
-            />
-          </div>
-        </div>
-
-        {aiLoading ? (
-          <div className="space-y-2 py-2 animate-pulse">
-            <div className="h-3 bg-primary-soft/50 rounded-full w-full" />
-            <div className="h-3 bg-primary-soft/30 rounded-full w-5/6" />
-          </div>
-        ) : aiError ? (
-          <div className="p-2.5 rounded-xl bg-red-50/70 border border-red-100 flex items-start gap-2">
-            <AlertCircle size={14} className="text-red-500 shrink-0 mt-0.5" />
-            <div className="flex-1">
-              <p className="text-xs font-medium text-red-700">{aiError}</p>
-              <button
-                onClick={handleRefreshAi}
-                className="mt-1 text-[11px] text-red-600 underline font-semibold"
-              >
-                重试加载
-              </button>
-            </div>
-          </div>
-        ) : aiTips && aiTips.length > 0 ? (
-          <ul className="space-y-2 text-xs text-text-primary leading-relaxed">
-            {aiTips.map((tip, idx) => (
-              <li key={idx} className="flex items-start gap-2">
-                <span className="w-4 h-4 rounded-full bg-primary/20 text-primary text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">
-                  {idx + 1}
-                </span>
-                <span>{tip}</span>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="text-xs text-text-muted">暂无育儿建议，请点击刷新获取</p>
-        )}
-      </CuteCard>
-
       {/* App Version Footer */}
-      <div className="text-center pt-2 pb-6">
+      <div className="text-center pt-4 pb-6">
         <p className="text-[10px] text-text-muted/60">
           宝宝成长工作台 {APP_VERSION}
         </p>

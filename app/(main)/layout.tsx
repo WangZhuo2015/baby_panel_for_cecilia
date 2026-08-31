@@ -3,8 +3,10 @@
 import { usePathname } from "next/navigation";
 import { useEffect } from "react";
 import { BottomNav } from "@/components/navigation/BottomNav";
+import { DesktopSidebar } from "@/components/navigation/DesktopSidebar";
 import { OfflineBanner } from "@/components/ui/OfflineBanner";
 import { QuickAiHost } from "@/components/ui/QuickAiHost";
+import { RecordDrawerHost } from "@/components/records/RecordDrawerHost";
 import { useBabyStore } from "@/stores/useBabyStore";
 
 const hideNavRoutes = [
@@ -30,15 +32,28 @@ export default function MainLayout({
   }, [user, fetchBaby]);
 
   return (
-    <div className="flex flex-col min-h-[100dvh]">
-      <OfflineBanner />
-      <main
-        className={`flex-1 ${hideNav ? "pb-4" : "pb-24"}`}
-      >
-        {children}
-      </main>
+    <div className="flex min-h-[100dvh] w-full">
+      {/* 桌面端 / iPad 宽屏导航中枢 */}
+      <DesktopSidebar />
+
+      {/* 主舞台区域 */}
+      <div className="flex-1 flex flex-col min-w-0 lg:pl-64 transition-all">
+        <OfflineBanner />
+        <main
+          className={`flex-1 ${hideNav ? "pb-4" : "pb-24 lg:pb-8"}`}
+        >
+          {children}
+        </main>
+      </div>
+
+      {/* 移动端底部导航（已在组件内实现 lg:hidden） */}
       {!hideNav && <BottomNav />}
+
+      {/* 全局 AI 弹窗宿主 */}
       <QuickAiHost />
+
+      {/* 全局快捷抽屉录入宿主 */}
+      <RecordDrawerHost />
     </div>
   );
 }
