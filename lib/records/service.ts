@@ -641,6 +641,17 @@ export async function deleteRecord(ctx: RecordContext, type: "feeding"|"sleep"|"
   else if (type === "growth") record = await prisma.growthMeasurement.findUnique({ where: { id } });
   if (!record) throw new NotFoundError(type === "feeding" ? "未找到指定的喂养记录" : type === "sleep" ? "未找到指定的睡眠记录" : type === "diaper" ? "未找到指定的排便/尿布记录" : type === "food" ? "未找到指定的辅食记录" : "未找到指定的生长记录");
   if (record.babyId !== ctx.babyId) throw new ForbiddenError();
+
+  // Automatically capture pre-deletion snapshot for safe rollback
+  const { captureRecordSnapshot } = await import("./snapshot");
+  await captureRecordSnapshot({
+    ctx: { babyId: ctx.babyId, userId: ctx.userId, source: "ui_manual" },
+    action: "delete",
+    entityType: type,
+    entityId: id,
+    payload: record,
+  });
+
   if (type === "feeding") await prisma.feedingRecord.delete({ where: { id } });
   else if (type === "sleep") await prisma.sleepRecord.delete({ where: { id } });
   else if (type === "diaper") await prisma.diaperRecord.delete({ where: { id } });

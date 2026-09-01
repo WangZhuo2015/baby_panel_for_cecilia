@@ -19,6 +19,9 @@ model User {
   memberships       FamilyMember[]
   pushSubscriptions PushSubscription[]
   aiChatSessions    AiChatSession[]
+  oauthCodes        OAuthAuthorizationCode[]
+  oauthTokens       OAuthRefreshToken[]
+  oauthConsents     OAuthConsent[]
 }
 
 model Family {
@@ -75,6 +78,10 @@ model Baby {
   aiChatSessions      AiChatSession[]
   supplementSchedules SupplementSchedule[]
   supplementRecords   SupplementRecord[]
+  oauthCodes          OAuthAuthorizationCode[]
+  oauthTokens         OAuthRefreshToken[]
+  oauthConsents       OAuthConsent[]
+  recordSnapshots     RecordSnapshot[]
 
   @@index([familyId])
 }
@@ -714,5 +721,124 @@ model AiChatMessage {
   createdAt DateTime      @default(now())
 
   @@index([sessionId, createdAt])
+}
+
+// ─── OAuth 2.1 & Dynamic Client Registration (RFC 7591 / RFC 9728) ────────────
+
+model OAuthClient {
+  id                      String                   @id @default(uuid())
+  clientId                String                   @unique
+  clientSecret            String?
+  clientName              String?
+  redirectUrisJson        String                   // JSON array of strings
+  grantTypesJson          String                   @default("[\"authorization_code\",\"refresh_token\"]")
+  responseTypesJson       String                   @default("[\"code\"]")
+  scope                   String?                  @default("baby:read baby:write")
+  tokenEndpointAuthMethod String                   @default("none") // "none" | "client_secret_post" | "client_secret_basic"
+  isDynamic               Boolean                  @default(false)
+  createdAt               DateTime                 @default(now())
+  updatedAt               DateTime                 @updatedAt
+  authorizationCodes      OAuthAuthorizationCode[]
+  refreshTokens           OAuthRefreshToken[]
+  consents                OAuthConsent[]
+}
+
+model OAuthAuthorizationCode {
+  id                  String      @id @default(uuid())
+  code                String      @unique
+  clientId            String
+  client              OAuthClient @relation(fields: [clientId], references: [clientId], onDelete: Cascade)
+  userId              String
+  user                User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  babyId              String?
+  baby                Baby?       @relation(fields: [babyId], references: [id], onDelete: SetNull)
+  redirectUri         String
+  scope               String
+  resource            String?
+  codeChallenge       String
+  codeChallengeMethod String      @default("S256")
+  expiresAt           DateTime
+  used                Boolean     @default(false)
+  createdAt           DateTime    @default(now())
+
+  @@index([clientId])
+  @@index([userId])
+  @@index([code])
+}
+
+model OAuthRefreshToken {
+  id        String      @id @default(uuid())
+  tokenHash String      @unique
+  clientId  String
+  client    OAuthClient @relation(fields: [clientId], references: [clientId], onDelete: Cascade)
+  userId    String
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  babyId    String?
+  baby      Baby?       @relation(fields: [babyId], references: [id], onDelete: SetNull)
+  scope     String
+  resource  String?
+  expiresAt DateTime
+  revoked   Boolean     @default(false)
+  createdAt DateTime    @default(now())
+
+  @@index([clientId])
+  @@index([userId])
+  @@index([tokenHash])
+}
+
+model OAuthConsent {
+  id        String      @id @default(uuid())
+  userId    String
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  clientId  String
+  client    OAuthClient @relation(fields: [clientId], references: [clientId], onDelete: Cascade)
+  babyId    String?
+  baby      Baby?       @relation(fields: [babyId], references: [id], onDelete: SetNull)
+  scope     String
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  @@unique([userId, clientId, babyId])
+  @@index([userId])
+  @@index([clientId])
+}
+
+model OAuthAuditLog {
+  id           String   @id @default(uuid())
+  requestId    String?
+  clientId     String?
+  userId       String?
+  babyId       String?
+  action       String   // e.g. "token_issue", "token_refresh", "token_revoke", "client_register", "mcp_tool_call"
+  toolName     String?
+  authResult   String   // "success" | "denied" | "error"
+  durationMs   Int?
+  statusCode   Int?
+  ip           String?
+  userAgent    String?
+  metadataJson String?  // Non-sensitive metadata only (NO tokens or secrets)
+  createdAt    DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([clientId, createdAt])
+  @@index([action, createdAt])
+}
+
+model RecordSnapshot {
+  id          String    @id @default(uuid())
+  babyId      String
+  baby        Baby      @relation(fields: [babyId], references: [id], onDelete: Cascade)
+  userId      String?
+  source      String    @default("mcp") // "mcp" | "web_chat" | "ui_manual"
+  action      String    @default("delete") // "delete" | "update" | "batch_overwrite"
+  entityType  String    // "feeding" | "sleep" | "diaper" | "food" | "growth" | "medical_report" | "vaccine" | "food_plan"
+  entityId    String
+  payloadJson String    // Full serialized JSON state before deletion/update
+  restored    Boolean   @default(false)
+  restoredAt  DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([babyId, createdAt])
+  @@index([entityType, entityId])
 }
 

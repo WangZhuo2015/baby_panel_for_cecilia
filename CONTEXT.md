@@ -59,5 +59,25 @@ Terms used in product and architecture talk. Prefer these names over file-level 
 
 **Dual-Pane AI Workspace (双栏 AI 协同工作区)** — Multi-panel conversational interface presenting session history alongside multimodal streaming tools, optimized for both iPad touch scrolling and desktop viewports.
 
-_Avoid_: Desktop-only mouse hover traps, fixed non-responsive widths, and sub-44px touch targets that degrade iPad touch ergonomics.
+## Coarse-Grained MCP Tools & Connected Apps
+
+**Coarse-Grained MCP Architecture (高内聚粗粒度 MCP 架构)** — Consolidated tool design optimized for Gemini Spark and connected apps, merging multi-step reads and writes into single high-cohesion tools to eliminate per-tool authorization prompt fatigue.
+
+**Baby Overview Hub (`get_baby_overview`)** — A single composite read tool returning full baby context in one turn: exact age, today's schedule summary (milk, sleep, diaper, foods), recent timeline events, nutrition/supplement DRI achievement, upcoming vaccines, and active month milestones.
+
+**Composite Event Record (`record_baby_events`)** — An atomic multi-action write tool supporting single or batch recording of daily parenting events (feeding, sleep, diaper, food, supplement) within a single authorization prompt.
+
+**Health & Measurement Record (`record_health_measurement`)** — A consolidated clinical and physical growth tool covering growth measurements (WHO percentile), vaccine completion logs, and medical lab report archiving.
+
+**Unified Parenting Knowledge (`query_parenting_knowledge`)** — A single searchable domain knowledge tool indexing complementary food ingredients, choking prevention, picture books, developmental activities, and formula/supplement product profiles.
+
+## Record Snapshots & Rollback Resilience
+
+**Record Snapshot (数据快照事件)** — An immutable audit snapshot (`RecordSnapshot`) captured automatically before any destructive action (delete, overwrite, or batch removal) across all domain tables. Preserves the full JSON state, author, source (`mcp`/`web_chat`/`ui`), and timestamp.
+
+**Snapshot Rollback / Undo (快照回滚与自然语言撤销)** — An atomic restoration capability allowing caregivers or conversational AI agents (e.g. Gemini Spark) to undo accidental deletions by restoring the serialized payload back to its primary table.
+
+_Avoid_: Fragmented 1:1 CRUD MCP tools that trigger 5-10 sequential approval modals for a single query in external AI clients like Gemini Spark. Hard deletes without a safety snapshot that cause permanent data loss upon AI misinterpretation.
+
+
 
