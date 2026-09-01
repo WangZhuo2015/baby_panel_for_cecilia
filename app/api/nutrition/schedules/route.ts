@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAuth, requireBaby } from "@/lib/api-helpers";
 import { prisma } from "@/lib/prisma";
-import { getLocalDateStr } from "@/lib/date";
+import { getLocalDateStr, isValidDateStr } from "@/lib/date";
 import type { SupplementSchedule, SupplementProduct, NutrientsMap } from "@/types/nutrition";
 
 export async function GET(request: Request) {
@@ -14,7 +14,8 @@ export async function GET(request: Request) {
     if (babyResult.errorResponse) return babyResult.errorResponse;
 
     const babyId = babyResult.baby.id;
-    const today = getLocalDateStr();
+    const dateParam = searchParams.get("date");
+    const targetDate = dateParam && isValidDateStr(dateParam) ? dateParam : getLocalDateStr();
 
     const dbSchedules = await prisma.supplementSchedule.findMany({
       where: { babyId, isActive: true },
@@ -24,11 +25,11 @@ export async function GET(request: Request) {
       orderBy: { createdAt: "desc" },
     });
 
-    // 检查今日打卡状态
-    const todayRecords = await prisma.supplementRecord.findMany({
-      where: { babyId, date: today },
+    // 检查指定日期的打卡状态
+    const dateRecords = await prisma.supplementRecord.findMany({
+      where: { babyId, date: targetDate },
     });
-    const completedProductIds = new Set(todayRecords.map((r) => r.productId));
+    const completedProductIds = new Set(dateRecords.map((r) => r.productId));
 
     const schedules: SupplementSchedule[] = dbSchedules.map((s) => {
       const p = s.product;
@@ -125,6 +126,27 @@ export async function POST(request: Request) {
         include: { product: true },
       });
 
+      return NextResponse.json(updated);
+    }
+
+    // Check if baby already has a schedule record for this product
+    const existingSame = await prisma.supplementSchedule.findFirst({
+      where: { babyId, productId },
+    });
+    if (existingSame) {
+      const updated = await prisma.supplementSchedule.update({
+        where: { id: existingSame.id },
+        data: {
+          frequency,
+          customDaysJson: customDays ? JSON.stringify(customDays) : null,
+          targetDose: Number(targetDose) || 1.0,
+          reminderTime: reminderTime ? String(reminderTime).trim() : null,
+          isActive: Boolean(isActive),
+          startDate: startDate || existingSame.startDate,
+          notes: notes !== undefined ? (notes ? String(notes).trim() : null) : existingSame.notes,
+        },
+        include: { product: true },
+      });
       return NextResponse.json(updated);
     }
 

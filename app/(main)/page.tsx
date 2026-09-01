@@ -16,6 +16,7 @@ import {
   Star,
   ChevronRight,
   Camera,
+  FileText,
 } from "lucide-react";
 import type { TimelineEntry } from "@/types";
 import { useBabyStore } from "@/stores/useBabyStore";
@@ -85,6 +86,7 @@ export default function HomePage() {
   const user = useBabyStore((s) => s.user);
   const baby = useBabyStore((s) => s.baby);
   const dailySummary = useBabyStore((s) => s.dailySummary);
+  const aiDailySummary = useBabyStore((s) => s.aiDailySummary);
   const timeline = useBabyStore((s) => s.timeline);
   const weather = useBabyStore((s) => s.weather);
   const feedingRecords = useBabyStore((s) => s.feedingRecords);
@@ -101,6 +103,7 @@ export default function HomePage() {
 
   const fetchUser = useBabyStore((s) => s.fetchUser);
   const fetchDailySummary = useBabyStore((s) => s.fetchDailySummary);
+  const fetchAiDailySummary = useBabyStore((s) => s.fetchAiDailySummary);
   const fetchTimeline = useBabyStore((s) => s.fetchTimeline);
   const fetchWeather = useBabyStore((s) => s.fetchWeather);
   const fetchFeedingRecords = useBabyStore((s) => s.fetchFeedingRecords);
@@ -140,6 +143,7 @@ export default function HomePage() {
   useEffect(() => {
     if (baby?.id) {
       fetchDailySummary();
+      fetchAiDailySummary();
       fetchTimeline();
       fetchFeedingRecords();
       fetchSleepRecords();
@@ -148,6 +152,7 @@ export default function HomePage() {
   }, [
     baby?.id,
     fetchDailySummary,
+    fetchAiDailySummary,
     fetchTimeline,
     fetchFeedingRecords,
     fetchSleepRecords,
@@ -159,6 +164,7 @@ export default function HomePage() {
     const handleVisibilityChange = () => {
       if (document.visibilityState === "visible" && baby?.id) {
         fetchDailySummary(undefined, true);
+        fetchAiDailySummary(undefined, true);
         fetchTimeline(undefined, true);
         fetchFeedingRecords(undefined, true);
         fetchSleepRecords(true);
@@ -166,7 +172,7 @@ export default function HomePage() {
     };
     document.addEventListener("visibilitychange", handleVisibilityChange);
     return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
-  }, [baby?.id, fetchDailySummary, fetchTimeline, fetchFeedingRecords, fetchSleepRecords]);
+  }, [baby?.id, fetchDailySummary, fetchAiDailySummary, fetchTimeline, fetchFeedingRecords, fetchSleepRecords]);
 
   // Safety fallback: if auth takes longer than 2s, stop blocking screen
   useEffect(() => {
@@ -427,7 +433,12 @@ export default function HomePage() {
           <div>
             <div className="flex items-center justify-between mb-2 px-1">
               <h3 className="text-xs font-bold text-text-secondary uppercase tracking-wider">今日累计概况</h3>
-              <span className="text-[10px] text-text-muted">实时统计</span>
+              <button
+                onClick={() => router.push("/daily-summary")}
+                className="text-[11px] font-bold text-primary hover:underline flex items-center gap-0.5 cursor-pointer"
+              >
+                查看完整日报 <ChevronRight size={12} />
+              </button>
             </div>
             <div className="grid grid-cols-4 gap-2">
               <StatCard icon={<Droplets size={16} className="text-sky" />} label="奶量" value={String(summary.totalFeedingMl)} unit="ml" color="bg-sky/10" />
@@ -435,6 +446,34 @@ export default function HomePage() {
               <StatCard icon={<Wind size={16} className="text-mint" />} label="尿布" value={String(summary.diaperCount)} unit="次" color="bg-mint/10" />
               <StatCard icon={<UtensilsCrossed size={16} className="text-peach" />} label="辅食" value={String(summary.foodCount)} unit="顿" color="bg-peach/10" />
             </div>
+
+            {/* 🤖 AI 每日成长日报 Banner */}
+            <CuteCard
+              className="mt-2.5 p-3.5 bg-gradient-to-r from-primary-light via-lavender/20 to-pink-50/50 dark:from-primary-dark/20 dark:via-lavender/10 dark:to-transparent border border-primary/20 cursor-pointer hover:shadow-md transition-all group"
+              onClick={() => router.push("/daily-summary")}
+            >
+              <div className="flex items-center justify-between mb-1.5">
+                <div className="flex items-center gap-2">
+                  <span className="w-6 h-6 rounded-full bg-primary/20 text-primary flex items-center justify-center">
+                    <FileText size={13} />
+                  </span>
+                  <span className="text-xs font-bold text-text-primary group-hover:text-primary transition-colors">
+                    AI 每日成长日报
+                  </span>
+                  {aiDailySummary?.overallScore && (
+                    <span className="text-[10px] bg-primary text-white px-2 py-0.5 rounded-full font-bold">
+                      {aiDailySummary.overallScore}
+                    </span>
+                  )}
+                </div>
+                <span className="text-[11px] font-bold text-primary flex items-center gap-0.5">
+                  查看与分享 <ChevronRight size={13} />
+                </span>
+              </div>
+              <p className="text-xs text-text-secondary line-clamp-1">
+                {aiDailySummary?.headline || "点击生成今日奶量、睡眠、排便全量 AI 智能总结与儿科指导"}
+              </p>
+            </CuteCard>
           </div>
 
           {/* Quick Action Grid */}
@@ -445,7 +484,7 @@ export default function HomePage() {
               <QuickActionCard icon={<Moon size={22} />} label="记睡眠" color="#B98AF5" onClick={() => handleQuickRecord("sleep", "/records/sleep")} />
               <QuickActionCard icon={<Wind size={22} />} label="换尿布" color="#78DDB5" onClick={() => handleQuickRecord("diaper", "/records/diaper")} />
               <QuickActionCard icon={<UtensilsCrossed size={22} />} label="吃辅食" color="#FFB38A" onClick={() => handleQuickRecord("food", "/food/log")} />
-              <QuickActionCard icon={<Sparkles size={22} />} label="营养素分析" color="#FF6F9F" onClick={() => router.push("/nutrition")} />
+              <QuickActionCard icon={<FileText size={22} />} label="每日总结" color="#FF6F9F" onClick={() => router.push("/daily-summary")} />
               <QuickActionCard icon={<Star size={22} />} label="发育里程" color="#B98AF5" onClick={() => router.push("/development")} />
             </div>
           </div>

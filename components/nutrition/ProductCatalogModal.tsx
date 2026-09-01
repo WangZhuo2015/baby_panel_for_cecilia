@@ -178,14 +178,15 @@ export function ProductCatalogModal({ isOpen, onClose, babyId, onUpdated }: Prod
       if (res.ok) {
         await fetchData();
         if (onUpdated) onUpdated();
+        window.dispatchEvent(new CustomEvent("baby:nutrition-updated"));
       }
     } catch (e) {
       console.error("Import preset error:", e);
     }
   };
 
-  // 预置导入补剂
-  const handleImportPresetSupp = async (preset: any) => {
+  // 预置导入补剂 (默认自动加入每日计划)
+  const handleImportPresetSupp = async (preset: any, frequency: "daily" | "alternate_day" = "daily") => {
     try {
       const res = await fetch("/api/nutrition/products", {
         method: "POST",
@@ -196,11 +197,57 @@ export function ProductCatalogModal({ isOpen, onClose, babyId, onUpdated }: Prod
         }),
       });
       if (res.ok) {
+        const prod = await res.json();
+        if (babyId && prod.id) {
+          await fetch("/api/nutrition/schedules", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              babyId,
+              productId: prod.id,
+              frequency,
+              targetDose: prod.defaultDose || 1.0,
+            }),
+          });
+        }
         await fetchData();
         if (onUpdated) onUpdated();
+        window.dispatchEvent(new CustomEvent("baby:nutrition-updated"));
       }
     } catch (e) {
       console.error("Import preset supplement error:", e);
+    }
+  };
+
+  // 快捷调整/设置补剂计划频次 (每日 / 隔天 / 暂停)
+  const handleSetScheduleFrequency = async (productId: string, frequency: "daily" | "alternate_day" | "none") => {
+    try {
+      const existingSched = schedules.find((s) => s.productId === productId);
+      if (frequency === "none") {
+        if (existingSched) {
+          await fetch(`/api/nutrition/schedules?id=${existingSched.id}`, {
+            method: "DELETE",
+          });
+        }
+      } else {
+        await fetch("/api/nutrition/schedules", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: existingSched?.id,
+            babyId,
+            productId,
+            frequency,
+            targetDose: 1.0,
+            isActive: true,
+          }),
+        });
+      }
+      await fetchData();
+      if (onUpdated) onUpdated();
+      window.dispatchEvent(new CustomEvent("baby:nutrition-updated"));
+    } catch (e) {
+      console.error("Set schedule frequency error:", e);
     }
   };
 
@@ -214,31 +261,10 @@ export function ProductCatalogModal({ isOpen, onClose, babyId, onUpdated }: Prod
       if (res.ok) {
         await fetchData();
         if (onUpdated) onUpdated();
+        window.dispatchEvent(new CustomEvent("baby:nutrition-updated"));
       }
     } catch (e) {
       console.error("Delete product error:", e);
-    }
-  };
-
-  // 创建补剂计划 (日服 / 隔天轮换)
-  const handleCreateSchedule = async (productId: string, frequency: string) => {
-    try {
-      const res = await fetch("/api/nutrition/schedules", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          babyId,
-          productId,
-          frequency,
-          targetDose: 1.0,
-        }),
-      });
-      if (res.ok) {
-        await fetchData();
-        if (onUpdated) onUpdated();
-      }
-    } catch (e) {
-      console.error("Create schedule error:", e);
     }
   };
 
@@ -251,10 +277,17 @@ export function ProductCatalogModal({ isOpen, onClose, babyId, onUpdated }: Prod
       if (res.ok) {
         await fetchData();
         if (onUpdated) onUpdated();
+        window.dispatchEvent(new CustomEvent("baby:nutrition-updated"));
       }
     } catch (e) {
       console.error("Delete schedule error:", e);
     }
+  };
+
+  const handleModalClose = () => {
+    if (onUpdated) onUpdated();
+    window.dispatchEvent(new CustomEvent("baby:nutrition-updated"));
+    onClose();
   };
 
   // OCR 拍照识别处理
@@ -321,11 +354,11 @@ export function ProductCatalogModal({ isOpen, onClose, babyId, onUpdated }: Prod
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-black/65 backdrop-blur-sm animate-fadeIn">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/65 backdrop-blur-sm animate-fadeIn">
       {/* 确保实体背景为 100% 不透明的 bg-white / dark:bg-[#1E171E] */}
-      <div className="bg-white dark:bg-[#1E171E] text-text-primary dark:text-gray-100 rounded-3xl p-4 max-w-lg w-full max-h-[90vh] flex flex-col shadow-2xl border border-primary/25">
+      <div className="bg-white dark:bg-[#1E171E] text-text-primary dark:text-gray-100 rounded-3xl p-4 sm:p-5 max-w-lg w-full max-h-[90dvh] flex flex-col shadow-2xl border border-primary/25 overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between pb-3 border-b border-divider">
+        <div className="flex items-center justify-between pb-3 border-b border-divider shrink-0">
           <div className="flex items-center gap-2.5">
             <div className="w-9 h-9 rounded-2xl bg-primary-light text-primary flex items-center justify-center shadow-xs">
               <Package size={20} />
@@ -333,12 +366,12 @@ export function ProductCatalogModal({ isOpen, onClose, babyId, onUpdated }: Prod
             <div>
               <h3 className="text-sm font-bold text-text-primary dark:text-white">配方奶粉与营养补剂库</h3>
               <p className="text-[11px] text-text-secondary dark:text-gray-300">
-                支持爱他美全版本、Witsbb补剂、自定义冲调比与AI拍照识别
+                添加补剂自动加入计划 · 支持爱他美全版本、Witsbb与拍照OCR
               </p>
             </div>
           </div>
           <button
-            onClick={onClose}
+            onClick={handleModalClose}
             className="w-8 h-8 rounded-full text-text-muted hover:text-text-primary hover:bg-gray-100 dark:hover:bg-gray-800 flex items-center justify-center transition-colors"
           >
             <X size={18} />
@@ -346,12 +379,12 @@ export function ProductCatalogModal({ isOpen, onClose, babyId, onUpdated }: Prod
         </div>
 
         {/* Tab Switcher */}
-        <div className="pt-3 pb-2">
+        <div className="pt-3 pb-2 shrink-0">
           <SegmentControl
             options={[
               { value: "formula", label: `🍼 奶粉库 (${formulas.length})` },
-              { value: "supplement", label: `💊 补剂库 (${supplements.length})` },
-              { value: "schedule", label: `📅 服用计划 (${schedules.length})` },
+              { value: "supplement", label: `💊 补剂与计划 (${supplements.length})` },
+              { value: "schedule", label: `📅 计划汇总 (${schedules.length})` },
             ]}
             value={activeTab}
             onChange={(v) => setActiveTab(v)}
@@ -369,12 +402,12 @@ export function ProductCatalogModal({ isOpen, onClose, babyId, onUpdated }: Prod
         />
 
         {/* Main Content Area */}
-        <div className="flex-1 overflow-y-auto space-y-3 pr-0.5 py-1">
+        <div className="flex-1 min-h-0 overflow-y-auto space-y-3 pr-1 py-1 overscroll-contain">
           {/* ==================== TAB 1: 奶粉档案 ==================== */}
           {activeTab === "formula" && (
             <div className="space-y-3">
               {/* 操作按钮区 */}
-              <div className="flex gap-2">
+              <div className="flex gap-2 shrink-0">
                 <button
                   type="button"
                   disabled={ocrLoading}
@@ -458,6 +491,7 @@ export function ProductCatalogModal({ isOpen, onClose, babyId, onUpdated }: Prod
                         setIsCreatingFormula(false);
                         await fetchData();
                         if (onUpdated) onUpdated();
+                        window.dispatchEvent(new CustomEvent("baby:nutrition-updated"));
                       }}
                     >
                       保存奶粉
@@ -570,7 +604,7 @@ export function ProductCatalogModal({ isOpen, onClose, babyId, onUpdated }: Prod
                 </div>
 
                 {/* 预置列表 */}
-                <div className="grid grid-cols-1 gap-1.5 max-h-60 overflow-y-auto pr-0.5">
+                <div className="grid grid-cols-1 gap-1.5 pr-0.5">
                   {filteredPresetFormulas.map((p, idx) => (
                     <div
                       key={idx}
@@ -603,11 +637,11 @@ export function ProductCatalogModal({ isOpen, onClose, babyId, onUpdated }: Prod
             </div>
           )}
 
-          {/* ==================== TAB 2: 补剂档案 ==================== */}
+          {/* ==================== TAB 2: 补剂管理与计划 ==================== */}
           {activeTab === "supplement" && (
             <div className="space-y-3">
               {/* 操作按钮区 */}
-              <div className="flex gap-2">
+              <div className="flex gap-2 shrink-0">
                 <button
                   type="button"
                   disabled={ocrLoading}
@@ -627,10 +661,21 @@ export function ProductCatalogModal({ isOpen, onClose, babyId, onUpdated }: Prod
                 </button>
               </div>
 
+              {/* 智能计划提示 */}
+              <div className="p-2.5 bg-emerald-50/90 dark:bg-emerald-950/40 rounded-2xl border border-emerald-200/80 dark:border-emerald-900 text-xs text-emerald-950 dark:text-emerald-200 flex items-start gap-2">
+                <Sparkles size={15} className="text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+                <div className="leading-relaxed text-[11px]">
+                  <span className="font-bold">智能计划自动联动：</span>
+                  <span className="text-emerald-800 dark:text-emerald-300">
+                    导入或添加补剂将<b>默认自动加入宝宝每日打卡计划</b>。在卡片上可直接一键切换「每日服」、「隔天轮换」或「暂停」。
+                  </span>
+                </div>
+              </div>
+
               {/* 手动添加补剂折叠表单 */}
               {isCreatingSupp && (
                 <CuteCard className="p-3.5 space-y-2.5 bg-gray-50/80 dark:bg-card border border-emerald-300">
-                  <h4 className="text-xs font-bold text-text-primary dark:text-white">添加新补剂档案 (支持复合营养素穿透)</h4>
+                  <h4 className="text-xs font-bold text-text-primary dark:text-white">添加新补剂档案 (自动加入计划)</h4>
                   <div className="space-y-2">
                     <CuteInput
                       placeholder="补剂名称 (如 健敏思液体小蓝盒乳钙)"
@@ -703,7 +748,7 @@ export function ProductCatalogModal({ isOpen, onClose, babyId, onUpdated }: Prod
                         if (suppForm.vitAAmount) nutrients.vitamin_a = { amount: Number(suppForm.vitAAmount), unit: "mcg RAE" };
                         if (suppForm.ironAmount) nutrients.iron = { amount: Number(suppForm.ironAmount), unit: "mg" };
 
-                        await fetch("/api/nutrition/products", {
+                        const res = await fetch("/api/nutrition/products", {
                           method: "POST",
                           headers: { "Content-Type": "application/json" },
                           body: JSON.stringify({
@@ -712,80 +757,151 @@ export function ProductCatalogModal({ isOpen, onClose, babyId, onUpdated }: Prod
                             nutrients,
                           }),
                         });
-                        setIsCreatingSupp(false);
-                        await fetchData();
-                        if (onUpdated) onUpdated();
+
+                        if (res.ok) {
+                          const prod = await res.json();
+                          if (babyId && prod.id) {
+                            await fetch("/api/nutrition/schedules", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({
+                                babyId,
+                                productId: prod.id,
+                                frequency: "daily",
+                                targetDose: Number(suppForm.defaultDose) || 1.0,
+                              }),
+                            });
+                          }
+                          setIsCreatingSupp(false);
+                          await fetchData();
+                          if (onUpdated) onUpdated();
+                          window.dispatchEvent(new CustomEvent("baby:nutrition-updated"));
+                        }
                       }}
                     >
-                      保存补剂
+                      保存并加入计划
                     </CuteButton>
                   </div>
                 </CuteCard>
               )}
 
-              {/* 已有补剂列表 */}
+              {/* 已有补剂与计划状态列表 */}
               <div className="space-y-2">
                 <span className="text-[11px] font-bold text-text-secondary uppercase block px-1">
-                  家庭已添加补剂 ({supplements.length})
+                  正在使用与计划中的补剂 ({supplements.length})
                 </span>
                 {supplements.length > 0 ? (
-                  supplements.map((s) => (
-                    <div
-                      key={s.id}
-                      className="p-3 bg-white dark:bg-[#251D25] rounded-2xl border border-emerald-200 dark:border-emerald-900/60 shadow-xs flex items-start justify-between gap-2"
-                    >
-                      <div>
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-xs font-bold text-text-primary dark:text-white">{s.name}</span>
-                          <span className="px-1.5 py-0.2 bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 text-[10px] rounded font-bold border border-emerald-200 dark:border-emerald-800">
-                            {s.unitName}
+                  supplements.map((s) => {
+                    const sched = schedules.find((sc) => sc.productId === s.id && sc.isActive);
+                    const currentFreq = sched ? sched.frequency : "none";
+                    return (
+                      <div
+                        key={s.id}
+                        className="p-3 bg-white dark:bg-[#251D25] rounded-2xl border border-emerald-200 dark:border-emerald-900/60 shadow-xs space-y-2.5"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="text-xs font-bold text-text-primary dark:text-white">{s.name}</span>
+                              <span className="px-1.5 py-0.2 bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 text-[10px] rounded font-bold border border-emerald-200 dark:border-emerald-800">
+                                {s.unitName}
+                              </span>
+                              {currentFreq === "daily" && (
+                                <span className="px-2 py-0.2 bg-emerald-500 text-white text-[10px] rounded-full font-bold shadow-2xs">
+                                  每日打卡
+                                </span>
+                              )}
+                              {currentFreq === "alternate_day" && (
+                                <span className="px-2 py-0.2 bg-purple-500 text-white text-[10px] rounded-full font-bold shadow-2xs">
+                                  隔天轮换
+                                </span>
+                              )}
+                              {currentFreq === "none" && (
+                                <span className="px-2 py-0.2 bg-gray-100 dark:bg-gray-800 text-text-muted text-[10px] rounded-full font-medium">
+                                  未入打卡计划
+                                </span>
+                              )}
+                            </div>
+                            {/* 穿透展示成分 */}
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              {Object.entries(s.nutrients || {}).map(([key, val]) => (
+                                <span
+                                  key={key}
+                                  className="text-[10px] bg-gray-100 dark:bg-gray-800 text-text-secondary dark:text-gray-300 px-1.5 py-0.2 rounded font-medium"
+                                >
+                                  {key === "vitamin_d"
+                                    ? "维D"
+                                    : key === "calcium"
+                                    ? "钙"
+                                    : key === "vitamin_a"
+                                    ? "维A"
+                                    : key === "iron"
+                                    ? "铁"
+                                    : key === "zinc"
+                                    ? "锌"
+                                    : key === "dha"
+                                    ? "DHA"
+                                    : key}
+                                  : {val.amount}
+                                  {val.unit}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteProduct("supplement", s.id, s.name)}
+                            className="p-1 text-text-muted hover:text-red-500 shrink-0"
+                            title="删除补剂"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+
+                        {/* 一键计划频次切换 */}
+                        <div className="flex items-center justify-between pt-1.5 border-t border-divider/60">
+                          <span className="text-[11px] text-text-secondary dark:text-gray-400 font-medium">
+                            打卡计划频次:
                           </span>
-                        </div>
-                        {/* 穿透展示成分 */}
-                        <div className="flex flex-wrap gap-1 mt-1">
-                          {Object.entries(s.nutrients || {}).map(([key, val]) => (
-                            <span
-                              key={key}
-                              className="text-[10px] bg-gray-100 dark:bg-gray-800 text-text-secondary dark:text-gray-300 px-1.5 py-0.2 rounded font-medium"
+                          <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-800 p-0.5 rounded-xl">
+                            <button
+                              type="button"
+                              onClick={() => handleSetScheduleFrequency(s.id, "daily")}
+                              className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${
+                                currentFreq === "daily"
+                                  ? "bg-emerald-600 text-white shadow-xs"
+                                  : "text-text-secondary dark:text-gray-300 hover:text-text-primary"
+                              }`}
                             >
-                              {key === "vitamin_d"
-                                ? "维D"
-                                : key === "calcium"
-                                ? "钙"
-                                : key === "vitamin_a"
-                                ? "维A"
-                                : key === "iron"
-                                ? "铁"
-                                : key === "zinc"
-                                ? "锌"
-                                : key === "dha"
-                                ? "DHA"
-                                : key}
-                              : {val.amount}
-                              {val.unit}
-                            </span>
-                          ))}
+                              每日服
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleSetScheduleFrequency(s.id, "alternate_day")}
+                              className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${
+                                currentFreq === "alternate_day"
+                                  ? "bg-purple-600 text-white shadow-xs"
+                                  : "text-text-secondary dark:text-gray-300 hover:text-text-primary"
+                              }`}
+                            >
+                              隔天轮换
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleSetScheduleFrequency(s.id, "none")}
+                              className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${
+                                currentFreq === "none"
+                                  ? "bg-gray-300 dark:bg-gray-600 text-text-primary dark:text-white"
+                                  : "text-text-muted hover:text-text-secondary"
+                              }`}
+                            >
+                              暂停
+                            </button>
+                          </div>
                         </div>
                       </div>
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        <button
-                          type="button"
-                          onClick={() => handleCreateSchedule(s.id, "daily")}
-                          className="px-2 py-1 bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold rounded-lg border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100"
-                        >
-                          + 加入计划
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteProduct("supplement", s.id, s.name)}
-                          className="p-1 text-text-muted hover:text-red-500"
-                          title="删除补剂"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
-                    </div>
-                  ))
+                    );
+                  })
                 ) : (
                   <div className="p-3 bg-gray-50 dark:bg-[#251D25] rounded-2xl text-center border border-dashed border-divider">
                     <p className="text-xs text-text-muted">暂无使用中的补剂，可在下方快速导入 Witsbb、星鲨或伊可新</p>
@@ -847,44 +963,54 @@ export function ProductCatalogModal({ isOpen, onClose, babyId, onUpdated }: Prod
                 </div>
 
                 {/* 预置列表 */}
-                <div className="grid grid-cols-1 gap-1.5 max-h-60 overflow-y-auto pr-0.5">
-                  {filteredPresetSupplements.map((p, idx) => (
-                    <div
-                      key={idx}
-                      className="flex items-center justify-between p-2.5 rounded-2xl bg-white dark:bg-[#251D25] hover:bg-emerald-50/50 border border-gray-200/80 dark:border-gray-800 transition-colors shadow-2xs"
-                    >
-                      <div className="truncate pr-2">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-xs font-bold text-text-primary dark:text-white truncate block">
-                            {p.name}
-                          </span>
-                          <span className="text-[10px] px-1.5 py-0.2 bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 font-bold rounded">
-                            {p.unitName || "剂"}
+                <div className="grid grid-cols-1 gap-1.5 pr-0.5">
+                  {filteredPresetSupplements.map((p, idx) => {
+                    const existing = supplements.find((item) => item.name === p.name);
+                    const sched = existing ? schedules.find((sc) => sc.productId === existing.id && sc.isActive) : null;
+                    return (
+                      <div
+                        key={idx}
+                        className="flex items-center justify-between p-2.5 rounded-2xl bg-white dark:bg-[#251D25] hover:bg-emerald-50/50 border border-gray-200/80 dark:border-gray-800 transition-colors shadow-2xs"
+                      >
+                        <div className="truncate pr-2">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-xs font-bold text-text-primary dark:text-white truncate block">
+                              {p.name}
+                            </span>
+                            <span className="text-[10px] px-1.5 py-0.2 bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 font-bold rounded">
+                              {p.unitName || "剂"}
+                            </span>
+                          </div>
+                          <span className="text-[10px] text-text-secondary dark:text-gray-300 block truncate mt-0.5">
+                            {p.notes || p.brand}
                           </span>
                         </div>
-                        <span className="text-[10px] text-text-secondary dark:text-gray-300 block truncate mt-0.5">
-                          {p.notes || p.brand}
-                        </span>
+                        {existing ? (
+                          <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/70 px-2.5 py-1 rounded-xl border border-emerald-200 dark:border-emerald-800 shrink-0">
+                            {sched ? (sched.frequency === "daily" ? "✓ 每日计划中" : "✓ 隔天轮换中") : "✓ 已在库中"}
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handleImportPresetSupp(p, "daily")}
+                            className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[11px] font-bold shrink-0 shadow-xs transition-colors cursor-pointer"
+                          >
+                            + 加入计划
+                          </button>
+                        )}
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => handleImportPresetSupp(p)}
-                        className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[11px] font-bold shrink-0 shadow-xs transition-colors cursor-pointer"
-                      >
-                        + 导入
-                      </button>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             </div>
           )}
 
-          {/* ==================== TAB 3: 宝宝补剂计划 ==================== */}
+          {/* ==================== TAB 3: 宝宝补剂计划汇总 ==================== */}
           {activeTab === "schedule" && (
             <div className="space-y-3">
               <span className="text-[11px] font-bold text-text-secondary uppercase block px-1">
-                宝宝补剂服用计划与轮换守护
+                宝宝补剂服用计划与轮换守护 ({schedules.length})
               </span>
 
               {schedules.length > 0 ? (
@@ -916,7 +1042,7 @@ export function ProductCatalogModal({ isOpen, onClose, babyId, onUpdated }: Prod
                   <Calendar size={24} className="mx-auto text-text-muted" />
                   <p className="text-xs font-bold text-text-primary dark:text-white">暂未配置补剂计划</p>
                   <p className="text-[11px] text-text-secondary dark:text-gray-300 leading-relaxed max-w-xs mx-auto">
-                    切换到「补剂库」标签，在补剂卡片上点击「+ 加入计划」即可建立日常打卡与过量安全防线。
+                    切换到「补剂与计划」标签，点击「+ 加入计划」即可一键导入并建立日常打卡防线。
                   </p>
                 </div>
               )}
@@ -925,9 +1051,16 @@ export function ProductCatalogModal({ isOpen, onClose, babyId, onUpdated }: Prod
         </div>
 
         {/* Footer */}
-        <div className="pt-3 border-t border-divider flex justify-end">
-          <CuteButton variant="primary" size="sm" onClick={onClose}>
-            完成
+        <div className="pt-3 border-t border-divider flex items-center justify-between gap-2 shrink-0">
+          <span className="text-[11px] text-text-secondary dark:text-gray-400 font-medium">
+            {activeTab === "formula"
+              ? `已配置 ${formulas.length} 款奶粉`
+              : activeTab === "supplement"
+              ? `已添加 ${supplements.length} 种补剂`
+              : `已设定 ${schedules.length} 项计划`}
+          </span>
+          <CuteButton variant="primary" size="sm" onClick={handleModalClose} className="px-6 shadow-button">
+            确认并完成
           </CuteButton>
         </div>
       </div>

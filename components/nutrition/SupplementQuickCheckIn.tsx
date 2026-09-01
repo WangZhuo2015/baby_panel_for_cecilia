@@ -4,19 +4,25 @@ import { useState, useEffect, useCallback } from "react";
 import { Plus, Check, AlertTriangle, Sparkles, RefreshCw, ShieldAlert, X } from "lucide-react";
 import { CuteCard } from "@/components/ui/CuteCard";
 import { CuteButton } from "@/components/ui/CuteButton";
+import { getLocalDateStr } from "@/lib/date";
 import type { SupplementSchedule, SupplementProduct, ConflictCheckResult } from "@/types/nutrition";
 
 export interface SupplementQuickCheckInProps {
   babyId?: string;
+  date?: string;
+  refreshKey?: number;
   onRecordSuccess?: () => void;
   className?: string;
 }
 
-export function SupplementQuickCheckIn({ babyId, onRecordSuccess, className = "" }: SupplementQuickCheckInProps) {
+export function SupplementQuickCheckIn({ babyId, date, refreshKey, onRecordSuccess, className = "" }: SupplementQuickCheckInProps) {
   const [schedules, setSchedules] = useState<SupplementSchedule[]>([]);
   const [supplements, setSupplements] = useState<SupplementProduct[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [submittingId, setSubmittingId] = useState<string | null>(null);
+
+  const targetDate = date || getLocalDateStr();
+  const isToday = targetDate === getLocalDateStr();
 
   // 冲突拦截弹窗状态
   const [conflictModal, setConflictModal] = useState<{
@@ -35,7 +41,7 @@ export function SupplementQuickCheckIn({ babyId, onRecordSuccess, className = ""
     try {
       setLoading(true);
       const [schedulesRes, productsRes] = await Promise.all([
-        fetch(`/api/nutrition/schedules${babyId ? `?babyId=${babyId}` : ""}`),
+        fetch(`/api/nutrition/schedules?date=${targetDate}${babyId ? `&babyId=${babyId}` : ""}`),
         fetch("/api/nutrition/products?type=supplement"),
       ]);
 
@@ -52,10 +58,21 @@ export function SupplementQuickCheckIn({ babyId, onRecordSuccess, className = ""
     } finally {
       setLoading(false);
     }
-  }, [babyId]);
+  }, [babyId, targetDate]);
 
   useEffect(() => {
     fetchData();
+  }, [fetchData, refreshKey]);
+
+  // 全局营养/计划变动自动刷新监听
+  useEffect(() => {
+    const handleUpdate = () => {
+      fetchData();
+    };
+    window.addEventListener("baby:nutrition-updated", handleUpdate);
+    return () => {
+      window.removeEventListener("baby:nutrition-updated", handleUpdate);
+    };
   }, [fetchData]);
 
   const handleCheckIn = async (product: SupplementProduct, forceOverride = false) => {
@@ -69,6 +86,7 @@ export function SupplementQuickCheckIn({ babyId, onRecordSuccess, className = ""
           productId: product.id,
           dose: product.defaultDose || 1.0,
           unitName: product.unitName,
+          date: targetDate,
           forceOverride,
         }),
       });
@@ -89,6 +107,7 @@ export function SupplementQuickCheckIn({ babyId, onRecordSuccess, className = ""
         setConflictModal({ isOpen: false, product: null, warnings: [], details: [] });
         await fetchData();
         if (onRecordSuccess) onRecordSuccess();
+        window.dispatchEvent(new CustomEvent("baby:nutrition-updated"));
       } else {
         const err = await res.json();
         alert(err.error || "打卡失败，请重试");
@@ -122,7 +141,9 @@ export function SupplementQuickCheckIn({ babyId, onRecordSuccess, className = ""
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className="text-sm">💊</span>
-            <span className="text-xs font-bold text-emerald-950">今日补剂打卡</span>
+            <span className="text-xs font-bold text-emerald-950">
+              {isToday ? "今日补剂打卡" : `${targetDate} 补剂打卡`}
+            </span>
           </div>
           <RefreshCw size={12} className="animate-spin text-emerald-600" />
         </div>
@@ -136,9 +157,11 @@ export function SupplementQuickCheckIn({ babyId, onRecordSuccess, className = ""
         <div className="flex items-center justify-between mb-2.5">
           <div className="flex items-center gap-1.5">
             <span className="text-sm">💊</span>
-            <h3 className="text-xs font-bold text-emerald-950">今日补剂打卡</h3>
+            <h3 className="text-xs font-bold text-emerald-950">
+              {isToday ? "今日补剂打卡" : `${targetDate} 补剂打卡`}
+            </h3>
             <span className="text-[10px] text-emerald-700 bg-emerald-100/70 px-1.5 py-0.2 rounded-full font-bold">
-              安全守护中
+              {isToday ? "安全守护中" : "指定日期录入"}
             </span>
           </div>
           <button
@@ -187,7 +210,7 @@ export function SupplementQuickCheckIn({ babyId, onRecordSuccess, className = ""
                     {isCompleted ? (
                       <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-emerald-100 text-emerald-700 text-xs font-bold shadow-2xs">
                         <Check size={13} strokeWidth={3} />
-                        今日已服
+                        {isToday ? "今日已服" : "当日已服"}
                       </span>
                     ) : (
                       <button
@@ -201,7 +224,7 @@ export function SupplementQuickCheckIn({ babyId, onRecordSuccess, className = ""
                         ) : (
                           <Plus size={13} strokeWidth={2.5} />
                         )}
-                        打卡
+                        {isToday ? "打卡" : "补录"}
                       </button>
                     )}
                   </div>
@@ -221,66 +244,70 @@ export function SupplementQuickCheckIn({ babyId, onRecordSuccess, className = ""
 
       {/* ⚠️ 补剂冲突与过量拦截弹窗 */}
       {conflictModal.isOpen && conflictModal.product && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/65 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-white dark:bg-[#1E171E] text-text-primary dark:text-gray-100 rounded-3xl p-5 max-w-sm w-full shadow-2xl border border-amber-400 space-y-4">
-            <div className="flex items-start justify-between">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/65 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-white dark:bg-[#1E171E] text-text-primary dark:text-gray-100 rounded-3xl p-4 sm:p-5 max-w-sm w-full max-h-[90dvh] flex flex-col shadow-2xl border border-amber-400 overflow-hidden">
+            {/* Header */}
+            <div className="flex items-start justify-between pb-3 border-b border-divider shrink-0">
               <div className="flex items-center gap-2">
-                <div className="w-10 h-10 rounded-2xl bg-amber-100 text-amber-600 flex items-center justify-center shrink-0">
+                <div className="w-10 h-10 rounded-2xl bg-amber-100 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
                   <ShieldAlert size={22} />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-text-primary">补剂冲突与过量警示</h3>
-                  <p className="text-[11px] text-amber-700 font-semibold">Conflict Guard 拦截提醒</p>
+                  <h3 className="text-sm font-bold text-text-primary dark:text-white">补剂冲突与过量警示</h3>
+                  <p className="text-[11px] text-amber-700 dark:text-amber-400 font-semibold">Conflict Guard 拦截提醒</p>
                 </div>
               </div>
               <button
                 onClick={() => setConflictModal({ isOpen: false, product: null, warnings: [], details: [] })}
-                className="p-1 rounded-full text-text-muted hover:bg-gray-100"
+                className="p-1 rounded-full text-text-muted hover:bg-gray-100 dark:hover:bg-gray-800"
               >
                 <X size={16} />
               </button>
             </div>
 
-            {/* 警告消息 */}
-            <div className="p-3 bg-amber-50 rounded-2xl border border-amber-200 text-xs text-amber-900 space-y-1.5">
-              {conflictModal.warnings.map((w, i) => (
-                <div key={i} className="flex items-start gap-1.5 leading-relaxed">
-                  <AlertTriangle size={14} className="text-amber-600 shrink-0 mt-0.5" />
-                  <span>{w}</span>
-                </div>
-              ))}
-            </div>
-
-            {/* 详细指标叠加 */}
-            {conflictModal.details.length > 0 && (
-              <div className="space-y-1.5 bg-gray-50 p-2.5 rounded-2xl border border-gray-200">
-                <span className="text-[10px] font-bold text-text-secondary uppercase block">
-                  预计叠加摄入总量
-                </span>
-                {conflictModal.details.map((d) => (
-                  <div key={d.nutrientId} className="flex items-center justify-between text-xs py-0.5">
-                    <span className="text-text-secondary">{d.nutrientName}</span>
-                    <span className={d.isExceeded ? "text-red-600 font-bold" : "text-text-primary font-medium"}>
-                      {d.projectedTotal} {d.unit}
-                      {d.ul ? ` (上限 ${d.ul})` : ""}
-                    </span>
+            {/* Scrollable Body */}
+            <div className="flex-1 min-h-0 overflow-y-auto space-y-3 py-2 pr-0.5 overscroll-contain">
+              {/* 警告消息 */}
+              <div className="p-3 bg-amber-50 dark:bg-amber-950/40 rounded-2xl border border-amber-200 dark:border-amber-900 text-xs text-amber-900 dark:text-amber-200 space-y-1.5">
+                {conflictModal.warnings.map((w, i) => (
+                  <div key={i} className="flex items-start gap-1.5 leading-relaxed">
+                    <AlertTriangle size={14} className="text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                    <span>{w}</span>
                   </div>
                 ))}
               </div>
-            )}
+
+              {/* 详细指标叠加 */}
+              {conflictModal.details.length > 0 && (
+                <div className="space-y-1.5 bg-gray-50 dark:bg-[#251D25] p-2.5 rounded-2xl border border-gray-200 dark:border-gray-800">
+                  <span className="text-[10px] font-bold text-text-secondary uppercase block">
+                    预计叠加摄入总量
+                  </span>
+                  {conflictModal.details.map((d) => (
+                    <div key={d.nutrientId} className="flex items-center justify-between text-xs py-0.5">
+                      <span className="text-text-secondary dark:text-gray-300">{d.nutrientName}</span>
+                      <span className={d.isExceeded ? "text-red-600 font-bold" : "text-text-primary dark:text-white font-medium"}>
+                        {d.projectedTotal} {d.unit}
+                        {d.ul ? ` (上限 ${d.ul})` : ""}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
 
             {/* 按钮 */}
-            <div className="flex gap-2 pt-1">
+            <div className="flex gap-2 pt-3 border-t border-divider shrink-0">
               <button
                 type="button"
                 onClick={() => setConflictModal({ isOpen: false, product: null, warnings: [], details: [] })}
-                className="flex-1 py-2.5 rounded-full border border-gray-300 text-xs text-text-secondary font-bold hover:bg-gray-50"
+                className="flex-1 py-2.5 rounded-full border border-gray-300 dark:border-gray-700 text-xs text-text-secondary dark:text-gray-300 font-bold hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
               >
                 取消打卡
               </button>
               <CuteButton
                 variant="primary"
-                className="flex-1 text-xs"
+                className="flex-1 text-xs shadow-button"
                 onClick={() => {
                   if (conflictModal.product) {
                     handleCheckIn(conflictModal.product, true);

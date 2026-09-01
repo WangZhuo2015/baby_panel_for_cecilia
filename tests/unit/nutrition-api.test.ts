@@ -112,6 +112,7 @@ test("API: Nutrition Products, Schedules, Records, and Analysis Domain", async (
 
   // 3. Test Records API (with Check-in & Conflict Guard)
   console.log("-> Testing Nutrition Records API...");
+  const yesterday = "2026-08-31";
   const createRecordReq = new Request("http://localhost:3000/api/nutrition/records", {
     method: "POST",
     headers: authHeaders,
@@ -128,6 +129,25 @@ test("API: Nutrition Products, Schedules, Records, and Analysis Domain", async (
   assert.equal(createRecordRes.status, 201);
   const recordData = await createRecordRes.json();
   assert.ok(recordData.record.id);
+
+  // Verify schedule status for today is completed, while yesterday is not completed
+  const getTodaySchedulesReq = new Request(`http://localhost:3000/api/nutrition/schedules?babyId=${baby.id}&date=${today}`, {
+    method: "GET",
+    headers: authHeaders,
+  });
+  const todaySchedulesRes = await schedulesRoute.GET(getTodaySchedulesReq);
+  const todaySchedulesData = await todaySchedulesRes.json();
+  const todayTargetSched = todaySchedulesData.schedules.find((s: any) => s.id === createdSchedule.id);
+  assert.equal(todayTargetSched?.isCompletedToday, true);
+
+  const getYesterdaySchedulesReq = new Request(`http://localhost:3000/api/nutrition/schedules?babyId=${baby.id}&date=${yesterday}`, {
+    method: "GET",
+    headers: authHeaders,
+  });
+  const yestSchedulesRes = await schedulesRoute.GET(getYesterdaySchedulesReq);
+  const yestSchedulesData = await yestSchedulesRes.json();
+  const yestTargetSched = yestSchedulesData.schedules.find((s: any) => s.id === createdSchedule.id);
+  assert.equal(yestTargetSched?.isCompletedToday, false);
 
   // Duplicate Check-in warning test
   const dupRecordReq = new Request("http://localhost:3000/api/nutrition/records", {

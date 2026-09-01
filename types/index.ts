@@ -469,4 +469,6 @@ export interface MedicalOcrResponse {
 
 // ===== Nutrition & Supplement Export =====
 export * from "./nutrition";
+export * from "./daily-summary";
+
 

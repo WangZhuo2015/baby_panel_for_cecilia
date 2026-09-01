@@ -35,6 +35,7 @@ import type {
   WeatherData,
   DataRelease,
   MedicalReport,
+  AiDailySummaryResult,
 } from "@/types";
 
 interface BabyStore {
@@ -50,6 +51,9 @@ interface BabyStore {
   foodLogRecords: FoodLogRecord[];
   growthMeasurements: GrowthMeasurement[];
   dailySummary: DailySummary | null;
+  aiDailySummary: AiDailySummaryResult | null;
+  aiDailySummaryLoading: boolean;
+  aiDailySummaryError: string | null;
   timeline: TimelineEntry[];
   weather: WeatherData | null;
   foodItems: FoodItem[];
@@ -85,6 +89,7 @@ interface BabyStore {
   fetchFoodLogRecords: (date?: string, force?: boolean) => Promise<void>;
   fetchGrowthMeasurements: (force?: boolean) => Promise<void>;
   fetchDailySummary: (date?: string, force?: boolean) => Promise<void>;
+  fetchAiDailySummary: (date?: string, force?: boolean) => Promise<AiDailySummaryResult | null>;
   fetchTimeline: (date?: string, force?: boolean) => Promise<void>;
   fetchWeather: (lat?: number, lon?: number, city?: string, force?: boolean) => Promise<void>;
   fetchFoodItems: (status?: string, force?: boolean) => Promise<void>;

@@ -88,6 +88,17 @@ export default function NutritionPage() {
     loadData();
   }, [loadData]);
 
+  // 监听全局补剂与奶粉计划变更，无需手动刷新即可实时更新
+  useEffect(() => {
+    const handleUpdate = () => {
+      loadData();
+    };
+    window.addEventListener("baby:nutrition-updated", handleUpdate);
+    return () => {
+      window.removeEventListener("baby:nutrition-updated", handleUpdate);
+    };
+  }, [loadData]);
+
   if (!baby) {
     return (
       <div className="px-4 pt-safe-12 pb-36 max-w-md mx-auto text-center space-y-4">
@@ -248,8 +259,8 @@ export default function NutritionPage() {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
         {/* ===== 左栏：补剂打卡、核心指标与趋势 (Col 7) ===== */}
         <div className="lg:col-span-7 space-y-5">
-          {/* 💊 今日补剂快速打卡与安全守护 */}
-          <SupplementQuickCheckIn babyId={baby.id} onRecordSuccess={loadData} />
+          {/* 💊 补剂快速打卡与安全守护 */}
+          <SupplementQuickCheckIn babyId={baby.id} date={selectedDate} onRecordSuccess={loadData} />
 
           {/* 🌟 核心指标卡片矩阵 (Progress Rings & Target Rate) */}
           {dailyAnalysis && (
@@ -319,7 +330,10 @@ export default function NutritionPage() {
       {/* 产品库管理弹窗 */}
       <ProductCatalogModal
         isOpen={isCatalogOpen}
-        onClose={() => setIsCatalogOpen(false)}
+        onClose={() => {
+          setIsCatalogOpen(false);
+          loadData();
+        }}
         babyId={baby.id}
         onUpdated={loadData}
       />

@@ -58,8 +58,8 @@ export function createBabyPanelTools(ctx: BabyToolContext): AgentTool[] {
   // Deep service delegation: daily summary via RecordService aggregates feeding/sleep/diaper/food
   const getDailySummary: AgentTool = {
     name: "get_daily_summary",
-    label: "今日汇总",
-    description: "获取指定日期的累计奶量(ml)、睡眠时长(分钟)、换尿布次数、辅食次数。日期默认今天。",
+    label: "今日总结与全量汇总",
+    description: "获取指定日期的全量日常作息汇总（奶量ml、母乳时长、睡眠时长与小睡段数、换尿布/排便形态、辅食打卡与食材列表、维生素D/补剂打卡）。日期默认今天。",
     parameters: Type.Object({
       date: Type.Optional(Type.String({ description: "YYYY-MM-DD，默认今天" })),
     }),

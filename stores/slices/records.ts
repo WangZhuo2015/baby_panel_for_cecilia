@@ -2,7 +2,8 @@
 import { enqueueOutbox, isRetryableSubmitError } from "@/lib/outbox";
 import { _fetchedAt, isFresh, markFetched, invalidateCache, dedup, toQuery } from "./helpers";
 import { request, isAuthError } from "./helpers";
-import type { Baby, FeedingRecord, SleepRecord, DiaperRecord, FoodLogRecord, DailySummary, TimelineEntry } from "@/types";
+import { getLocalDateStr } from "@/lib/date";
+import type { Baby, FeedingRecord, SleepRecord, DiaperRecord, FoodLogRecord, DailySummary, TimelineEntry, AiDailySummaryResult } from "@/types";
 
 export interface RecordsSlice {
   baby: Baby | null;
@@ -12,6 +13,9 @@ export interface RecordsSlice {
   foodLogRecords: FoodLogRecord[];
   timeline: TimelineEntry[];
   dailySummary: DailySummary | null;
+  aiDailySummary: AiDailySummaryResult | null;
+  aiDailySummaryLoading: boolean;
+  aiDailySummaryError: string | null;
   fetchBaby: (force?: boolean) => Promise<void>;
   saveBaby: (data: { nickname: string; birthDate: string; gender: string; gestationalAge?: number; avatarUrl?: string }) => Promise<void>;
   fetchFeedingRecords: (date?: string, force?: boolean) => Promise<void>;
@@ -20,6 +24,7 @@ export interface RecordsSlice {
   fetchFoodLogRecords: (date?: string, force?: boolean) => Promise<void>;
   fetchDailySummary: (date?: string, force?: boolean) => Promise<void>;
   fetchTimeline: (date?: string, force?: boolean) => Promise<void>;
+  fetchAiDailySummary: (date?: string, force?: boolean) => Promise<AiDailySummaryResult | null>;
   refreshAll: (date?: string) => Promise<void>;
   addFeedingRecord: (record: Partial<FeedingRecord>) => Promise<void>;
   addSleepRecord: (record: Partial<SleepRecord>) => Promise<void>;
@@ -37,6 +42,9 @@ export const createRecordsSlice = (set: any, get: any): RecordsSlice => ({
   foodLogRecords: [],
   dailySummary: null,
   timeline: [],
+  aiDailySummary: null,
+  aiDailySummaryLoading: false,
+  aiDailySummaryError: null,
 
   fetchBaby: async (force?: boolean) => {
     if (!get().user && !get().authLoading) return;
@@ -177,8 +185,41 @@ export const createRecordsSlice = (set: any, get: any): RecordsSlice => ({
     });
   },
 
+  fetchAiDailySummary: async (date?: string, force?: boolean) => {
+    if (!get().user && !get().authLoading) return null;
+    const babyId = get().baby?.id;
+    const key = `aiDailySummary:${babyId || ''}:${date || ''}`;
+    if (!force && get().aiDailySummary && get().aiDailySummary.date === (date || getLocalDateStr()) && isFresh(key)) {
+      return get().aiDailySummary;
+    }
+    if (force) invalidateCache(key);
+    set({ aiDailySummaryLoading: true, aiDailySummaryError: null });
+    return dedup(key, async () => {
+      try {
+        const query = toQuery({ date, babyId, force: force ? "1" : undefined });
+        const res = await request<{ summary: AiDailySummaryResult }>(`/api/ai/daily-summary${query}`);
+        if (res?.summary) {
+          set({ aiDailySummary: res.summary, aiDailySummaryLoading: false, aiDailySummaryError: null });
+          markFetched(key);
+          return res.summary;
+        }
+        set({ aiDailySummaryLoading: false });
+        return null;
+      } catch (e: any) {
+        if (!isAuthError(e)) {
+          console.error("Failed to fetch AI daily summary:", e);
+          set({ aiDailySummaryLoading: false, aiDailySummaryError: e?.message || "获取 AI 总结失败" });
+        } else {
+          set({ aiDailySummaryLoading: false });
+        }
+        return null;
+      }
+    });
+  },
+
   refreshAll: async (date?: string) => {
     invalidateCache("dailySummary");
+    invalidateCache("aiDailySummary");
     invalidateCache("timeline");
     invalidateCache("feedingRecords");
     invalidateCache("sleepRecords");
@@ -189,6 +230,7 @@ export const createRecordsSlice = (set: any, get: any): RecordsSlice => ({
     await Promise.allSettled([
       get().fetchBaby(true),
       get().fetchDailySummary(date, true),
+      get().fetchAiDailySummary(date, true),
       get().fetchTimeline(date, true),
       get().fetchFeedingRecords(date, true),
       get().fetchSleepRecords(true),
