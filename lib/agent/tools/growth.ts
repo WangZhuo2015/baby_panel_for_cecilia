@@ -29,7 +29,9 @@ export function makeRecordGrowthTool(ctx: { userId: string; baby: Baby }): Agent
       const weightKg = optionalNumber((params as any).weightKg, 0.5, 50, "体重kg");
       const heightCm = optionalNumber((params as any).heightCm, 20, 150, "身长cm");
       const headCircumferenceCm = optionalNumber((params as any).headCircumferenceCm, 20, 60, "头围cm");
-      if (weightKg == null && heightCm == null && headCircumferenceCm == null) fail("请至少提供体重、身长或头围一项");
+      if (weightKg == null && heightCm == null && headCircumferenceCm == null) {
+        fail("生长记录缺少测量数值（体重/身长/头围），请先向家长追问确认具体数值后再记录");
+      }
       // Use service for idempotency + percentile, but compute percentile for message
       const ageDetail = calculateAgeDetail(ctx.baby.birthDate, date);
       const gender = ctx.baby.gender || "female";

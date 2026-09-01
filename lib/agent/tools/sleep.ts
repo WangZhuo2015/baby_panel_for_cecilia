@@ -22,7 +22,13 @@ export function makeRecordSleepTool(ctx: { userId: string; baby: Baby }): AgentT
       const params = raw as Params;
       let start = String((params.startTime ?? (params as any).start_time ?? (params as any).start ?? "") as string).trim();
       let end = String((params.endTime ?? (params as any).end_time ?? (params as any).end ?? "") as string).trim();
-      const date = typeof params.date === "string" && isValidDateStr(params.date) ? params.date : getLocalDateStr();
+      const hasExplicitTime = TIME_RE.test(start) && TIME_RE.test(end);
+      const hasDuration = typeof (params as any).durationMinutes === "number" || typeof (params as any).duration_minutes === "number" || typeof (params as any).duration === "number";
+
+      if (!hasExplicitTime && !hasDuration && !params.notes) {
+        fail("睡眠记录缺少具体入睡与醒来时间（或睡眠时长），请先向家长追问确认后再记录");
+      }
+
       if (!TIME_RE.test(start) || !TIME_RE.test(end)) {
         const duration = Number((params as any).durationMinutes ?? (params as any).duration_minutes ?? (params as any).duration ?? 60);
         const now = new Date();
@@ -30,6 +36,7 @@ export function makeRecordSleepTool(ctx: { userId: string; baby: Baby }): AgentT
         start = getLocalTimeStr(startD);
         end = getLocalTimeStr(now);
       }
+      const date = typeof params.date === "string" && isValidDateStr(params.date) ? params.date : getLocalDateStr();
       const startIso = hhmmToIso(start, date);
       let endIso = hhmmToIso(end, date);
       if (new Date(endIso).getTime() <= new Date(startIso).getTime()) {

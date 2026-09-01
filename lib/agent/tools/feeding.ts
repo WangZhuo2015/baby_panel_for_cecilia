@@ -4,7 +4,7 @@ import { getLocalDateStr } from "@/lib/date";
 import { prisma } from "@/lib/prisma";
 import * as records from "@/lib/records/service";
 import type { Baby } from "@/generated/prisma/client";
-import { TIME_RE, hhmmToIso, optionalNumber, ok, type Params } from "./helpers";
+import { TIME_RE, hhmmToIso, optionalNumber, ok, fail, type Params } from "./helpers";
 
 export function makeRecordFeedingTool(ctx: { userId: string; baby: Baby }): AgentTool {
   return {
@@ -30,6 +30,10 @@ export function makeRecordFeedingTool(ctx: { userId: string; baby: Baby }): Agen
       const rightMinutes = optionalNumber(params.rightMinutes ?? (params as any).right_minutes, 0, 180, "rightMinutes");
       if (leftMinutes == null && (typeof params.durationMinutes === "number" || typeof (params as any).duration_minutes === "number")) {
         leftMinutes = optionalNumber((params as any).durationMinutes ?? (params as any).duration_minutes, 0, 180, "durationMinutes");
+      }
+
+      if (amountMl == null && leftMinutes == null && rightMinutes == null && !params.notes) {
+        fail("喂养记录缺少关键数据（奶量 ml 或亲喂时长分钟），请先向家长追问确认具体数值后再记录");
       }
       let recordTimestamp: string | undefined;
       const rawTime = (params.timestamp ?? (params as any).time ?? (params as any).startTime ?? (params as any).start_time) as unknown;

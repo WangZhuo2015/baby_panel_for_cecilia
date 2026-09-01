@@ -4,7 +4,7 @@ import { getLocalDateStr, getLocalTimeStr, isValidDateStr } from "@/lib/date";
 import { prisma } from "@/lib/prisma";
 import * as records from "@/lib/records/service";
 import type { Baby } from "@/generated/prisma/client";
-import { TIME_RE, ok, type Params } from "./helpers";
+import { TIME_RE, ok, fail, type Params } from "./helpers";
 
 export function makeRecordFoodTool(ctx: { userId: string; baby: Baby }): AgentTool {
   return {
@@ -30,7 +30,9 @@ export function makeRecordFoodTool(ctx: { userId: string; baby: Baby }): AgentTo
       let foods: string[] = [];
       if (Array.isArray(rawFoods)) foods = (rawFoods as unknown[]).map((f) => String(f || "").trim().slice(0, 20)).filter(Boolean).slice(0, 8) as string[];
       else if (typeof rawFoods === "string" && rawFoods.trim()) foods = rawFoods.split(/[,，、\s]+/).map((f) => f.trim().slice(0, 20)).filter(Boolean).slice(0, 8);
-      if (foods.length === 0) foods = ["辅食"];
+      if (foods.length === 0 || (foods.length === 1 && ["辅食", "吃辅食", "辅食餐点", "食物", "开饭"].includes(foods[0]))) {
+        fail("辅食记录缺少具体食材名称（如高铁米粉、胡萝卜泥等），请先向家长追问吃了什么食材后再记录");
+      }
       const record = await records.createFoodLog(
         { userId: ctx.userId, babyId: ctx.baby.id, baby: ctx.baby },
         {
