@@ -17,10 +17,10 @@ const QuickActionCardImpl: React.FC<QuickActionCardProps> = ({
     <button
       type="button"
       onClick={onClick}
-      className="btn-press flex flex-col items-center justify-center gap-2 w-full rounded-[20px] min-h-[88px] py-4 px-3 shadow-card bg-card cursor-pointer transition-all active:scale-[0.97]"
+      className="card-hover-lift flex flex-col items-center justify-center gap-2 w-full rounded-[20px] min-h-[88px] py-4 px-3 shadow-card bg-card cursor-pointer transition-all duration-200 hover:-translate-y-1.5 active:scale-[0.94] group"
     >
       <div
-        className="flex items-center justify-center w-12 h-12 rounded-full text-white"
+        className="flex items-center justify-center w-12 h-12 rounded-full text-white shadow-xs transition-transform duration-200 group-hover:scale-110 group-active:scale-95"
         style={{ backgroundColor: color }}
       >
         {icon}

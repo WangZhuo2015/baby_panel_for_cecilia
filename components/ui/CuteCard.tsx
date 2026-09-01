@@ -13,14 +13,14 @@ export const CuteCard: React.FC<CuteCardProps> = ({
   onClick,
   variant = 'default',
 }) => {
-  const baseStyles = 'rounded-[24px] p-4 shadow-soft';
+  const baseStyles = 'rounded-[24px] p-4 shadow-soft transition-all duration-200';
 
   const variantStyles =
     variant === 'gradient'
-      ? 'bg-gradient-to-br from-primary-light to-primary-soft/40'
+      ? 'bg-gradient-to-br from-primary-light to-primary-soft/40 border border-primary/20'
       : 'bg-card';
 
-  const pressable = onClick ? 'card-press cursor-pointer' : '';
+  const pressable = onClick ? 'card-hover-lift card-press cursor-pointer' : '';
 
   return (
     <div

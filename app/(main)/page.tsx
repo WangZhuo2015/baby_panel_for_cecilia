@@ -17,6 +17,7 @@ import {
   ChevronRight,
   Camera,
   FileText,
+  MessageSquare,
 } from "lucide-react";
 import type { TimelineEntry } from "@/types";
 import { useBabyStore } from "@/stores/useBabyStore";
@@ -34,6 +35,7 @@ import { SupplementQuickCheckIn } from "@/components/nutrition/SupplementQuickCh
 import { formatIsoToLocalTime } from "@/lib/date";
 import { APP_VERSION } from "@/lib/version";
 import { openRecordDrawer, RecordDrawerType } from "@/lib/drawer-bus";
+import { openQuickAI } from "@/lib/quickai-bus";
 
 function NotificationBell() {
   const [unreadCount, setUnreadCount] = useState(0);
@@ -501,32 +503,76 @@ export default function HomePage() {
 
         {/* ===== 右栏：智能顾问、补剂打卡与环境分析 (40% / Col 5) ===== */}
         <div className="lg:col-span-5 space-y-5">
-          {/* AI Assistant Advice */}
-          <CuteCard className="bg-gradient-to-br from-primary-light to-lavender/10 border border-lavender/25 p-4.5">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-1.5">
-                <Sparkles size={16} className="text-primary" />
-                <h4 className="text-xs font-bold text-text-primary">AI 育儿温馨建议</h4>
-              </div>
+          {/* AI Assistant Advice & Unified AI Hub Launcher */}
+          <CuteCard className="bg-gradient-to-br from-primary-light via-pink-50/40 to-lavender/15 border border-primary/20 p-4.5 space-y-3.5 shadow-soft hover:shadow-elevated transition-all">
+            <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-primary to-pink-500 text-white flex items-center justify-center shadow-xs animate-float">
+                  <Sparkles size={16} />
+                </div>
+                <div>
+                  <h4 className="text-xs sm:text-sm font-bold text-text-primary">AI 育儿智能中枢</h4>
+                  <p className="text-[10px] text-text-muted">全科儿科数据库 · 智能复盘 · 视觉识别</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-1.5">
                 <button
                   onClick={handleRefreshAi}
                   disabled={aiLoading}
-                  className="text-[11px] text-text-muted hover:text-primary flex items-center gap-1 btn-press disabled:opacity-50 cursor-pointer"
+                  className="text-[11px] text-text-muted hover:text-primary flex items-center gap-1 btn-press disabled:opacity-50 cursor-pointer p-1 rounded-lg hover:bg-white/60 transition-colors"
                   title="刷新 AI 建议"
                 >
-                  <RefreshCw size={11} className={aiLoading ? "animate-spin" : ""} />
-                  刷新
+                  <RefreshCw size={12} className={aiLoading ? "animate-spin text-primary" : ""} />
                 </button>
                 <QuickAiButton
                   contextType="general"
-                  label="深度问答"
-                  contextTitle="AI 育儿专属顾问"
-                  variant="compact"
+                  label="打开 AI 中枢"
+                  contextTitle="AI 育儿智能中枢"
+                  variant="primary"
                 />
               </div>
             </div>
 
+            {/* 4 Fast AI Entry Pills */}
+            <div className="grid grid-cols-4 gap-1.5 pt-0.5">
+              <button
+                type="button"
+                onClick={() => openQuickAI({ contextTitle: "AI 育儿智能中枢", initialPrompt: "请帮我分析宝宝今天的整体作息与发育重点" })}
+                className="flex flex-col items-center justify-center p-2 rounded-xl bg-white/80 dark:bg-card/80 hover:bg-white dark:hover:bg-card border border-primary/10 hover:border-primary/30 shadow-2xs hover:shadow-xs transition-all card-hover-lift cursor-pointer group"
+              >
+                <MessageSquare size={14} className="text-primary group-hover:scale-115 transition-transform" />
+                <span className="text-[10px] font-bold mt-1 text-text-primary">问答记账</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => router.push("/daily-summary")}
+                className="flex flex-col items-center justify-center p-2 rounded-xl bg-white/80 dark:bg-card/80 hover:bg-white dark:hover:bg-card border border-primary/10 hover:border-primary/30 shadow-2xs hover:shadow-xs transition-all card-hover-lift cursor-pointer group"
+              >
+                <FileText size={14} className="text-pink-500 group-hover:scale-115 transition-transform" />
+                <span className="text-[10px] font-bold mt-1 text-text-primary">今日日报</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => openQuickAI({ contextType: "medical", contextTitle: "多模态视觉识别中枢" })}
+                className="flex flex-col items-center justify-center p-2 rounded-xl bg-white/80 dark:bg-card/80 hover:bg-white dark:hover:bg-card border border-primary/10 hover:border-primary/30 shadow-2xs hover:shadow-xs transition-all card-hover-lift cursor-pointer group"
+              >
+                <Camera size={14} className="text-blue-500 group-hover:scale-115 transition-transform" />
+                <span className="text-[10px] font-bold mt-1 text-text-primary">拍照识单</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => openQuickAI({ contextTitle: "专科题库与问答锦囊" })}
+                className="flex flex-col items-center justify-center p-2 rounded-xl bg-white/80 dark:bg-card/80 hover:bg-white dark:hover:bg-card border border-primary/10 hover:border-primary/30 shadow-2xs hover:shadow-xs transition-all card-hover-lift cursor-pointer group"
+              >
+                <Star size={14} className="text-amber-500 group-hover:scale-115 transition-transform" />
+                <span className="text-[10px] font-bold mt-1 text-text-primary">专科题库</span>
+              </button>
+            </div>
+
+            {/* AI Real-time Advice List */}
             {aiLoading ? (
               <div className="space-y-2 py-2 animate-pulse">
                 <div className="h-3 bg-primary-soft/50 rounded-full w-full" />
@@ -546,9 +592,9 @@ export default function HomePage() {
                 </div>
               </div>
             ) : aiTips && aiTips.length > 0 ? (
-              <ul className="space-y-2 text-xs text-text-primary leading-relaxed">
+              <ul className="space-y-2 text-xs text-text-primary leading-relaxed pt-1 border-t border-primary/10">
                 {aiTips.map((tip, idx) => (
-                  <li key={idx} className="flex items-start gap-2">
+                  <li key={idx} className="flex items-start gap-2 animate-slide-up">
                     <span className="w-4 h-4 rounded-full bg-primary/20 text-primary text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">
                       {idx + 1}
                     </span>
@@ -557,7 +603,7 @@ export default function HomePage() {
                 ))}
               </ul>
             ) : (
-              <p className="text-xs text-text-muted">暂无育儿建议，请点击刷新获取</p>
+              <p className="text-xs text-text-muted">暂无育儿建议，请点击右上角刷新获取</p>
             )}
           </CuteCard>
 

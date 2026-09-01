@@ -199,52 +199,186 @@ body {
   display: none;
 }
 
-/* ===== Animations ===== */
+/* ===== Rich Animations & Motion System ===== */
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(4px); }
+  from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
 @keyframes slideUp {
-  from { opacity: 0; transform: translateY(12px); }
-  to { opacity: 1; transform: translateY(0); }
+  0% { opacity: 0; transform: translateY(16px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideInRight {
+  0% { opacity: 0; transform: translateX(20px); }
+  100% { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes slideInLeft {
+  0% { opacity: 0; transform: translateX(-20px); }
+  100% { opacity: 1; transform: translateX(0); }
 }
 
 @keyframes scaleIn {
-  from { transform: scale(0.95); opacity: 0; }
-  to { transform: scale(1); opacity: 1; }
+  0% { transform: scale(0.92); opacity: 0; }
+  60% { transform: scale(1.02); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
 }
 
+@keyframes springPop {
+  0% { transform: scale(0.85); opacity: 0; }
+  60% { transform: scale(1.06); opacity: 1; }
+  85% { transform: scale(0.98); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes floatSlow {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-5px); }
+}
+
+@keyframes pulseGlow {
+  0%, 100% {
+    box-shadow: 0 0 12px rgba(255, 111, 159, 0.35), 0 4px 16px rgba(255, 111, 159, 0.2);
+  }
+  50% {
+    box-shadow: 0 0 24px rgba(255, 111, 159, 0.65), 0 6px 24px rgba(255, 111, 159, 0.4);
+  }
+}
+
+@keyframes pulseGlowAi {
+  0%, 100% {
+    box-shadow: 0 0 14px rgba(185, 138, 245, 0.35), 0 4px 18px rgba(255, 111, 159, 0.25);
+  }
+  50% {
+    box-shadow: 0 0 28px rgba(185, 138, 245, 0.65), 0 6px 28px rgba(255, 111, 159, 0.5);
+  }
+}
+
+@keyframes shimmerSweep {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+@keyframes waveBounce {
+  0%, 100% { transform: scaleY(0.4); }
+  50% { transform: scaleY(1.1); }
+}
+
+@keyframes rotateSparkle {
+  0% { transform: rotate(0deg) scale(1); }
+  50% { transform: rotate(180deg) scale(1.15); }
+  100% { transform: rotate(360deg) scale(1); }
+}
+
+/* Animation Classes */
 .animate-fade-in {
-  animation: fadeIn 0.3s ease-out forwards;
+  animation: fadeIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 .animate-slide-up {
-  animation: slideUp 0.35s ease-out forwards;
+  animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-slide-in-right {
+  animation: slideInRight 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-slide-in-left {
+  animation: slideInLeft 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 .animate-scale-in {
-  animation: scaleIn 0.2s ease-out forwards;
+  animation: scaleIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
-/* ===== Utilities ===== */
+.animate-spring-pop {
+  animation: springPop 0.45s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+}
+
+.animate-float {
+  animation: floatSlow 3.2s ease-in-out infinite;
+}
+
+.animate-pulse-glow {
+  animation: pulseGlow 2.4s ease-in-out infinite;
+}
+
+.animate-pulse-glow-ai {
+  animation: pulseGlowAi 2.8s ease-in-out infinite;
+}
+
+.animate-rotate-sparkle {
+  animation: rotateSparkle 8s linear infinite;
+}
+
+/* Stagger Animation Helpers */
+.anim-stagger-1 { animation-delay: 40ms; }
+.anim-stagger-2 { animation-delay: 80ms; }
+.anim-stagger-3 { animation-delay: 120ms; }
+.anim-stagger-4 { animation-delay: 160ms; }
+.anim-stagger-5 { animation-delay: 200ms; }
+.anim-stagger-6 { animation-delay: 240ms; }
+.anim-stagger-7 { animation-delay: 280ms; }
+.anim-stagger-8 { animation-delay: 320ms; }
+
+/* ===== Interactive Micro-Interactions ===== */
 .btn-press {
-  transition: transform 0.1s ease;
+  transition: transform 0.15s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.15s ease, opacity 0.15s ease;
 }
 .btn-press:active {
-  transform: scale(0.97);
+  transform: scale(0.95);
+}
+
+.btn-spring {
+  transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.2s ease;
+}
+.btn-spring:hover {
+  transform: translateY(-2px);
+}
+.btn-spring:active {
+  transform: scale(0.94) translateY(0);
 }
 
 .card-press {
-  transition: transform 0.15s ease;
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s ease;
 }
 .card-press:active {
   transform: scale(0.98);
 }
 
-/* ===== Toast ===== */
+.card-hover-lift {
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s ease, border-color 0.2s ease;
+}
+.card-hover-lift:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-elevated);
+}
+.card-hover-lift:active {
+  transform: scale(0.98) translateY(0);
+}
+
+/* Shimmer Loading Effect */
+.shimmer-mask {
+  position: relative;
+  overflow: hidden;
+}
+.shimmer-mask::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.45), transparent);
+  transform: translateX(-100%);
+  animation: shimmerSweep 1.8s infinite;
+}
+
+/* ===== Toast & Banners ===== */
 .toast-enter {
-  animation: slideUp 0.3s ease-out forwards;
+  animation: springPop 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
 }
 
 /* ===== PWA 反模式修复 ===== */

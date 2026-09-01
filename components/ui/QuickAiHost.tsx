@@ -18,7 +18,20 @@ export const QuickAiHost: React.FC = () => {
       setIsOpen(true);
     };
     window.addEventListener("quickai:open", handler);
-    return () => window.removeEventListener("quickai:open", handler);
+
+    // 全局快捷键 ⌘K / Ctrl+K / Ctrl+J
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && (e.key.toLowerCase() === "k" || e.key.toLowerCase() === "j")) {
+        e.preventDefault();
+        setIsOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("quickai:open", handler);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
   }, []);
 
   return (

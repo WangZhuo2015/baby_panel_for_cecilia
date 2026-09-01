@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { useRouter } from "next/navigation";
 import {
   X,
   Send,
@@ -26,11 +27,26 @@ import {
   Trash2,
   Clock,
   ChevronLeft,
+  FileText,
+  Camera,
+  Layers,
+  Lightbulb,
+  Droplets,
+  Moon,
+  Wind,
+  UtensilsCrossed,
+  ShieldCheck,
+  TrendingUp,
+  Star,
+  Activity,
+  ArrowRight,
+  RefreshCw,
 } from "lucide-react";
 import { useBabyStore } from "@/stores/useBabyStore";
 import { calculateAge } from "@/lib/age";
 import { AiActionCard, ActionCardData } from "@/components/ui/AiActionCard";
 import { useToast } from "@/components/ui/Toast";
+import type { AiDailySummaryResult } from "@/types/daily-summary";
 
 export type AiContextType =
   | "food"
@@ -42,6 +58,8 @@ export type AiContextType =
   | "feeding"
   | "diaper"
   | "general";
+
+export type AiHubTab = "chat" | "daily_summary" | "vision" | "topics";
 
 interface QuickAiModalProps {
   isOpen: boolean;
@@ -91,7 +109,7 @@ function WebSearchCitationCard({ results }: { results: SearchEvidenceItem[] }) {
   const displayResults = expanded ? results : results.slice(0, 2);
 
   return (
-    <div className="my-2 rounded-2xl bg-gradient-to-br from-blue-50/80 via-indigo-50/40 to-sky-50/30 border border-blue-200/70 p-2.5 space-y-2 text-xs">
+    <div className="my-2 rounded-2xl bg-gradient-to-br from-blue-50/80 via-indigo-50/40 to-sky-50/30 border border-blue-200/70 p-2.5 space-y-2 text-xs animate-fade-in">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-1.5 font-bold text-blue-900 text-xs">
           <Globe size={13} className="text-blue-600 animate-pulse" />
@@ -101,7 +119,7 @@ function WebSearchCitationCard({ results }: { results: SearchEvidenceItem[] }) {
           <button
             type="button"
             onClick={() => setExpanded(!expanded)}
-            className="text-[11px] font-medium text-blue-600 hover:text-blue-800 flex items-center gap-0.5 cursor-pointer"
+            className="text-[11px] font-medium text-blue-600 hover:text-blue-800 flex items-center gap-0.5 cursor-pointer btn-press"
           >
             <span>{expanded ? "收起" : `查看更多 (${results.length - 2})`}</span>
             {expanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
@@ -125,7 +143,7 @@ function WebSearchCitationCard({ results }: { results: SearchEvidenceItem[] }) {
               href={safeUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="block p-2 rounded-xl bg-white/90 hover:bg-white border border-blue-100/80 shadow-2xs transition-all hover:border-blue-300 hover:shadow-xs group"
+              className="block p-2 rounded-xl bg-white/90 hover:bg-white border border-blue-100/80 shadow-2xs transition-all hover:border-blue-300 hover:shadow-xs card-hover-lift group"
             >
               <div className="flex items-start justify-between gap-1.5">
                 <span className="font-semibold text-text-primary text-[11px] group-hover:text-blue-600 line-clamp-1 flex items-center gap-1">
@@ -257,38 +275,107 @@ const CONTEXT_META: Record<
     title: "AI 智能育儿顾问",
     emoji: "✨",
     chips: [
+      "刚才喝了120ml奶粉，记一下",
+      "下午1点半睡到3点，帮我记录",
       "今天这个月龄最需要注意什么？",
       "宝宝体温多少度算发烧？怎么物理降温？",
-      "如何建立规律舒适的每日生活作息？",
     ],
-    placeholder: "随时提问、发照片或自然语言记录日常...",
+    placeholder: "随时提问、发照片或一句话记账（如'喝了120ml奶'）...",
   },
 };
 
-/**
- * Parses out ```json:action ... ``` or ```action ... ``` blocks from assistant messages
- */
+const TOPIC_PRESETS = [
+  {
+    category: "喂养与胀气",
+    icon: Droplets,
+    color: "from-sky-500 to-blue-500",
+    contextType: "feeding" as AiContextType,
+    prompts: [
+      "当前月龄每日科学奶量标准是多少？分几次喂最合适？",
+      "宝宝吃完奶频繁吐奶溢奶，有什么防吐奶和深度拍嗝技巧？",
+      "宝宝肚子胀气鼓鼓、蹬腿哭闹，怎么做排气操与腹部按摩？",
+      "母乳亲喂与配方奶混合喂养，该如何合理安排节奏？",
+    ],
+  },
+  {
+    category: "睡眠与作息",
+    icon: Moon,
+    color: "from-purple-500 to-indigo-500",
+    contextType: "sleep" as AiContextType,
+    prompts: [
+      "当前月龄最合理的清醒间隔和作息时间表是怎样的？",
+      "宝宝白天短睡30分钟就醒，怎么科学接觉延长睡眠？",
+      "落地醒、必须要抱睡或含乳睡，如何温和培养自主入睡？",
+      "夜醒频繁（每隔1-2小时醒一次），常见原因与排查步骤是什么？",
+    ],
+  },
+  {
+    category: "辅食与营养",
+    icon: UtensilsCrossed,
+    color: "from-amber-500 to-orange-500",
+    contextType: "food" as AiContextType,
+    prompts: [
+      "当前月龄可以引入哪些新食材？制作辅食有哪些质地要求？",
+      "宝宝吃辅食出现轻微红疹或便便变稀，如何排查食物过敏？",
+      "如何科学补充维生素D、铁剂和钙？复合补剂该怎么吃？",
+      "宝宝抗拒辅食、闭嘴不吃，有什么温和引导进食的方法？",
+    ],
+  },
+  {
+    category: "生长与发育",
+    icon: TrendingUp,
+    color: "from-pink-500 to-rose-500",
+    contextType: "growth" as AiContextType,
+    prompts: [
+      "如何根据 WHO 生长曲线看懂宝宝的身长和体重百分位？",
+      "宝宝体重增长稍微放缓，需要加奶或调整营养摄入吗？",
+      "当前月龄大运动（翻身/坐立/爬行/站立）家庭训练方法有哪些？",
+      "有哪些需要警惕的发育红旗信号（Red Flags）？",
+    ],
+  },
+  {
+    category: "医学与化验单",
+    icon: FileText,
+    color: "from-blue-600 to-cyan-600",
+    contextType: "medical" as AiContextType,
+    prompts: [
+      "血常规化验单上的白细胞、中性粒细胞和CRP偏高代表什么？",
+      "宝宝发烧到了多少度需要吃退烧药（美林/泰诺林）？怎么交替？",
+      "微量元素化验单缺铁性贫血该如何正确补铁？",
+      "出现哪些伴随症状时必须立刻去儿科急诊？",
+    ],
+  },
+  {
+    category: "疫苗与疾病",
+    icon: ShieldCheck,
+    color: "from-emerald-500 to-teal-500",
+    contextType: "vaccine" as AiContextType,
+    prompts: [
+      "13价肺炎、轮状病毒、流感等自费二类疫苗推荐接种吗？",
+      "打完疫苗后发热、接种部位红肿硬结该如何护理？",
+      "宝宝轻微流鼻涕或咳嗽，可以正常如期去接种疫苗吗？",
+      "幼儿急疹和普通感冒发热在发病过程上有什么区别？",
+    ],
+  },
+];
+
 function extractActionsAndCleanMarkdown(content: string): { cleanText: string; actions: ActionCardData[] } {
   const closedRegex = /```(?:json:action|action)\s*([\s\S]*?)\s*```/g;
   const actions: ActionCardData[] = [];
   let cleanText = content;
 
-  // 收集全部闭合块：一句话多事件 → 多张待确认卡片
   const matches = [...content.matchAll(closedRegex)];
   for (const match of matches) {
     try {
       const parsed = JSON.parse(match[1].trim());
       if (actions.length < 6) actions.push(parsed);
-    } catch {
-      // 单块解析失败不影响其余
-    }
+    } catch {}
   }
   if (matches.length > 0) {
     cleanText = content.replace(closedRegex, "").trim();
     return { cleanText, actions };
   }
 
-  // Strip unclosed streaming action block from visible markdown
   const unclosedRegex = /```(?:json:action|action)[\s\S]*$/;
   if (unclosedRegex.test(content)) {
     return { cleanText: content.replace(unclosedRegex, "").trim(), actions: [] };
@@ -300,29 +387,31 @@ function extractActionsAndCleanMarkdown(content: string): { cleanText: string; a
 export const QuickAiModal: React.FC<QuickAiModalProps> = ({
   isOpen,
   onClose,
-  contextType,
+  contextType: initialContextType,
   contextTitle,
   contextDetail,
   initialPrompt,
 }) => {
+  const router = useRouter();
   const baby = useBabyStore((s) => s.baby);
   const age = baby ? calculateAge(baby.birthDate) : { months: 0, days: 0, label: "0月0天" };
 
-  const meta = CONTEXT_META[contextType] || CONTEXT_META.general;
+  const [activeTab, setActiveTab] = useState<AiHubTab>("chat");
+  const [currentContextType, setCurrentContextType] = useState<AiContextType>(initialContextType || "general");
+
+  const meta = CONTEXT_META[currentContextType] || CONTEXT_META.general;
   const displayTitle = contextTitle || meta.title;
 
   const [messages, setMessages] = useState<Message[]>([]);
   const { showToast } = useToast();
 
-  // ===== iOS 键盘适配：visualViewport 收缩时把输入条上移，避免露出下层内容 =====
   const [keyboardInset, setKeyboardInset] = useState(0);
   useEffect(() => {
     const vv = window.visualViewport;
     if (!vv) return;
     const update = () => {
-      // 布局视口高度 - 可视视口高度 - 顶部偏移 ≈ 键盘占据的高度
       const inset = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
-      setKeyboardInset(inset > 120 ? inset : 0); // 小于阈值视作收起
+      setKeyboardInset(inset > 120 ? inset : 0);
     };
     update();
     vv.addEventListener("resize", update);
@@ -341,16 +430,41 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
   const [loading, setLoading] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  // ===== 会话与历史持久化状态 =====
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [sessionTitle, setSessionTitle] = useState<string | null>(null);
   const sessionIdRef = useRef<string | null>(sessionId);
   sessionIdRef.current = sessionId;
 
   const [showHistory, setShowHistory] = useState(false);
-  const [historyFilter, setHistoryFilter] = useState<"all" | "current">("current");
+  const [historyFilter, setHistoryFilter] = useState<"all" | "current">("all");
   const [sessionList, setSessionList] = useState<SessionSummary[]>([]);
   const [loadingSessions, setLoadingSessions] = useState(false);
+
+  const [dailySummaryData, setDailySummaryData] = useState<AiDailySummaryResult | null>(null);
+  const [loadingDailySummary, setLoadingDailySummary] = useState(false);
+
+  const fetchDailySummaryInline = useCallback(async (force = false) => {
+    if (!baby?.id) return;
+    setLoadingDailySummary(true);
+    try {
+      const url = `/api/ai/daily-summary?babyId=${baby.id}${force ? "&force=true" : ""}`;
+      const res = await fetch(url);
+      if (res.ok) {
+        const data = await res.json();
+        setDailySummaryData(data.summary);
+      }
+    } catch {
+      // ignore
+    } finally {
+      setLoadingDailySummary(false);
+    }
+  }, [baby?.id]);
+
+  useEffect(() => {
+    if (activeTab === "daily_summary" && !dailySummaryData) {
+      fetchDailySummaryInline();
+    }
+  }, [activeTab, dailySummaryData, fetchDailySummaryInline]);
 
   const fetchSessions = useCallback(async () => {
     setLoadingSessions(true);
@@ -371,17 +485,13 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
 
   const loadSessionDetail = async (targetId: string) => {
     const summary = sessionList.find((session) => session.id === targetId);
-    if (
-      summary &&
-      (summary.babyId !== (baby?.id ?? null) || summary.contextType !== contextType)
-    ) {
-      showToast("请切换到该宝宝和对应领域后再打开这条历史对话");
-      return;
+    if (summary && summary.contextType) {
+      setCurrentContextType(summary.contextType as AiContextType);
     }
     try {
       const query = new URLSearchParams();
       if (baby?.id) query.set("babyId", baby.id);
-      query.set("contextType", contextType);
+      query.set("contextType", summary?.contextType || currentContextType);
       const res = await fetch(`/api/ai/sessions/${targetId}?${query.toString()}`);
       if (!res.ok) throw new Error("加载历史对话失败");
       const data = await res.json();
@@ -404,6 +514,7 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
         );
       }
       setShowHistory(false);
+      setActiveTab("chat");
     } catch (err: any) {
       showToast(err?.message || "加载历史对话失败");
     }
@@ -419,11 +530,12 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
     const welcome: Message = {
       id: "welcome",
       role: "assistant",
-      content: `你好！我是针对 **${baby?.nickname || "宝宝"}**（${age.label}）的专属 **${displayTitle}** ✨\n\n你可以点击上方的热门问题、拍照上传单据，或直接输入任何你想了解的育儿疑问：`,
+      content: `你好！我是 **${baby?.nickname || "宝宝"}**（${age.label}）的专属 **${displayTitle}** ✨\n\n你可以一句话快捷录入（如“喝了150ml奶”）、拍照上传单据，或选择上方专科专题与我交流：`,
       timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
     };
     setMessages([welcome]);
     setShowHistory(false);
+    setActiveTab("chat");
     setTimeout(() => inputRef.current?.focus(), 150);
   };
 
@@ -447,6 +559,7 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const visionInputRef = useRef<HTMLInputElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
   const messagesRef = useRef<Message[]>(messages);
@@ -456,7 +569,6 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
   const selectedImageRef = useRef(selectedImage);
   selectedImageRef.current = selectedImage;
 
-  // ===== 语音输入（服务端中文 ASR）=====
   const [recording, setRecording] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -494,7 +606,6 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
           const data = await res.json().catch(() => ({}));
           if (!res.ok) throw new Error(data?.error || "识别失败");
           showToast(`已识别：${String(data.text).slice(0, 30)}${data.text.length > 30 ? "…" : ""}`);
-          // 语音模式：识别即发送，直接在对话里出结果卡片
           handleSend(String(data.text));
         } catch (err: unknown) {
           showToast(err instanceof Error ? err.message : "语音识别失败");
@@ -509,6 +620,7 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
       showToast("无法访问麦克风，请检查权限");
     }
   };
+
   const loadingRef = useRef(loading);
   loadingRef.current = loading;
 
@@ -517,9 +629,9 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
   };
 
   const handleSend = useCallback(
-    async (textToSend?: string) => {
+    async (textToSend?: string, imageOverride?: string, customContext?: AiContextType) => {
       const query = (textToSend || inputTextRef.current).trim();
-      const currentImg = selectedImageRef.current;
+      const currentImg = imageOverride || selectedImageRef.current;
       if ((!query && !currentImg) || loadingRef.current) return;
 
       if (abortControllerRef.current) {
@@ -527,6 +639,8 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
       }
       const controller = new AbortController();
       abortControllerRef.current = controller;
+
+      const targetContext = customContext || currentContextType;
 
       const userMsg: Message = {
         id: `user_${Date.now()}`,
@@ -549,6 +663,7 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
       setInputText("");
       setSelectedImage(null);
       setLoading(true);
+      setActiveTab("chat");
 
       try {
         const history = messagesRef.current
@@ -567,7 +682,7 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
                 content: query || "请帮我结构化识别这张单据并提供儿科解读",
               },
             ],
-            contextType,
+            contextType: targetContext,
             contextDetail,
             babyId: baby?.id,
             image: currentImg,
@@ -575,9 +690,7 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
           }),
         });
 
-        if (!res.body) {
-          throw new Error("No response stream");
-        }
+        if (!res.body) throw new Error("No response stream");
 
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
@@ -596,9 +709,7 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
             const trimmed = line.trim();
             if (!trimmed || trimmed.startsWith(":")) continue;
 
-            if (trimmed === "data: [DONE]") {
-              break;
-            }
+            if (trimmed === "data: [DONE]") break;
 
             if (trimmed.startsWith("data: ")) {
               try {
@@ -636,14 +747,11 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
                     })
                   );
                 }
-              } catch {
-                // Partial JSON, ignore
-              }
+              } catch {}
             }
           }
         }
 
-        // Mark streaming finished
         setMessages((prev) =>
           prev.map((msg) =>
             msg.id === aiMsgId
@@ -680,16 +788,14 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
         useBabyStore.getState().refreshAll().catch(() => {});
       }
     },
-    [contextType, contextDetail, baby?.id]
+    [currentContextType, contextDetail, baby?.id]
   );
 
   useEffect(() => {
     if (!isOpen) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        onClose();
-      }
+      if (e.key === "Escape") onClose();
     };
 
     window.addEventListener("keydown", handleKeyDown);
@@ -697,7 +803,7 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
   }, [isOpen, onClose]);
 
   const prevScopeRef = useRef<{ contextType: string; babyId: string | null }>({
-    contextType,
+    contextType: initialContextType,
     babyId: baby?.id ?? null,
   });
 
@@ -705,10 +811,10 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
     if (isOpen) {
       const previousScope = prevScopeRef.current;
       const isScopeChanged =
-        previousScope.contextType !== contextType ||
+        previousScope.contextType !== initialContextType ||
         previousScope.babyId !== (baby?.id ?? null);
       prevScopeRef.current = {
-        contextType,
+        contextType: initialContextType,
         babyId: baby?.id ?? null,
       };
 
@@ -717,16 +823,16 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
         sessionIdRef.current = null;
         setSessionTitle(null);
         setSelectedImage(null);
+        setCurrentContextType(initialContextType || "general");
       }
 
       fetchSessions();
 
       if (messages.length === 0 || isScopeChanged) {
-        // Welcome message
         const welcome: Message = {
           id: "welcome",
           role: "assistant",
-          content: `你好！我是针对 **${baby?.nickname || "宝宝"}**（${age.label}）的专属 **${displayTitle}** ✨\n\n你可以点击上方的热门问题、拍照上传单据，或直接输入任何你想了解的育儿疑问：`,
+          content: `你好！我是 **${baby?.nickname || "宝宝"}**（${age.label}）的专属 **${displayTitle}** ✨\n\n你可以一句话快捷录入（如“刚才喂了120ml奶”）、拍照上传单据，或选择上方【专科题库】与【今日复盘】深度了解宝宝状态：`,
           timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
         };
         setMessages([welcome]);
@@ -737,10 +843,9 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
       }
       setTimeout(() => inputRef.current?.focus(), 150);
     } else {
-      // Trigger store refresh when closed
       useBabyStore.getState().refreshAll().catch(() => {});
     }
-  }, [isOpen, contextType, initialPrompt, displayTitle, baby?.id, baby?.nickname, age.label, messages.length, handleSend, fetchSessions]);
+  }, [isOpen, initialContextType, initialPrompt, displayTitle, baby?.id, baby?.nickname, age.label, messages.length, handleSend, fetchSessions]);
 
   useEffect(() => {
     if (!isOpen && abortControllerRef.current) {
@@ -759,17 +864,17 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
   }, []);
 
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && activeTab === "chat") {
       scrollToBottom();
     }
-  }, [messages, loading, isOpen]);
+  }, [messages, loading, isOpen, activeTab]);
 
-  const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>, autoSendPrompt?: string, targetContext?: AiContextType) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     if (file.size > 8 * 1024 * 1024) {
-      alert("单据照片大小不能超过 8MB，请压缩后重试");
+      alert("照片大小不能超过 8MB，请压缩后重试");
       return;
     }
 
@@ -787,12 +892,17 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
       }
       const data = await res.json();
       setSelectedImage(data.imageUrl);
+
+      if (autoSendPrompt) {
+        handleSend(autoSendPrompt, data.imageUrl, targetContext);
+      }
     } catch (err: any) {
-      alert(err?.message || "单据图片上传失败，请重新选择或拍照");
+      alert(err?.message || "图片上传失败，请重新选择或拍照");
       setSelectedImage(null);
     } finally {
       setUploadingImage(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
+      if (visionInputRef.current) visionInputRef.current.value = "";
     }
   };
 
@@ -802,6 +912,12 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
     setTimeout(() => setCopiedId(null), 2000);
   };
 
+  const handleSelectTopicPrompt = (prompt: string, topicContext: AiContextType) => {
+    setCurrentContextType(topicContext);
+    handleSend(prompt, undefined, topicContext);
+  };
+
+  const [visionMode, setVisionMode] = useState<string>("medical");
 
   if (!isOpen) return null;
 
@@ -810,20 +926,19 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
       role="dialog"
       aria-modal="true"
       aria-labelledby="quick-ai-title"
-      className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-200"
+      className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in"
     >
-      {/* Backdrop with soft blur */}
+      {/* Backdrop */}
       <div
-        className="absolute inset-0 bg-slate-900/40 backdrop-blur-xs transition-opacity"
+        className="absolute inset-0 bg-slate-950/45 backdrop-blur-xs transition-opacity duration-200"
         onClick={onClose}
       />
 
-      {/* Sheet / Modal Container - Full screen on mobile, elegant dual-pane dialog on iPad/desktop */}
-      <div className="relative w-full max-w-full sm:max-w-4xl lg:max-w-5xl bg-card h-full sm:h-[720px] lg:h-[760px] max-h-full sm:max-h-[92vh] rounded-none sm:rounded-[28px] shadow-2xl overflow-hidden flex flex-row border-0 sm:border sm:border-primary/15 animate-in slide-in-from-bottom-6 duration-200 z-10">
+      {/* Modal Container */}
+      <div className="relative w-full max-w-full sm:max-w-4xl lg:max-w-5xl bg-card h-full sm:h-[720px] lg:h-[780px] max-h-full sm:max-h-[92vh] rounded-none sm:rounded-[28px] shadow-2xl overflow-hidden flex flex-row border-0 sm:border sm:border-primary/15 animate-spring-pop z-10">
         
-        {/* ===== 左侧常驻历史会话边栏 (md / lg 视口常驻) ===== */}
+        {/* ===== Desktop/iPad History Sidebar ===== */}
         <div className="w-72 border-r border-primary/10 hidden md:flex flex-col bg-white/50 dark:bg-card/50 shrink-0 select-none">
-          {/* 边栏 Header */}
           <div className="flex items-center justify-between px-3.5 py-3 pt-[max(12px,env(safe-area-inset-top))] bg-white/90 dark:bg-card/90 backdrop-blur-md border-b border-primary/10 shrink-0">
             <div className="flex items-center gap-2">
               <div className="w-7 h-7 rounded-xl bg-primary-soft/50 text-primary flex items-center justify-center">
@@ -834,7 +949,7 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
             <button
               type="button"
               onClick={startNewSession}
-              className="px-2.5 py-1 rounded-xl bg-gradient-to-r from-primary to-pink-500 text-white text-xs font-bold shadow-xs hover:opacity-95 flex items-center gap-1 cursor-pointer transition-all active:scale-95"
+              className="px-2.5 py-1 rounded-xl bg-gradient-to-r from-primary to-pink-500 text-white text-xs font-bold shadow-xs hover:opacity-95 flex items-center gap-1 cursor-pointer btn-spring"
               title="新建会话"
             >
               <Plus size={13} />
@@ -842,7 +957,7 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
             </button>
           </div>
 
-          {/* 边栏过滤 Chips */}
+          {/* Sidebar Filter Chips */}
           <div className="px-3 py-2 bg-white/40 dark:bg-card/40 border-b border-primary/10 flex gap-1.5 shrink-0">
             <button
               type="button"
@@ -864,18 +979,18 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
                   : "bg-card text-text-secondary border border-primary/15 hover:bg-primary-light/40"
               }`}
             >
-              当前领域 ({sessionList.filter((s) => s.contextType === contextType).length})
+              当前领域 ({sessionList.filter((s) => s.contextType === currentContextType).length})
             </button>
           </div>
 
-          {/* 滚动会话列表 */}
+          {/* Session List */}
           <div className="flex-1 min-h-0 overflow-y-auto p-2.5 space-y-2 scrollbar-thin">
             {loadingSessions ? (
               <div className="flex flex-col items-center justify-center py-12 text-text-muted gap-2">
                 <Loader2 size={20} className="animate-spin text-primary" />
                 <span className="text-[11px]">加载历史中...</span>
               </div>
-            ) : sessionList.filter((s) => (historyFilter === "current" ? s.contextType === contextType : true)).length === 0 ? (
+            ) : sessionList.filter((s) => (historyFilter === "current" ? s.contextType === currentContextType : true)).length === 0 ? (
               <div className="text-center py-12 space-y-1.5">
                 <p className="text-2xl">💬</p>
                 <p className="text-[11px] text-text-muted">暂无历史对话记录</p>
@@ -889,7 +1004,7 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
               </div>
             ) : (
               sessionList
-                .filter((s) => (historyFilter === "current" ? s.contextType === contextType : true))
+                .filter((s) => (historyFilter === "current" ? s.contextType === currentContextType : true))
                 .map((s) => {
                   const sMeta = CONTEXT_META[s.contextType as AiContextType] || CONTEXT_META.general;
                   const isCurrentActive = s.id === sessionId;
@@ -898,7 +1013,7 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
                     <div
                       key={s.id}
                       onClick={() => loadSessionDetail(s.id)}
-                      className={`p-2.5 rounded-2xl border transition-all cursor-pointer group flex items-start justify-between gap-2 ${
+                      className={`p-2.5 rounded-2xl border transition-all cursor-pointer group flex items-start justify-between gap-2 card-hover-lift ${
                         isCurrentActive
                           ? "bg-primary-light/50 dark:bg-primary-950/40 border-primary shadow-xs ring-1 ring-primary/20"
                           : "bg-card hover:bg-white dark:hover:bg-white/5 border-primary/10 hover:border-primary/30 shadow-2xs"
@@ -948,584 +1063,890 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
           </div>
         </div>
 
-        {/* ===== 右侧主对话与工具链展示区域 ===== */}
+        {/* ===== Right Main Area with Unified Tabs ===== */}
         <div className="flex-1 flex flex-col min-w-0 h-full relative">
-          {/* Header - Frosted pastel navbar with notch safe area */}
-          <div className="flex items-center justify-between px-4 py-3 pt-[max(12px,env(safe-area-inset-top))] bg-white/95 backdrop-blur-md border-b border-primary/10 shrink-0">
-            <div className="flex items-center gap-2.5 min-w-0 flex-1 mr-2">
-              <div className="w-9 h-9 rounded-2xl bg-gradient-to-br from-primary to-pink-500 text-white flex items-center justify-center text-lg shadow-sm shadow-primary/25 shrink-0">
-                {meta.emoji}
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-1.5">
-                  <h3 id="quick-ai-title" className="font-bold text-text-primary text-sm sm:text-base truncate">
-                    {sessionTitle || displayTitle}
-                  </h3>
+          
+          {/* 1. Header with Unified Hub Tab Navigation */}
+          <div className="px-4 py-2.5 pt-[max(12px,env(safe-area-inset-top))] bg-white/95 dark:bg-card/95 backdrop-blur-md border-b border-primary/10 shrink-0 space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5 min-w-0 flex-1 mr-2">
+                <div className="w-8 h-8 rounded-2xl bg-gradient-to-br from-primary to-pink-500 text-white flex items-center justify-center text-base shadow-sm shadow-primary/25 shrink-0 animate-float">
+                  <Sparkles size={16} />
                 </div>
-                <p className="text-[11px] text-text-muted flex items-center gap-1 mt-0.5 truncate">
-                  <span className="font-medium text-text-secondary">{baby?.nickname || "宝宝"}</span>
-                  <span>·</span>
-                  <span>{age.label}</span>
-                  {sessionTitle && (
-                    <>
-                      <span>·</span>
-                      <span className="text-primary font-medium">{meta.title}</span>
-                    </>
-                  )}
-                </p>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5">
+                    <h3 id="quick-ai-title" className="font-bold text-text-primary text-sm sm:text-base truncate">
+                      AI 育儿智能中枢
+                    </h3>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary-soft/50 text-primary font-bold">
+                      {baby?.nickname || "宝宝"}·{age.label}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-1 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowHistory(true);
+                    fetchSessions();
+                  }}
+                  className="md:hidden w-8 h-8 rounded-full bg-primary-soft/40 hover:bg-primary-soft text-text-muted hover:text-primary flex items-center justify-center transition-colors cursor-pointer btn-press"
+                  title="历史对话记录"
+                  aria-label="历史对话记录"
+                >
+                  <History size={16} />
+                </button>
+                <button
+                  type="button"
+                  onClick={startNewSession}
+                  className="w-8 h-8 rounded-full bg-primary-soft/40 hover:bg-primary-soft text-text-muted hover:text-primary flex items-center justify-center transition-colors cursor-pointer btn-press"
+                  title="新建对话"
+                  aria-label="新建对话"
+                >
+                  <Plus size={16} />
+                </button>
+                <button
+                  onClick={onClose}
+                  className="w-8 h-8 rounded-full bg-primary-soft/40 hover:bg-primary-soft text-text-muted hover:text-text-primary flex items-center justify-center transition-colors cursor-pointer btn-press"
+                  title="关闭 (Esc)"
+                  aria-label="关闭"
+                >
+                  <X size={16} />
+                </button>
               </div>
             </div>
-            <div className="flex items-center gap-1 shrink-0">
-              {/* 移动端历史记录抽屉触发按钮 */}
+
+            {/* Hub Navigation Tabs Bar */}
+            <div className="flex items-center gap-1.5 p-1 bg-primary-light/40 dark:bg-card/70 rounded-2xl border border-primary/15 overflow-x-auto scrollbar-hide">
               <button
                 type="button"
-                onClick={() => {
-                  setShowHistory(true);
-                  fetchSessions();
-                }}
-                className="md:hidden w-8 h-8 rounded-full bg-primary-soft/40 hover:bg-primary-soft text-text-muted hover:text-primary flex items-center justify-center transition-colors cursor-pointer"
-                title="历史对话记录"
-                aria-label="历史对话记录"
+                onClick={() => setActiveTab("chat")}
+                className={`flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 ${
+                  activeTab === "chat"
+                    ? "bg-primary text-white shadow-xs scale-102"
+                    : "text-text-secondary hover:text-primary hover:bg-primary-light/60"
+                }`}
               >
-                <History size={16} />
+                <MessageSquare size={13} />
+                <span>智能对话与录入</span>
               </button>
               <button
                 type="button"
-                onClick={startNewSession}
-                className="w-8 h-8 rounded-full bg-primary-soft/40 hover:bg-primary-soft text-text-muted hover:text-primary flex items-center justify-center transition-colors cursor-pointer"
-                title="新建对话"
-                aria-label="新建对话"
+                onClick={() => setActiveTab("daily_summary")}
+                className={`flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 ${
+                  activeTab === "daily_summary"
+                    ? "bg-primary text-white shadow-xs scale-102"
+                    : "text-text-secondary hover:text-primary hover:bg-primary-light/60"
+                }`}
               >
-                <Plus size={16} />
+                <Activity size={13} />
+                <span>今日复盘</span>
               </button>
               <button
-                onClick={onClose}
-                className="w-8 h-8 rounded-full bg-primary-soft/40 hover:bg-primary-soft text-text-muted hover:text-text-primary flex items-center justify-center transition-colors cursor-pointer"
-                title="关闭"
-                aria-label="关闭"
+                type="button"
+                onClick={() => setActiveTab("vision")}
+                className={`flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 ${
+                  activeTab === "vision"
+                    ? "bg-primary text-white shadow-xs scale-102"
+                    : "text-text-secondary hover:text-primary hover:bg-primary-light/60"
+                }`}
               >
-                <X size={16} />
+                <Camera size={13} />
+                <span>拍照识别中枢</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab("topics")}
+                className={`flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 ${
+                  activeTab === "topics"
+                    ? "bg-primary text-white shadow-xs scale-102"
+                    : "text-text-secondary hover:text-primary hover:bg-primary-light/60"
+                }`}
+              >
+                <Lightbulb size={13} />
+                <span>专科题库</span>
               </button>
             </div>
           </div>
 
-          {/* 移动端历史抽屉浮层 (md 屏幕以上隐藏) */}
+          {/* 移动端历史抽屉浮层 */}
           {showHistory && (
-            <div className="absolute inset-0 bg-card z-30 flex flex-col md:hidden animate-in fade-in slide-in-from-right-4 duration-200">
-              {/* History Header */}
+            <div className="absolute inset-0 bg-card z-30 flex flex-col md:hidden animate-slide-in-right">
               <div className="flex items-center justify-between px-4 py-3 pt-[max(12px,env(safe-area-inset-top))] bg-white/95 backdrop-blur-md border-b border-primary/10 shrink-0">
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
                     onClick={() => setShowHistory(false)}
                     className="w-8 h-8 rounded-full bg-primary-soft/40 hover:bg-primary-soft text-text-muted hover:text-text-primary flex items-center justify-center transition-colors cursor-pointer"
-                    title="返回当前对话"
                   >
                     <ChevronLeft size={18} />
                   </button>
                   <div>
                     <h3 className="font-bold text-text-primary text-sm sm:text-base">历史对话记录</h3>
-                    <p className="text-[11px] text-text-muted">按主题回溯与随时续聊</p>
+                    <p className="text-[11px] text-text-muted">随时查看与续聊</p>
                   </div>
                 </div>
                 <button
                   type="button"
                   onClick={startNewSession}
-                  className="px-3 py-1.5 rounded-full bg-gradient-to-r from-primary to-pink-500 text-white text-xs font-bold shadow-xs hover:opacity-95 flex items-center gap-1 cursor-pointer"
+                  className="px-3 py-1.5 rounded-full bg-gradient-to-r from-primary to-pink-500 text-white text-xs font-bold shadow-xs hover:opacity-95 flex items-center gap-1 cursor-pointer btn-spring"
                 >
                   <Plus size={14} />
                   <span>新对话</span>
                 </button>
               </div>
 
-              {/* Filter Chips */}
-              <div className="px-3.5 py-2 bg-white/60 border-b border-primary/10 flex gap-2 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setHistoryFilter("all")}
-                  className={`text-xs px-3 py-1 rounded-full font-medium transition-all ${
-                    historyFilter === "all"
-                      ? "bg-primary text-white shadow-xs"
-                      : "bg-card text-text-secondary border border-primary/15 hover:bg-primary-light/40"
-                  }`}
-                >
-                  全部历史 ({sessionList.length})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setHistoryFilter("current")}
-                  className={`text-xs px-3 py-1 rounded-full font-medium transition-all ${
-                    historyFilter === "current"
-                      ? "bg-primary text-white shadow-xs"
-                      : "bg-card text-text-secondary border border-primary/15 hover:bg-primary-light/40"
-                  }`}
-                >
-                  当前领域 ({sessionList.filter((s) => s.contextType === contextType).length})
-                </button>
-              </div>
-
-              {/* Session List */}
               <div className="flex-1 min-h-0 overflow-y-auto p-3.5 space-y-2.5">
-                {loadingSessions ? (
-                  <div className="flex flex-col items-center justify-center py-16 text-text-muted gap-2">
-                    <Loader2 size={24} className="animate-spin text-primary" />
-                    <span className="text-xs">加载历史记录中...</span>
-                  </div>
-                ) : sessionList.filter((s) => (historyFilter === "current" ? s.contextType === contextType : true)).length === 0 ? (
-                  <div className="text-center py-16 space-y-2">
-                    <p className="text-3xl">💬</p>
-                    <p className="text-xs text-text-muted">暂无历史对话记录</p>
-                    <button
-                      type="button"
-                      onClick={startNewSession}
-                      className="text-xs text-primary font-bold hover:underline"
+                {sessionList.map((s) => {
+                  const sMeta = CONTEXT_META[s.contextType as AiContextType] || CONTEXT_META.general;
+                  return (
+                    <div
+                      key={s.id}
+                      onClick={() => loadSessionDetail(s.id)}
+                      className="p-3 rounded-2xl border border-primary/10 bg-card shadow-2xs card-hover-lift cursor-pointer flex items-start justify-between gap-2.5"
                     >
-                      开启一次新对话
-                    </button>
-                  </div>
-                ) : (
-                  sessionList
-                    .filter((s) => (historyFilter === "current" ? s.contextType === contextType : true))
-                    .map((s) => {
-                      const sMeta = CONTEXT_META[s.contextType as AiContextType] || CONTEXT_META.general;
-                      const isCurrentActive = s.id === sessionId;
-
-                      return (
-                        <div
-                          key={s.id}
-                          onClick={() => loadSessionDetail(s.id)}
-                          className={`p-3 rounded-2xl border transition-all cursor-pointer group flex items-start justify-between gap-2.5 ${
-                            isCurrentActive
-                              ? "bg-primary-light/40 border-primary shadow-xs ring-1 ring-primary/20"
-                              : "bg-card hover:bg-white border-primary/10 hover:border-primary/30 shadow-2xs"
-                          }`}
-                        >
-                          <div className="flex items-start gap-2.5 flex-1 min-w-0">
-                            <div className="w-8 h-8 rounded-xl bg-primary-soft/50 text-base flex items-center justify-center shrink-0 mt-0.5">
-                              {sMeta.emoji}
-                            </div>
-                            <div className="flex-1 min-w-0 space-y-1">
-                              <div className="flex items-center gap-1.5">
-                                <h4 className="font-bold text-xs sm:text-sm text-text-primary truncate group-hover:text-primary transition-colors">
-                                  {s.title}
-                                </h4>
-                                {isCurrentActive && (
-                                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-primary text-white font-bold shrink-0">
-                                    当前
-                                  </span>
-                                )}
-                              </div>
-                              {s.lastMessage && (
-                                <p className="text-[11px] text-text-muted truncate">
-                                  {s.lastMessage.role === "user" ? "家长：" : "AI："}{s.lastMessage.content}
-                                </p>
-                              )}
-                              <div className="flex items-center gap-2 text-[10px] text-text-muted">
-                                <span className="flex items-center gap-0.5">
-                                  <Clock size={10} />
-                                  <span>{new Date(s.updatedAt).toLocaleDateString()} {new Date(s.updatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
-                                </span>
-                                <span>·</span>
-                                <span className="flex items-center gap-0.5">
-                                  <MessageSquare size={10} />
-                                  <span>{s.messageCount} 条</span>
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-
-                          <button
-                            type="button"
-                            onClick={(e) => handleDeleteSession(e, s.id)}
-                            className="p-1.5 text-text-muted hover:text-red-500 rounded-lg hover:bg-red-50 transition-colors shrink-0"
-                            title="删除会话"
-                          >
-                            <Trash2 size={14} />
-                          </button>
+                      <div className="flex items-start gap-2.5 flex-1 min-w-0">
+                        <div className="w-8 h-8 rounded-xl bg-primary-soft/50 text-base flex items-center justify-center shrink-0 mt-0.5">
+                          {sMeta.emoji}
                         </div>
-                      );
-                    })
-                )}
+                        <div className="flex-1 min-w-0 space-y-1">
+                          <h4 className="font-bold text-xs sm:text-sm text-text-primary truncate">
+                            {s.title}
+                          </h4>
+                          {s.lastMessage && (
+                            <p className="text-[11px] text-text-muted truncate">
+                              {s.lastMessage.role === "user" ? "家长：" : "AI："}{s.lastMessage.content}
+                            </p>
+                          )}
+                          <div className="flex items-center gap-2 text-[10px] text-text-muted">
+                            <Clock size={10} />
+                            <span>{new Date(s.updatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+                            <span>·</span>
+                            <span>{s.messageCount} 条</span>
+                          </div>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={(e) => handleDeleteSession(e, s.id)}
+                        className="p-1.5 text-text-muted hover:text-red-500 rounded-lg transition-colors shrink-0"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
 
-          {/* Quick Suggestion Chips */}
-          <div className="px-3.5 py-2.5 bg-white dark:bg-[#251D25] border-b border-primary/10 overflow-x-auto scrollbar-hide flex gap-2 shrink-0">
-            {meta.chips.map((chip, idx) => (
-              <button
-                key={idx}
-                type="button"
-                disabled={loading}
-                onClick={() => {
-                  if (chip.startsWith("📷")) {
-                    fileInputRef.current?.click();
-                  } else {
-                    handleSend(chip);
-                  }
-                }}
-                className="text-xs bg-card text-text-secondary hover:text-primary hover:bg-primary-light/50 border border-primary/15 rounded-full px-3 py-1.5 shrink-0 shadow-xs transition-all active:scale-95 text-left flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
-              >
-                <Sparkles size={11} className="text-primary shrink-0" />
-                <span>{chip}</span>
-              </button>
-            ))}
-          </div>
+          {/* ===== TAB 1: 智能对话与录入 ===== */}
+          {activeTab === "chat" && (
+            <div className="flex-1 flex flex-col min-h-0 animate-fade-in">
+              {/* Context Specific Chips Bar */}
+              <div className="px-3.5 py-2 bg-white/70 dark:bg-card/70 border-b border-primary/10 overflow-x-auto scrollbar-hide flex items-center gap-2 shrink-0">
+                <span className="text-[10px] font-bold text-text-muted shrink-0 uppercase tracking-wider">快捷提问:</span>
+                {meta.chips.map((chip, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    disabled={loading}
+                    onClick={() => {
+                      if (chip.startsWith("📷")) {
+                        fileInputRef.current?.click();
+                      } else {
+                        handleSend(chip);
+                      }
+                    }}
+                    className="text-xs bg-card text-text-secondary hover:text-primary hover:bg-primary-light/50 border border-primary/15 rounded-full px-3 py-1 shrink-0 shadow-xs transition-all card-hover-lift active:scale-95 text-left flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+                  >
+                    <Sparkles size={11} className="text-primary shrink-0" />
+                    <span>{chip}</span>
+                  </button>
+                ))}
+              </div>
 
-        {/* Message History */}
-        <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4 bg-gradient-to-b from-transparent to-primary-light/10">
-          {messages.map((m) => {
-            const isUser = m.role === "user";
-            const isThinking =
-              !isUser && m.isStreaming && !m.content && !(m.tools && m.tools.length);
-            const { cleanText, actions } = !isUser
-              ? extractActionsAndCleanMarkdown(m.content)
-              : { cleanText: m.content, actions: [] as ActionCardData[] };
+              {/* Message Scroll Area */}
+              <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4 bg-gradient-to-b from-transparent to-primary-light/10">
+                {messages.map((m, mIdx) => {
+                  const isUser = m.role === "user";
+                  const isThinking =
+                    !isUser && m.isStreaming && !m.content && !(m.tools && m.tools.length);
+                  const { cleanText, actions } = !isUser
+                    ? extractActionsAndCleanMarkdown(m.content)
+                    : { cleanText: m.content, actions: [] as ActionCardData[] };
 
-            return (
+                  return (
+                    <div
+                      key={m.id}
+                      className={`flex gap-2.5 ${isUser ? "justify-end" : "justify-start"} animate-slide-up`}
+                    >
+                      {!isUser && (
+                        <div className="w-7 h-7 rounded-full bg-gradient-to-br from-primary-soft to-pink-100 text-primary flex items-center justify-center shrink-0 mt-0.5 shadow-xs border border-primary/10">
+                          <Bot size={14} />
+                        </div>
+                      )}
+
+                      <div
+                        className={`relative max-w-[88%] rounded-2xl p-3.5 shadow-sm text-xs sm:text-sm leading-relaxed ${
+                          isUser
+                            ? "bg-gradient-to-r from-primary to-pink-500 text-white shadow-primary/20"
+                            : "bg-card text-text-primary border border-primary/10 shadow-none"
+                        }`}
+                      >
+                        {isThinking ? (
+                          <div className="flex items-center gap-2 text-xs text-text-secondary py-1">
+                            <div className="flex gap-1">
+                              <div className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce [animation-delay:-0.3s]" />
+                              <div className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce [animation-delay:-0.15s]" />
+                              <div className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce" />
+                            </div>
+                            <span className="text-[11px] text-text-muted">结合宝宝月龄与医学数据库思考中...</span>
+                          </div>
+                        ) : isUser ? (
+                          <div className="space-y-2">
+                            {m.image && (
+                              <div className="rounded-xl overflow-hidden max-w-[200px] border border-white/30 shadow-xs">
+                                <img src={m.image} alt="上传单据" className="w-full h-auto max-h-48 object-cover" />
+                              </div>
+                            )}
+                            <div className="whitespace-pre-wrap">{m.content}</div>
+                          </div>
+                        ) : (
+                          <div className="space-y-2">
+                            {m.tools && m.tools.length > 0 && (
+                              <div className="flex flex-wrap gap-1">
+                                {m.tools.map((t, i) => (
+                                  <span
+                                    key={`${t.name}-${i}`}
+                                    className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border ${
+                                      t.name === "web_search"
+                                        ? "bg-blue-50 text-blue-700 border-blue-200"
+                                        : t.status === "start"
+                                          ? "bg-primary-light/50 text-text-secondary border-primary/15"
+                                          : t.isError
+                                            ? "bg-red-50 text-red-600 border-red-200"
+                                            : "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                    }`}
+                                    title={t.summary || t.name}
+                                  >
+                                    {t.name === "web_search" ? (
+                                      <Globe size={10} className="text-blue-500 animate-pulse" />
+                                    ) : (
+                                      <Wrench size={10} />
+                                    )}
+                                    {t.status === "start" ? "正在" : t.isError ? "失败" : "已完成"}
+                                    {t.label || t.name}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+
+                            {(() => {
+                              const webSearchTool = m.tools?.find((t) => t.name === "web_search");
+                              let searchEvidenceResults: SearchEvidenceItem[] = [];
+                              if (webSearchTool) {
+                                if (Array.isArray((webSearchTool.details as any)?.results)) {
+                                  searchEvidenceResults = (webSearchTool.details as any).results;
+                                } else if (typeof webSearchTool.summary === "string") {
+                                  try {
+                                    const parsed = JSON.parse(webSearchTool.summary);
+                                    if (Array.isArray(parsed.results)) searchEvidenceResults = parsed.results;
+                                  } catch {}
+                                }
+                              }
+                              return searchEvidenceResults.length > 0 ? (
+                                <WebSearchCitationCard results={searchEvidenceResults} />
+                              ) : null;
+                            })()}
+
+                            <div className="markdown-content space-y-2">
+                              <ReactMarkdown
+                                remarkPlugins={[remarkGfm]}
+                                components={{
+                                  a: ({ href, children }) => (
+                                    <a
+                                      href={href}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="inline-flex items-center gap-0.5 px-1.5 py-0.5 my-0.5 rounded-md bg-blue-50/80 hover:bg-blue-100 text-blue-600 hover:text-blue-800 border border-blue-200/60 font-medium text-[11px] transition-colors"
+                                    >
+                                      <span>{children}</span>
+                                      <ExternalLink size={10} className="shrink-0 text-blue-400" />
+                                    </a>
+                                  ),
+                                  h1: ({ children }) => (
+                                    <h1 className="text-sm font-bold text-primary-dark mt-2 mb-1 border-l-2 border-primary pl-2">
+                                      {children}
+                                    </h1>
+                                  ),
+                                  h2: ({ children }) => (
+                                    <h2 className="text-xs sm:text-sm font-bold text-text-primary mt-2 mb-1 flex items-center gap-1.5">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-primary inline-block" />
+                                      {children}
+                                    </h2>
+                                  ),
+                                  h3: ({ children }) => (
+                                    <h3 className="text-xs font-bold text-text-primary mt-1.5 mb-0.5">
+                                      {children}
+                                    </h3>
+                                  ),
+                                  p: ({ children }) => (
+                                    <p className="my-1 leading-relaxed text-text-primary">{children}</p>
+                                  ),
+                                  strong: ({ children }) => (
+                                    <strong className="font-bold text-primary bg-primary-light/50 px-1 py-0.5 rounded">
+                                      {children}
+                                    </strong>
+                                  ),
+                                  ul: ({ children }) => (
+                                    <ul className="my-1.5 pl-4 space-y-1 list-disc marker:text-primary/70">
+                                      {children}
+                                    </ul>
+                                  ),
+                                  ol: ({ children }) => (
+                                    <ol className="my-1.5 pl-4 space-y-1 list-decimal marker:text-primary font-medium">
+                                      {children}
+                                    </ol>
+                                  ),
+                                  li: ({ children }) => (
+                                    <li className="leading-relaxed pl-0.5">{children}</li>
+                                  ),
+                                  blockquote: ({ children }) => (
+                                    <blockquote className="my-2 p-2.5 bg-primary-light/30 border-l-3 border-primary rounded-r-xl text-xs text-text-secondary">
+                                      {children}
+                                    </blockquote>
+                                  ),
+                                  table: ({ children }) => (
+                                    <div className="overflow-x-auto my-2 rounded-xl border border-primary/15">
+                                      <table className="w-full text-left text-[11px] border-collapse">
+                                        {children}
+                                      </table>
+                                    </div>
+                                  ),
+                                  code: ({ children }) => (
+                                    <code className="bg-primary-light/40 text-primary px-1.5 py-0.5 rounded text-[11px] font-mono">
+                                      {children}
+                                    </code>
+                                  ),
+                                }}
+                              >
+                                {cleanText}
+                              </ReactMarkdown>
+
+                              {m.isStreaming && (
+                                <span className="inline-block w-1.5 h-3.5 bg-primary ml-0.5 animate-pulse align-middle" />
+                              )}
+                            </div>
+
+                            {actions.map((a, i) => (
+                              <div key={`${a.type}-${i}`} className={i > 0 ? "mt-2.5" : ""}>
+                                <AiActionCard action={a} />
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        <div
+                          className={`flex items-center justify-between gap-3 mt-2 text-[10px] ${
+                            isUser ? "text-white/75" : "text-text-muted"
+                          }`}
+                        >
+                          <span>{m.timestamp}</span>
+                          {!isUser && m.id !== "welcome" && !m.isStreaming && cleanText && (
+                            <button
+                              onClick={() => handleCopy(m.id, cleanText)}
+                              className="hover:text-primary transition-colors flex items-center gap-0.5 cursor-pointer btn-press"
+                              title="复制建议"
+                            >
+                              {copiedId === m.id ? (
+                                <>
+                                  <Check size={11} className="text-emerald-500" />
+                                  <span className="text-emerald-500">已复制</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Copy size={11} />
+                                  <span>复制</span>
+                                </>
+                              )}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      {isUser && (
+                        <div className="w-7 h-7 rounded-full bg-primary-light flex items-center justify-center shrink-0 mt-0.5 overflow-hidden shadow-xs border border-primary/20">
+                          {baby?.avatarUrl ? (
+                            <img src={baby.avatarUrl} alt="头像" className="w-full h-full object-cover" />
+                          ) : (
+                            <Baby size={14} className="text-primary" />
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+
+                <div ref={messagesEndRef} />
+              </div>
+
+              {/* Bottom Input Area */}
               <div
-                key={m.id}
-                className={`flex gap-2.5 ${isUser ? "justify-end" : "justify-start"}`}
+                className="p-3 pb-[max(14px,env(safe-area-inset-bottom))] relative bg-card border-t border-primary/15 flex flex-col gap-2 shrink-0 z-30"
+                style={{
+                  transform: keyboardInset > 0 ? `translateY(-${keyboardInset}px)` : undefined,
+                  paddingBottom: keyboardInset > 0 ? 12 : undefined,
+                  transition: "transform 0.15s ease-out",
+                }}
               >
-                {!isUser && (
-                  <div className="w-7 h-7 rounded-full bg-gradient-to-br from-primary-soft to-pink-100 text-primary flex items-center justify-center shrink-0 mt-0.5 shadow-xs border border-primary/10">
-                    <Bot size={14} />
+                {keyboardInset > 0 && (
+                  <div aria-hidden className="absolute left-0 right-0 top-full h-[40vh] bg-card pointer-events-none" />
+                )}
+                
+                {selectedImage && (
+                  <div className="flex items-center gap-2 bg-primary-light/40 p-1.5 px-3 rounded-2xl border border-primary/20 w-fit animate-spring-pop">
+                    <div className="w-8 h-8 rounded-lg overflow-hidden border border-primary/30">
+                      <img src={selectedImage} alt="预览" className="w-full h-full object-cover" />
+                    </div>
+                    <span className="text-[11px] text-text-primary font-medium">已附加单据照片</span>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedImage(null)}
+                      className="tap-hotzone w-5 h-5 rounded-full bg-primary/20 text-primary hover:bg-primary/30 flex items-center justify-center cursor-pointer"
+                    >
+                      <X size={12} />
+                    </button>
                   </div>
                 )}
 
-                <div
-                  className={`relative max-w-[88%] rounded-2xl p-3.5 shadow-sm text-xs sm:text-sm leading-relaxed ${
-                    isUser
-                      ? "bg-gradient-to-r from-primary to-pink-500 text-white shadow-primary/20"
-                      : "bg-card text-text-primary border border-primary/10 shadow-none"
-                  }`}
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    handleSend();
+                  }}
+                  className="flex items-center gap-2"
                 >
-                  {/* Thinking status inside the single assistant bubble */}
-                  {isThinking ? (
-                    <div className="flex items-center gap-2 text-xs text-text-secondary py-1">
-                      <div className="flex gap-1">
-                        <div className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce [animation-delay:-0.3s]" />
-                        <div className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce [animation-delay:-0.15s]" />
-                        <div className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce" />
-                      </div>
-                      <span className="text-[11px] text-text-muted">结合宝宝月龄与多模态数据深度解析中...</span>
-                    </div>
-                  ) : isUser ? (
-                    /* User message with optional image thumbnail */
-                    <div className="space-y-2">
-                      {m.image && (
-                        <div className="rounded-xl overflow-hidden max-w-[200px] border border-white/30 shadow-xs">
-                          <img src={m.image} alt="上传单据" className="w-full h-auto max-h-48 object-cover" />
-                        </div>
-                      )}
-                      <div className="whitespace-pre-wrap">{m.content}</div>
-                    </div>
-                  ) : (
-                    /* Assistant Rich Markdown Rendering + Action Card + Search Citations */
-                    <div className="space-y-2">
-                      {m.tools && m.tools.length > 0 && (
-                        <div className="flex flex-wrap gap-1">
-                          {m.tools.map((t, i) => (
-                            <span
-                              key={`${t.name}-${i}`}
-                              className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border ${
-                                t.name === "web_search"
-                                  ? "bg-blue-50 text-blue-700 border-blue-200"
-                                  : t.status === "start"
-                                    ? "bg-primary-light/50 text-text-secondary border-primary/15"
-                                    : t.isError
-                                      ? "bg-red-50 text-red-600 border-red-200"
-                                      : "bg-emerald-50 text-emerald-700 border-emerald-200"
-                              }`}
-                              title={t.summary || t.name}
-                            >
-                              {t.name === "web_search" ? (
-                                <Globe size={10} className="text-blue-500 animate-pulse" />
-                              ) : (
-                                <Wrench size={10} />
-                              )}
-                              {t.status === "start" ? "正在" : t.isError ? "失败" : "已完成"}
-                              {t.label || t.name}
-                            </span>
-                          ))}
-                        </div>
-                      )}
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => handleImageSelect(e)}
+                  />
 
-                      {/* 🌐 实时联网检索佐证卡片 */}
-                      {(() => {
-                        const webSearchTool = m.tools?.find((t) => t.name === "web_search");
-                        let searchEvidenceResults: SearchEvidenceItem[] = [];
-                        if (webSearchTool) {
-                          if (Array.isArray((webSearchTool.details as any)?.results)) {
-                            searchEvidenceResults = (webSearchTool.details as any).results;
-                          } else if (typeof webSearchTool.summary === "string") {
-                            try {
-                              const parsed = JSON.parse(webSearchTool.summary);
-                              if (Array.isArray(parsed.results)) searchEvidenceResults = parsed.results;
-                            } catch {}
-                          }
-                        }
-                        return searchEvidenceResults.length > 0 ? (
-                          <WebSearchCitationCard results={searchEvidenceResults} />
-                        ) : null;
-                      })()}
-
-                      <div className="markdown-content space-y-2">
-                        <ReactMarkdown
-                          remarkPlugins={[remarkGfm]}
-                          components={{
-                            a: ({ href, children }) => (
-                              <a
-                                href={href}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center gap-0.5 px-1.5 py-0.5 my-0.5 rounded-md bg-blue-50/80 hover:bg-blue-100 text-blue-600 hover:text-blue-800 border border-blue-200/60 font-medium text-[11px] transition-colors"
-                              >
-                                <span>{children}</span>
-                                <ExternalLink size={10} className="shrink-0 text-blue-400" />
-                              </a>
-                            ),
-                            h1: ({ children }) => (
-                              <h1 className="text-sm font-bold text-primary-dark mt-2 mb-1 border-l-2 border-primary pl-2">
-                                {children}
-                              </h1>
-                            ),
-                            h2: ({ children }) => (
-                              <h2 className="text-xs sm:text-sm font-bold text-text-primary mt-2 mb-1 flex items-center gap-1.5">
-                                <span className="w-1.5 h-1.5 rounded-full bg-primary inline-block" />
-                                {children}
-                              </h2>
-                            ),
-                            h3: ({ children }) => (
-                              <h3 className="text-xs font-bold text-text-primary mt-1.5 mb-0.5">
-                                {children}
-                              </h3>
-                            ),
-                            p: ({ children }) => (
-                              <p className="my-1 leading-relaxed text-text-primary">{children}</p>
-                            ),
-                            strong: ({ children }) => (
-                              <strong className="font-bold text-primary bg-primary-light/50 px-1 py-0.5 rounded">
-                                {children}
-                              </strong>
-                            ),
-                            ul: ({ children }) => (
-                              <ul className="my-1.5 pl-4 space-y-1 list-disc marker:text-primary/70">
-                                {children}
-                              </ul>
-                            ),
-                            ol: ({ children }) => (
-                              <ol className="my-1.5 pl-4 space-y-1 list-decimal marker:text-primary font-medium">
-                                {children}
-                              </ol>
-                            ),
-                            li: ({ children }) => (
-                              <li className="leading-relaxed pl-0.5">{children}</li>
-                            ),
-                            blockquote: ({ children }) => (
-                              <blockquote className="my-2 p-2.5 bg-primary-light/30 border-l-3 border-primary rounded-r-xl text-xs text-text-secondary">
-                                {children}
-                              </blockquote>
-                            ),
-                            table: ({ children }) => (
-                              <div className="overflow-x-auto my-2 rounded-xl border border-primary/15">
-                                <table className="w-full text-left text-[11px] border-collapse">
-                                  {children}
-                                </table>
-                              </div>
-                            ),
-                            thead: ({ children }) => (
-                              <thead className="bg-primary-light/60 text-text-primary font-bold">
-                                {children}
-                              </thead>
-                            ),
-                            th: ({ children }) => (
-                              <th className="p-2 border-b border-primary/15">{children}</th>
-                            ),
-                            td: ({ children }) => (
-                              <td className="p-2 border-b border-primary/10">{children}</td>
-                            ),
-                            code: ({ children }) => (
-                              <code className="bg-primary-light/40 text-primary px-1.5 py-0.5 rounded text-[11px] font-mono">
-                                {children}
-                              </code>
-                            ),
-                          }}
-                        >
-                          {cleanText}
-                        </ReactMarkdown>
-
-                        {/* Streaming blinking cursor */}
-                        {m.isStreaming && (
-                          <span className="inline-block w-1.5 h-3.5 bg-primary ml-0.5 animate-pulse align-middle" />
-                        )}
-                      </div>
-
-                      {/* Interactive Action Cards（支持多事件多卡片） */}
-                      {actions.map((a, i) => (
-                        <div key={`${a.type}-${i}`} className={i > 0 ? "mt-2.5" : ""}>
-                          <AiActionCard action={a} />
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Bubble footer */}
-                  <div
-                    className={`flex items-center justify-between gap-3 mt-2 text-[10px] ${
-                      isUser ? "text-white/75" : "text-text-muted"
-                    }`}
+                  <button
+                    type="button"
+                    disabled={loading || uploadingImage}
+                    onClick={() => fileInputRef.current?.click()}
+                    className="w-10 h-10 rounded-2xl bg-slate-100 dark:bg-card hover:bg-primary-light text-text-secondary hover:text-primary flex items-center justify-center border border-primary/15 transition-all shrink-0 active:scale-95 cursor-pointer disabled:opacity-40 btn-press"
+                    title="拍照 / 上传化验单或图片"
                   >
-                    <span>{m.timestamp}</span>
-                    {!isUser && m.id !== "welcome" && !m.isStreaming && cleanText && (
-                      <button
-                        onClick={() => handleCopy(m.id, cleanText)}
-                        className="hover:text-primary transition-colors flex items-center gap-0.5 cursor-pointer"
-                        title="复制建议"
-                      >
-                        {copiedId === m.id ? (
-                          <>
-                            <Check size={11} className="text-emerald-500" />
-                            <span className="text-emerald-500">已复制</span>
-                          </>
-                        ) : (
-                          <>
-                            <Copy size={11} />
-                            <span>复制</span>
-                          </>
-                        )}
-                      </button>
+                    {uploadingImage ? (
+                      <Loader2 size={16} className="animate-spin text-primary" />
+                    ) : (
+                      <ImageIcon size={18} />
                     )}
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={loading || transcribing}
+                    onClick={() => (recording ? stopRecording() : startRecording())}
+                    className={`w-10 h-10 rounded-2xl flex items-center justify-center border transition-all shrink-0 active:scale-95 cursor-pointer disabled:opacity-40 btn-spring ${
+                      recording
+                        ? "bg-red-500 text-white border-red-500 animate-pulse"
+                        : "bg-slate-100 dark:bg-card hover:bg-primary-light text-text-secondary hover:text-primary border-primary/15"
+                    }`}
+                    title={recording ? "点击停止并发送识别" : "按一下说话，自动转成文字"}
+                  >
+                    {transcribing ? (
+                      <Loader2 size={18} className="animate-spin text-primary" />
+                    ) : recording ? (
+                      <span className="w-3 h-3 bg-white rounded-sm" />
+                    ) : (
+                      <Mic size={18} />
+                    )}
+                  </button>
+
+                  <input
+                    ref={inputRef}
+                    type="text"
+                    value={inputText}
+                    onChange={(e) => setInputText(e.target.value)}
+                    placeholder={selectedImage ? "可补充说明，如'帮我解读并存入档案'..." : meta.placeholder}
+                    disabled={loading}
+                    className="flex-1 px-4 py-2.5 bg-slate-50/90 hover:bg-white focus:bg-white dark:bg-card rounded-2xl text-xs sm:text-sm text-text-primary font-medium border-2 border-primary/20 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all placeholder:text-text-muted/70 shadow-2xs"
+                  />
+
+                  <button
+                    type="submit"
+                    disabled={(!inputText.trim() && !selectedImage) || loading}
+                    className="w-10 h-10 rounded-2xl bg-gradient-to-r from-primary to-pink-500 text-white flex items-center justify-center shadow-button hover:opacity-95 disabled:opacity-35 transition-all shrink-0 active:scale-95 cursor-pointer btn-spring"
+                    title="发送提问或一句话记账"
+                  >
+                    <Send size={15} />
+                  </button>
+                </form>
+
+                <p className="text-[10px] text-text-muted/70 text-center flex items-center justify-center gap-1">
+                  <AlertCircle size={10} className="text-amber-500/70 shrink-0" />
+                  支持自然语言一句话记账、拍照化验单解读 · 医疗指导仅供参考
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* ===== TAB 2: 今日综合复盘 (AI Daily Summary Inline) ===== */}
+          {activeTab === "daily_summary" && (
+            <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4 bg-gradient-to-b from-transparent to-primary-light/10 animate-fade-in">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="text-sm font-bold text-text-primary flex items-center gap-1.5">
+                    <Activity size={16} className="text-primary" />
+                    <span>今日 AI 综合复盘与全维点评</span>
+                  </h4>
+                  <p className="text-[11px] text-text-muted">多维度汇聚今日喂养、睡眠、排便与生长状态</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => fetchDailySummaryInline(true)}
+                    disabled={loadingDailySummary}
+                    className="text-xs px-2.5 py-1 rounded-xl bg-primary-light text-primary font-bold hover:bg-primary-soft flex items-center gap-1 transition-all cursor-pointer btn-press"
+                  >
+                    <RefreshCw size={12} className={loadingDailySummary ? "animate-spin" : ""} />
+                    <span>重新生成</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClose();
+                      router.push("/daily-summary");
+                    }}
+                    className="text-xs px-2.5 py-1 rounded-xl bg-primary text-white font-bold hover:opacity-90 flex items-center gap-1 transition-all cursor-pointer btn-spring"
+                  >
+                    <span>完整日报页</span>
+                    <ArrowRight size={12} />
+                  </button>
+                </div>
+              </div>
+
+              {loadingDailySummary ? (
+                <div className="py-20 flex flex-col items-center justify-center text-text-muted gap-3">
+                  <Loader2 size={28} className="animate-spin text-primary" />
+                  <p className="text-xs">AI 正在汇总今日全部数据并生成复盘中...</p>
+                </div>
+              ) : dailySummaryData ? (
+                <div className="space-y-4 animate-slide-up">
+                  {/* Score & Headline Card */}
+                  <div className="p-4 rounded-2xl bg-gradient-to-br from-primary-light via-pink-50/60 to-lavender/20 border border-primary/20 shadow-soft">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <span className="text-[10px] font-bold text-primary uppercase tracking-wider">今日状态评分</span>
+                        <div className="text-xl font-black text-primary mt-0.5 flex items-baseline gap-1.5">
+                          <span>{dailySummaryData.overallScore}</span>
+                          <span className="text-xs font-normal text-text-muted">（{dailySummaryData.overallRating} / 5星）</span>
+                        </div>
+                      </div>
+                      <span className="text-xs px-2.5 py-1 rounded-full bg-primary/15 text-primary font-bold">
+                        {dailySummaryData.isPreterm ? "已按矫正月龄对标" : "按生理月龄对标"}
+                      </span>
+                    </div>
+                    <h5 className="font-bold text-sm text-text-primary mt-2">{dailySummaryData.headline}</h5>
+                  </div>
+
+                  {/* Highlights Grid */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    {dailySummaryData.highlights.map((h, i) => (
+                      <div key={i} className="p-3 rounded-2xl bg-card border border-primary/10 shadow-xs flex items-start gap-2.5">
+                        <span className="w-5 h-5 rounded-full bg-primary/15 text-primary text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">
+                          {i + 1}
+                        </span>
+                        <p className="text-xs text-text-primary leading-relaxed">{h}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Detailed Sections Evaluation */}
+                  <div className="space-y-2.5">
+                    <h5 className="text-xs font-bold text-text-secondary uppercase tracking-wider">分项儿科评估</h5>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                      <div className="p-3.5 rounded-2xl bg-sky-50/70 dark:bg-sky-950/30 border border-sky-200/60">
+                        <div className="flex items-center justify-between mb-1.5">
+                          <span className="font-bold text-xs text-sky-900 flex items-center gap-1.5">
+                            <Droplets size={14} className="text-sky-500" />
+                            <span>喂养与奶量摄入</span>
+                          </span>
+                          <span className="text-[10px] font-bold text-sky-700 bg-sky-100 px-2 py-0.5 rounded-full">
+                            {dailySummaryData.metrics.totalFeedingMl}ml / {dailySummaryData.metrics.feedingCount}次
+                          </span>
+                        </div>
+                        <p className="text-xs text-sky-950 leading-relaxed">{dailySummaryData.sections.feeding}</p>
+                      </div>
+
+                      <div className="p-3.5 rounded-2xl bg-purple-50/70 dark:bg-purple-950/30 border border-purple-200/60">
+                        <div className="flex items-center justify-between mb-1.5">
+                          <span className="font-bold text-xs text-purple-900 flex items-center gap-1.5">
+                            <Moon size={14} className="text-purple-500" />
+                            <span>睡眠与作息节律</span>
+                          </span>
+                          <span className="text-[10px] font-bold text-purple-700 bg-purple-100 px-2 py-0.5 rounded-full">
+                            {Math.floor(dailySummaryData.metrics.totalSleepMinutes / 60)}h{dailySummaryData.metrics.totalSleepMinutes % 60}m
+                          </span>
+                        </div>
+                        <p className="text-xs text-purple-950 leading-relaxed">{dailySummaryData.sections.sleep}</p>
+                      </div>
+
+                      <div className="p-3.5 rounded-2xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200/60">
+                        <div className="flex items-center justify-between mb-1.5">
+                          <span className="font-bold text-xs text-emerald-900 flex items-center gap-1.5">
+                            <Wind size={14} className="text-emerald-500" />
+                            <span>大小便与肠胃舒适</span>
+                          </span>
+                          <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">
+                            {dailySummaryData.metrics.diaperCount}次尿布
+                          </span>
+                        </div>
+                        <p className="text-xs text-emerald-950 leading-relaxed">{dailySummaryData.sections.diaper}</p>
+                      </div>
+
+                      <div className="p-3.5 rounded-2xl bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200/60">
+                        <div className="flex items-center justify-between mb-1.5">
+                          <span className="font-bold text-xs text-amber-900 flex items-center gap-1.5">
+                            <Sparkles size={14} className="text-amber-500" />
+                            <span>生长与补剂守护</span>
+                          </span>
+                          <span className="text-[10px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full">
+                            {dailySummaryData.metrics.supplementsCount}次补剂
+                          </span>
+                        </div>
+                        <p className="text-xs text-amber-950 leading-relaxed">{dailySummaryData.sections.growthAndCare}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Pediatric Tomorrow Advice */}
+                  <div className="p-4 rounded-2xl bg-card border border-primary/20 shadow-soft space-y-2">
+                    <h5 className="font-bold text-xs text-text-primary flex items-center gap-1.5">
+                      <ShieldCheck size={15} className="text-primary" />
+                      <span>明日照护建议与早教互动</span>
+                    </h5>
+                    <p className="text-xs text-text-primary leading-relaxed">{dailySummaryData.sections.tomorrowTips}</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="py-16 text-center space-y-2">
+                  <p className="text-3xl">📊</p>
+                  <p className="text-xs text-text-muted">点击上方「重新生成」获取今日综合复盘</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ===== TAB 3: 视觉识别中枢 (AI Vision Center) ===== */}
+          {activeTab === "vision" && (
+            <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4 bg-gradient-to-b from-transparent to-primary-light/10 animate-fade-in">
+              <input
+                ref={visionInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => {
+                  let promptText = "请帮我解读这张单据并提取结构化指标";
+                  let targetCtx: AiContextType = "medical";
+                  if (visionMode === "formula") {
+                    promptText = "请帮我识别这张配方奶粉或补剂的营养成分表，提取每100g各营养素含量及冲调比例";
+                    targetCtx = "feeding";
+                  } else if (visionMode === "food") {
+                    promptText = "请识别这张辅食/餐盘照片中的食材，评估当前月龄过敏风险与营养搭配";
+                    targetCtx = "food";
+                  } else if (visionMode === "skin") {
+                    promptText = "请帮我观察这张皮肤/便便/身体照片，给出初步护理建议与就医指引";
+                    targetCtx = "medical";
+                  }
+                  handleImageSelect(e, promptText, targetCtx);
+                }}
+              />
+
+              <div>
+                <h4 className="text-sm font-bold text-text-primary flex items-center gap-1.5">
+                  <Camera size={16} className="text-primary" />
+                  <span>多模态视觉识别中枢</span>
+                </h4>
+                <p className="text-[11px] text-text-muted">选择识别类型，拍照或从相册上传，AI 自动提取入库并给出临床指导</p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                {/* 1. Medical Report */}
+                <div
+                  onClick={() => {
+                    setVisionMode("medical");
+                    visionInputRef.current?.click();
+                  }}
+                  className="p-4 rounded-2xl bg-gradient-to-br from-blue-50/80 to-sky-50/40 border border-blue-200/70 shadow-xs card-hover-lift cursor-pointer space-y-2.5 group"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="w-10 h-10 rounded-2xl bg-blue-500 text-white flex items-center justify-center shadow-xs group-hover:scale-110 transition-transform">
+                      <FileText size={20} />
+                    </div>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 font-bold">
+                      化验单 OCR
+                    </span>
+                  </div>
+                  <div>
+                    <h5 className="font-bold text-sm text-blue-950 group-hover:text-blue-600 transition-colors">
+                      血常规 / 微量元素 / 体检单
+                    </h5>
+                    <p className="text-xs text-blue-900/80 mt-1 leading-relaxed">
+                      智能识别白细胞、CRP、血红蛋白、铁蛋白等30+指标并一键存入健康档案
+                    </p>
+                  </div>
+                  <div className="pt-2 border-t border-blue-100 flex items-center justify-between text-xs font-bold text-blue-600">
+                    <span>📷 拍照或上传化验单</span>
+                    <ArrowRight size={14} />
                   </div>
                 </div>
 
-                {isUser && (
-                  <div className="w-7 h-7 rounded-full bg-primary-light flex items-center justify-center shrink-0 mt-0.5 overflow-hidden shadow-xs border border-primary/20">
-                    {baby?.avatarUrl ? (
-                      <img src={baby.avatarUrl} alt="头像" className="w-full h-full object-cover" />
-                    ) : (
-                      <Baby size={14} className="text-primary" />
-                    )}
+                {/* 2. Formula & Supplement Nutrition Facts */}
+                <div
+                  onClick={() => {
+                    setVisionMode("formula");
+                    visionInputRef.current?.click();
+                  }}
+                  className="p-4 rounded-2xl bg-gradient-to-br from-pink-50/80 to-rose-50/40 border border-pink-200/70 shadow-xs card-hover-lift cursor-pointer space-y-2.5 group"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="w-10 h-10 rounded-2xl bg-pink-500 text-white flex items-center justify-center shadow-xs group-hover:scale-110 transition-transform">
+                      <Droplets size={20} />
+                    </div>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-pink-100 text-pink-800 font-bold">
+                      营养成分表
+                    </span>
                   </div>
-                )}
-              </div>
-            );
-          })}
+                  <div>
+                    <h5 className="font-bold text-sm text-pink-950 group-hover:text-primary transition-colors">
+                      配方奶粉 / 补剂包装表
+                    </h5>
+                    <p className="text-xs text-pink-900/80 mt-1 leading-relaxed">
+                      识别奶粉或D3液体钙包装成分表，自动折算浓度与每日安全摄入上限 (UL)
+                    </p>
+                  </div>
+                  <div className="pt-2 border-t border-pink-100 flex items-center justify-between text-xs font-bold text-primary">
+                    <span>📷 拍照包装成分表</span>
+                    <ArrowRight size={14} />
+                  </div>
+                </div>
 
-          <div ref={messagesEndRef} />
-        </div>
+                {/* 3. Food Plate & Ingredients */}
+                <div
+                  onClick={() => {
+                    setVisionMode("food");
+                    visionInputRef.current?.click();
+                  }}
+                  className="p-4 rounded-2xl bg-gradient-to-br from-amber-50/80 to-orange-50/40 border border-amber-200/70 shadow-xs card-hover-lift cursor-pointer space-y-2.5 group"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="w-10 h-10 rounded-2xl bg-amber-500 text-white flex items-center justify-center shadow-xs group-hover:scale-110 transition-transform">
+                      <UtensilsCrossed size={20} />
+                    </div>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 font-bold">
+                      辅食识别
+                    </span>
+                  </div>
+                  <div>
+                    <h5 className="font-bold text-sm text-amber-950 group-hover:text-amber-600 transition-colors">
+                      辅食餐盘 / 食材性状识别
+                    </h5>
+                    <p className="text-xs text-amber-900/80 mt-1 leading-relaxed">
+                      拍照宝宝辅食泥或手指食物，评估颗粒粗细、营养搭配及新食材过敏风险
+                    </p>
+                  </div>
+                  <div className="pt-2 border-t border-amber-100 flex items-center justify-between text-xs font-bold text-amber-700">
+                    <span>📷 拍照辅食餐盘</span>
+                    <ArrowRight size={14} />
+                  </div>
+                </div>
 
-        {/* Input Bar - High contrast, sticky with image upload */}
-        <div
-          className="p-3 pb-[max(14px,env(safe-area-inset-bottom))] relative bg-card border-t border-primary/15 flex flex-col gap-2 shrink-0 z-30"
-          style={{
-            transform: keyboardInset > 0 ? `translateY(-${keyboardInset}px)` : undefined,
-            paddingBottom: keyboardInset > 0 ? 12 : undefined,
-            transition: "transform 0.15s ease-out",
-          }}
-        >
-          {/* 键盘上方 iOS form assistant 栏是半透明的，用不透明色块向下延伸遮住透出的页面 */}
-          {keyboardInset > 0 && (
-            <div aria-hidden className="absolute left-0 right-0 top-full h-[40vh] bg-card pointer-events-none" />
-          )}
-          
-          {/* Selected image preview chip */}
-          {selectedImage && (
-            <div className="flex items-center gap-2 bg-primary-light/40 p-1.5 px-3 rounded-2xl border border-primary/20 w-fit animate-in fade-in">
-              <div className="w-8 h-8 rounded-lg overflow-hidden border border-primary/30">
-                <img src={selectedImage} alt="预览" className="w-full h-full object-cover" />
+                {/* 4. Skin Rash / Diaper Triage */}
+                <div
+                  onClick={() => {
+                    setVisionMode("skin");
+                    visionInputRef.current?.click();
+                  }}
+                  className="p-4 rounded-2xl bg-gradient-to-br from-purple-50/80 to-indigo-50/40 border border-purple-200/70 shadow-xs card-hover-lift cursor-pointer space-y-2.5 group"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="w-10 h-10 rounded-2xl bg-purple-500 text-white flex items-center justify-center shadow-xs group-hover:scale-110 transition-transform">
+                      <ShieldCheck size={20} />
+                    </div>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 font-bold">
+                      分诊指引
+                    </span>
+                  </div>
+                  <div>
+                    <h5 className="font-bold text-sm text-purple-950 group-hover:text-purple-600 transition-colors">
+                      便便性状 / 皮肤红疹观察
+                    </h5>
+                    <p className="text-xs text-purple-900/80 mt-1 leading-relaxed">
+                      辅助辨识大便颜色、奶瓣、红屁屁或轻微皮疹，获取护理要点与就医预警
+                    </p>
+                  </div>
+                  <div className="pt-2 border-t border-purple-100 flex items-center justify-between text-xs font-bold text-purple-700">
+                    <span>📷 拍照辅助观察</span>
+                    <ArrowRight size={14} />
+                  </div>
+                </div>
               </div>
-              <span className="text-[11px] text-text-primary font-medium">已附加单据照片</span>
-              <button
-                type="button"
-                onClick={() => setSelectedImage(null)}
-                className="tap-hotzone w-5 h-5 rounded-full bg-primary/20 text-primary hover:bg-primary/30 flex items-center justify-center cursor-pointer"
-              >
-                <X size={12} />
-              </button>
             </div>
           )}
 
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              handleSend();
-            }}
-            className="flex items-center gap-2"
-          >
-            {/* Hidden image input */}
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={handleImageSelect}
-            />
+          {/* ===== TAB 4: 专科题库与提示词 (Specialist Topics & Prompt Library) ===== */}
+          {activeTab === "topics" && (
+            <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4 bg-gradient-to-b from-transparent to-primary-light/10 animate-fade-in">
+              <div>
+                <h4 className="text-sm font-bold text-text-primary flex items-center gap-1.5">
+                  <Lightbulb size={16} className="text-primary" />
+                  <span>8 大专科临床问答锦囊</span>
+                </h4>
+                <p className="text-[11px] text-text-muted">点击任意问题，一键调取儿科专家深度解析与实操指导</p>
+              </div>
 
-            {/* Photo / Image Attachment button */}
-            <button
-              type="button"
-              disabled={loading || uploadingImage}
-              onClick={() => fileInputRef.current?.click()}
-              className="w-10 h-10 rounded-2xl bg-slate-100 hover:bg-primary-light text-text-secondary hover:text-primary flex items-center justify-center border border-primary/15 transition-all shrink-0 active:scale-95 cursor-pointer disabled:opacity-40"
-              title="拍照 / 上传化验单或图片"
-            >
-              {uploadingImage ? (
-                <Loader2 size={16} className="animate-spin text-primary" />
-              ) : (
-                <ImageIcon size={18} />
-              )}
-            </button>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                {TOPIC_PRESETS.map((t, idx) => {
+                  const Icon = t.icon;
+                  return (
+                    <div key={idx} className="p-4 rounded-2xl bg-card border border-primary/15 shadow-xs space-y-2.5 card-hover-lift">
+                      <div className="flex items-center gap-2">
+                        <div className={`w-7 h-7 rounded-xl bg-gradient-to-r ${t.color} text-white flex items-center justify-center shadow-xs`}>
+                          <Icon size={15} />
+                        </div>
+                        <h5 className="font-bold text-xs sm:text-sm text-text-primary">{t.category}</h5>
+                      </div>
+                      <div className="space-y-1.5">
+                        {t.prompts.map((p, pIdx) => (
+                          <button
+                            key={pIdx}
+                            type="button"
+                            onClick={() => handleSelectTopicPrompt(p, t.contextType)}
+                            className="w-full text-left p-2 rounded-xl bg-primary-light/30 hover:bg-primary-light text-xs text-text-secondary hover:text-primary transition-all duration-150 flex items-start gap-1.5 group cursor-pointer btn-press"
+                          >
+                            <Sparkles size={12} className="text-primary shrink-0 mt-0.5 group-hover:scale-115 transition-transform" />
+                            <span className="line-clamp-2 leading-relaxed">{p}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
-            {/* Voice input button */}
-            <button
-              type="button"
-              disabled={loading || transcribing}
-              onClick={() => (recording ? stopRecording() : startRecording())}
-              className={`w-10 h-10 rounded-2xl flex items-center justify-center border transition-all shrink-0 active:scale-95 cursor-pointer disabled:opacity-40 ${
-                recording
-                  ? "bg-red-500 text-white border-red-500 animate-pulse"
-                  : "bg-slate-100 hover:bg-primary-light text-text-secondary hover:text-primary border-primary/15"
-              }`}
-              title={recording ? "点击停止并发送识别" : "按一下说话，自动转成文字"}
-            >
-              {transcribing ? (
-                <Loader2 size={18} className="animate-spin text-primary" />
-              ) : recording ? (
-                <span className="w-3 h-3 bg-white rounded-sm" />
-              ) : (
-                <Mic size={18} />
-              )}
-            </button>
-
-            <input
-              ref={inputRef}
-              type="text"
-              value={inputText}
-              onChange={(e) => setInputText(e.target.value)}
-              placeholder={selectedImage ? "可补充说明，如'帮我解读并存入档案'..." : meta.placeholder}
-              disabled={loading}
-              className="flex-1 px-4 py-2.5 bg-slate-50/90 hover:bg-white focus:bg-white rounded-2xl text-xs sm:text-sm text-text-primary font-medium border-2 border-primary/20 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all placeholder:text-text-muted/70 shadow-2xs"
-            />
-
-            <button
-              type="submit"
-              disabled={(!inputText.trim() && !selectedImage) || loading}
-              className="w-10 h-10 rounded-2xl bg-gradient-to-r from-primary to-pink-500 text-white flex items-center justify-center shadow-button hover:opacity-95 disabled:opacity-35 transition-all shrink-0 active:scale-95 cursor-pointer"
-              title="发送提问或录入"
-            >
-              <Send size={15} />
-            </button>
-          </form>
-
-          {/* Medical disclaimer */}
-          <p className="text-[10px] text-text-muted/70 text-center flex items-center justify-center gap-1">
-            <AlertCircle size={10} className="text-amber-500/70 shrink-0" />
-            支持拍照化验单智能录入与自然语言日常记账 · 医疗建议仅供参考
-          </p>
         </div>
       </div>
     </div>
-  </div>
   );
 };

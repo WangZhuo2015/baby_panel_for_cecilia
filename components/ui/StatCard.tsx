@@ -16,8 +16,8 @@ const StatCardImpl: React.FC<StatCardProps> = ({
   color = 'text-primary',
 }) => {
   return (
-    <div className="bg-card rounded-[20px] shadow-card p-3 flex flex-col items-center gap-1.5 min-w-0">
-      <div className={`flex items-center justify-center w-9 h-9 rounded-full ${color}`}>
+    <div className="bg-card rounded-[20px] shadow-card hover:shadow-elevated p-3 flex flex-col items-center gap-1.5 min-w-0 transition-all duration-200 hover:-translate-y-1 active:scale-95 cursor-default">
+      <div className={`flex items-center justify-center w-9 h-9 rounded-full ${color} transition-transform group-hover:scale-110`}>
         {icon}
       </div>
       <div className="flex items-baseline gap-0.5">

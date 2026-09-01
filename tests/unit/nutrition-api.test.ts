@@ -23,6 +23,9 @@ test("API: Nutrition Products, Schedules, Records, and Analysis Domain", async (
   };
   const today = getLocalDateStr();
 
+  // Clean up any test records from today
+  await prisma.supplementRecord.deleteMany({ where: { babyId: baby.id, date: today } });
+
   // 1. Test Products API
   console.log("-> Testing Nutrition Products API...");
   // POST Formula

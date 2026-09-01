@@ -169,20 +169,20 @@ export const RecordDrawerHost: React.FC = () => {
       role="dialog"
       aria-modal="true"
       aria-labelledby="record-drawer-title"
-      className="fixed inset-0 z-[90] flex justify-end animate-in fade-in duration-200"
+      className="fixed inset-0 z-[90] flex justify-end animate-fade-in"
     >
       {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs transition-opacity"
+        className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs transition-opacity duration-200"
         onClick={handleClose}
       />
 
       {/* Slide-over Drawer Panel */}
-      <div className="relative w-full sm:w-[480px] max-w-full h-full bg-card shadow-2xl flex flex-col border-l border-primary/15 animate-in slide-in-from-right duration-300 z-10">
+      <div className="relative w-full sm:w-[480px] max-w-full h-full bg-card shadow-2xl flex flex-col border-l border-primary/15 animate-slide-in-right z-10">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 pt-[max(16px,env(safe-area-inset-top))] bg-white/95 dark:bg-card/95 backdrop-blur-md border-b border-primary/10 shrink-0">
           <div className="flex items-center gap-3 min-w-0 flex-1">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-primary to-pink-500 text-white flex items-center justify-center text-xl shadow-sm shadow-primary/25 shrink-0">
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-primary to-pink-500 text-white flex items-center justify-center text-xl shadow-sm shadow-primary/25 shrink-0 animate-float">
               {meta.emoji}
             </div>
             <div className="min-w-0 flex-1">
@@ -201,7 +201,7 @@ export const RecordDrawerHost: React.FC = () => {
             type="button"
             onClick={handleClose}
             aria-label="关闭抽屉"
-            className="w-10 h-10 rounded-full bg-primary-soft/40 hover:bg-primary-soft text-text-muted hover:text-text-primary flex items-center justify-center transition-colors cursor-pointer tap-hotzone"
+            className="w-10 h-10 rounded-full bg-primary-soft/40 hover:bg-primary-soft text-text-muted hover:text-text-primary flex items-center justify-center transition-colors cursor-pointer tap-hotzone btn-press"
           >
             <X size={20} />
           </button>

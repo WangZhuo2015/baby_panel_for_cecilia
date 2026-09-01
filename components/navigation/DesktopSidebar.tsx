@@ -142,14 +142,20 @@ export function DesktopSidebar() {
 
       {/* 4. Bottom AI Assistant & Theme Toggle Area */}
       <div className="p-3.5 border-t border-primary/10 space-y-2 bg-gradient-to-t from-primary-light/20 to-transparent">
-        {/* Large Prominent AI Entry */}
+        {/* Large Prominent AI Entry with shortcut badge & glow */}
         <button
           type="button"
-          onClick={() => openQuickAI({ contextTitle: "AI 育儿专属顾问" })}
-          className="w-full min-h-[46px] py-2.5 px-3 rounded-2xl bg-gradient-to-r from-primary to-pink-500 text-white font-bold text-xs shadow-button flex items-center justify-center gap-2 hover:opacity-95 active:scale-98 transition-all cursor-pointer"
+          onClick={() => openQuickAI({ contextTitle: "AI 育儿智能中枢" })}
+          className="w-full min-h-[48px] py-2.5 px-3 rounded-2xl bg-gradient-to-r from-primary via-pink-500 to-lavender text-white font-bold text-xs shadow-button flex items-center justify-between hover:opacity-95 hover:scale-[1.02] active:scale-98 transition-all cursor-pointer animate-pulse-glow-ai group"
+          title="打开统一 AI 智能中枢 (快捷键 Ctrl+K / ⌘K)"
         >
-          <Sparkles size={16} className="animate-pulse" />
-          <span>AI 育儿智能顾问</span>
+          <div className="flex items-center gap-2">
+            <Sparkles size={16} className="transition-transform duration-300 group-hover:rotate-12" />
+            <span>AI 育儿智能中枢</span>
+          </div>
+          <span className="text-[10px] bg-white/20 px-1.5 py-0.5 rounded-md text-white font-mono font-normal">
+            ⌘K
+          </span>
         </button>
 
         {/* System Bar (Theme, Settings) */}
