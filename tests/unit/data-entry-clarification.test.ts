@@ -31,7 +31,8 @@ test("Data Entry Clarification: System Prompt contains strict follow-up rules", 
   assert.ok(prompt.includes("睡眠记录 (record_sleep)"), "Must cover sleep clarification");
   assert.ok(prompt.includes("尿布与排便 (record_diaper)"), "Must cover diaper clarification");
   assert.ok(prompt.includes("辅食餐点 (record_food)"), "Must cover food clarification");
-  assert.ok(prompt.includes("生长测量 (record_growth)"), "Must cover growth clarification");
+  assert.ok(prompt.includes("交互式对话操作卡片 (Action Cards"), "Must include Action Cards protocol");
+  assert.ok(prompt.includes("json:action"), "Must specify json:action format");
 });
 
 test("Data Entry Clarification: Tools guard against missing data", async () => {
