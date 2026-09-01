@@ -652,7 +652,8 @@ export async function generateAiDailySummary(
     }
 
     const jsonRes = await res.json();
-    const content = jsonRes.choices?.[0]?.message?.content ?? "";
+    const choice = jsonRes.choices?.[0]?.message;
+    const content = (choice?.content || choice?.reasoning_content || "");
 
     // Extract JSON block
     const match = content.match(/\{[\s\S]*\}/);

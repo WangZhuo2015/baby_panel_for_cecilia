@@ -124,3 +124,18 @@ export function validateUploadedImage(
     mime: magic.detectedMime || mime || "image/jpeg",
   };
 }
+
+export function getProjectRoot(): string {
+  let cwd = process.cwd();
+  if (cwd.endsWith(`${path.sep}.next${path.sep}standalone`) || cwd.endsWith(".next/standalone")) {
+    cwd = path.resolve(cwd, "..", "..");
+  }
+  return cwd;
+}
+
+export function getUploadsDir(subDir?: string): string {
+  const root = getProjectRoot();
+  const base = path.resolve(root, "public", "uploads");
+  return subDir ? path.resolve(base, subDir) : base;
+}
+

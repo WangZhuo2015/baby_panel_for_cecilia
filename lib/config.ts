@@ -83,7 +83,7 @@ function isAbandonedHermesUpstream(url: string): boolean {
 }
 
 function preferOpenRouter(): boolean {
-  return Boolean(process.env.OPENROUTER_API_KEY);
+  return Boolean(process.env.OPENROUTER_API_KEY) && !process.env.AI_BASE_URL && !process.env.OPENAI_BASE_URL;
 }
 
 export const AI_CONFIG = {
@@ -102,13 +102,15 @@ export const AI_CONFIG = {
   get model() {
     if (preferOpenRouter()) return process.env.OPENROUTER_MODEL || "muse-spark-1.2-contributor";
     const model = process.env.AI_MODEL || process.env.OPENAI_MODEL || "";
-    if (!model || model === "hermes-agent") return process.env.OPENROUTER_MODEL || "muse-spark-1.2-contributor";
+    if (!model || model === "hermes-agent" || (this.baseUrl.includes("opencode.ai") && model.includes("muse-spark"))) {
+      return "deepseek-v4-flash-vision-exp";
+    }
     return model;
   },
   get visionModel() {
     const vision = process.env.AI_VISION_MODEL;
     if (vision && vision !== "hermes-agent") return vision;
-    return this.model;
+    return "deepseek-v4-flash-vision-exp";
   },
   get headers(): Record<string, string> {
     const headers: Record<string, string> = { "Content-Type": "application/json" };

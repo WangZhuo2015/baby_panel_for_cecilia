@@ -9,6 +9,7 @@ import {
   createBabyPanelTools,
   createLlmBackend,
   parseDataImage,
+  resolveImageContent,
   runBabyAgent,
 } from "@/lib/agent";
 
@@ -166,13 +167,13 @@ export async function POST(request: Request) {
             (m: { role?: string }, idx: number) =>
               idx < messages.length - 1 && (m.role === "user" || m.role === "assistant")
           );
+          const resolvedImage = await resolveImageContent(image);
           await runBabyAgent({
             systemPrompt,
             history: toHistory(prior.slice(-8)),
             prompt: promptText,
-            images: parseDataImage(image) ? [parseDataImage(image)!] : undefined,
+            images: resolvedImage ? [resolvedImage] : undefined,
             tools: createBabyPanelTools({ userId: user.id, baby: targetBaby }),
-            backend: "openrouter",
             abortSignal: request.signal,
             onEvent: (event) => {
               if (event.type === "text") {

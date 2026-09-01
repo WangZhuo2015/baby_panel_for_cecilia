@@ -82,7 +82,8 @@ food.data: date?, time?(HH:mm), foods(string[]), portion?(little|half|most|all),
       return NextResponse.json({ error: "整理记录失败，请稍后重试" }, { status: 502 });
     }
     const data = await res.json();
-    const content = data.choices?.[0]?.message?.content ?? "";
+    const choice = data.choices?.[0]?.message;
+    const content = (choice?.content || choice?.reasoning_content || "");
     const actions = extractActionCards(content);
     return NextResponse.json({ transcript: text, actions });
   } catch (err) {

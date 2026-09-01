@@ -629,6 +629,86 @@ export function createBabyPanelTools(ctx: BabyToolContext): AgentTool[] {
     },
   };
 
+  const deleteRecord: AgentTool = {
+    name: "delete_record",
+    label: "删除记录",
+    description: "删除宝宝的某条错误或重复记录（支持 growth 生长记录 / medical_report 化验单 / feeding 喂养 / sleep 睡眠 / diaper 换尿布 / food 辅食）。可指定 id 或按日期与类型定位删除。",
+    parameters: Type.Object({
+      type: Type.Union([
+        Type.Literal("growth"),
+        Type.Literal("medical_report"),
+        Type.Literal("feeding"),
+        Type.Literal("sleep"),
+        Type.Literal("diaper"),
+        Type.Literal("food"),
+      ]),
+      id: Type.Optional(Type.String({ description: "记录的唯一 ID（如有）" })),
+      date: Type.Optional(Type.String({ description: "YYYY-MM-DD，若不知道 ID 可指定该日期的记录" })),
+    }),
+    executionMode: "sequential",
+    execute: async (_id, raw) => {
+      const params = raw as Params;
+      const type = String(params.type);
+      let targetId = typeof params.id === "string" ? params.id.trim() : "";
+      const date = typeof params.date === "string" && isValidDateStr(params.date) ? params.date : undefined;
+
+      if (!targetId && date) {
+        if (type === "growth") {
+          const rec = await prisma.growthMeasurement.findFirst({
+            where: { babyId, date },
+            orderBy: { createdAt: "desc" },
+          });
+          if (rec) targetId = rec.id;
+        } else if (type === "medical_report") {
+          const rec = await prisma.medicalReport.findFirst({
+            where: { babyId, date },
+            orderBy: { createdAt: "desc" },
+          });
+          if (rec) targetId = rec.id;
+        } else if (type === "feeding") {
+          const { start, end } = getLocalDayUtcRange(date);
+          const rec = await prisma.feedingRecord.findFirst({
+            where: { babyId, timestamp: { gte: start, lt: end } },
+            orderBy: { timestamp: "desc" },
+          });
+          if (rec) targetId = rec.id;
+        } else if (type === "sleep") {
+          const { start, end } = getLocalDayUtcRange(date);
+          const rec = await prisma.sleepRecord.findFirst({
+            where: { babyId, startTime: { gte: start, lt: end } },
+            orderBy: { startTime: "desc" },
+          });
+          if (rec) targetId = rec.id;
+        } else if (type === "diaper") {
+          const { start, end } = getLocalDayUtcRange(date);
+          const rec = await prisma.diaperRecord.findFirst({
+            where: { babyId, timestamp: { gte: start, lt: end } },
+            orderBy: { timestamp: "desc" },
+          });
+          if (rec) targetId = rec.id;
+        } else if (type === "food") {
+          const rec = await prisma.foodLogRecord.findFirst({
+            where: { babyId, date },
+            orderBy: { createdAt: "desc" },
+          });
+          if (rec) targetId = rec.id;
+        }
+      }
+
+      if (!targetId) {
+        fail(`未找到指定的 ${type} 记录，请确认记录 ID 或具体日期`);
+      }
+
+      if (type === "medical_report") {
+        await prisma.medicalReport.delete({ where: { id: targetId } });
+        return ok(`已成功删除该条化验/体检报告`, { id: targetId });
+      }
+
+      await records.deleteRecord({ userId: ctx.userId, babyId, baby: ctx.baby }, type as any, targetId);
+      return ok(`已成功删除该条 ${type} 记录`, { id: targetId });
+    },
+  };
+
   return [
     getBabyProfile,
     getDailySummary,
@@ -640,6 +720,7 @@ export function createBabyPanelTools(ctx: BabyToolContext): AgentTool[] {
     recordDiaper,
     recordGrowth,
     recordVaccine,
+    deleteRecord,
     queryFoodItem,
     getVaccineSchedule,
     getDevelopmentMilestones,

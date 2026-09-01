@@ -3,6 +3,7 @@ import { readFile, stat } from "fs/promises";
 import { existsSync } from "fs";
 import path from "path";
 import { getAuthSession } from "@/lib/auth";
+import { getUploadsDir, getProjectRoot } from "@/lib/upload";
 
 const MIME_TYPES: Record<string, string> = {
   ".jpg": "image/jpeg",
@@ -34,26 +35,34 @@ export async function GET(
       return new NextResponse("Not Found", { status: 404 });
     }
 
-    const baseUploadDir = path.resolve(process.cwd(), "public", "uploads");
     const safePath = path.join(...pathSegments);
-    const resolvedPath = path.resolve(baseUploadDir, safePath);
+    const candidateDirs = [
+      getUploadsDir(),
+      path.resolve(process.cwd(), "public", "uploads"),
+      path.resolve(getProjectRoot(), ".next", "standalone", "public", "uploads"),
+    ];
 
-    // Prevent directory traversal attacks (verify path is within uploads boundary)
-    if (!resolvedPath.startsWith(baseUploadDir + path.sep)) {
-      return new NextResponse("Forbidden", { status: 403 });
+    let targetPath: string | null = null;
+    for (const baseDir of candidateDirs) {
+      const p = path.resolve(/* turbopackIgnore: true */ baseDir, safePath);
+      // Prevent directory traversal attacks
+      if (p.startsWith(baseDir + path.sep) && existsSync(/* turbopackIgnore: true */ p)) {
+        targetPath = p;
+        break;
+      }
     }
 
-    if (!existsSync(resolvedPath)) {
+    if (!targetPath) {
       return new NextResponse("File Not Found", { status: 404 });
     }
 
-    const fileStat = await stat(resolvedPath);
+    const fileStat = await stat(/* turbopackIgnore: true */ targetPath);
     if (!fileStat.isFile()) {
       return new NextResponse("Not Found", { status: 404 });
     }
 
-    const fileBuffer = await readFile(resolvedPath);
-    const ext = path.extname(resolvedPath).toLowerCase();
+    const fileBuffer = await readFile(/* turbopackIgnore: true */ targetPath);
+    const ext = path.extname(targetPath).toLowerCase();
     const contentType = MIME_TYPES[ext] || "application/octet-stream";
 
     return new NextResponse(fileBuffer, {

@@ -52,6 +52,12 @@ function opencodeModelId(): string {
   return process.env.AI_MODEL || "muse-spark-1.2-contributor";
 }
 
+function opencodeVisionModelId(): string {
+  const v = process.env.AI_VISION_MODEL;
+  if (v && v !== "hermes-agent") return v;
+  return "deepseek-v4-flash-vision-exp";
+}
+
 export function listLlmBackends(): LlmBackendPublic[] {
   return [
     {
@@ -74,20 +80,62 @@ export function resolveLlmBackendId(_raw?: unknown): LlmBackendId {
   return "openrouter";
 }
 
-export function createLlmBackend(_id: LlmBackendId = "openrouter"): LlmBackendSession {
-  // Opencode provider (primary, uses responses API for muse-spark)
+export function createLlmBackend(
+  _id: LlmBackendId = "openrouter",
+  options?: { isVision?: boolean }
+): LlmBackendSession {
+  const isVision = Boolean(options?.isVision);
+
+  // Opencode provider (primary)
   if (_id === "opencode" || (opencodeApiKey() && _id !== "openrouter")) {
     const models = createModels();
-    const model: Model<"openai-responses"> = {
-      id: opencodeModelId(),
-      name: opencodeModelId(),
-      api: "openai-responses",
+    const modelId = isVision ? opencodeVisionModelId() : opencodeModelId();
+    const usesResponsesApi = modelId.includes("muse-spark") && !isVision;
+
+    if (usesResponsesApi) {
+      const model: Model<"openai-responses"> = {
+        id: modelId,
+        name: modelId,
+        api: "openai-responses",
+        provider: "opencode",
+        baseUrl: opencodeBaseUrl(),
+        reasoning: true,
+        input: ["text", "image"],
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+        contextWindow: 1_048_576,
+        maxTokens: 4096,
+        headers: {},
+      };
+      models.setProvider(
+        createProvider({
+          id: "opencode",
+          name: "Opencode",
+          baseUrl: opencodeBaseUrl(),
+          auth: {
+            apiKey: envApiKeyAuth("Opencode API key", ["AI_API_KEY"]),
+          },
+          models: [model as unknown as Model<"openai-completions">],
+          api: openAIResponsesApi(),
+        })
+      );
+      return {
+        id: "opencode",
+        models,
+        model: model as unknown as Model<"openai-completions">,
+        getApiKey: () => opencodeApiKey() || undefined,
+      };
+    }
+
+    const model: Model<"openai-completions"> = {
+      id: modelId,
+      name: modelId,
+      api: "openai-completions",
       provider: "opencode",
       baseUrl: opencodeBaseUrl(),
       reasoning: true,
       input: ["text", "image"],
       cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-      contextWindow: 1_048_576,
+      contextWindow: 1_050_000,
       maxTokens: 4096,
       headers: {},
     };
@@ -99,17 +147,18 @@ export function createLlmBackend(_id: LlmBackendId = "openrouter"): LlmBackendSe
         auth: {
           apiKey: envApiKeyAuth("Opencode API key", ["AI_API_KEY"]),
         },
-        models: [model as unknown as Model<"openai-completions">],
-        api: openAIResponsesApi(),
+        models: [model],
+        api: openAICompletionsApi(),
       })
     );
     return {
       id: "opencode",
       models,
-      model: model as unknown as Model<"openai-completions">,
+      model,
       getApiKey: () => opencodeApiKey() || undefined,
     };
   }
+
   const models = createModels();
   const model: Model<"openai-completions"> = {
     id: openrouterModelId(),

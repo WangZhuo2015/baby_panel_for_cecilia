@@ -41,6 +41,7 @@ export interface GrowthSlice {
   fetchWeather: (lat?: number, lon?: number, city?: string, force?: boolean) => Promise<void>;
   fetchAiTips: (force?: boolean) => Promise<void>;
   addGrowthMeasurement: (measurement: Partial<GrowthMeasurement>) => Promise<void>;
+  deleteGrowthMeasurement: (id: string) => Promise<void>;
   addMedicalReport: (report: Partial<MedicalReport> & { growthData?: any }) => Promise<MedicalReport>;
   deleteMedicalReport: (id: string) => Promise<void>;
   updateBook: (id: string, data: Partial<Book>) => Promise<void>;
@@ -266,6 +267,19 @@ export const createGrowthSlice = (set: any, get: any): GrowthSlice => ({
         throw new Error("当前离线，记录已保存，联网后自动同步 ⏳");
       }
       console.error("Failed to add growth measurement:", e); throw e;
+    }
+  },
+
+  deleteGrowthMeasurement: async (id: string) => {
+    try {
+      await request<{ success: boolean; id: string }>(`/api/growth?id=${id}`, { method: "DELETE" });
+      invalidateCache("growthMeasurements");
+      set((state: any) => ({
+        growthMeasurements: state.growthMeasurements.filter((m: any) => m.id !== id),
+      }));
+    } catch (e) {
+      console.error("Failed to delete growth measurement:", e);
+      throw e;
     }
   },
 

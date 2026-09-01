@@ -3,7 +3,7 @@ import { writeFile, mkdir } from "fs/promises";
 import path from "path";
 import crypto from "crypto";
 import { requireAuth } from "@/lib/api-helpers";
-import { validateUploadedImage } from "@/lib/upload";
+import { validateUploadedImage, getUploadsDir } from "@/lib/upload";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 
 export async function POST(request: Request) {
@@ -37,12 +37,18 @@ export async function POST(request: Request) {
     const ext = validation.ext || ".jpg";
     const randomHex = crypto.randomBytes(16).toString("hex");
     const filename = `${Date.now()}_${randomHex}${ext}`;
-    const uploadDir = path.join(process.cwd(), "public", "uploads", "medical");
+    const uploadDir = getUploadsDir("medical");
 
     await mkdir(uploadDir, { recursive: true });
     const filePath = path.join(uploadDir, filename);
     await writeFile(filePath, buffer);
 
+    const cwd = process.cwd();
+    if (cwd.endsWith(".next/standalone") || cwd.endsWith(`${path.sep}.next${path.sep}standalone`)) {
+      const standaloneUploadDir = path.join(cwd, "public", "uploads", "medical");
+      await mkdir(standaloneUploadDir, { recursive: true });
+      await writeFile(path.join(standaloneUploadDir, filename), buffer);
+    }
 
     const imageUrl = `/uploads/medical/${filename}`;
     return NextResponse.json({ success: true, imageUrl, filename });

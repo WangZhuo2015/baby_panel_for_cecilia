@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Baby, Sparkles, RefreshCw } from "lucide-react";
+import { Plus, Baby, Sparkles, RefreshCw, Trash2 } from "lucide-react";
 import dynamic from "next/dynamic";
 import { useBabyStore } from "@/stores/useBabyStore";
 import { calculateAge } from "@/lib/age";
@@ -28,6 +28,7 @@ export default function GrowthPage() {
   const age = baby ? calculateAge(baby.birthDate) : { months: 0, days: 0, label: "0月0天" };
   const measurements = useBabyStore((s) => s.growthMeasurements);
   const fetchGrowthMeasurements = useBabyStore((s) => s.fetchGrowthMeasurements);
+  const deleteGrowthMeasurement = useBabyStore((s) => s.deleteGrowthMeasurement);
 
   const [activeTab, setActiveTab] = useState<GrowthTab>("weight");
   const [whoPercentiles, setWhoPercentiles] = useState<Record<string, Record<string, number[]>>>({
@@ -130,6 +131,28 @@ export default function GrowthPage() {
       ]);
     } finally {
       setTimeout(() => setRefreshing(false), 500);
+    }
+  };
+
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const handleDeleteMeasurement = async (id: string, date: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!confirm(`确定要删除 ${date} 的这条生长测量记录吗？`)) return;
+    setDeletingId(id);
+    try {
+      await deleteGrowthMeasurement(id);
+      fetch("/api/growth/chart")
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.whoPercentiles) setWhoPercentiles(data.whoPercentiles);
+          if (data.monthLabels) setMonthLabels(data.monthLabels);
+        })
+        .catch(() => {});
+    } catch {
+      alert("删除失败，请重试");
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -273,21 +296,33 @@ export default function GrowthPage() {
                 {measurements.slice(0, 15).map((m) => (
                   <div
                     key={m.id}
-                    className="flex items-center justify-between p-2.5 rounded-xl bg-white dark:bg-card border border-primary/15 hover:border-primary/30 transition-all shadow-2xs"
+                    className="flex items-center justify-between p-2.5 rounded-xl bg-white dark:bg-card border border-primary/15 hover:border-primary/30 transition-all shadow-2xs group/item"
                   >
                     <div>
                       <p className="text-[11px] text-text-muted">{m.date}</p>
                       <p className="text-xs font-bold text-text-primary mt-0.5">{m.ageLabel}</p>
                     </div>
-                    <div className="text-right">
-                      <p className="text-xs font-black text-primary">
-                        {m.weightKg != null ? `${m.weightKg}kg` : ""}
-                        {m.heightCm != null ? ` · ${m.heightCm}cm` : ""}
-                        {m.headCircumferenceCm != null ? ` · 头围${m.headCircumferenceCm}cm` : ""}
-                      </p>
-                      {m.percentile != null && (
-                        <p className="text-[10px] text-text-muted mt-0.5">WHO P{m.percentile}</p>
-                      )}
+                    <div className="flex items-center gap-2.5">
+                      <div className="text-right">
+                        <p className="text-xs font-black text-primary">
+                          {m.weightKg != null ? `${m.weightKg}kg` : ""}
+                          {m.heightCm != null ? ` · ${m.heightCm}cm` : ""}
+                          {m.headCircumferenceCm != null ? ` · 头围${m.headCircumferenceCm}cm` : ""}
+                        </p>
+                        {m.percentile != null && (
+                          <p className="text-[10px] text-text-muted mt-0.5">WHO P{m.percentile}</p>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={(e) => handleDeleteMeasurement(m.id, m.date, e)}
+                        disabled={deletingId === m.id}
+                        aria-label={`删除 ${m.date} 生长记录`}
+                        title="删除此条记录"
+                        className="p-1.5 rounded-lg text-text-muted hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors cursor-pointer disabled:opacity-40"
+                      >
+                        <Trash2 size={14} />
+                      </button>
                     </div>
                   </div>
                 ))}

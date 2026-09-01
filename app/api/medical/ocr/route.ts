@@ -10,6 +10,7 @@ import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import { prisma } from "@/lib/prisma";
 import { archiveBuffer, archiveText } from "@/lib/archive";
 import { composeMedicalAiSummary } from "@/lib/medical-summary";
+import { resolveImageContent } from "@/lib/agent/images";
 
 export const maxDuration = 120;
 
@@ -97,6 +98,14 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: "imageUrl 仅支持本站 /uploads/ 路径" }, { status: 400 });
           }
           savedImageUrl = json.imageUrl;
+          const imgContent = await resolveImageContent(json.imageUrl);
+          if (imgContent) {
+            imageBase64 = imgContent.data;
+            mime = imgContent.mimeType;
+            if (!inputBuffer) {
+              inputBuffer = Buffer.from(imageBase64, "base64");
+            }
+          }
         }
       }
 

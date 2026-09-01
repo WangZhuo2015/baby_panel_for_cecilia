@@ -77,11 +77,12 @@ function isNotFoundError(error: unknown): boolean {
 }
 
 export async function runBabyAgent(opts: RunBabyAgentOptions): Promise<void> {
+  const hasImages = Boolean(opts.images && opts.images.length > 0);
   // Try Opencode first (chat -> responses), then OpenRouter - keep both endpoints
   const useOpencode = Boolean(process.env.AI_API_KEY);
-  const opencodeChat = useOpencode ? createLlmBackend("opencode") : null;
-  const opencodeResponses = useOpencode ? createOpencodeResponsesBackend() : null;
-  const openrouter = createLlmBackend("openrouter");
+  const opencodeChat = useOpencode ? createLlmBackend("opencode", { isVision: hasImages }) : null;
+  const opencodeResponses = useOpencode && !hasImages ? createOpencodeResponsesBackend() : null;
+  const openrouter = createLlmBackend("openrouter", { isVision: hasImages });
 
   const makeStreamFn = (backend: { models: { streamSimple: StreamFn }, model: Model<any> }, providerHeader: Record<string,string>): StreamFn => {
     const inner = (backend.models as any).streamSimple.bind(backend.models);

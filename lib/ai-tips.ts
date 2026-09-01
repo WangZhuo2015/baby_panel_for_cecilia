@@ -113,7 +113,8 @@ export async function getAiTips(babyId?: string): Promise<string[]> {
     }
 
     const data = await res.json();
-    const content = data.choices?.[0]?.message?.content ?? "";
+    const choice = data.choices?.[0]?.message;
+    const content = (choice?.content || choice?.reasoning_content || "");
 
     // Try parsing JSON array from response
     const jsonMatch = content.match(/\[[\s\S]*\]/);
