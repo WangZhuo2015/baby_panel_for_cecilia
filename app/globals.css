@@ -272,29 +272,47 @@ body {
   100% { transform: rotate(360deg) scale(1); }
 }
 
+@keyframes drawerBottomIn {
+  0% { transform: translateY(100%); }
+  100% { transform: translateY(0); }
+}
+
+@keyframes drawerRightIn {
+  0% { transform: translateX(100%); }
+  100% { transform: translateX(0); }
+}
+
 /* Animation Classes */
 .animate-fade-in {
   animation: fadeIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 .animate-slide-up {
-  animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: slideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 .animate-slide-in-right {
-  animation: slideInRight 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: slideInRight 0.32s cubic-bezier(0.32, 0.72, 0, 1) forwards;
 }
 
 .animate-slide-in-left {
-  animation: slideInLeft 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: slideInLeft 0.32s cubic-bezier(0.32, 0.72, 0, 1) forwards;
+}
+
+.animate-drawer-bottom {
+  animation: drawerBottomIn 0.32s cubic-bezier(0.32, 0.72, 0, 1) forwards;
+}
+
+.animate-drawer-right {
+  animation: drawerRightIn 0.32s cubic-bezier(0.32, 0.72, 0, 1) forwards;
 }
 
 .animate-scale-in {
-  animation: scaleIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: scaleIn 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 .animate-spring-pop {
-  animation: springPop 0.45s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+  animation: scaleIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 .animate-float {

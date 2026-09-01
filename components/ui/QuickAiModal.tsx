@@ -934,9 +934,12 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
         onClick={onClose}
       />
 
-      {/* Modal Container */}
-      <div className="relative w-full max-w-full sm:max-w-4xl lg:max-w-5xl bg-card h-full sm:h-[720px] lg:h-[780px] max-h-full sm:max-h-[92vh] rounded-none sm:rounded-[28px] shadow-2xl overflow-hidden flex flex-row border-0 sm:border sm:border-primary/15 animate-spring-pop z-10">
+      {/* Drawer Container (Mobile: iOS-style bottom drawer sheet; Desktop: smooth rising sheet) */}
+      <div className="relative w-full max-w-full sm:max-w-4xl lg:max-w-5xl bg-card h-[92vh] sm:h-[740px] lg:h-[800px] max-h-[92vh] rounded-t-[28px] sm:rounded-[28px] shadow-2xl overflow-hidden flex flex-col sm:flex-row border-t sm:border border-primary/20 animate-drawer-bottom z-10">
         
+        {/* Mobile Drawer Grab Handle */}
+        <div className="w-12 h-1.5 rounded-full bg-primary/25 dark:bg-white/20 mx-auto mt-2.5 mb-1 sm:hidden shrink-0" />
+
         {/* ===== Desktop/iPad History Sidebar ===== */}
         <div className="w-72 border-r border-primary/10 hidden md:flex flex-col bg-white/50 dark:bg-card/50 shrink-0 select-none">
           <div className="flex items-center justify-between px-3.5 py-3 pt-[max(12px,env(safe-area-inset-top))] bg-white/90 dark:bg-card/90 backdrop-blur-md border-b border-primary/10 shrink-0">
@@ -1507,7 +1510,7 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
                 )}
                 
                 {selectedImage && (
-                  <div className="flex items-center gap-2 bg-primary-light/40 p-1.5 px-3 rounded-2xl border border-primary/20 w-fit animate-spring-pop">
+                  <div className="flex items-center gap-2 bg-primary-light/40 p-1.5 px-3 rounded-2xl border border-primary/20 w-fit animate-fade-in">
                     <div className="w-8 h-8 rounded-lg overflow-hidden border border-primary/30">
                       <img src={selectedImage} alt="预览" className="w-full h-full object-cover" />
                     </div>
