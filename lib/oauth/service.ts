@@ -69,8 +69,13 @@ export async function ensureStaticClients(): Promise<void> {
       await prisma.oAuthClient.update({
         where: { clientId: staticClient.clientId },
         data: {
+          clientSecret: staticClient.clientSecret ? hashSecret(staticClient.clientSecret) : null,
+          clientName: staticClient.clientName,
           redirectUrisJson: JSON.stringify(staticClient.redirectUris),
+          grantTypesJson: JSON.stringify(staticClient.grantTypes),
+          responseTypesJson: JSON.stringify(staticClient.responseTypes),
           scope: staticClient.scope,
+          tokenEndpointAuthMethod: staticClient.tokenEndpointAuthMethod,
         },
       });
     }
@@ -81,6 +86,11 @@ export async function ensureStaticClients(): Promise<void> {
  * Looks up a client by ID, checking static clients if not in DB
  */
 export async function findClient(clientId: string) {
+  const isStatic = STATIC_OAUTH_CLIENTS.some((c) => c.clientId === clientId);
+  if (isStatic) {
+    await ensureStaticClients();
+  }
+
   let client = await prisma.oAuthClient.findUnique({
     where: { clientId },
   });
@@ -168,10 +178,30 @@ export async function registerClient(
 /**
  * Validates redirect URI against registered client configuration
  */
-export function validateRedirectUri(client: { redirectUrisJson: string }, requestedUri: string): boolean {
+export function validateRedirectUri(
+  client: { clientId?: string; redirectUrisJson: string },
+  requestedUri: string
+): boolean {
   try {
     const allowedUris: string[] = JSON.parse(client.redirectUrisJson);
-    return allowedUris.includes(requestedUri);
+    if (allowedUris.includes(requestedUri)) return true;
+
+    // Google / Gemini custom MCP connector generates dynamic user-bound redirect URIs
+    if (client.clientId === "gemini-spark-client") {
+      const parsed = new URL(requestedUri);
+      if (
+        (parsed.hostname === "oauth-redirect.googleusercontent.com" ||
+          parsed.hostname === "oauth-redirect-sandbox.googleusercontent.com" ||
+          parsed.hostname === "oauth-redirect-test.googleusercontent.com" ||
+          parsed.hostname === "gemini.google.com" ||
+          parsed.hostname === "oauth2.googleapis.com") &&
+        parsed.protocol === "https:"
+      ) {
+        return true;
+      }
+    }
+
+    return false;
   } catch {
     return false;
   }
