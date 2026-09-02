@@ -322,57 +322,67 @@ export default function GrowthPage() {
               </div>
             ) : (
               <div className="space-y-2.5 max-h-[360px] overflow-y-auto pr-1">
-                {measurements.slice(0, 15).map((m) => (
-                  <div
-                    key={m.id}
-                    className="flex items-center justify-between p-2.5 rounded-xl bg-white dark:bg-card border border-primary/15 hover:border-primary/30 transition-all shadow-2xs group/item"
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-8 h-8 rounded-xl bg-primary-light/60 flex items-center justify-center text-primary shrink-0">
-                        <TrendingUp size={14} />
+                {measurements.slice(0, 15).map((m) => {
+                  const whoRes = getWhoMetricsForBaby(baby, m.date, {
+                    weightKg: m.weightKg ?? undefined,
+                    heightCm: m.heightCm ?? undefined,
+                    headCircumferenceCm: m.headCircumferenceCm ?? undefined,
+                  });
+
+                  return (
+                    <div
+                      key={m.id}
+                      className="p-3 rounded-2xl bg-white dark:bg-card border border-primary/15 hover:border-primary/30 transition-all shadow-2xs space-y-2 group/item"
+                    >
+                      {/* Top line: Date & Age on Left, Value & Delete on Right */}
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <div className="w-7 h-7 rounded-lg bg-primary-light/60 flex items-center justify-center text-primary shrink-0">
+                            <TrendingUp size={13} />
+                          </div>
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <span className="text-xs font-bold text-text-primary whitespace-nowrap">{m.date}</span>
+                            {m.ageLabel && (
+                              <span className="text-[10px] px-1.5 py-0.2 rounded-md bg-primary-soft text-primary font-semibold whitespace-nowrap">
+                                {m.ageLabel}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 shrink-0">
+                          <div className="text-xs font-black text-primary whitespace-nowrap">
+                            {m.weightKg != null && <span>{m.weightKg}kg</span>}
+                            {m.heightCm != null && <span className="ml-1.5">· {m.heightCm}cm</span>}
+                            {m.headCircumferenceCm != null && <span className="ml-1.5">· 头围{m.headCircumferenceCm}cm</span>}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={(e) => handleDeleteMeasurement(m.id, m.date, e)}
+                            disabled={deletingId === m.id}
+                            aria-label={`删除 ${m.date} 生长记录`}
+                            title="删除此条记录"
+                            className="p-1 rounded-lg text-text-muted hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors cursor-pointer disabled:opacity-40"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
                       </div>
-                      <div>
-                        <p className="text-[11px] text-text-muted flex items-center gap-1">
-                          <Calendar size={11} />
-                          <span>{m.date}</span>
-                        </p>
-                        <p className="text-xs font-bold text-text-primary mt-0.5">{m.ageLabel}</p>
-                      </div>
+
+                      {/* Bottom line: WHO Percentile Badges */}
+                      {whoRes.length > 0 ? (
+                        <div className="pt-1.5 border-t border-divider/40 flex items-center justify-between gap-1 flex-wrap">
+                          <span className="text-[10px] text-text-muted font-medium shrink-0">WHO 百分位:</span>
+                          <WhoPercentileChips metrics={whoRes} showValue={false} />
+                        </div>
+                      ) : m.percentile != null ? (
+                        <div className="pt-1.5 border-t border-divider/40 flex items-center justify-end">
+                          <span className="text-[10px] text-text-muted font-medium">WHO P{m.percentile}</span>
+                        </div>
+                      ) : null}
                     </div>
-                    <div className="flex items-center gap-2.5">
-                      <div className="text-right space-y-1">
-                        <p className="text-xs font-black text-primary">
-                          {m.weightKg != null ? `${m.weightKg}kg` : ""}
-                          {m.heightCm != null ? ` · ${m.heightCm}cm` : ""}
-                          {m.headCircumferenceCm != null ? ` · 头围${m.headCircumferenceCm}cm` : ""}
-                        </p>
-                        {(() => {
-                          const whoRes = getWhoMetricsForBaby(baby, m.date, {
-                            weightKg: m.weightKg ?? undefined,
-                            heightCm: m.heightCm ?? undefined,
-                            headCircumferenceCm: m.headCircumferenceCm ?? undefined,
-                          });
-                          if (whoRes.length === 0) {
-                            return m.percentile != null ? (
-                              <p className="text-[10px] text-text-muted mt-0.5">WHO P{m.percentile}</p>
-                            ) : null;
-                          }
-                          return <WhoPercentileChips metrics={whoRes} className="justify-end" />;
-                        })()}
-                      </div>
-                      <button
-                        type="button"
-                        onClick={(e) => handleDeleteMeasurement(m.id, m.date, e)}
-                        disabled={deletingId === m.id}
-                        aria-label={`删除 ${m.date} 生长记录`}
-                        title="删除此条记录"
-                        className="p-1.5 rounded-lg text-text-muted hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors cursor-pointer disabled:opacity-40"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </CuteCard>

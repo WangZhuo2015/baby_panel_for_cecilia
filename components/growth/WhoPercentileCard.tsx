@@ -9,9 +9,14 @@ import { TrendingUp, ShieldCheck } from "lucide-react";
 interface WhoPercentileChipsProps {
   metrics: WhoMetricResult[];
   className?: string;
+  showValue?: boolean;
 }
 
-export function WhoPercentileChips({ metrics, className = "" }: WhoPercentileChipsProps) {
+export function WhoPercentileChips({
+  metrics,
+  className = "",
+  showValue = true,
+}: WhoPercentileChipsProps) {
   if (!metrics || metrics.length === 0) return null;
 
   return (
@@ -19,12 +24,12 @@ export function WhoPercentileChips({ metrics, className = "" }: WhoPercentileChi
       {metrics.map((m) => (
         <span
           key={m.key}
-          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-semibold border ${m.evaluation.badgeBg} ${m.evaluation.badgeColor}`}
-          title={`${m.name} ${m.value}${m.unit} 对应 WHO 第 ${m.percentile} 百分位 (${m.evaluation.label})`}
+          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-semibold border ${m.evaluation.badgeBg} ${m.evaluation.badgeColor} shadow-2xs whitespace-nowrap shrink-0`}
+          title={`${m.name} ${m.value}${m.unit} · WHO P${m.percentile} (${m.evaluation.label})`}
         >
           <span>{m.icon}</span>
           <span>{m.name}</span>
-          <span className="font-bold">{m.value}{m.unit}</span>
+          {showValue && <span className="font-bold">{m.value}{m.unit}</span>}
           <span className="font-black px-1 py-0.2 rounded bg-white/80 dark:bg-black/40 text-[10px]">
             P{m.percentile}
           </span>

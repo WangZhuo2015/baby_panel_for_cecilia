@@ -279,25 +279,25 @@ export default function MedicalReportsPage() {
                 onClick={() => setSelectedReport(report)}
               >
                 <div className="flex items-start justify-between gap-2 mb-2">
-                  <div className="flex items-center gap-2">
-                    <span className="text-lg">{catInfo.emoji}</span>
-                    <div>
-                      <h3 className="text-sm font-bold text-text-primary leading-tight">
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                    <span className="text-lg shrink-0">{catInfo.emoji}</span>
+                    <div className="min-w-0 flex-1">
+                      <h3 className="text-sm font-bold text-text-primary leading-tight truncate">
                         {report.title}
                       </h3>
-                      <div className="flex items-center gap-2 text-[11px] text-text-muted mt-0.5">
-                        <span className="flex items-center gap-1">
+                      <div className="flex items-center gap-2 text-[11px] text-text-muted mt-0.5 flex-wrap">
+                        <span className="flex items-center gap-1 whitespace-nowrap">
                           <Calendar size={11} /> {report.date}
                         </span>
                         {report.hospital && (
-                          <span className="flex items-center gap-1">
-                            <Building2 size={11} /> {report.hospital}
+                          <span className="flex items-center gap-1 truncate">
+                            <Building2 size={11} className="shrink-0" /> {report.hospital}
                           </span>
                         )}
                       </div>
                     </div>
                   </div>
-                  <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${catInfo.color}`}>
+                  <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium shrink-0 ${catInfo.color}`}>
                     {catInfo.label}
                   </span>
                 </div>
