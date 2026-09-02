@@ -79,9 +79,11 @@ export default function DailySummaryPage() {
   const fetchTimeline = useBabyStore((s) => s.fetchTimeline);
   const fetchBaby = useBabyStore((s) => s.fetchBaby);
 
-  const initialDate = searchParams.get("date") || getLocalDateStr();
+  const todayStr = getLocalDateStr();
+  const yesterdayStr = addDays(todayStr, -1);
+  const initialDate = searchParams.get("date") || yesterdayStr;
   const [selectedDate, setSelectedDate] = useState<string>(
-    isValidDateStr(initialDate) ? initialDate : getLocalDateStr()
+    isValidDateStr(initialDate) ? initialDate : yesterdayStr
   );
 
   const [summary, setSummary] = useState<AiDailySummaryResult | null>(null);
@@ -93,12 +95,11 @@ export default function DailySummaryPage() {
   const [activeTab, setActiveTab] = useState<"all" | "feeding" | "sleep" | "diaper" | "growth" | "tips">("all");
   const [isPending, startTransition] = useTransition();
 
-  const todayStr = getLocalDateStr();
   const isToday = selectedDate === todayStr;
   const isFuture = selectedDate > todayStr;
   const daysDiff = diffCalendarDays(selectedDate, todayStr);
   const dateLabel = isToday
-    ? `今天 · ${selectedDate.slice(5)} (${getWeekdayStr(selectedDate)})`
+    ? `今天 · ${selectedDate.slice(5)} (${getWeekdayStr(selectedDate)}) · 进行中`
     : daysDiff === 1
     ? `昨天 · ${selectedDate.slice(5)} (${getWeekdayStr(selectedDate)})`
     : daysDiff === 2
@@ -112,6 +113,15 @@ export default function DailySummaryPage() {
     summary.metrics.totalSleepMinutes === 0 &&
     summary.metrics.diaperCount === 0 &&
     summary.metrics.foodCount === 0;
+
+  // Persist date change to URL without full-page reloads
+  const updateSelectedDate = (newDate: string) => {
+    if (!isValidDateStr(newDate) || newDate > todayStr) return;
+    startTransition(() => {
+      setSelectedDate(newDate);
+      router.replace(`/daily-summary?date=${newDate}`, { scroll: false });
+    });
+  };
 
   // Fetch summary for date
   const loadDailySummary = async (date: string, force: boolean = false) => {
@@ -147,18 +157,12 @@ export default function DailySummaryPage() {
   }, [selectedDate, fetchTimeline]);
 
   const handlePrevDay = () => {
-    const prev = addDays(selectedDate, -1);
-    startTransition(() => {
-      setSelectedDate(prev);
-    });
+    updateSelectedDate(addDays(selectedDate, -1));
   };
 
   const handleNextDay = () => {
     if (isToday || isFuture) return;
-    const next = addDays(selectedDate, 1);
-    startTransition(() => {
-      setSelectedDate(next);
-    });
+    updateSelectedDate(addDays(selectedDate, 1));
   };
 
   const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -168,7 +172,7 @@ export default function DailySummaryPage() {
         alert("不能选择未来日期哦");
         return;
       }
-      setSelectedDate(val);
+      updateSelectedDate(val);
     }
   };
 
@@ -266,12 +270,27 @@ ${summary.sections.tomorrowTips}
             <ChevronRight size={18} />
           </button>
 
-          {!isToday && (
+          {isToday ? (
             <button
-              onClick={() => setSelectedDate(todayStr)}
-              className="text-[11px] font-bold text-primary bg-primary/10 hover:bg-primary/20 px-2.5 py-1 rounded-full btn-press cursor-pointer"
+              onClick={() => updateSelectedDate(yesterdayStr)}
+              className="text-[11px] font-bold text-primary bg-primary/10 hover:bg-primary/20 px-2.5 py-1 rounded-full btn-press cursor-pointer whitespace-nowrap"
             >
-              回到今天
+              查看昨天完整日报
+            </button>
+          ) : selectedDate !== yesterdayStr ? (
+            <button
+              onClick={() => updateSelectedDate(yesterdayStr)}
+              className="text-[11px] font-bold text-primary bg-primary/10 hover:bg-primary/20 px-2.5 py-1 rounded-full btn-press cursor-pointer whitespace-nowrap"
+            >
+              回到昨天
+            </button>
+          ) : (
+            <button
+              onClick={() => updateSelectedDate(todayStr)}
+              className="text-[11px] font-bold text-text-secondary bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 px-2.5 py-1 rounded-full btn-press cursor-pointer whitespace-nowrap"
+              title="预览今日实时作息（进行中）"
+            >
+              今日实时预览 ⏳
             </button>
           )}
         </div>
@@ -345,20 +364,25 @@ ${summary.sections.tomorrowTips}
         </div>
       ) : summary ? (
         <>
-          {/* Helpful banner if today is empty (e.g. past midnight with 0 records) */}
-          {isTodayEmpty && (
-            <div className="flex items-center justify-between p-3.5 rounded-2xl bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-950/40 dark:to-orange-950/20 border border-amber-200 dark:border-amber-800 text-xs text-amber-900 dark:text-amber-200 shadow-xs">
+          {/* If viewing Today, show friendly in-progress banner */}
+          {isToday && (
+            <div className="flex items-center justify-between p-3.5 rounded-2xl bg-gradient-to-r from-sky-50 via-indigo-50 to-purple-50 dark:from-sky-950/40 dark:via-indigo-950/30 dark:to-purple-950/20 border border-sky-200/80 dark:border-sky-800/60 text-xs text-sky-900 dark:text-sky-200 shadow-xs">
               <div className="flex items-center gap-2">
-                <span className="text-base">🌙</span>
-                <span className="font-bold">
-                  今日（{selectedDate.slice(5)} {getWeekdayStr(selectedDate)}）刚过零点，暂无记录
-                </span>
+                <span className="text-base">⏳</span>
+                <div>
+                  <p className="font-bold">
+                    今日（{selectedDate.slice(5)} {getWeekdayStr(selectedDate)}）作息仍在进行中
+                  </p>
+                  <p className="text-[11px] text-text-muted">
+                    每日成长手账于次日生成全天完整复盘与评分
+                  </p>
+                </div>
               </div>
               <button
-                onClick={handlePrevDay}
-                className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold transition-all shadow-xs btn-press cursor-pointer shrink-0"
+                onClick={() => updateSelectedDate(yesterdayStr)}
+                className="px-3 py-1.5 rounded-xl bg-primary text-white font-bold transition-all shadow-xs btn-press cursor-pointer shrink-0 ml-2"
               >
-                查看昨天（{addDays(selectedDate, -1).slice(5)} {getWeekdayStr(addDays(selectedDate, -1))}）👈
+                查看昨日完整日报 👈
               </button>
             </div>
           )}
