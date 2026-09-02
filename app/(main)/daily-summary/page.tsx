@@ -43,6 +43,33 @@ import { calculateAge } from "@/lib/age";
 import type { AiDailySummaryResult } from "@/types/daily-summary";
 import { DailySummaryPosterModal } from "@/components/daily-summary/DailySummaryPosterModal";
 
+function FormattedSectionText({ text }: { text: string }) {
+  if (!text) return null;
+  const lines = text
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
+
+  return (
+    <div className="space-y-1.5 text-xs text-text-primary leading-relaxed">
+      {lines.map((line, idx) => {
+        const match = line.match(/^(\d+)\.\s*(.*)$/);
+        if (match) {
+          return (
+            <div key={idx} className="flex items-start gap-2 pt-0.5">
+              <span className="w-4 h-4 rounded-full bg-primary/15 text-primary text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">
+                {match[1]}
+              </span>
+              <span className="flex-1">{match[2]}</span>
+            </div>
+          );
+        }
+        return <p key={idx}>{line}</p>;
+      })}
+    </div>
+  );
+}
+
 export default function DailySummaryPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -71,12 +98,20 @@ export default function DailySummaryPage() {
   const isFuture = selectedDate > todayStr;
   const daysDiff = diffCalendarDays(selectedDate, todayStr);
   const dateLabel = isToday
-    ? "今天"
+    ? `今天 · ${selectedDate.slice(5)} (${getWeekdayStr(selectedDate)})`
     : daysDiff === 1
-    ? "昨天"
+    ? `昨天 · ${selectedDate.slice(5)} (${getWeekdayStr(selectedDate)})`
     : daysDiff === 2
-    ? "前天"
+    ? `前天 · ${selectedDate.slice(5)} (${getWeekdayStr(selectedDate)})`
     : `${selectedDate.slice(5)} (${getWeekdayStr(selectedDate)})`;
+
+  const isTodayEmpty =
+    isToday &&
+    summary &&
+    summary.metrics.totalFeedingMl === 0 &&
+    summary.metrics.totalSleepMinutes === 0 &&
+    summary.metrics.diaperCount === 0 &&
+    summary.metrics.foodCount === 0;
 
   // Fetch summary for date
   const loadDailySummary = async (date: string, force: boolean = false) => {
@@ -310,6 +345,24 @@ ${summary.sections.tomorrowTips}
         </div>
       ) : summary ? (
         <>
+          {/* Helpful banner if today is empty (e.g. past midnight with 0 records) */}
+          {isTodayEmpty && (
+            <div className="flex items-center justify-between p-3.5 rounded-2xl bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-950/40 dark:to-orange-950/20 border border-amber-200 dark:border-amber-800 text-xs text-amber-900 dark:text-amber-200 shadow-xs">
+              <div className="flex items-center gap-2">
+                <span className="text-base">🌙</span>
+                <span className="font-bold">
+                  今日（{selectedDate.slice(5)} {getWeekdayStr(selectedDate)}）刚过零点，暂无记录
+                </span>
+              </div>
+              <button
+                onClick={handlePrevDay}
+                className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold transition-all shadow-xs btn-press cursor-pointer shrink-0"
+              >
+                查看昨天（{addDays(selectedDate, -1).slice(5)} {getWeekdayStr(addDays(selectedDate, -1))}）👈
+              </button>
+            </div>
+          )}
+
           {/* 3. Status Score & Headline Card */}
           <CuteCard className="bg-gradient-to-br from-primary-light via-lavender/15 to-pink-50/40 dark:from-primary-dark/20 dark:via-lavender/10 dark:to-transparent border border-lavender/30 p-5 shadow-soft">
             <div className="flex items-start justify-between gap-3 mb-3">
@@ -329,7 +382,7 @@ ${summary.sections.tomorrowTips}
 
             {/* 1-Sentence Headline */}
             <h2 className="text-sm sm:text-base font-bold text-text-primary leading-relaxed mb-3">
-              {summary.headline}
+              “{summary.headline.replace(/^[“"「]+|[”"」]+$/g, "").trim()}”
             </h2>
 
             {/* Highlight Tags */}
@@ -445,9 +498,7 @@ ${summary.sections.tomorrowTips}
                   </div>
                   <h4 className="text-xs font-bold text-text-primary">喂养与营养摄入评估</h4>
                 </div>
-                <p className="text-xs text-text-primary leading-relaxed whitespace-pre-wrap">
-                  {summary.sections.feeding}
-                </p>
+                <FormattedSectionText text={summary.sections.feeding} />
               </CuteCard>
 
               {/* Section 2: Sleep & Rhythm */}
@@ -458,9 +509,7 @@ ${summary.sections.tomorrowTips}
                   </div>
                   <h4 className="text-xs font-bold text-text-primary">作息与睡眠节律评估</h4>
                 </div>
-                <p className="text-xs text-text-primary leading-relaxed whitespace-pre-wrap">
-                  {summary.sections.sleep}
-                </p>
+                <FormattedSectionText text={summary.sections.sleep} />
               </CuteCard>
 
               {/* Section 3: Diaper & Digestion */}
@@ -471,9 +520,7 @@ ${summary.sections.tomorrowTips}
                   </div>
                   <h4 className="text-xs font-bold text-text-primary">排泄与肠胃舒适度</h4>
                 </div>
-                <p className="text-xs text-text-primary leading-relaxed whitespace-pre-wrap">
-                  {summary.sections.diaper}
-                </p>
+                <FormattedSectionText text={summary.sections.diaper} />
               </CuteCard>
 
               {/* Section 4: Growth & Supplements */}
@@ -484,9 +531,7 @@ ${summary.sections.tomorrowTips}
                   </div>
                   <h4 className="text-xs font-bold text-text-primary">生长发育与营养补剂</h4>
                 </div>
-                <p className="text-xs text-text-primary leading-relaxed whitespace-pre-wrap">
-                  {summary.sections.growthAndCare}
-                </p>
+                <FormattedSectionText text={summary.sections.growthAndCare} />
               </CuteCard>
 
               {/* Section 5: Tomorrow Tips */}
@@ -497,9 +542,7 @@ ${summary.sections.tomorrowTips}
                   </div>
                   <h4 className="text-xs font-bold text-amber-900 dark:text-amber-300">明日照护与早教互动贴士</h4>
                 </div>
-                <div className="text-xs text-text-primary leading-relaxed whitespace-pre-wrap">
-                  {summary.sections.tomorrowTips}
-                </div>
+                <FormattedSectionText text={summary.sections.tomorrowTips} />
               </CuteCard>
             </div>
           </div>

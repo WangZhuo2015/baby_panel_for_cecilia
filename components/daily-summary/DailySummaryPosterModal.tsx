@@ -61,10 +61,57 @@ export function DailySummaryPosterModal({
     return selectedDate;
   })();
 
-  // Filter key timeline milestones for the mini rhythm section (max 4 key events)
-  const keyEvents = timeline
-    .filter((e) => ["feeding", "sleep", "food", "diaper"].includes(e.type))
-    .slice(0, 4);
+  // Synthesize key milestones from metrics and timeline
+  const milestones = (() => {
+    const list: Array<{ time: string; icon: string; label: string; detail: string; order: string }> = [];
+
+    for (const f of metrics.feedings || []) {
+      const isBreast = f.type === "breast";
+      list.push({
+        time: f.time,
+        icon: isBreast ? "🤱" : "🍼",
+        label: isBreast ? "母乳亲喂" : "配方奶",
+        detail: isBreast
+          ? `${(f.leftMinutes || 0) + (f.rightMinutes || 0)}分钟`
+          : `${f.amountMl || 0}ml`,
+        order: f.time,
+      });
+    }
+
+    for (const s of metrics.sleeps || []) {
+      list.push({
+        time: s.startTime,
+        icon: "😴",
+        label: s.type === "night" ? "夜间睡眠" : "白天小睡",
+        detail: `${s.durationMinutes}分钟`,
+        order: s.startTime,
+      });
+    }
+
+    for (const d of metrics.diapers || []) {
+      const isPoop = d.type === "poop" || d.type === "both";
+      list.push({
+        time: d.time,
+        icon: isPoop ? "💩" : "💧",
+        label: isPoop ? "换尿布(便)" : "换尿布(尿)",
+        detail: d.poopColor || (d.type === "both" ? "便+尿" : "排尿正常"),
+        order: d.time,
+      });
+    }
+
+    for (const fl of metrics.foodLogs || []) {
+      list.push({
+        time: fl.time,
+        icon: "🥣",
+        label: "辅食打卡",
+        detail: Array.isArray(fl.foods) && fl.foods.length > 0 ? fl.foods.slice(0, 2).join("、") : "营养辅食",
+        order: fl.time,
+      });
+    }
+
+    // Sort chronologically and take up to 4 highlights
+    return list.sort((a, b) => a.order.localeCompare(b.order)).slice(0, 4);
+  })();
 
   // Generate poster blob with Retina 2.5x resolution
   const generatePosterBlob = async (): Promise<Blob | null> => {
@@ -74,7 +121,7 @@ export function DailySummaryPosterModal({
       pixelRatio: 2.5,
       quality: 0.98,
       backgroundColor: "#FFF9FB",
-      skipFonts: true, // Prevents security errors reading external stylesheets in iOS WebKit
+      skipFonts: true,
     });
   };
 
@@ -88,7 +135,6 @@ export function DailySummaryPosterModal({
       const fileName = `${summary.babyName || "宝宝"}_${selectedDate}_成长日报.png`;
       const file = new File([blob], fileName, { type: "image/png" });
 
-      // Native mobile Web Share API if supported (e.g. iOS Safari / Android)
       if (typeof navigator !== "undefined" && navigator.canShare && navigator.canShare({ files: [file] })) {
         try {
           await navigator.share({
@@ -102,7 +148,6 @@ export function DailySummaryPosterModal({
         }
       }
 
-      // Fallback: Object URL download
       const blobUrl = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.download = fileName;
@@ -175,18 +220,25 @@ ${summary.sections.tomorrowTips}
     }
   };
 
+  // Clean headline of redundant quotes
+  const cleanHeadline = summary.headline.replace(/^[“"「]+|[”"」]+$/g, "").trim();
+  const cleanTips = (summary.sections.tomorrowTips || summary.sections.growthAndCare || "")
+    .replace(/\n{2,}/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm animate-fade-in overflow-y-auto pb-[calc(1rem+env(safe-area-inset-bottom,0px))] pt-[calc(1rem+env(safe-area-inset-top,0px))]">
       <div className="relative w-full max-w-lg bg-white dark:bg-card rounded-[32px] shadow-2xl border border-primary/20 overflow-hidden flex flex-col max-h-[calc(100dvh-2rem)] sm:max-h-[90vh] my-auto">
         {/* Modal Top Action Bar */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-primary/10 bg-primary-light/40 dark:bg-card shrink-0">
+        <div className="flex items-center justify-between px-5 py-3.5 border-b border-primary/10 bg-primary-light/40 dark:bg-card shrink-0">
           <div className="flex items-center gap-2">
             <span className="w-8 h-8 rounded-full bg-primary/15 text-primary flex items-center justify-center text-sm font-bold">
               🎨
             </span>
             <div>
-              <h3 className="text-sm font-bold text-text-primary">精美成长日报海报</h3>
-              <p className="text-[11px] text-text-muted">高清手账风 · 支持一键保存与发送</p>
+              <h3 className="text-sm font-bold text-text-primary">成长日报手账海报</h3>
+              <p className="text-[11px] text-text-muted">精致手账排版 · 高清无失真导出</p>
             </div>
           </div>
           <button
@@ -198,39 +250,39 @@ ${summary.sections.tomorrowTips}
         </div>
 
         {/* Poster Scrollable Preview Canvas */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-neutral-100/70 dark:bg-neutral-900/50 flex justify-center">
-          {/* THE POSTER ELEMENT (Export Target - Forced Light Mode for Crystal Clear Contrast) */}
+        <div className="flex-1 overflow-y-auto p-3 sm:p-5 bg-neutral-100/70 dark:bg-neutral-900/50 flex justify-center">
+          {/* THE POSTER ELEMENT */}
           <div
             ref={posterRef}
             id="daily-summary-poster"
-            className="light w-full max-w-[420px] bg-gradient-to-b from-[#FFF5F8] via-[#FFF9F5] to-[#F5F8FF] rounded-[28px] border border-pink-200/60 shadow-xl p-5 sm:p-6 space-y-4 font-sans relative overflow-hidden text-[#4A252B]"
+            className="light w-full max-w-[400px] bg-gradient-to-b from-[#FFF5F8] via-[#FFF9F5] to-[#F5F8FF] rounded-[24px] border border-pink-200/60 shadow-xl p-4 sm:p-5 space-y-3 font-sans relative overflow-hidden text-[#4A252B]"
             style={{
               color: "#4A252B",
               fontFamily:
                 '-apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif',
             }}
           >
-            {/* Background Decorative Accents */}
-            <div className="absolute top-0 right-0 w-48 h-48 bg-radial from-pink-300/20 via-pink-100/10 to-transparent pointer-events-none rounded-bl-full" />
-            <div className="absolute bottom-0 left-0 w-40 h-40 bg-radial from-sky-300/15 via-sky-100/10 to-transparent pointer-events-none rounded-tr-full" />
+            {/* Background Soft Bokeh Accents */}
+            <div className="absolute -top-10 -right-10 w-40 h-40 bg-pink-300/20 rounded-full blur-2xl pointer-events-none" />
+            <div className="absolute -bottom-10 -left-10 w-36 h-36 bg-sky-300/20 rounded-full blur-2xl pointer-events-none" />
 
-            {/* 1. Brand Top Bar & Date Badge */}
-            <div className="flex items-center justify-between relative z-10 border-b border-pink-200/50 pb-3">
-              <div className="flex items-center gap-1.5">
-                <span className="text-base">🌿</span>
+            {/* 1. Header Row */}
+            <div className="flex items-center justify-between relative z-10 border-b border-pink-200/50 pb-2.5">
+              <div className="flex items-center gap-1.5 whitespace-nowrap">
+                <span className="text-sm">🌿</span>
                 <span className="text-xs font-black tracking-wider text-pink-600 uppercase">
                   Baby Panel · 每日成长手账
                 </span>
               </div>
-              <div className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-white/90 shadow-xs border border-pink-100 text-[11px] font-bold text-[#8F7076]">
-                <Calendar size={12} className="text-pink-500" />
+              <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/95 shadow-xs border border-pink-100 text-[11px] font-bold text-[#8F7076] whitespace-nowrap">
+                <Calendar size={11} className="text-pink-500" />
                 <span>{formattedDateStr}</span>
               </div>
             </div>
 
-            {/* 2. Baby Profile & Hero Banner */}
-            <div className="flex items-center gap-3.5 bg-white/85 backdrop-blur-md p-3.5 rounded-2xl border border-pink-100 shadow-sm relative z-10">
-              <div className="w-14 h-14 rounded-full p-0.5 bg-gradient-to-tr from-pink-400 via-amber-300 to-sky-400 shrink-0 shadow-sm">
+            {/* 2. Baby Identity Card */}
+            <div className="flex items-center gap-3 bg-white/90 backdrop-blur-md p-3 rounded-2xl border border-pink-100/80 shadow-xs relative z-10">
+              <div className="w-12 h-12 rounded-full p-0.5 bg-gradient-to-tr from-pink-400 via-amber-300 to-sky-400 shrink-0 shadow-xs">
                 <div className="w-full h-full rounded-full bg-white flex items-center justify-center overflow-hidden">
                   {baby?.avatarUrl ? (
                     <img
@@ -240,125 +292,122 @@ ${summary.sections.tomorrowTips}
                       crossOrigin="anonymous"
                     />
                   ) : (
-                    <BabyIcon size={26} className="text-pink-500" />
+                    <BabyIcon size={24} className="text-pink-500" />
                   )}
                 </div>
               </div>
 
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <h2 className="text-lg font-black text-[#4A252B] tracking-tight truncate">
+                <div className="flex items-center gap-1.5">
+                  <h2 className="text-base font-black text-[#4A252B] tracking-tight truncate">
                     {summary.babyName || "宝宝"}
                   </h2>
-                  <span className="px-2 py-0.5 rounded-full bg-pink-100/80 text-pink-600 text-[10px] font-bold shrink-0">
-                    {baby?.gender === "male" ? "👦 男宝" : "👧 女宝"}
+                  <span className="px-1.5 py-0.5 rounded-md bg-pink-100/80 text-pink-600 text-[10px] font-bold shrink-0 whitespace-nowrap">
+                    {baby?.gender === "male" ? "👦男宝" : "👧女宝"}
                   </span>
                 </div>
-                <p className="text-xs font-bold text-[#8F7076] mt-0.5">
+                <p className="text-[11px] font-bold text-[#8F7076] mt-0.5 truncate">
                   🍼 {summary.babyAgeLabel || "快乐成长中"}
                 </p>
               </div>
 
-              {/* Status Badge */}
-              <div className="text-right shrink-0 bg-gradient-to-br from-pink-50 to-pink-100/80 px-2.5 py-1.5 rounded-xl border border-pink-200/60">
-                <div className="flex items-center justify-end gap-1 text-xs font-black text-pink-600">
-                  <Sparkles size={13} className="text-amber-500" />
+              {/* Status Score Pill */}
+              <div className="text-right shrink-0 bg-gradient-to-br from-pink-50 to-pink-100/90 px-2 py-1 rounded-xl border border-pink-200/60 whitespace-nowrap">
+                <div className="flex items-center justify-end gap-1 text-[11px] font-black text-pink-600">
+                  <Sparkles size={11} className="text-amber-500" />
                   <span>{summary.overallScore}</span>
                 </div>
-                <div className="text-[10px] font-bold text-[#B6A0A5] mt-0.5">
-                  {summary.overallRating.toFixed(1)} / 5.0
+                <div className="text-[9px] font-bold text-[#8F7076] mt-0.5">
+                  评分 {summary.overallRating.toFixed(1)} / 5.0
                 </div>
               </div>
             </div>
 
             {/* 3. Headline & Highlights */}
-            <div className="bg-gradient-to-br from-pink-50/90 via-amber-50/50 to-white/90 p-4 rounded-2xl border border-pink-200/50 shadow-xs relative z-10 space-y-2.5">
-              <div className="flex items-start gap-1.5">
-                <span className="text-base text-pink-500 font-serif leading-none select-none">“</span>
-                <p className="text-xs sm:text-[13px] font-bold text-[#4A252B] leading-relaxed flex-1">
-                  {summary.headline}
-                </p>
-                <span className="text-base text-pink-500 font-serif leading-none select-none">”</span>
-              </div>
+            <div className="bg-gradient-to-r from-pink-50/90 via-amber-50/40 to-pink-50/90 p-3 rounded-2xl border border-pink-200/50 shadow-xs relative z-10 space-y-2">
+              <p className="text-xs font-bold text-[#4A252B] leading-relaxed">
+                “{cleanHeadline}”
+              </p>
 
-              {/* Highlight Tag Badges */}
-              <div className="flex flex-wrap gap-1.5 pt-1">
-                {summary.highlights.slice(0, 3).map((tag, idx) => (
+              <div className="flex flex-wrap gap-1.5 pt-0.5">
+                {summary.highlights.slice(0, 4).map((tag, idx) => (
                   <span
                     key={idx}
-                    className="text-[10px] font-bold px-2.5 py-1 rounded-lg bg-white text-[#4A252B] border border-pink-100 shadow-xs flex items-center gap-1"
+                    className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-white/95 text-[#4A252B] border border-pink-100 shadow-xs inline-flex items-center gap-1 whitespace-nowrap"
                   >
-                    <span className="text-pink-500">✓</span> {tag}
+                    <span className="text-pink-500 font-black">✓</span> {tag}
                   </span>
                 ))}
               </div>
             </div>
 
             {/* 4. 4-Grid Vital Stats Dashboard */}
-            <div className="grid grid-cols-2 gap-2.5 relative z-10">
+            <div className="grid grid-cols-2 gap-2 relative z-10">
               {/* Feeding */}
-              <div className="bg-gradient-to-br from-sky-50 to-white p-3 rounded-2xl border border-sky-100 shadow-xs space-y-1">
+              <div className="bg-gradient-to-br from-sky-50 to-white p-2.5 rounded-xl border border-sky-100 shadow-xs">
                 <div className="flex items-center justify-between text-sky-600">
-                  <div className="flex items-center gap-1">
-                    <Droplets size={14} />
-                    <span className="text-[11px] font-bold">总奶量摄入</span>
-                  </div>
-                  <span className="text-[10px] bg-sky-100 text-sky-700 px-1.5 py-0.5 rounded-md font-bold">
+                  <span className="text-[11px] font-bold flex items-center gap-1">
+                    <Droplets size={13} />
+                    总奶量
+                  </span>
+                  <span className="text-[10px] bg-sky-100 text-sky-700 px-1 py-0.2 rounded font-bold">
                     {metrics.feedingCount}次
                   </span>
                 </div>
-                <div className="flex items-baseline gap-1 pt-0.5">
+                <div className="flex items-baseline gap-1 my-0.5">
                   <span className="text-xl font-black text-sky-700">
                     {metrics.totalFeedingMl}
                   </span>
-                  <span className="text-xs font-bold text-sky-500">ml</span>
+                  <span className="text-[11px] font-bold text-sky-500">ml</span>
                 </div>
                 <p className="text-[10px] text-[#8F7076] truncate">
                   {metrics.totalBreastMinutes > 0
                     ? `亲喂 ${metrics.totalBreastMinutes} 分钟`
-                    : "配方奶/瓶喂摄入"}
+                    : metrics.formulaCount > 0
+                      ? `${metrics.formulaCount}次配方奶`
+                      : "暂无喂养"}
                 </p>
               </div>
 
               {/* Sleep */}
-              <div className="bg-gradient-to-br from-purple-50 to-white p-3 rounded-2xl border border-purple-100 shadow-xs space-y-1">
+              <div className="bg-gradient-to-br from-purple-50 to-white p-2.5 rounded-xl border border-purple-100 shadow-xs">
                 <div className="flex items-center justify-between text-purple-600">
-                  <div className="flex items-center gap-1">
-                    <Moon size={14} />
-                    <span className="text-[11px] font-bold">全天总睡眠</span>
-                  </div>
-                  <span className="text-[10px] bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded-md font-bold">
+                  <span className="text-[11px] font-bold flex items-center gap-1">
+                    <Moon size={13} />
+                    总睡眠
+                  </span>
+                  <span className="text-[10px] bg-purple-100 text-purple-700 px-1 py-0.2 rounded font-bold">
                     夜醒{metrics.nightWakingCount}次
                   </span>
                 </div>
-                <div className="flex items-baseline gap-1 pt-0.5">
+                <div className="flex items-baseline gap-1 my-0.5">
                   <span className="text-xl font-black text-purple-700">
                     {totalSleepHours}
                   </span>
-                  <span className="text-xs font-bold text-purple-500">小时</span>
+                  <span className="text-[11px] font-bold text-purple-500">小时</span>
                 </div>
                 <p className="text-[10px] text-[#8F7076] truncate">
-                  夜睡 {nightSleepHours}h · 白天 {daySleepHours}h
+                  夜间 {nightSleepHours}h · 白天 {daySleepHours}h
                 </p>
               </div>
 
               {/* Diaper */}
-              <div className="bg-gradient-to-br from-emerald-50 to-white p-3 rounded-2xl border border-emerald-100 shadow-xs space-y-1">
+              <div className="bg-gradient-to-br from-emerald-50 to-white p-2.5 rounded-xl border border-emerald-100 shadow-xs">
                 <div className="flex items-center justify-between text-emerald-600">
-                  <div className="flex items-center gap-1">
-                    <Wind size={14} />
-                    <span className="text-[11px] font-bold">大小便排泄</span>
-                  </div>
-                  <span className="text-[10px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-md font-bold">
+                  <span className="text-[11px] font-bold flex items-center gap-1">
+                    <Wind size={13} />
+                    大小便
+                  </span>
+                  <span className="text-[10px] bg-emerald-100 text-emerald-700 px-1 py-0.2 rounded font-bold">
                     共{metrics.diaperCount}次
                   </span>
                 </div>
-                <div className="flex items-baseline gap-1 pt-0.5">
+                <div className="flex items-baseline gap-1 my-0.5">
                   <span className="text-xl font-black text-emerald-700">
                     {metrics.poopCount}
                   </span>
-                  <span className="text-xs font-bold text-emerald-500">次便便</span>
-                  <span className="text-xs text-[#8F7076] font-bold ml-1.5">
+                  <span className="text-[11px] font-bold text-emerald-500">次便</span>
+                  <span className="text-[10px] text-[#8F7076] font-bold ml-1">
                     · {metrics.peeCount}次尿
                   </span>
                 </div>
@@ -367,100 +416,76 @@ ${summary.sections.tomorrowTips}
                 </p>
               </div>
 
-              {/* Food / Supplements */}
-              <div className="bg-gradient-to-br from-amber-50 to-white p-3 rounded-2xl border border-amber-100 shadow-xs space-y-1">
+              {/* Food */}
+              <div className="bg-gradient-to-br from-amber-50 to-white p-2.5 rounded-xl border border-amber-100 shadow-xs">
                 <div className="flex items-center justify-between text-amber-600">
-                  <div className="flex items-center gap-1">
-                    <UtensilsCrossed size={14} />
-                    <span className="text-[11px] font-bold">辅食与补剂</span>
-                  </div>
-                  <span className="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-md font-bold">
+                  <span className="text-[11px] font-bold flex items-center gap-1">
+                    <UtensilsCrossed size={13} />
+                    辅食
+                  </span>
+                  <span className="text-[10px] bg-amber-100 text-amber-700 px-1 py-0.2 rounded font-bold">
                     {metrics.foodCount}餐
                   </span>
                 </div>
-                <div className="flex items-baseline gap-1 pt-0.5">
+                <div className="flex items-baseline gap-1 my-0.5">
                   <span className="text-xl font-black text-amber-700">
                     {metrics.foodsTried.length}
                   </span>
-                  <span className="text-xs font-bold text-amber-500">种食材</span>
+                  <span className="text-[11px] font-bold text-amber-500">种食材</span>
                 </div>
                 <p className="text-[10px] text-[#8F7076] truncate">
                   {metrics.foodsTried.length > 0
-                    ? metrics.foodsTried.slice(0, 2).join("、")
-                    : "今日未打卡辅食"}
+                    ? metrics.foodsTried.join("、")
+                    : "今日未添加辅食"}
                 </p>
               </div>
             </div>
 
-            {/* 5. Key Daily Rhythm Milestones (Mini Timeline) */}
-            {keyEvents.length > 0 && (
-              <div className="bg-white/90 p-3.5 rounded-2xl border border-pink-100/70 shadow-xs relative z-10 space-y-2">
-                <div className="flex items-center gap-1.5 text-xs font-bold text-[#4A252B]">
-                  <Clock size={13} className="text-pink-500" />
+            {/* 5. Key Rhythm Milestones Timeline */}
+            {milestones.length > 0 && (
+              <div className="bg-white/90 p-2.5 rounded-xl border border-pink-100/70 shadow-xs relative z-10 space-y-1.5">
+                <div className="flex items-center gap-1 text-[11px] font-bold text-[#4A252B]">
+                  <Clock size={12} className="text-pink-500" />
                   <span>今日作息高光时刻</span>
                 </div>
-                <div className="grid grid-cols-2 gap-2">
-                  {keyEvents.map((item, idx) => {
-                    const timeStr = item.timestamp
-                      ? new Date(item.timestamp).toLocaleTimeString("zh-CN", {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                          hour12: false,
-                        })
-                      : item.time || "--:--";
-
-                    let icon = "🍼";
-                    let label = "喂养";
-                    let detail = `${item.amountMl || ""}ml`;
-                    if (item.type === "sleep") {
-                      icon = "😴";
-                      label = "小睡";
-                      detail = item.durationMinutes ? `${item.durationMinutes}分` : "睡眠";
-                    } else if (item.type === "diaper") {
-                      icon = item.diaperType === "poop" ? "💩" : "💧";
-                      label = "换尿布";
-                      detail = item.diaperType === "both" ? "便+尿" : item.diaperType || "正常";
-                    } else if (item.type === "food") {
-                      icon = "🥣";
-                      label = "辅食";
-                      detail = Array.isArray(item.foods) ? item.foods.join(",") : "餐点";
-                    }
-
-                    return (
-                      <div
-                        key={idx}
-                        className="flex items-center gap-2 bg-neutral-50/80 p-2 rounded-xl border border-neutral-100 text-[11px]"
-                      >
-                        <span className="text-sm">{icon}</span>
-                        <div className="min-w-0 flex-1">
-                          <p className="font-bold text-[#4A252B] leading-tight">
-                            {timeStr} {label}
-                          </p>
-                          <p className="text-[10px] text-[#8F7076] truncate">{detail}</p>
-                        </div>
+                <div className="space-y-1">
+                  {milestones.map((item, idx) => (
+                    <div
+                      key={idx}
+                      className="flex items-center justify-between bg-neutral-50/90 px-2.5 py-1 rounded-lg border border-neutral-100 text-[11px]"
+                    >
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="text-xs">{item.icon}</span>
+                        <span className="font-bold text-[#4A252B] whitespace-nowrap">{item.time}</span>
+                        <span className="font-medium text-[#8F7076] truncate">{item.label}</span>
                       </div>
-                    );
-                  })}
+                      <span className="text-[10px] font-bold text-pink-600 shrink-0 ml-2 whitespace-nowrap">
+                        {item.detail}
+                      </span>
+                    </div>
+                  ))}
                 </div>
               </div>
             )}
 
-            {/* 6. Pediatric AI Care & Tomorrow Tips */}
-            <div className="bg-gradient-to-br from-amber-500/10 via-pink-500/5 to-white/90 p-3.5 rounded-2xl border border-amber-200/60 shadow-xs relative z-10 space-y-1.5">
-              <div className="flex items-center gap-1.5 text-xs font-bold text-amber-800">
-                <Lightbulb size={14} className="text-amber-600" />
-                <span>儿科专家明日照护贴士</span>
+            {/* 6. Pediatric Care Tip */}
+            {cleanTips && (
+              <div className="bg-gradient-to-br from-amber-500/10 via-pink-500/5 to-white/90 p-2.5 rounded-xl border border-amber-200/60 shadow-xs relative z-10 space-y-1">
+                <div className="flex items-center gap-1 text-[11px] font-bold text-amber-800">
+                  <Lightbulb size={12} className="text-amber-600" />
+                  <span>儿科专家明日照护贴士</span>
+                </div>
+                <p className="text-[10px] text-[#4A252B] leading-relaxed line-clamp-2">
+                  {cleanTips}
+                </p>
               </div>
-              <p className="text-[11px] text-[#4A252B] leading-relaxed line-clamp-3">
-                {summary.sections.tomorrowTips || summary.sections.growthAndCare}
-              </p>
-            </div>
+            )}
 
             {/* 7. Poster Footer Watermark */}
-            <div className="pt-2 border-t border-pink-200/40 flex items-center justify-between text-[10px] text-[#B6A0A5] relative z-10">
+            <div className="pt-1.5 border-t border-pink-200/40 flex items-center justify-between text-[9px] text-[#B6A0A5] relative z-10">
               <div className="flex items-center gap-1">
-                <Heart size={11} className="text-pink-500 fill-pink-500" />
-                <span className="font-bold text-[#8F7076]">用心记录宝宝成长的每一刻</span>
+                <Heart size={10} className="text-pink-500 fill-pink-500" />
+                <span className="font-bold text-[#8F7076]">记录点滴陪伴 · 见证每个闪光瞬间</span>
               </div>
               <span>Baby Panel 专属档案</span>
             </div>
@@ -468,41 +493,41 @@ ${summary.sections.tomorrowTips}
         </div>
 
         {/* Modal Bottom Action Controls */}
-        <div className="p-4 sm:p-5 border-t border-primary/10 bg-white dark:bg-card shrink-0 space-y-2.5 pb-[max(1rem,env(safe-area-inset-bottom,1rem))]">
-          <div className="grid grid-cols-2 gap-3">
+        <div className="p-3.5 sm:p-4 border-t border-primary/10 bg-white dark:bg-card shrink-0 space-y-2 pb-[max(1rem,env(safe-area-inset-bottom,1rem))]">
+          <div className="grid grid-cols-2 gap-2.5">
             <button
               onClick={handleDownload}
               disabled={downloading}
-              className="flex items-center justify-center gap-1.5 py-3 px-4 rounded-2xl bg-primary text-white font-bold text-xs sm:text-sm hover:bg-primary-dark transition-all shadow-button btn-press disabled:opacity-50 cursor-pointer"
+              className="flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl bg-primary text-white font-bold text-xs sm:text-sm hover:bg-primary-dark transition-all shadow-button btn-press disabled:opacity-50 cursor-pointer"
             >
-              <Download size={16} className={downloading ? "animate-bounce" : ""} />
-              <span>{downloading ? "正在渲染海报..." : "保存高清海报 (PNG)"}</span>
+              <Download size={15} className={downloading ? "animate-bounce" : ""} />
+              <span>{downloading ? "正在渲染..." : "保存高清海报 (PNG)"}</span>
             </button>
 
             <button
               onClick={handleCopyImage}
               disabled={copyingImage}
-              className={`flex items-center justify-center gap-1.5 py-3 px-4 rounded-2xl font-bold text-xs sm:text-sm border transition-all btn-press cursor-pointer ${
+              className={`flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl font-bold text-xs sm:text-sm border transition-all btn-press cursor-pointer ${
                 copiedImage
                   ? "bg-emerald-500 border-emerald-500 text-white"
                   : "bg-white dark:bg-card border-primary/30 text-primary hover:bg-primary-light/50 shadow-xs"
               }`}
             >
-              {copiedImage ? <Check size={16} /> : <Share2 size={16} />}
+              {copiedImage ? <Check size={15} /> : <Share2 size={15} />}
               <span>{copiedImage ? "已复制图片到剪贴板" : "复制海报图片"}</span>
             </button>
           </div>
 
-          <div className="flex items-center justify-between pt-1">
+          <div className="flex items-center justify-between pt-0.5">
             <button
               onClick={handleCopyText}
-              className="text-xs font-bold text-text-secondary hover:text-primary transition-colors flex items-center gap-1 py-1 px-2 rounded-lg hover:bg-primary/5 cursor-pointer"
+              className="text-[11px] font-bold text-text-secondary hover:text-primary transition-colors flex items-center gap-1 py-0.5 px-1.5 rounded-lg hover:bg-primary/5 cursor-pointer"
             >
               {copiedText ? <Check size={12} className="text-emerald-500" /> : <Copy size={12} />}
               <span>{copiedText ? "已复制文字版" : "复制文字版日报"}</span>
             </button>
-            <span className="text-[11px] text-text-muted">
-              Retina 2.5x 高清输出 · 自动适配深浅色与移动端
+            <span className="text-[10px] text-text-muted">
+              Retina 2.5x 高清 · 自动适配深浅色与移动端
             </span>
           </div>
         </div>
