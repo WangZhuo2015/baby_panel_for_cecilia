@@ -139,3 +139,86 @@ export function getUploadsDir(subDir?: string): string {
   return subDir ? path.resolve(base, subDir) : base;
 }
 
+/**
+ * Compresses an image file in the browser using HTML5 Canvas.
+ * Reduces raw 5-15MB mobile photos to ~200-400KB while maintaining high OCR clarity.
+ */
+export async function compressImageForOcr(
+  file: File,
+  maxDimension = 1600,
+  quality = 0.85
+): Promise<File> {
+  if (typeof window === "undefined" || !file || !file.type.startsWith("image/")) {
+    return file;
+  }
+
+  // If already small (< 500KB), return as is
+  if (file.size <= 500 * 1024 && !file.type.includes("heic")) {
+    return file;
+  }
+
+  return new Promise((resolve) => {
+    try {
+      const img = new Image();
+      const objectUrl = URL.createObjectURL(file);
+
+      img.onload = () => {
+        URL.revokeObjectURL(objectUrl);
+        let { width, height } = img;
+
+        if (width > maxDimension || height > maxDimension) {
+          if (width > height) {
+            height = Math.round((height * maxDimension) / width);
+            width = maxDimension;
+          } else {
+            width = Math.round((width * maxDimension) / height);
+            height = maxDimension;
+          }
+        }
+
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+
+        if (!ctx) {
+          resolve(file);
+          return;
+        }
+
+        ctx.drawImage(img, 0, 0, width, height);
+
+        canvas.toBlob(
+          (blob) => {
+            if (!blob || blob.size >= file.size) {
+              resolve(file);
+              return;
+            }
+            const compressedFile = new File(
+              [blob],
+              file.name.replace(/\.[^.]+$/, ".jpg"),
+              {
+                type: "image/jpeg",
+                lastModified: Date.now(),
+              }
+            );
+            resolve(compressedFile);
+          },
+          "image/jpeg",
+          quality
+        );
+      };
+
+      img.onerror = () => {
+        URL.revokeObjectURL(objectUrl);
+        resolve(file);
+      };
+
+      img.src = objectUrl;
+    } catch {
+      resolve(file);
+    }
+  });
+}
+
+

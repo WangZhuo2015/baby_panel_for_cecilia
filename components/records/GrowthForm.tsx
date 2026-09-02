@@ -24,6 +24,7 @@ import { useToast } from "@/components/ui/Toast";
 import { VoiceConfirmEntry } from "@/components/ui/VoiceConfirmEntry";
 import { QuickAiButton } from "@/components/ui/QuickAiButton";
 import { getLocalDateStr } from "@/lib/date";
+import { compressImageForOcr } from "@/lib/upload";
 import type { GrowthMeasurement } from "@/types";
 
 type InputMode = "manual" | "ocr";
@@ -65,12 +66,16 @@ export function GrowthForm({
   );
 
   const [ocrLoading, setOcrLoading] = useState(false);
+  const [ocrElapsed, setOcrElapsed] = useState(0);
   const [ocrDone, setOcrDone] = useState(false);
   const [ocrError, setOcrError] = useState<string | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(initialData?.imageUrl || null);
   const [uploadedImageUrl, setUploadedImageUrl] = useState<string | null>(
     initialData?.imageUrl || null
   );
+  const [internalSaving, setInternalSaving] = useState(false);
+  const isSaving = saving || internalSaving;
+
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
 
@@ -81,19 +86,34 @@ export function GrowthForm({
       return;
     }
     setOcrLoading(true);
+    setOcrElapsed(0);
     setOcrError(null);
     setOcrDone(false);
     setImagePreview(URL.createObjectURL(file));
+
+    const timer = setInterval(() => {
+      setOcrElapsed((s) => s + 1);
+    }, 1000);
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 45000);
+
     try {
+      // 1. 客户端秒级压缩高分辨率照片（由 10MB 压至 ~300KB），大幅加速网络上传与 AI 解析
+      const compressed = await compressImageForOcr(file);
+
       const formData = new FormData();
-      formData.append("image", file);
+      formData.append("image", compressed);
       const res = await fetch("/api/growth/ocr", {
         method: "POST",
         body: formData,
+        signal: controller.signal,
       });
+      clearTimeout(timeoutId);
+
       const data = await res.json();
       if (!res.ok) {
-        setOcrError(data.error || "识别失败，请手动输入");
+        setOcrError(data.error || "识别未能提取到有效数据，请手动核对录入");
         return;
       }
       if (data.date) setDate(data.date);
@@ -102,27 +122,40 @@ export function GrowthForm({
       if (data.headCircumferenceCm != null) setHead(String(data.headCircumferenceCm));
       if (data.imageUrl) setUploadedImageUrl(data.imageUrl);
       setOcrDone(true);
-    } catch {
-      setOcrError("识别服务连接失败，请手动输入");
+      showToast("识别完成！请核对下方数据 ✨");
+    } catch (err: any) {
+      clearTimeout(timeoutId);
+      if (err?.name === "AbortError") {
+        setOcrError("识别响应超时（已超过45秒），建议直接手动输入或换用清晰局部照片");
+      } else {
+        setOcrError(err?.message || "识别服务连接失败，请手动输入");
+      }
     } finally {
+      clearInterval(timer);
       setOcrLoading(false);
     }
   };
 
   const handleFormSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
+    if (isSaving) return; // Prevent double submit
     if (!weight && !height && !head) {
       showToast("请至少输入一项测量数据");
       return;
     }
 
-    await onSubmit({
-      date,
-      weightKg: weight ? parseFloat(weight) : undefined,
-      heightCm: height ? parseFloat(height) : undefined,
-      headCircumferenceCm: head ? parseFloat(head) : undefined,
-      imageUrl: uploadedImageUrl || undefined,
-    });
+    setInternalSaving(true);
+    try {
+      await onSubmit({
+        date,
+        weightKg: weight ? parseFloat(weight) : undefined,
+        heightCm: height ? parseFloat(height) : undefined,
+        headCircumferenceCm: head ? parseFloat(head) : undefined,
+        imageUrl: uploadedImageUrl || undefined,
+      });
+    } finally {
+      setInternalSaving(false);
+    }
   };
 
   return (
@@ -261,7 +294,14 @@ export function GrowthForm({
                   </>
                 )
               ) : (
-                <p className="text-xs text-text-secondary">AI 智能识别体检单中...</p>
+                <div className="text-center py-2 space-y-1">
+                  <p className="text-xs font-bold text-primary animate-pulse">
+                    AI 正在识别体检单指标（已耗时 {ocrElapsed}s）...
+                  </p>
+                  <p className="text-[11px] text-text-muted">
+                    已自动优化压缩图片，正在提取各项测量指标
+                  </p>
+                </div>
               )}
 
               {ocrError && !ocrLoading && (
@@ -352,11 +392,20 @@ export function GrowthForm({
           fullWidth={!isEdit}
           size="lg"
           onClick={() => handleFormSubmit()}
-          disabled={saving}
+          disabled={isSaving}
           className={`flex items-center justify-center gap-2 ${isEdit ? "flex-1" : ""}`}
         >
-          <CheckCircle2 size={18} />
-          {saving ? "保存中..." : isEdit ? "保存修改" : "保存测量记录"}
+          {isSaving ? (
+            <>
+              <Loader2 size={18} className="animate-spin" />
+              <span>保存中...</span>
+            </>
+          ) : (
+            <>
+              <CheckCircle2 size={18} />
+              <span>{isEdit ? "保存修改" : "保存测量记录"}</span>
+            </>
+          )}
         </CuteButton>
       </div>
     </div>

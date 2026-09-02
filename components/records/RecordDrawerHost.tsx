@@ -81,6 +81,7 @@ export const RecordDrawerHost: React.FC = () => {
   }, [isOpen, handleClose]);
 
   const handleSubmitFeeding = async (data: any) => {
+    if (saving) return;
     setSaving(true);
     try {
       await addFeedingRecord(data);
@@ -95,6 +96,7 @@ export const RecordDrawerHost: React.FC = () => {
   };
 
   const handleSubmitSleep = async (data: any) => {
+    if (saving) return;
     setSaving(true);
     try {
       await addSleepRecord(data);
@@ -109,6 +111,7 @@ export const RecordDrawerHost: React.FC = () => {
   };
 
   const handleSubmitDiaper = async (data: any) => {
+    if (saving) return;
     setSaving(true);
     try {
       await addDiaperRecord(data);
@@ -123,6 +126,7 @@ export const RecordDrawerHost: React.FC = () => {
   };
 
   const handleSubmitFood = async (data: any) => {
+    if (saving) return;
     setSaving(true);
     try {
       await addFoodLogRecord(data);
@@ -137,6 +141,7 @@ export const RecordDrawerHost: React.FC = () => {
   };
 
   const handleSubmitGrowth = async (data: any) => {
+    if (saving) return;
     if (!baby?.birthDate) {
       showToast("请先设置宝宝生日");
       return;

@@ -23,6 +23,7 @@ import { useBabyStore } from "@/stores/useBabyStore";
 import { getLocalDateStr } from "@/lib/date";
 import { composeMedicalAiSummary } from "@/lib/medical-summary";
 import { MarkdownBody } from "@/components/ui/MarkdownBody";
+import { compressImageForOcr } from "@/lib/upload";
 import type { MedicalReportCategory, MedicalReportItem } from "@/types";
 
 export default function MedicalAddPage() {
@@ -44,6 +45,7 @@ export default function MedicalAddPage() {
   const [ocrError, setOcrError] = useState<string | null>(null);
   const [ocrDone, setOcrDone] = useState(false);
   const [saving, setSaving] = useState(false);
+  const isSubmittingRef = useRef(false);
 
   // Form Fields
   const [title, setTitle] = useState("化验检查报告");
@@ -69,15 +71,18 @@ export default function MedicalAddPage() {
       return;
     }
 
-    setImageFile(file);
-    setImagePreview(URL.createObjectURL(file));
     setOcrLoading(true);
     setOcrError(null);
     setOcrDone(false);
 
     try {
+      // 客户端压缩高分辨率照片，减少网络负载
+      const compressed = await compressImageForOcr(file);
+      setImageFile(compressed);
+      setImagePreview(URL.createObjectURL(compressed));
+
       const formData = new FormData();
-      formData.append("image", file);
+      formData.append("image", compressed);
 
       const res = await fetch("/api/medical/ocr", {
         method: "POST",
@@ -225,6 +230,7 @@ export default function MedicalAddPage() {
   };
 
   const handleSave = async () => {
+    if (saving || isSubmittingRef.current) return;
     if (!title.trim()) {
       showToast("请填写单据名称");
       return;
@@ -234,6 +240,7 @@ export default function MedicalAddPage() {
       return;
     }
 
+    isSubmittingRef.current = true;
     setSaving(true);
     try {
       let finalImageUrl = uploadedImageUrl;
@@ -280,6 +287,7 @@ export default function MedicalAddPage() {
     } catch (e: any) {
       showToast(e?.message || "保存失败，请重试");
     } finally {
+      isSubmittingRef.current = false;
       setSaving(false);
     }
   };
@@ -639,8 +647,17 @@ export default function MedicalAddPage() {
             disabled={saving}
             className="flex items-center justify-center gap-2"
           >
-            <CheckCircle2 size={18} />
-            {saving ? "保存中..." : "确认保存到健康档案"}
+            {saving ? (
+              <>
+                <Loader2 size={18} className="animate-spin" />
+                <span>保存中...</span>
+              </>
+            ) : (
+              <>
+                <CheckCircle2 size={18} />
+                <span>确认保存到健康档案</span>
+              </>
+            )}
           </CuteButton>
         </div>
       </div>
