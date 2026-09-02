@@ -1,5 +1,5 @@
 /**
- * 智能通知状态管理（24小时自动归档与自清理）
+ * 智能通知状态管理（24小时自动归档与自清理，多版本全兼容）
  */
 
 const READ_KEY = "baby_read_notifications";
@@ -37,16 +37,22 @@ export function setClearedBeforeTime(timestamp: number = Date.now()): void {
 export function getDismissedNotificationIds(): Set<string> {
   if (typeof window === "undefined") return new Set();
   try {
-    const raw = localStorage.getItem(DISMISSED_KEY);
+    const raw = localStorage.getItem(DISMISSED_KEY) || localStorage.getItem("baby_cleared_notifications");
     if (!raw) return new Set();
-    const entries: TimestampedEntry[] = JSON.parse(raw);
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return new Set();
     const now = Date.now();
-    // 自动清理超过 24 小时的旧记录，不无限膨胀
-    const valid = entries.filter((e) => now - e.ts < MAX_AGE_MS);
-    if (valid.length !== entries.length) {
-      localStorage.setItem(DISMISSED_KEY, JSON.stringify(valid));
+    const set = new Set<string>();
+    for (const item of parsed) {
+      if (typeof item === "string") {
+        set.add(item);
+      } else if (item && typeof item.id === "string") {
+        if (!item.ts || now - item.ts < MAX_AGE_MS) {
+          set.add(item.id);
+        }
+      }
     }
-    return new Set(valid.map((e) => e.id));
+    return set;
   } catch {
     return new Set();
   }
@@ -55,27 +61,33 @@ export function getDismissedNotificationIds(): Set<string> {
 export function addDismissedNotificationId(id: string): void {
   if (typeof window === "undefined") return;
   try {
-    const raw = localStorage.getItem(DISMISSED_KEY);
-    const entries: TimestampedEntry[] = raw ? JSON.parse(raw) : [];
+    const existing = getDismissedNotificationIds();
+    existing.add(id);
     const now = Date.now();
-    const valid = entries.filter((e) => now - e.ts < MAX_AGE_MS && e.id !== id);
-    valid.push({ id, ts: now });
-    localStorage.setItem(DISMISSED_KEY, JSON.stringify(valid));
+    const entries: TimestampedEntry[] = Array.from(existing).map((itemId) => ({ id: itemId, ts: now }));
+    localStorage.setItem(DISMISSED_KEY, JSON.stringify(entries));
   } catch {}
 }
 
 export function getReadNotificationIds(): Set<string> {
   if (typeof window === "undefined") return new Set();
   try {
-    const raw = localStorage.getItem(READ_KEY);
+    const raw = localStorage.getItem(READ_KEY) || localStorage.getItem("notification-read-ids");
     if (!raw) return new Set();
-    const entries: TimestampedEntry[] = JSON.parse(raw);
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return new Set();
     const now = Date.now();
-    const valid = entries.filter((e) => now - e.ts < MAX_AGE_MS);
-    if (valid.length !== entries.length) {
-      localStorage.setItem(READ_KEY, JSON.stringify(valid));
+    const set = new Set<string>();
+    for (const item of parsed) {
+      if (typeof item === "string") {
+        set.add(item);
+      } else if (item && typeof item.id === "string") {
+        if (!item.ts || now - item.ts < MAX_AGE_MS) {
+          set.add(item.id);
+        }
+      }
     }
-    return new Set(valid.map((e) => e.id));
+    return set;
   } catch {
     return new Set();
   }
@@ -84,21 +96,26 @@ export function getReadNotificationIds(): Set<string> {
 export function markNotificationRead(id: string): void {
   if (typeof window === "undefined") return;
   try {
-    const raw = localStorage.getItem(READ_KEY);
-    const entries: TimestampedEntry[] = raw ? JSON.parse(raw) : [];
+    const existing = getReadNotificationIds();
+    existing.add(id);
     const now = Date.now();
-    const valid = entries.filter((e) => now - e.ts < MAX_AGE_MS && e.id !== id);
-    valid.push({ id, ts: now });
-    localStorage.setItem(READ_KEY, JSON.stringify(valid));
+    const entries: TimestampedEntry[] = Array.from(existing).map((itemId) => ({ id: itemId, ts: now }));
+    localStorage.setItem(READ_KEY, JSON.stringify(entries));
+    localStorage.setItem("notification-read-ids", JSON.stringify(Array.from(existing)));
   } catch {}
 }
 
 export function markAllNotificationsRead(ids: string[]): void {
   if (typeof window === "undefined") return;
   try {
+    const existing = getReadNotificationIds();
+    for (const id of ids) {
+      existing.add(id);
+    }
     const now = Date.now();
-    const entries: TimestampedEntry[] = ids.map((id) => ({ id, ts: now }));
+    const entries: TimestampedEntry[] = Array.from(existing).map((itemId) => ({ id: itemId, ts: now }));
     localStorage.setItem(READ_KEY, JSON.stringify(entries));
+    localStorage.setItem("notification-read-ids", JSON.stringify(Array.from(existing)));
   } catch {}
 }
 
@@ -107,12 +124,13 @@ export function filterVisibleNotifications<T extends { id: string; createdAt?: n
   const dismissedIds = getDismissedNotificationIds();
 
   return items.filter((item) => {
+    const itemTime = item.createdAt ?? 0;
     // 超过24小时的通知自然归档过期
-    if (item.createdAt && Date.now() - item.createdAt > MAX_AGE_MS) {
+    if (itemTime > 0 && Date.now() - itemTime > MAX_AGE_MS) {
       return false;
     }
-    // 全部清除时间点之前的通知被过滤
-    if (clearedBefore > 0 && item.createdAt && item.createdAt <= clearedBefore) {
+    // 全部清除时间点之前的通知被过滤（若 item 无 createdAt 或 createdAt <= clearedBefore，均被清除）
+    if (clearedBefore > 0 && itemTime <= clearedBefore) {
       return false;
     }
     // 单条被划掉清除的通知被过滤

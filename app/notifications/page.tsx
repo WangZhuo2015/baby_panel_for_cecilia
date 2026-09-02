@@ -165,6 +165,11 @@ export default function NotificationsPage() {
         const data = await res.json();
         const visible = filterVisibleNotifications(Array.isArray(data) ? data : []);
         setNotifications(visible);
+        if (visible.length > 0) {
+          markAllNotificationsRead(visible.map((n) => n.id));
+          setReadIds(getReadNotificationIds());
+          window.dispatchEvent(new CustomEvent("notifications-read"));
+        }
       }
     } catch {
       // Offline fallback
