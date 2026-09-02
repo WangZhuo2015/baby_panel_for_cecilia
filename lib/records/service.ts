@@ -108,16 +108,33 @@ function clientIdOrNull(raw: unknown): string | null {
   return typeof raw === "string" && raw.length > 0 && raw.length <= 64 ? raw : null;
 }
 
+async function triggerFamilyPush(ctx: RecordContext, title: string, body: string, url: string = "/notifications") {
+  try {
+    const { notifyFamilyMembers, getFamilyMemberLabel } = await import("@/lib/push-helper");
+    let familyId = ctx.familyId;
+    if (!familyId) {
+      const baby = await prisma.baby.findUnique({ where: { id: ctx.babyId }, select: { familyId: true } });
+      familyId = baby?.familyId;
+    }
+    if (!familyId) return;
+    const actor = await getFamilyMemberLabel(familyId, ctx.userId);
+    void notifyFamilyMembers({
+      familyId,
+      excludeUserId: ctx.userId,
+      title: `${actor} ${title}`,
+      body,
+      url,
+    });
+  } catch {
+    // Non-blocking
+  }
+}
+
 export async function createFeeding(ctx: RecordContext, input: CreateFeedingInput) {
   const validTypes = ["breast", "formula", "bottle_breast", "mixed", "solid"];
   const type = validTypes.includes(input.type) ? input.type : "formula";
   if (!input.type || !validTypes.includes(input.type)) {
     // Keep strict error for API seam; agent tools tolerate fallback.
-    // Service throws; caller maps to 400.
-    // We keep permissive for tools: only API callers should validate before calling with strict.
-    // To preserve existing API behavior, require valid type when called from API.
-    // Detect if caller expects strict: check input.type presence.
-    // For now, allow fallback but also expose validateFeeding.
   }
   const timestamp = normalizeTimestamp(input.timestamp);
   guardFutureAndBirth(ctx.baby, timestamp);
@@ -144,14 +161,23 @@ export async function createFeeding(ctx: RecordContext, input: CreateFeedingInpu
     notes: input.notes?.trim() || null,
     formulaProductId: input.formulaProductId || null,
   };
+  let record: any;
   if (clientId) {
-    return prisma.feedingRecord.upsert({
+    record = await prisma.feedingRecord.upsert({
       where: { babyId_clientId: { babyId: ctx.babyId, clientId } },
       create: { ...data, clientId },
       update: {},
     });
+  } else {
+    record = await prisma.feedingRecord.create({ data });
   }
-  return prisma.feedingRecord.create({ data });
+  const feedDesc = type === "breast"
+    ? `母乳 亲喂(左${input.leftMinutes || 0}分/右${input.rightMinutes || 0}分)`
+    : type === "bottle_breast"
+      ? `瓶喂母乳 ${input.amountMl || 0}ml`
+      : `配方奶 ${input.amountMl || 0}ml`;
+  void triggerFamilyPush(ctx, "记录了喂奶 🍼", feedDesc, "/records/feeding");
+  return record;
 }
 
 export function validateFeedingStrict(input: { type?: unknown; amountMl?: unknown; leftMinutes?: unknown; rightMinutes?: unknown; timestamp?: unknown; notes?: unknown }) {
@@ -242,14 +268,19 @@ export async function createSleep(ctx: RecordContext, input: CreateSleepInput) {
     nightWakingCount: typeof input.nightWakingCount === "number" && input.nightWakingCount >= 0 ? Math.floor(input.nightWakingCount) : 0,
     notes: input.notes?.trim() || null,
   };
+  let record: any;
   if (clientId) {
-    return prisma.sleepRecord.upsert({
+    record = await prisma.sleepRecord.upsert({
       where: { babyId_clientId: { babyId: ctx.babyId, clientId } },
       create: { ...data, clientId },
       update: {},
     });
+  } else {
+    record = await prisma.sleepRecord.create({ data });
   }
-  return prisma.sleepRecord.create({ data });
+  const sleepDesc = `${input.type === "night" ? "夜觉" : "小睡"} · ${start} ~ ${end}`;
+  void triggerFamilyPush(ctx, "记录了睡眠 😴", sleepDesc, "/records/sleep");
+  return record;
 }
 
 function guardSleepNotes(notes: unknown) {
@@ -278,8 +309,15 @@ export async function createDiaper(ctx: RecordContext, input: CreateDiaperInput)
     poopConsistency: input.poopConsistency ? String(input.poopConsistency).trim() : null,
     notes: input.notes ? String(input.notes).trim() : null,
   };
-  if (clientId) return prisma.diaperRecord.upsert({ where: { babyId_clientId: { babyId: ctx.babyId, clientId } }, create: { ...data, clientId }, update: {} });
-  return prisma.diaperRecord.create({ data });
+  let dRecord: any;
+  if (clientId) {
+    dRecord = await prisma.diaperRecord.upsert({ where: { babyId_clientId: { babyId: ctx.babyId, clientId } }, create: { ...data, clientId }, update: {} });
+  } else {
+    dRecord = await prisma.diaperRecord.create({ data });
+  }
+  const diaperDesc = input.type === "pee" ? "嘘嘘" : input.type === "poop" ? "便便" : "嘘嘘+便便";
+  void triggerFamilyPush(ctx, "记录了换尿布 🧷", diaperDesc, "/records/diaper");
+  return dRecord;
 }
 
 export async function createFoodLog(ctx: RecordContext, input: CreateFoodLogInput) {
@@ -328,6 +366,7 @@ export async function createFoodLog(ctx: RecordContext, input: CreateFoodLogInpu
   const record = clientId
     ? await prisma.foodLogRecord.upsert({ where: { babyId_clientId: { babyId: ctx.babyId, clientId } }, create: { ...data, clientId }, update: {} })
     : await prisma.foodLogRecord.create({ data });
+  void triggerFamilyPush(ctx, "记录了辅食 🍚", `${foodsArr.join("、") || "辅食"} · 份量: ${validatedPortion}`, "/food");
   return { ...record, foods: safeJsonParse(record.foods, []) };
 }
 
@@ -385,8 +424,15 @@ export async function createGrowth(ctx: RecordContext, input: CreateGrowthInput)
     percentile,
     imageUrl: input.imageUrl ? String(input.imageUrl).trim().slice(0, 500) : null,
   };
-  if (clientId) return prisma.growthMeasurement.upsert({ where: { babyId_clientId: { babyId: ctx.babyId, clientId } }, create: { ...baseData, clientId }, update: {} });
-  return prisma.growthMeasurement.create({ data: baseData });
+  let gRecord: any;
+  if (clientId) {
+    gRecord = await prisma.growthMeasurement.upsert({ where: { babyId_clientId: { babyId: ctx.babyId, clientId } }, create: { ...baseData, clientId }, update: {} });
+  } else {
+    gRecord = await prisma.growthMeasurement.create({ data: baseData });
+  }
+  const growthDesc = [parsedWeight ? `体重 ${parsedWeight}kg` : "", parsedHeight ? `身高 ${parsedHeight}cm` : "", parsedHeadCirc ? `头围 ${parsedHeadCirc}cm` : ""].filter(Boolean).join(" · ") || "体检生长测量";
+  void triggerFamilyPush(ctx, "记录了生长数据 📏", growthDesc, "/growth");
+  return gRecord;
 }
 
 // ── Query side (read) ──
@@ -683,6 +729,8 @@ export async function deleteRecord(ctx: RecordContext, type: "feeding"|"sleep"|"
   else if (type === "food") await prisma.foodLogRecord.delete({ where: { id } });
   else if (type === "growth") await prisma.growthMeasurement.delete({ where: { id } });
   else if (type === "supplement") await prisma.supplementRecord.delete({ where: { id } });
+  const typeMap: Record<string, string> = { feeding: "喂奶记录", sleep: "睡眠记录", diaper: "换尿布记录", food: "辅食记录", growth: "生长测量", supplement: "补剂打卡" };
+  void triggerFamilyPush(ctx, `删除了${typeMap[type] || "记录"} 🗑️`, "撤销了一条记录", "/");
   return { success: true, id };
 }
 
@@ -720,7 +768,9 @@ export async function updateFeeding(ctx: RecordContext, id: string, patch: Recor
     timestamp: parsedTs.toISOString(),
     formulaProductId: merged.formulaProductId ? String(merged.formulaProductId) : null,
   };
-  return prisma.feedingRecord.update({ where: { id }, data });
+  const updated = await prisma.feedingRecord.update({ where: { id }, data });
+  void triggerFamilyPush(ctx, "修改了喂奶记录 ✏️", "修正了喂奶内容", "/records/feeding");
+  return updated;
 }
 
 export async function updateSleep(ctx: RecordContext, id: string, patch: Record<string, unknown>) {
@@ -752,7 +802,9 @@ export async function updateSleep(ctx: RecordContext, id: string, patch: Record<
   const wakingCount = patch.nightWakingCount !== undefined ? (typeof patch.nightWakingCount === "number" && (patch.nightWakingCount as number) >=0 ? Math.floor(patch.nightWakingCount as number) : 0) : record.nightWakingCount;
   const notes = patch.notes !== undefined ? (patch.notes ? String(patch.notes).trim() : null) : record.notes;
   if (notes !== null && String(notes).length > 1000) throw new ValidationError("notes 不能超过 1000 个字符");
-  return prisma.sleepRecord.update({ where: { id }, data: { startTime: finalStartIso, endTime: finalEndIso, type: sleepType, nightWakingCount: wakingCount, notes } });
+  const updated = await prisma.sleepRecord.update({ where: { id }, data: { startTime: finalStartIso, endTime: finalEndIso, type: sleepType, nightWakingCount: wakingCount, notes } });
+  void triggerFamilyPush(ctx, "修改了睡眠记录 ✏️", "修正了睡眠时间", "/records/sleep");
+  return updated;
 }
 
 export async function updateDiaper(ctx: RecordContext, id: string, patch: Record<string, unknown>) {
@@ -772,7 +824,9 @@ export async function updateDiaper(ctx: RecordContext, id: string, patch: Record
   if (merged.poopConsistency !== null && String(merged.poopConsistency).length > 100) throw new ValidationError("poopConsistency 不能超过 100 个字符");
   const parsed = new Date(merged.timestamp as string);
   if (Number.isNaN(parsed.getTime())) throw new ValidationError("timestamp 格式无效");
-  return prisma.diaperRecord.update({ where: { id }, data: { type: merged.type, poopColor: merged.poopColor, poopConsistency: merged.poopConsistency, notes: merged.notes, timestamp: parsed.toISOString() } });
+  const updated = await prisma.diaperRecord.update({ where: { id }, data: { type: merged.type, poopColor: merged.poopColor, poopConsistency: merged.poopConsistency, notes: merged.notes, timestamp: parsed.toISOString() } });
+  void triggerFamilyPush(ctx, "修改了换尿布记录 ✏️", "修正了尿布记录", "/records/diaper");
+  return updated;
 }
 
 export async function updateFoodLog(ctx: RecordContext, id: string, patch: Record<string, unknown>) {
@@ -797,5 +851,6 @@ export async function updateFoodLog(ctx: RecordContext, id: string, patch: Recor
   try { const parsed = safeJsonParse(merged.foods as string, []); if (Array.isArray(parsed) && parsed.length > 20) throw new ValidationError("foods 不能超过 20 项"); } catch (e:any) { if (e.message?.includes("foods 不能超过")) throw e; }
   if (merged.abnormalNotes !== null && String(merged.abnormalNotes).length > 1000) throw new ValidationError("abnormalNotes 不能超过 1000 个字符");
   const updated = await prisma.foodLogRecord.update({ where: { id }, data: { date: merged.date, time: String(merged.time), foods: merged.foods, portion: String(merged.portion), acceptance: acc, babyState: String(merged.babyState), hasAbnormal: merged.hasAbnormal, abnormalNotes: merged.abnormalNotes } });
+  void triggerFamilyPush(ctx, "修改了辅食记录 ✏️", "修正了辅食记录", "/food");
   return { ...updated, foods: safeJsonParse(updated.foods, []) };
 }

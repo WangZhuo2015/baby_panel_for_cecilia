@@ -104,6 +104,7 @@ interface BabyStore {
   fetchMedicalReports: (category?: string, force?: boolean) => Promise<void>;
   invalidateCache: (prefix?: string) => void;
   refreshAll: (date?: string) => Promise<void>;
+  pollActiveData: (date?: string) => Promise<void>;
   updateBook: (id: string, data: Partial<Book>) => Promise<void>;
   addFeedingRecord: (record: Partial<FeedingRecord>) => Promise<void>;
   addSleepRecord: (record: Partial<SleepRecord>) => Promise<void>;

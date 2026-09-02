@@ -26,6 +26,7 @@ export interface RecordsSlice {
   fetchTimeline: (date?: string, force?: boolean) => Promise<void>;
   fetchAiDailySummary: (date?: string, force?: boolean) => Promise<AiDailySummaryResult | null>;
   refreshAll: (date?: string) => Promise<void>;
+  pollActiveData: (date?: string) => Promise<void>;
   addFeedingRecord: (record: Partial<FeedingRecord>) => Promise<void>;
   addSleepRecord: (record: Partial<SleepRecord>) => Promise<void>;
   addDiaperRecord: (record: Partial<DiaperRecord>) => Promise<void>;
@@ -239,6 +240,27 @@ export const createRecordsSlice = (set: any, get: any): RecordsSlice => ({
       get().fetchGrowthMeasurements(true),
       get().fetchMedicalReports(undefined, true),
     ]);
+  },
+
+  pollActiveData: async (date?: string) => {
+    if (!get().user || !get().baby?.id) return;
+    invalidateCache("dailySummary");
+    invalidateCache("timeline");
+    invalidateCache("feedingRecords");
+    invalidateCache("sleepRecords");
+    invalidateCache("diaperRecords");
+    invalidateCache("foodLogRecords");
+    await Promise.allSettled([
+      get().fetchDailySummary(date, true),
+      get().fetchTimeline(date, true),
+      get().fetchFeedingRecords(date, true),
+      get().fetchSleepRecords(true),
+      get().fetchDiaperRecords(true),
+      get().fetchFoodLogRecords(date, true),
+    ]);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("baby:data-polled"));
+    }
   },
 
   addFeedingRecord: async (record) => {

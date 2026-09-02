@@ -1,37 +1,71 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { Bell, BellOff, Trash2, Shield, Sparkles, Clock, CheckCircle } from "lucide-react";
-import { AppHeader } from "@/components/ui/AppHeader";
+import {
+  Bell,
+  BellOff,
+  Clock,
+  Shield,
+  Trash2,
+  CheckCircle,
+  Users,
+  Send,
+  Smartphone,
+  RefreshCw,
+} from "lucide-react";
 import { CuteCard } from "@/components/ui/CuteCard";
 import { SectionTitle } from "@/components/ui/SectionTitle";
+import { AppHeader } from "@/components/ui/AppHeader";
+import { useBabyStore } from "@/stores/useBabyStore";
 import { useToast } from "@/components/ui/Toast";
 import { InstallGuideModal } from "@/components/ui/InstallGuideModal";
 
 interface NotificationItem {
   id: string;
-  type: "vaccine" | "ai" | "daily" | "data_release";
+  type: "vaccine" | "daily" | "data_release" | "family";
   title: string;
   detail: string;
   time: string;
   urgent: boolean;
   icon: string;
+  actorId?: string | null;
+  actorLabel?: string | null;
 }
 
-const READ_IDS_KEY = "notification-read-ids";
+const READ_NOTIFICATIONS_KEY = "baby_read_notifications";
 
 function getReadIds(): Set<string> {
+  if (typeof window === "undefined") return new Set();
   try {
-    const raw = localStorage.getItem(READ_IDS_KEY);
-    return new Set(raw ? JSON.parse(raw) : []);
+    const stored = localStorage.getItem(READ_NOTIFICATIONS_KEY);
+    return stored ? new Set(JSON.parse(stored)) : new Set();
   } catch {
     return new Set();
   }
 }
 
 function saveReadIds(ids: Set<string>) {
-  localStorage.setItem(READ_IDS_KEY, JSON.stringify([...ids]));
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(READ_NOTIFICATIONS_KEY, JSON.stringify(Array.from(ids)));
+  } catch {
+    // localStorage full or unavailable
+  }
+}
+
+/** 将 VAPID Base64 字符串转换为浏览器 PushManager 必需的 Uint8Array */
+function urlBase64ToUint8Array(base64String: string): Uint8Array {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding)
+    .replace(/-/g, "+")
+    .replace(/_/g, "/");
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+  return outputArray;
 }
 
 export default function NotificationsPage() {
@@ -39,71 +73,138 @@ export default function NotificationsPage() {
   const [loading, setLoading] = useState(true);
   const [readIds, setReadIds] = useState<Set<string>>(new Set());
   const [pushEnabled, setPushEnabled] = useState(false);
-  const [pushPermission, setPushPermission] = useState<NotificationPermission | "unsupported">(
-    "default"
-  );
+  const [pushPermission, setPushPermission] = useState<string>("default");
   const [showInstallGuide, setShowInstallGuide] = useState(false);
+  const [testingPush, setTestingPush] = useState(false);
+  const [enablingPush, setEnablingPush] = useState(false);
+
+  const baby = useBabyStore((s) => s.baby);
   const { showToast } = useToast();
-  const fetchNotifications = useCallback(async () => {
-    try {
-      const res = await fetch("/api/notifications");
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      const list = Array.isArray(data) ? data : data?.notifications ?? [];
-      setNotifications(list);
 
-      // Prune read ids that no longer exist so localStorage stays bounded
-      setReadIds((prev) => {
-        const valid = new Set(list.map((n: NotificationItem) => n.id));
-        const pruned = new Set([...prev].filter((id) => valid.has(id)));
-        if (pruned.size !== prev.size) saveReadIds(pruned);
-        return pruned;
-      });
-    } catch (e) {
-      console.error("Failed to fetch notifications:", e);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  /** 强制生成最新有效的推送订阅并同步至服务端 */
+  const subscribeFresh = useCallback(
+    async (readyReg: ServiceWorkerRegistration): Promise<PushSubscription | null> => {
+      try {
+        const keyRes = await fetch("/api/push/vapid-key");
+        if (!keyRes.ok) throw new Error("获取推送公钥失败");
+        const { publicKey } = await keyRes.json();
 
-  const markRead = useCallback(
-    (id: string) => {
-      setReadIds((prev) => {
-        const next = new Set(prev);
-        next.add(id);
-        saveReadIds(next);
-        return next;
-      });
-      window.dispatchEvent(new CustomEvent("notifications-read"));
+        // 先退订本地旧的或失效的订阅凭据，防止 key 漂移冲突
+        const oldSub = await readyReg.pushManager.getSubscription();
+        if (oldSub) {
+          await oldSub.unsubscribe().catch(() => {});
+        }
+
+        // 获取全新的当前有效订阅（必须传 Uint8Array）
+        const appServerKey = urlBase64ToUint8Array(publicKey);
+        const newSub = await readyReg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: appServerKey as unknown as BufferSource,
+        });
+
+        // 立即上传并绑定到当前用户
+        await fetch("/api/push/subscribe", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(newSub.toJSON()),
+        });
+
+        setPushEnabled(true);
+        return newSub;
+      } catch (e) {
+        console.error("subscribeFresh error:", e);
+        return null;
+      }
     },
     []
   );
 
-  useEffect(() => {
-    // Read stored read IDs
-    setReadIds(getReadIds());
+  const checkAndSyncPush = useCallback(async () => {
+    if (typeof window === "undefined") return;
 
-    // Check push support
-    if (typeof window !== "undefined" && "Notification" in window) {
-      setPushPermission(Notification.permission);
-      // Check if service worker is registered
-      if ("serviceWorker" in navigator) {
-        navigator.serviceWorker.getRegistration().then((reg) => {
-          setPushEnabled(!!reg && Notification.permission === "granted");
-        });
-      }
-    } else {
-      setPushPermission("unsupported");
+    const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent);
+    const isStandalone =
+      window.matchMedia("(display-mode: standalone)").matches ||
+      (window.navigator as { standalone?: boolean }).standalone === true;
+
+    if (isIos && !isStandalone) {
+      setPushPermission("ios_not_standalone");
+      setPushEnabled(false);
+      return;
     }
 
+    if (!("Notification" in window) || !("serviceWorker" in navigator)) {
+      setPushPermission("unsupported");
+      setPushEnabled(false);
+      return;
+    }
+
+    const perm = Notification.permission;
+    setPushPermission(perm);
+
+    if (perm === "granted") {
+      try {
+        const reg = await navigator.serviceWorker.ready;
+        const sub = await reg.pushManager.getSubscription();
+        if (sub) {
+          setPushEnabled(true);
+          // 自动向后端同步当前用户与设备订阅绑定
+          fetch("/api/push/subscribe", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(sub.toJSON()),
+          }).catch(() => {});
+        } else {
+          setPushEnabled(false);
+        }
+      } catch {
+        setPushEnabled(false);
+      }
+    } else {
+      setPushEnabled(false);
+    }
+  }, []);
+
+  const fetchNotifications = useCallback(async () => {
+    setLoading(true);
+    try {
+      const url = baby?.id
+        ? `/api/notifications?babyId=${baby.id}`
+        : "/api/notifications";
+      const res = await fetch(url);
+      if (res.ok) {
+        const data = await res.json();
+        setNotifications(data);
+      }
+    } catch {
+      // Offline fallback
+    } finally {
+      setLoading(false);
+    }
+  }, [baby?.id]);
+
+  const markRead = useCallback((id: string) => {
+    setReadIds((prev) => {
+      const next = new Set(prev);
+      next.add(id);
+      saveReadIds(next);
+      return next;
+    });
+    window.dispatchEvent(new CustomEvent("notifications-read"));
+  }, []);
+
+  useEffect(() => {
+    setReadIds(getReadIds());
+    checkAndSyncPush();
     fetchNotifications();
-  }, [fetchNotifications]);
+  }, [fetchNotifications, checkAndSyncPush]);
 
   const unreadCount = notifications.filter((n) => !readIds.has(n.id)).length;
 
   const handleEnablePush = async () => {
+    if (enablingPush) return;
+    setEnablingPush(true);
     try {
-      // iOS Safari 需先安装到主屏幕（standalone）才有 Push API
       const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent);
       const isStandalone =
         window.matchMedia("(display-mode: standalone)").matches ||
@@ -123,7 +224,7 @@ export default function NotificationsPage() {
       setPushPermission(permission);
 
       if (permission !== "granted") {
-        showToast("推送通知权限被拒绝");
+        showToast("推送权限未开启，请在浏览器设置中允许通知", "error");
         return;
       }
 
@@ -134,34 +235,63 @@ export default function NotificationsPage() {
 
       const registration = await navigator.serviceWorker.register("/sw.js");
       await registration.update();
+      const readyReg = await navigator.serviceWorker.ready;
 
-      // Get VAPID public key
-      const keyRes = await fetch("/api/push/vapid-key");
-      if (!keyRes.ok) throw new Error("Failed to get VAPID key");
-      const { publicKey } = await keyRes.json();
-
-      // Subscribe to push
-      const subscription = await registration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: publicKey,
-      });
-
-      // Save subscription to server
-      const subRes = await fetch("/api/push/subscribe", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(subscription.toJSON()),
-      });
-
-      if (subRes.ok) {
-        setPushEnabled(true);
-        showToast("推送通知已开启 ✨");
+      const newSub = await subscribeFresh(readyReg);
+      if (newSub) {
+        showToast("设备推送已绑定并就绪 ✨", "success");
       } else {
-        showToast("订阅保存失败");
+        showToast("绑定失败，请检查网络设置", "error");
       }
     } catch (error) {
       console.error("Push subscription error:", error);
-      showToast("开启推送通知失败");
+      showToast("开启推送通知失败，请重试", "error");
+    } finally {
+      setEnablingPush(false);
+    }
+  };
+
+  const handleSendTestPush = async () => {
+    if (testingPush) return;
+    setTestingPush(true);
+    try {
+      let subPayload: any = null;
+
+      if ("serviceWorker" in navigator && "Notification" in window) {
+        if (Notification.permission === "default") {
+          const perm = await Notification.requestPermission();
+          setPushPermission(perm);
+        }
+
+        if (Notification.permission === "granted") {
+          const readyReg = await navigator.serviceWorker.ready;
+          let sub = await readyReg.pushManager.getSubscription();
+          if (!sub) {
+            sub = await subscribeFresh(readyReg);
+          }
+          if (sub) {
+            subPayload = sub.toJSON();
+          }
+        }
+      }
+
+      const res = await fetch("/api/push/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ subscription: subPayload }),
+      });
+      const data = await res.json();
+
+      if (res.ok) {
+        setPushEnabled(true);
+        showToast("测试推送已发出，请查看手机/电脑系统通知栏 ✨", "success");
+      } else {
+        showToast(data.error || "发送测试推送失败", "error");
+      }
+    } catch {
+      showToast("网络请求失败，请稍后重试", "error");
+    } finally {
+      setTestingPush(false);
     }
   };
 
@@ -175,8 +305,8 @@ export default function NotificationsPage() {
     showToast("已全部清除");
   };
 
+  const familyNotifs = notifications.filter((n) => n.type === "family");
   const vaccineNotifs = notifications.filter((n) => n.type === "vaccine");
-  const aiNotifs = notifications.filter((n) => n.type === "ai");
   const dailyNotifs = notifications.filter((n) => n.type === "daily");
 
   return (
@@ -200,42 +330,101 @@ export default function NotificationsPage() {
         }
       />
 
-      {/* Push notification toggle */}
+      {/* Push notification card */}
       <CuteCard variant="gradient" className="mb-5 mt-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-lavender/15 flex items-center justify-center">
-              {pushEnabled ? (
-                <Bell size={20} className="text-lavender" />
-              ) : (
-                <BellOff size={20} className="text-text-muted" />
-              )}
-            </div>
-            <div>
-              <p className="text-sm font-medium text-text-primary">推送通知</p>
-              <p className="text-xs text-text-muted">
-                {pushEnabled
-                  ? "已开启，新消息会自动推送"
-                  : pushPermission === "unsupported"
-                    ? "浏览器不支持"
-                    : "开启浏览器推送通知"}
-              </p>
+        <div className="space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-10 h-10 rounded-2xl bg-lavender/15 flex items-center justify-center flex-shrink-0 text-lavender">
+                {pushEnabled ? <Bell size={20} /> : <BellOff size={20} className="text-text-muted" />}
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-bold text-text-primary">设备推送通知</p>
+                  {pushEnabled ? (
+                    <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-mint bg-mint/10 px-2 py-0.5 rounded-full">
+                      <CheckCircle size={12} /> 已开启
+                    </span>
+                  ) : pushPermission === "denied" ? (
+                    <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-rose-500 bg-rose-50 px-2 py-0.5 rounded-full">
+                      权限被拦截
+                    </span>
+                  ) : pushPermission === "ios_not_standalone" ? (
+                    <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">
+                      需添加桌面
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-text-muted bg-gray-100 px-2 py-0.5 rounded-full">
+                      未开启
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-text-muted mt-0.5 leading-relaxed">
+                  {pushEnabled
+                    ? "家人提交或修改记录时，手机锁屏状态下将实时弹出通知"
+                    : pushPermission === "denied"
+                      ? "浏览器通知权限被禁用，请点击地址栏锁头图标允许"
+                      : pushPermission === "ios_not_standalone"
+                        ? "iOS Safari 需先添加到主屏幕打开，即可开启系统锁屏推送"
+                        : "开启后家人提交或修改记录将实时收到系统推送"}
+                </p>
+              </div>
             </div>
           </div>
-          {!pushEnabled && pushPermission !== "unsupported" && (
+
+          {/* Action buttons row */}
+          <div className="pt-2 border-t border-divider/50 flex flex-wrap items-center justify-end gap-2">
+            {pushPermission === "ios_not_standalone" && (
+              <button
+                type="button"
+                onClick={() => setShowInstallGuide(true)}
+                className="px-3.5 py-1.5 rounded-full bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold btn-press shadow-button transition-all cursor-pointer flex items-center gap-1.5"
+              >
+                <Smartphone size={13} />
+                <span>添加到主屏幕指引</span>
+              </button>
+            )}
+
+            {pushPermission === "denied" && (
+              <button
+                type="button"
+                onClick={() => {
+                  checkAndSyncPush();
+                  showToast("请在浏览器设置中开启通知权限后刷新页面", "info");
+                }}
+                className="px-3.5 py-1.5 rounded-full bg-rose-500 hover:bg-rose-600 text-white text-xs font-bold btn-press shadow-button transition-all cursor-pointer flex items-center gap-1.5"
+              >
+                <RefreshCw size={13} />
+                <span>已允许权限，点击重试</span>
+              </button>
+            )}
+
+            {/* Re-bind / Enable button is ALWAYS available */}
             <button
+              type="button"
               onClick={handleEnablePush}
-              className="px-4 py-2 rounded-full bg-primary text-white text-xs font-medium btn-press shadow-button"
+              disabled={enablingPush}
+              className={`px-3.5 py-1.5 rounded-full text-xs font-bold btn-press shadow-button transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-50 ${
+                pushEnabled
+                  ? "bg-gray-100 hover:bg-gray-200 text-text-primary border border-divider"
+                  : "bg-primary hover:bg-primary/90 text-white"
+              }`}
             >
-              开启推送通知
+              <RefreshCw size={12} className={enablingPush ? "animate-spin" : ""} />
+              <span>{enablingPush ? "绑定中..." : pushEnabled ? "重新绑定设备" : "开启推送通知"}</span>
             </button>
-          )}
-          {pushEnabled && (
-            <span className="flex items-center gap-1 text-xs text-mint font-medium">
-              <CheckCircle size={14} />
-              已开启
-            </span>
-          )}
+
+            {/* Test button is always visible & interactive */}
+            <button
+              type="button"
+              onClick={handleSendTestPush}
+              disabled={testingPush}
+              className="px-3.5 py-1.5 rounded-full bg-primary/10 hover:bg-primary/20 text-primary text-xs font-bold btn-press transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+            >
+              <Send size={13} />
+              <span>{testingPush ? "正在发送..." : "发送测试推送"}</span>
+            </button>
+          </div>
         </div>
       </CuteCard>
 
@@ -266,11 +455,37 @@ export default function NotificationsPage() {
         </div>
       ) : (
         <div className="space-y-5">
+          {/* Family member dynamic group */}
+          {familyNotifs.length > 0 && (
+            <div>
+              <SectionTitle
+                title="家庭协同动态"
+                icon={<Users size={18} className="text-primary" />}
+                className="mb-3"
+                action={
+                  <span className="text-xs text-text-muted">
+                    {familyNotifs.length} 条动态
+                  </span>
+                }
+              />
+              <div className="space-y-2.5">
+                {familyNotifs.map((notif) => (
+                  <NotificationCard
+                    key={notif.id}
+                    notification={notif}
+                    read={readIds.has(notif.id)}
+                    onRead={markRead}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Vaccine reminders group */}
           {vaccineNotifs.length > 0 && (
             <div>
               <SectionTitle
-                title="疫苗提醒"
+                title="疫苗接种提醒"
                 icon={<Shield size={18} className="text-primary" />}
                 className="mb-3"
                 action={
@@ -281,28 +496,12 @@ export default function NotificationsPage() {
               />
               <div className="space-y-2.5">
                 {vaccineNotifs.map((notif) => (
-                  <NotificationCard key={notif.id} notification={notif} read={readIds.has(notif.id)} onRead={markRead} />
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* AI Tips group */}
-          {aiNotifs.length > 0 && (
-            <div>
-              <SectionTitle
-                title="AI 建议"
-                icon={<Sparkles size={18} className="text-lavender" />}
-                className="mb-3"
-                action={
-                  <span className="text-xs text-text-muted">
-                    {aiNotifs.length} 条
-                  </span>
-                }
-              />
-              <div className="space-y-2.5">
-                {aiNotifs.map((notif) => (
-                  <NotificationCard key={notif.id} notification={notif} read={readIds.has(notif.id)} onRead={markRead} />
+                  <NotificationCard
+                    key={notif.id}
+                    notification={notif}
+                    read={readIds.has(notif.id)}
+                    onRead={markRead}
+                  />
                 ))}
               </div>
             </div>
@@ -312,7 +511,7 @@ export default function NotificationsPage() {
           {dailyNotifs.length > 0 && (
             <div>
               <SectionTitle
-                title="日常提醒"
+                title="日常记录提醒"
                 icon={<Clock size={18} className="text-sky" />}
                 className="mb-3"
                 action={
@@ -323,7 +522,12 @@ export default function NotificationsPage() {
               />
               <div className="space-y-2.5">
                 {dailyNotifs.map((notif) => (
-                  <NotificationCard key={notif.id} notification={notif} read={readIds.has(notif.id)} onRead={markRead} />
+                  <NotificationCard
+                    key={notif.id}
+                    notification={notif}
+                    read={readIds.has(notif.id)}
+                    onRead={markRead}
+                  />
                 ))}
               </div>
             </div>
@@ -331,12 +535,10 @@ export default function NotificationsPage() {
         </div>
       )}
 
-      {/* Disclaimer */}
-      <p className="text-[10px] text-text-muted text-center mt-8">
-        AI 建议仅供参考，如有疑问请咨询专业医生。
-      </p>
-
-      <InstallGuideModal isOpen={showInstallGuide} onClose={() => setShowInstallGuide(false)} />
+      <InstallGuideModal
+        isOpen={showInstallGuide}
+        onClose={() => setShowInstallGuide(false)}
+      />
     </div>
   );
 }
@@ -354,9 +556,24 @@ function NotificationCard({
 
   const handleClick = () => {
     if (!read) onRead(notification.id);
-    // Route to relevant page based on notification type
     if (notification.type === "vaccine") {
       router.push("/health/vaccines");
+    } else if (notification.type === "family") {
+      if (notification.title.includes("喂奶")) {
+        router.push("/records/feeding");
+      } else if (notification.title.includes("睡眠")) {
+        router.push("/records/sleep");
+      } else if (notification.title.includes("尿布")) {
+        router.push("/records/diaper");
+      } else if (notification.title.includes("辅食")) {
+        router.push("/food");
+      } else if (notification.title.includes("生长")) {
+        router.push("/growth");
+      } else if (notification.title.includes("补剂")) {
+        router.push("/nutrition");
+      } else {
+        router.push("/");
+      }
     } else if (notification.type === "daily") {
       if (notification.title.includes("喂奶")) {
         router.push("/records/feeding");
@@ -370,10 +587,10 @@ function NotificationCard({
 
   const borderColor = notification.urgent
     ? "border-l-primary"
-    : notification.type === "vaccine"
-      ? "border-l-primary/50"
-      : notification.type === "ai"
-        ? "border-l-lavender/50"
+    : notification.type === "family"
+      ? "border-l-mint"
+      : notification.type === "vaccine"
+        ? "border-l-primary/50"
         : "border-l-sky/50";
 
   return (
@@ -382,15 +599,15 @@ function NotificationCard({
       onClick={handleClick}
     >
       <div className="flex items-start gap-3">
-        {/* Icon */}
         <div className="flex-shrink-0 w-10 h-10 rounded-xl bg-primary-light/50 flex items-center justify-center">
           <span className="text-lg">{notification.icon}</span>
         </div>
 
-        {/* Content */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <p className={`text-sm ${!read ? "font-semibold" : "font-medium"} text-text-primary truncate`}>
+            <p
+              className={`text-sm ${!read ? "font-semibold" : "font-medium"} text-text-primary truncate`}
+            >
               {notification.title}
             </p>
             {!read && (
@@ -400,7 +617,9 @@ function NotificationCard({
           <p className="text-xs text-text-secondary mt-0.5 leading-relaxed line-clamp-2">
             {notification.detail}
           </p>
-          <p className="text-[10px] text-text-muted mt-1.5">{notification.time}</p>
+          <p className="text-[10px] text-text-muted mt-1.5">
+            {notification.time}
+          </p>
         </div>
       </div>
     </CuteCard>

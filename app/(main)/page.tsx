@@ -63,7 +63,11 @@ function NotificationBell() {
     fetchCount();
     const handler = () => fetchCount();
     window.addEventListener("notifications-read", handler);
-    return () => window.removeEventListener("notifications-read", handler);
+    window.addEventListener("baby:data-polled", handler);
+    return () => {
+      window.removeEventListener("notifications-read", handler);
+      window.removeEventListener("baby:data-polled", handler);
+    };
   }, [fetchCount]);
 
   return (

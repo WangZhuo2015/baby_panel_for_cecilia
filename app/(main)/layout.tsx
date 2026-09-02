@@ -7,6 +7,7 @@ import { DesktopSidebar } from "@/components/navigation/DesktopSidebar";
 import { OfflineBanner } from "@/components/ui/OfflineBanner";
 import { QuickAiHost } from "@/components/ui/QuickAiHost";
 import { RecordDrawerHost } from "@/components/records/RecordDrawerHost";
+import { SmartPollingHost } from "@/components/ui/SmartPollingHost";
 import { useBabyStore } from "@/stores/useBabyStore";
 
 const hideNavRoutes = [
@@ -54,6 +55,9 @@ export default function MainLayout({
 
       {/* 全局快捷抽屉录入宿主 */}
       <RecordDrawerHost />
+
+      {/* 全局前台智能轮询（防休眠、多端数据即时同步） */}
+      <SmartPollingHost />
     </div>
   );
 }
