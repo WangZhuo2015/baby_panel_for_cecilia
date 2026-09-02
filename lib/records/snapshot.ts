@@ -9,6 +9,7 @@ export interface SnapshotContext {
   userId?: string | null;
   babyId: string;
   source?: "mcp" | "web_chat" | "ui_manual";
+  sourceAgent?: string | null;
 }
 
 /**
@@ -26,6 +27,7 @@ export async function captureRecordSnapshot(params: {
       babyId: params.ctx.babyId,
       userId: params.ctx.userId || null,
       source: params.ctx.source || "mcp",
+      sourceAgent: params.ctx.sourceAgent || null,
       action: params.action,
       entityType: params.entityType,
       entityId: params.entityId,

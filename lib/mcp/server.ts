@@ -41,7 +41,15 @@ export function checkScope(principal: UserPrincipal, requiredScope: "read" | "wr
 export function createMcpServer(principal: UserPrincipal): Server {
   const babyId = principal.babyId;
   const baby = principal.baby!;
-  const recCtx = { userId: principal.userId, babyId, baby, familyId: baby.familyId };
+  const sourceAgent = principal.sourceAgent || "Gemini Spark";
+  const recCtx = {
+    userId: principal.userId,
+    babyId,
+    baby,
+    familyId: baby.familyId,
+    source: "mcp",
+    sourceAgent,
+  };
 
   const server = new Server(
     {
@@ -557,6 +565,8 @@ export function createMcpServer(principal: UserPrincipal): Server {
             data: {
               babyId,
               recordedById: principal.userId,
+              source: "mcp",
+              sourceAgent,
               title,
               category: String(mr.category || "general"),
               date,

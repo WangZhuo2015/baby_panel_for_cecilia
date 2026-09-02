@@ -1,6 +1,7 @@
 import React from 'react';
 import type { TimelineEntry } from '@/types';
 import { Baby, Moon, Droplets, UtensilsCrossed, Pill } from 'lucide-react';
+import { AgentBadge } from '@/components/ui/AgentBadge';
 
 interface TimelineProps {
   items: TimelineEntry[];
@@ -53,9 +54,10 @@ const TimelineImpl: React.FC<TimelineProps> = ({ items, onItemTap }) => {
 
             {/* Content */}
             <div className="flex-1 min-w-0 ml-1">
-              <div className="flex items-baseline gap-2 flex-wrap">
+              <div className="flex items-baseline gap-1.5 flex-wrap">
                 <span className="text-xs text-text-muted font-medium">{item.time}</span>
                 <span className="text-sm font-medium text-text-primary">{item.title}</span>
+                {item.sourceAgent && <AgentBadge name={item.sourceAgent} size="xs" />}
                 {item.recorderName && (
                   <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary-soft/40 text-text-secondary whitespace-nowrap">
                     {item.recorderName}

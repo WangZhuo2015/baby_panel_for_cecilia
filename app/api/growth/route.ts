@@ -35,6 +35,8 @@ export async function POST(request: Request) {
       headCircumferenceCm: body.headCircumferenceCm,
       imageUrl: body.imageUrl,
       clientId: body.clientId,
+      source: body.source,
+      sourceAgent: body.sourceAgent,
     });
     return NextResponse.json(rec, { status: 201 });
   } catch (e) {

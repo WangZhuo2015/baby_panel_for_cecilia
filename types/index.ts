@@ -51,6 +51,8 @@ export interface FeedingRecord {
   foodName?: string | null;
   foodAmount?: string | null;
   formulaProductId?: string | null;
+  source?: string | null;
+  sourceAgent?: string | null;
 }
 
 export interface SleepRecord {
@@ -62,6 +64,8 @@ export interface SleepRecord {
   notes?: string;
   fallingAsleepMethod?: string;
   wakeUpMood?: string;
+  source?: string | null;
+  sourceAgent?: string | null;
 }
 
 export interface DiaperRecord {
@@ -71,6 +75,8 @@ export interface DiaperRecord {
   poopColor?: PoopColor;
   poopConsistency?: PoopConsistency;
   notes?: string;
+  source?: string | null;
+  sourceAgent?: string | null;
 }
 
 // ===== Growth Types =====
@@ -84,6 +90,8 @@ export interface GrowthMeasurement {
   headCircumferenceCm?: number;
   percentile?: number;
   imageUrl?: string | null;
+  source?: string | null;
+  sourceAgent?: string | null;
 }
 
 // ===== Food Types =====
@@ -403,6 +411,10 @@ export interface TimelineEntry {
   icon: string;
   /** 记录人显示名（家庭成员），旧数据可能为 null */
   recorderName?: string | null;
+  /** 数据来源: "mcp" | "web_chat" | "ui_manual" */
+  source?: string | null;
+  /** 外部 Agent 来源: "Gemini Spark" | "ChatGPT" | "Claude" | "Cursor" 等 */
+  sourceAgent?: string | null;
   /** 原始记录详情数据（用于精准回填与编辑） */
   rawRecord?: any;
 }
@@ -432,6 +444,8 @@ export interface MedicalReport {
   id: string;
   babyId: string;
   recordedById?: string | null;
+  source?: string | null;
+  sourceAgent?: string | null;
   title: string;
   category: MedicalReportCategory;
   date: string;

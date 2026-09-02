@@ -23,6 +23,7 @@ import dynamic from "next/dynamic";
 import { useBabyStore } from "@/stores/useBabyStore";
 import { calculateAge } from "@/lib/age";
 import { SegmentControl } from "@/components/ui/SegmentControl";
+import { AgentBadge } from "@/components/ui/AgentBadge";
 import { CuteCard } from "@/components/ui/CuteCard";
 import { QuickAiButton } from "@/components/ui/QuickAiButton";
 import { openRecordDrawer } from "@/lib/drawer-bus";
@@ -350,6 +351,7 @@ export default function GrowthPage() {
                               {m.ageLabel}
                             </span>
                           )}
+                          {m.sourceAgent && <AgentBadge name={m.sourceAgent} size="xs" />}
                         </div>
 
                         <div className="flex items-center gap-1.5 shrink-0">

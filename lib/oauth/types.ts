@@ -70,6 +70,8 @@ export interface UserPrincipal {
   babyId: string;
   scopes: Set<string>;
   clientId: string;
+  clientName?: string;
+  sourceAgent: string; // e.g. "Gemini Spark" | "ChatGPT" | "Claude" | "外部 Agent (MCP)"
   baby?: {
     id: string;
     nickname: string;

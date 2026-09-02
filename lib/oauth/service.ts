@@ -523,6 +523,38 @@ export function normalizeResourceUrl(urlStr: string): string {
 }
 
 /**
+ * Resolves human-readable source agent identity (e.g. "Gemini Spark", "ChatGPT", "Claude")
+ */
+export function resolveSourceAgent(clientId?: string, clientName?: string, userAgent?: string): string {
+  const u = (userAgent || "").toLowerCase();
+  const cn = (clientName || "").toLowerCase();
+  const cid = (clientId || "").toLowerCase();
+
+  if (cid.includes("gemini") || cn.includes("gemini") || u.includes("gemini")) {
+    return "Gemini Spark";
+  }
+  if (cid.includes("chatgpt") || cn.includes("chatgpt") || u.includes("chatgpt") || cn.includes("openai") || u.includes("openai")) {
+    return "ChatGPT";
+  }
+  if (cid.includes("claude") || cn.includes("claude") || u.includes("claude") || u.includes("anthropic")) {
+    return "Claude";
+  }
+  if (cid.includes("cursor") || cn.includes("cursor") || u.includes("cursor")) {
+    return "Cursor";
+  }
+  if (cid.includes("cline") || cn.includes("cline") || u.includes("cline")) {
+    return "Cline";
+  }
+  if (clientName && clientName.trim() && !clientName.includes("Fallback") && !clientName.includes("fallback")) {
+    return clientName.trim();
+  }
+  if (clientId && clientId !== "unknown") {
+    return clientId;
+  }
+  return "外部 Agent (MCP)";
+}
+
+/**
  * Verifies Bearer Access Token for MCP Resource Server (/mcp)
  * Validates Signature, Issuer, Audience, Expiration, and resolves UserPrincipal with strict IDOR checks.
  */
@@ -610,13 +642,25 @@ export async function verifyMcpAccessToken(
     ? payload.scope.split(/\s+/).filter(Boolean)
     : [];
 
+  const clientId = typeof payload.client_id === "string" ? payload.client_id : "unknown";
+  let clientName: string | undefined;
+  try {
+    const client = await findClient(clientId);
+    clientName = client?.clientName || undefined;
+  } catch {}
+
+  const userAgent = request?.headers?.get("user-agent") || undefined;
+  const sourceAgent = resolveSourceAgent(clientId, clientName, userAgent);
+
   return {
     userId: user.id,
     username: user.username,
     displayName: user.displayName,
     babyId: activeBaby.id,
     scopes: new Set(scopesList),
-    clientId: typeof payload.client_id === "string" ? payload.client_id : "unknown",
+    clientId,
+    clientName,
+    sourceAgent,
     baby: activeBaby,
   };
 }

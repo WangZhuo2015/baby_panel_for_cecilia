@@ -38,6 +38,8 @@ export async function POST(request: Request) {
       hasAbnormal: body.hasAbnormal,
       abnormalNotes: body.abnormalNotes,
       clientId: body.clientId,
+      source: body.source,
+      sourceAgent: body.sourceAgent,
     });
     return NextResponse.json(rec, { status: 201 });
   } catch (e) {

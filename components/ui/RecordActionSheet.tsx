@@ -3,6 +3,7 @@
 import React from "react";
 import type { TimelineEntry } from "@/types";
 import { Pencil, Trash2, X } from "lucide-react";
+import { AgentBadge } from "@/components/ui/AgentBadge";
 
 interface RecordActionSheetProps {
   item: TimelineEntry | null;
@@ -35,9 +36,10 @@ export const RecordActionSheet: React.FC<RecordActionSheetProps> = ({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-1 pb-2">
-          <p className="text-xs text-text-secondary truncate">
-            {item.time} · {item.title}
-            {item.recorderName ? ` · ${item.recorderName} 记录` : ""}
+          <p className="text-xs text-text-secondary truncate flex items-center gap-1.5 flex-wrap">
+            <span>{item.time} · {item.title}</span>
+            {item.sourceAgent && <AgentBadge name={item.sourceAgent} size="xs" />}
+            {item.recorderName ? <span>· {item.recorderName} 记录</span> : ""}
           </p>
           <button
             type="button"

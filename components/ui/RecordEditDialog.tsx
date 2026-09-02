@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import type { TimelineEntry } from "@/types";
 import { X, Baby, Moon, Droplets, UtensilsCrossed, Pill } from "lucide-react";
+import { AgentBadge } from "@/components/ui/AgentBadge";
 import { FeedingForm } from "@/components/records/FeedingForm";
 import { DiaperForm } from "@/components/records/DiaperForm";
 import { SleepForm } from "@/components/records/SleepForm";
@@ -74,8 +75,10 @@ export const RecordEditDialog: React.FC<RecordEditDialogProps> = ({ item, onClos
             </div>
             <div>
               <h3 className="text-base font-bold text-text-primary">{meta.title}</h3>
-              <p className="text-[11px] text-text-muted">
-                {item.time} · {item.title}
+              <p className="text-[11px] text-text-muted flex items-center gap-1.5 flex-wrap">
+                <span>{item.time} · {item.title}</span>
+                {item.sourceAgent && <AgentBadge name={item.sourceAgent} size="xs" />}
+                {item.recorderName && <span>· {item.recorderName}</span>}
               </p>
             </div>
           </div>

@@ -28,6 +28,7 @@ import { useBabyStore } from "@/stores/useBabyStore";
 import { composeMedicalAiSummary } from "@/lib/medical-summary";
 import { MarkdownBody } from "@/components/ui/MarkdownBody";
 import { WhoPercentileChips, ReportWhoSection } from "@/components/growth/WhoPercentileCard";
+import { AgentBadge } from "@/components/ui/AgentBadge";
 import { extractReportGrowthMetrics, getWhoMetricsForBaby } from "@/lib/who-growth-standards";
 import type { MedicalReport, MedicalReportItem } from "@/types";
 
@@ -285,10 +286,11 @@ export default function MedicalReportsPage() {
                       <h3 className="text-sm font-bold text-text-primary leading-tight truncate">
                         {report.title}
                       </h3>
-                      <div className="flex items-center gap-2 text-[11px] text-text-muted mt-0.5 flex-wrap">
+                      <div className="flex items-center gap-1.5 text-[11px] text-text-muted mt-0.5 flex-wrap">
                         <span className="flex items-center gap-1 whitespace-nowrap">
                           <Calendar size={11} /> {report.date}
                         </span>
+                        {report.sourceAgent && <AgentBadge name={report.sourceAgent} size="xs" />}
                         {report.hospital && (
                           <span className="flex items-center gap-1 truncate">
                             <Building2 size={11} className="shrink-0" /> {report.hospital}
@@ -364,8 +366,10 @@ export default function MedicalReportsPage() {
                   <h3 className="text-base font-bold text-text-primary">
                     {selectedReport.title}
                   </h3>
-                  <p className="text-xs text-text-muted">
-                    {selectedReport.date} {selectedReport.hospital ? `· ${selectedReport.hospital}` : ""}
+                  <p className="text-xs text-text-muted flex items-center gap-1.5 flex-wrap">
+                    <span>{selectedReport.date}</span>
+                    {selectedReport.sourceAgent && <AgentBadge name={selectedReport.sourceAgent} size="xs" />}
+                    {selectedReport.hospital && <span>· {selectedReport.hospital}</span>}
                   </p>
                 </div>
               </div>

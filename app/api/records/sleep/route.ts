@@ -39,6 +39,8 @@ export async function POST(request: Request) {
       notes: body.notes,
       clientId: body.clientId,
       date: body.date,
+      source: body.source,
+      sourceAgent: body.sourceAgent,
     });
     return NextResponse.json(rec, { status: 201 });
   } catch (e) {

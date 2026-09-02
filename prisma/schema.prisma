@@ -95,6 +95,8 @@ model FeedingRecord {
   formulaProduct   FormulaProduct? @relation(fields: [formulaProductId], references: [id], onDelete: SetNull)
   clientId         String? // 离线提交幂等键（outbox 重放防重）
   recordedById     String?
+  source           String?         @default("ui_manual") // "mcp" | "web_chat" | "ui_manual"
+  sourceAgent      String?         // "Gemini Spark" | "ChatGPT" | "Claude" | "Cursor" | null
   timestamp        String
   type             String   // breast, formula, mixed
   amountMl         Int?
@@ -180,6 +182,8 @@ model SupplementRecord {
   product      SupplementProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
   clientId     String?           // 离线提交幂等键
   recordedById String?
+  source       String?           @default("ui_manual") // "mcp" | "web_chat" | "ui_manual"
+  sourceAgent  String?           // "Gemini Spark" | "ChatGPT" | "Claude" | "Cursor" | null
   date         String            // YYYY-MM-DD
   time         String            // HH:mm
   dose         Float             @default(1.0)
@@ -198,6 +202,8 @@ model SleepRecord {
   baby             Baby     @relation(fields: [babyId], references: [id], onDelete: Cascade)
   clientId       String? // 离线提交幂等键（outbox 重放防重）
   recordedById     String?
+  source           String?  @default("ui_manual") // "mcp" | "web_chat" | "ui_manual"
+  sourceAgent      String?  // "Gemini Spark" | "ChatGPT" | "Claude" | "Cursor" | null
   startTime        String
   endTime          String
   type             String   // night, day
@@ -216,6 +222,8 @@ model DiaperRecord {
   baby            Baby     @relation(fields: [babyId], references: [id], onDelete: Cascade)
   clientId       String? // 离线提交幂等键（outbox 重放防重）
   recordedById    String?
+  source          String?  @default("ui_manual") // "mcp" | "web_chat" | "ui_manual"
+  sourceAgent     String?  // "Gemini Spark" | "ChatGPT" | "Claude" | "Cursor" | null
   timestamp       String
   type            String   // pee, poop, both
   poopColor       String?  // yellow, green, brown, other
@@ -233,6 +241,8 @@ model GrowthMeasurement {
   baby                Baby     @relation(fields: [babyId], references: [id], onDelete: Cascade)
   clientId            String? // 离线幂等
   recordedById        String?
+  source              String?  @default("ui_manual") // "mcp" | "web_chat" | "ui_manual"
+  sourceAgent         String?  // "Gemini Spark" | "ChatGPT" | "Claude" | "Cursor" | null
   date                String
   ageInMonths         Int?
   ageLabel            String
@@ -252,6 +262,8 @@ model MedicalReport {
   babyId       String
   baby         Baby     @relation(fields: [babyId], references: [id], onDelete: Cascade)
   recordedById String?
+  source       String?  @default("ui_manual") // "mcp" | "web_chat" | "ui_manual"
+  sourceAgent  String?  // "Gemini Spark" | "ChatGPT" | "Claude" | "Cursor" | null
   title        String
   category     String   // "blood" | "growth" | "trace_element" | "allergy" | "general"
   date         String   // YYYY-MM-DD
@@ -274,6 +286,8 @@ model FoodLogRecord {
   baby          Baby     @relation(fields: [babyId], references: [id], onDelete: Cascade)
   clientId       String? // 离线提交幂等键（outbox 重放防重）
   recordedById  String?
+  source        String?  @default("ui_manual") // "mcp" | "web_chat" | "ui_manual"
+  sourceAgent   String?  // "Gemini Spark" | "ChatGPT" | "Claude" | "Cursor" | null
   date          String
   time          String
   foods         String   // JSON array
@@ -830,6 +844,7 @@ model RecordSnapshot {
   baby        Baby      @relation(fields: [babyId], references: [id], onDelete: Cascade)
   userId      String?
   source      String    @default("mcp") // "mcp" | "web_chat" | "ui_manual"
+  sourceAgent String?   // "Gemini Spark" | "ChatGPT" | "Claude" | "Cursor" | null
   action      String    @default("delete") // "delete" | "update" | "batch_overwrite"
   entityType  String    // "feeding" | "sleep" | "diaper" | "food" | "growth" | "medical_report" | "vaccine" | "food_plan"
   entityId    String

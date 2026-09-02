@@ -22,7 +22,14 @@ export class ForbiddenError extends Error {
   status = 403;
   constructor(message: string = "Forbidden") { super(message); this.name = "ForbiddenError"; }
 }
-export type RecordContext = { userId: string; babyId: string; baby?: any; familyId?: string | null };
+export type RecordContext = {
+  userId: string;
+  babyId: string;
+  baby?: any;
+  familyId?: string | null;
+  source?: string | null;
+  sourceAgent?: string | null;
+};
 
 export interface CreateFeedingInput {
   timestamp?: string;
@@ -34,6 +41,8 @@ export interface CreateFeedingInput {
   notes?: string | null;
   clientId?: string | null;
   formulaProductId?: string | null;
+  source?: string | null;
+  sourceAgent?: string | null;
 }
 
 export interface CreateSleepInput {
@@ -44,6 +53,8 @@ export interface CreateSleepInput {
   notes?: string | null;
   clientId?: string | null;
   date?: string;
+  source?: string | null;
+  sourceAgent?: string | null;
 }
 
 export interface CreateDiaperInput {
@@ -53,6 +64,8 @@ export interface CreateDiaperInput {
   poopConsistency?: string | null;
   notes?: string | null;
   clientId?: string | null;
+  source?: string | null;
+  sourceAgent?: string | null;
 }
 
 export interface CreateFoodLogInput {
@@ -65,6 +78,8 @@ export interface CreateFoodLogInput {
   hasAbnormal?: boolean;
   abnormalNotes?: string | null;
   clientId?: string | null;
+  source?: string | null;
+  sourceAgent?: string | null;
 }
 
 export interface CreateGrowthInput {
@@ -74,6 +89,8 @@ export interface CreateGrowthInput {
   headCircumferenceCm?: number | string | null;
   imageUrl?: string | null;
   clientId?: string | null;
+  source?: string | null;
+  sourceAgent?: string | null;
 }
 
 function parseLimit(raw: unknown, fallback = 50): number {
@@ -152,6 +169,8 @@ export async function createFeeding(ctx: RecordContext, input: CreateFeedingInpu
   const data = {
     babyId: ctx.babyId,
     recordedById: ctx.userId,
+    source: input.source || ctx.source || "ui_manual",
+    sourceAgent: input.sourceAgent || ctx.sourceAgent || null,
     timestamp,
     type,
     amountMl: input.amountMl ?? null,
@@ -230,6 +249,8 @@ export async function createSleep(ctx: RecordContext, input: CreateSleepInput) {
       const data = {
         babyId: ctx.babyId,
         recordedById: ctx.userId,
+        source: input.source || ctx.source || "ui_manual",
+        sourceAgent: input.sourceAgent || ctx.sourceAgent || null,
         startTime: startIsoTry,
         endTime: endIsoTry,
         type: input.type === "night" ? "night" : "day",
@@ -262,6 +283,8 @@ export async function createSleep(ctx: RecordContext, input: CreateSleepInput) {
   const data = {
     babyId: ctx.babyId,
     recordedById: ctx.userId,
+    source: input.source || ctx.source || "ui_manual",
+    sourceAgent: input.sourceAgent || ctx.sourceAgent || null,
     startTime: startIso,
     endTime: endIso,
     type: input.type === "night" ? "night" : "day",
@@ -303,6 +326,8 @@ export async function createDiaper(ctx: RecordContext, input: CreateDiaperInput)
   const data = {
     babyId: ctx.babyId,
     recordedById: ctx.userId,
+    source: input.source || ctx.source || "ui_manual",
+    sourceAgent: input.sourceAgent || ctx.sourceAgent || null,
     timestamp,
     type: input.type,
     poopColor: input.poopColor ? String(input.poopColor).trim() : null,
@@ -354,6 +379,8 @@ export async function createFoodLog(ctx: RecordContext, input: CreateFoodLogInpu
   const data = {
     babyId: ctx.babyId,
     recordedById: ctx.userId,
+    source: input.source || ctx.source || "ui_manual",
+    sourceAgent: input.sourceAgent || ctx.sourceAgent || null,
     date: validatedDate,
     time: validatedTime,
     foods: foodsJson,
@@ -415,6 +442,8 @@ export async function createGrowth(ctx: RecordContext, input: CreateGrowthInput)
   const baseData = {
     babyId: ctx.babyId,
     recordedById: ctx.userId,
+    source: input.source || ctx.source || "ui_manual",
+    sourceAgent: input.sourceAgent || ctx.sourceAgent || null,
     date: dateVal,
     ageInMonths: ageSummary.correctedMonths,
     ageLabel: ageSummary.label,
@@ -579,6 +608,8 @@ export async function getTimeline(ctx: RecordContext, date?: string) {
       detail: detail || undefined,
       icon: typeIcons[r.type] || "🍼",
       recorderName: recorderOf(r.recordedById),
+      source: r.source || (r.sourceAgent ? "mcp" : "ui_manual"),
+      sourceAgent: r.sourceAgent || null,
       rawRecord: {
         id: r.id,
         timestamp: r.timestamp,
@@ -588,6 +619,8 @@ export async function getTimeline(ctx: RecordContext, date?: string) {
         rightMinutes: r.rightMinutes,
         spitUp: r.spitUp,
         notes: r.notes,
+        source: r.source,
+        sourceAgent: r.sourceAgent,
       },
     });
   }
@@ -613,6 +646,8 @@ export async function getTimeline(ctx: RecordContext, date?: string) {
       detail,
       icon: typeIcons[r.type] || "🌙",
       recorderName: recorderOf(r.recordedById),
+      source: r.source || (r.sourceAgent ? "mcp" : "ui_manual"),
+      sourceAgent: r.sourceAgent || null,
       rawRecord: {
         id: r.id,
         startTime: r.startTime,
@@ -620,6 +655,8 @@ export async function getTimeline(ctx: RecordContext, date?: string) {
         type: r.type,
         nightWakingCount: r.nightWakingCount,
         notes: r.notes,
+        source: r.source,
+        sourceAgent: r.sourceAgent,
       },
     });
   }
@@ -638,6 +675,8 @@ export async function getTimeline(ctx: RecordContext, date?: string) {
       detail: detail || undefined,
       icon: typeIcons[r.type] || "💧",
       recorderName: recorderOf(r.recordedById),
+      source: r.source || (r.sourceAgent ? "mcp" : "ui_manual"),
+      sourceAgent: r.sourceAgent || null,
       rawRecord: {
         id: r.id,
         timestamp: r.timestamp,
@@ -645,6 +684,8 @@ export async function getTimeline(ctx: RecordContext, date?: string) {
         poopColor: r.poopColor,
         poopConsistency: r.poopConsistency,
         notes: r.notes,
+        source: r.source,
+        sourceAgent: r.sourceAgent,
       },
     });
   }
@@ -660,6 +701,8 @@ export async function getTimeline(ctx: RecordContext, date?: string) {
       detail: Array.isArray(foods)&&foods.length>0?foods.join("、"):undefined,
       icon:"🥣",
       recorderName: recorderOf(r.recordedById),
+      source: r.source || (r.sourceAgent ? "mcp" : "ui_manual"),
+      sourceAgent: r.sourceAgent || null,
       rawRecord: {
         id: r.id,
         date: r.date,
@@ -670,6 +713,8 @@ export async function getTimeline(ctx: RecordContext, date?: string) {
         babyState: r.babyState,
         hasAbnormal: r.hasAbnormal,
         abnormalNotes: r.abnormalNotes,
+        source: r.source,
+        sourceAgent: r.sourceAgent,
       },
     });
   }
@@ -684,6 +729,8 @@ export async function getTimeline(ctx: RecordContext, date?: string) {
       detail: `${r.product?.name || "营养补充剂"} ${r.dose}${r.unitName || r.product?.unitName || "剂"}${r.notes ? ` · ${r.notes}` : ""}`,
       icon: "💊",
       recorderName: recorderOf(r.recordedById),
+      source: r.source || (r.sourceAgent ? "mcp" : "ui_manual"),
+      sourceAgent: r.sourceAgent || null,
       rawRecord: {
         id: r.id,
         date: r.date,
@@ -693,6 +740,8 @@ export async function getTimeline(ctx: RecordContext, date?: string) {
         dose: r.dose,
         unitName: r.unitName || r.product?.unitName,
         notes: r.notes,
+        source: r.source,
+        sourceAgent: r.sourceAgent,
       },
     });
   }
