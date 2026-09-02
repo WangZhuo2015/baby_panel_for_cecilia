@@ -43,60 +43,88 @@ export function hashSecret(raw: string): string {
   return crypto.createHash("sha256").update(raw).digest("hex");
 }
 
+// In-memory sync flag & concurrency lock to avoid DB write amplification on read/auth paths
+let staticClientsSynced = false;
+let staticClientsSyncPromise: Promise<void> | null = null;
+
 /**
  * Ensures static clients exist in the database (lazy seed/lookup)
  */
-export async function ensureStaticClients(): Promise<void> {
-  for (const staticClient of STATIC_OAUTH_CLIENTS) {
-    const existing = await prisma.oAuthClient.findUnique({
-      where: { clientId: staticClient.clientId },
-    });
-    if (!existing) {
-      await prisma.oAuthClient.create({
-        data: {
-          clientId: staticClient.clientId,
-          clientSecret: staticClient.clientSecret ? hashSecret(staticClient.clientSecret) : null,
-          clientName: staticClient.clientName,
-          redirectUrisJson: JSON.stringify(staticClient.redirectUris),
-          grantTypesJson: JSON.stringify(staticClient.grantTypes),
-          responseTypesJson: JSON.stringify(staticClient.responseTypes),
-          scope: staticClient.scope,
-          tokenEndpointAuthMethod: staticClient.tokenEndpointAuthMethod,
-          isDynamic: false,
-        },
-      });
-    } else if (!existing.isDynamic) {
-      await prisma.oAuthClient.update({
-        where: { clientId: staticClient.clientId },
-        data: {
-          clientSecret: staticClient.clientSecret ? hashSecret(staticClient.clientSecret) : null,
-          clientName: staticClient.clientName,
-          redirectUrisJson: JSON.stringify(staticClient.redirectUris),
-          grantTypesJson: JSON.stringify(staticClient.grantTypes),
-          responseTypesJson: JSON.stringify(staticClient.responseTypes),
-          scope: staticClient.scope,
-          tokenEndpointAuthMethod: staticClient.tokenEndpointAuthMethod,
-        },
-      });
+export async function ensureStaticClients(force = false): Promise<void> {
+  if (staticClientsSynced && !force) return;
+  if (staticClientsSyncPromise) return staticClientsSyncPromise;
+
+  staticClientsSyncPromise = (async () => {
+    try {
+      for (const staticClient of STATIC_OAUTH_CLIENTS) {
+        const clientSecretHash = staticClient.clientSecret ? hashSecret(staticClient.clientSecret) : null;
+        const redirectUrisJson = JSON.stringify(staticClient.redirectUris);
+        const grantTypesJson = JSON.stringify(staticClient.grantTypes);
+        const responseTypesJson = JSON.stringify(staticClient.responseTypes);
+
+        const existing = await prisma.oAuthClient.findUnique({
+          where: { clientId: staticClient.clientId },
+        });
+
+        if (!existing) {
+          await prisma.oAuthClient.create({
+            data: {
+              clientId: staticClient.clientId,
+              clientSecret: clientSecretHash,
+              clientName: staticClient.clientName,
+              redirectUrisJson,
+              grantTypesJson,
+              responseTypesJson,
+              scope: staticClient.scope,
+              tokenEndpointAuthMethod: staticClient.tokenEndpointAuthMethod,
+              isDynamic: false,
+            },
+          });
+        } else if (!existing.isDynamic) {
+          // Only perform an update if configuration actually changed
+          const needsUpdate =
+            existing.clientName !== staticClient.clientName ||
+            existing.redirectUrisJson !== redirectUrisJson ||
+            existing.grantTypesJson !== grantTypesJson ||
+            existing.responseTypesJson !== responseTypesJson ||
+            existing.scope !== staticClient.scope ||
+            existing.tokenEndpointAuthMethod !== staticClient.tokenEndpointAuthMethod;
+
+          if (needsUpdate) {
+            await prisma.oAuthClient.update({
+              where: { clientId: staticClient.clientId },
+              data: {
+                clientSecret: clientSecretHash,
+                clientName: staticClient.clientName,
+                redirectUrisJson,
+                grantTypesJson,
+                responseTypesJson,
+                scope: staticClient.scope,
+                tokenEndpointAuthMethod: staticClient.tokenEndpointAuthMethod,
+              },
+            });
+          }
+        }
+      }
+      staticClientsSynced = true;
+    } finally {
+      staticClientsSyncPromise = null;
     }
-  }
+  })();
+
+  return staticClientsSyncPromise;
 }
 
 /**
  * Looks up a client by ID, checking static clients if not in DB
  */
 export async function findClient(clientId: string) {
-  const isStatic = STATIC_OAUTH_CLIENTS.some((c) => c.clientId === clientId);
-  if (isStatic) {
-    await ensureStaticClients();
-  }
-
   let client = await prisma.oAuthClient.findUnique({
     where: { clientId },
   });
 
   if (!client) {
-    await ensureStaticClients();
+    await ensureStaticClients(true);
     client = await prisma.oAuthClient.findUnique({
       where: { clientId },
     });
@@ -187,15 +215,18 @@ export function validateRedirectUri(
     if (allowedUris.includes(requestedUri)) return true;
 
     // Google / Gemini custom MCP connector generates dynamic user-bound redirect URIs
+    // Format: https://oauth-redirect.googleusercontent.com/r/user_bound_custom-mcp-...
     if (client.clientId === "gemini-spark-client") {
       const parsed = new URL(requestedUri);
+      const isGoogleOAuthRedirectHost =
+        parsed.hostname === "oauth-redirect.googleusercontent.com" ||
+        parsed.hostname === "oauth-redirect-sandbox.googleusercontent.com" ||
+        parsed.hostname === "oauth-redirect-test.googleusercontent.com";
+
       if (
-        (parsed.hostname === "oauth-redirect.googleusercontent.com" ||
-          parsed.hostname === "oauth-redirect-sandbox.googleusercontent.com" ||
-          parsed.hostname === "oauth-redirect-test.googleusercontent.com" ||
-          parsed.hostname === "gemini.google.com" ||
-          parsed.hostname === "oauth2.googleapis.com") &&
-        parsed.protocol === "https:"
+        isGoogleOAuthRedirectHost &&
+        parsed.protocol === "https:" &&
+        /^\/r\/user_bound_custom-mcp-[a-zA-Z0-9_\-\.]+$/.test(parsed.pathname)
       ) {
         return true;
       }

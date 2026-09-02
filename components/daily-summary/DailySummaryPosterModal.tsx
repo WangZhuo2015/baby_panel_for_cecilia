@@ -18,7 +18,7 @@ import {
   Share2,
   Clock,
 } from "lucide-react";
-import { toPng, toBlob } from "html-to-image";
+import { toBlob } from "html-to-image";
 import type { AiDailySummaryResult } from "@/types/daily-summary";
 import type { Baby } from "@/types";
 import { getWeekdayStr } from "@/lib/date";
@@ -66,20 +66,49 @@ export function DailySummaryPosterModal({
     .filter((e) => ["feeding", "sleep", "food", "diaper"].includes(e.type))
     .slice(0, 4);
 
+  // Generate poster blob with Retina 2.5x resolution
+  const generatePosterBlob = async (): Promise<Blob | null> => {
+    if (!posterRef.current) return null;
+    return await toBlob(posterRef.current, {
+      cacheBust: true,
+      pixelRatio: 2.5,
+      quality: 0.98,
+      backgroundColor: "#FFF9FB",
+      skipFonts: true, // Prevents security errors reading external stylesheets in iOS WebKit
+    });
+  };
+
   const handleDownload = async () => {
     if (!posterRef.current || downloading) return;
     setDownloading(true);
     try {
-      const dataUrl = await toPng(posterRef.current, {
-        cacheBust: true,
-        pixelRatio: 2.5, // Crisp high-DPI export
-        quality: 0.98,
-        backgroundColor: "#FFF9FB",
-      });
+      const blob = await generatePosterBlob();
+      if (!blob) throw new Error("Failed to generate image blob");
+
+      const fileName = `${summary.babyName || "宝宝"}_${selectedDate}_成长日报.png`;
+      const file = new File([blob], fileName, { type: "image/png" });
+
+      // Native mobile Web Share API if supported (e.g. iOS Safari / Android)
+      if (typeof navigator !== "undefined" && navigator.canShare && navigator.canShare({ files: [file] })) {
+        try {
+          await navigator.share({
+            files: [file],
+            title: `${summary.babyName}的成长日报`,
+          });
+          return;
+        } catch (shareErr: any) {
+          if (shareErr.name === "AbortError") return;
+          console.warn("navigator.share cancelled or failed, falling back to download:", shareErr);
+        }
+      }
+
+      // Fallback: Object URL download
+      const blobUrl = URL.createObjectURL(blob);
       const link = document.createElement("a");
-      link.download = `${summary.babyName || "宝宝"}_${selectedDate}_成长日报.png`;
-      link.href = dataUrl;
+      link.download = fileName;
+      link.href = blobUrl;
       link.click();
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
     } catch (err) {
       console.error("Failed to generate poster:", err);
       alert("生成海报图片失败，请稍后重试");
@@ -92,24 +121,21 @@ export function DailySummaryPosterModal({
     if (!posterRef.current || copyingImage) return;
     setCopyingImage(true);
     try {
-      const blob = await toBlob(posterRef.current, {
-        cacheBust: true,
-        pixelRatio: 2.5,
-        backgroundColor: "#FFF9FB",
-      });
-      if (blob && navigator.clipboard && window.ClipboardItem) {
+      const blob = await generatePosterBlob();
+      if (!blob) throw new Error("Failed to generate image blob");
+
+      if (typeof navigator !== "undefined" && navigator.clipboard && window.ClipboardItem) {
         await navigator.clipboard.write([
           new ClipboardItem({ "image/png": blob }),
         ]);
         setCopiedImage(true);
         setTimeout(() => setCopiedImage(false), 2500);
       } else {
-        // Fallback to download if ClipboardItem not supported
-        handleDownload();
+        await handleDownload();
       }
     } catch (err) {
       console.warn("Clipboard write image failed, falling back to download:", err);
-      handleDownload();
+      await handleDownload();
     } finally {
       setCopyingImage(false);
     }
@@ -165,7 +191,7 @@ ${summary.sections.tomorrowTips}
           </div>
           <button
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-white dark:bg-neutral-800 text-text-muted hover:text-text-primary flex items-center justify-center shadow-xs transition-colors btn-press"
+            className="w-8 h-8 rounded-full bg-white dark:bg-neutral-800 text-text-muted hover:text-text-primary flex items-center justify-center shadow-xs transition-colors btn-press cursor-pointer"
           >
             <X size={16} />
           </button>
@@ -173,12 +199,13 @@ ${summary.sections.tomorrowTips}
 
         {/* Poster Scrollable Preview Canvas */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-neutral-100/70 dark:bg-neutral-900/50 flex justify-center">
-          {/* THE POSTER ELEMENT (Export Target) */}
+          {/* THE POSTER ELEMENT (Export Target - Forced Light Mode for Crystal Clear Contrast) */}
           <div
             ref={posterRef}
             id="daily-summary-poster"
-            className="w-full max-w-[420px] bg-gradient-to-b from-[#FFF5F8] via-[#FFF9F5] to-[#F5F8FF] rounded-[28px] border border-pink-200/60 shadow-xl p-5 sm:p-6 space-y-4 text-text-primary font-sans relative overflow-hidden"
+            className="light w-full max-w-[420px] bg-gradient-to-b from-[#FFF5F8] via-[#FFF9F5] to-[#F5F8FF] rounded-[28px] border border-pink-200/60 shadow-xl p-5 sm:p-6 space-y-4 font-sans relative overflow-hidden text-[#4A252B]"
             style={{
+              color: "#4A252B",
               fontFamily:
                 '-apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif',
             }}
@@ -195,7 +222,7 @@ ${summary.sections.tomorrowTips}
                   Baby Panel · 每日成长手账
                 </span>
               </div>
-              <div className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-white/90 shadow-xs border border-pink-100 text-[11px] font-bold text-text-secondary">
+              <div className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-white/90 shadow-xs border border-pink-100 text-[11px] font-bold text-[#8F7076]">
                 <Calendar size={12} className="text-pink-500" />
                 <span>{formattedDateStr}</span>
               </div>
@@ -207,7 +234,7 @@ ${summary.sections.tomorrowTips}
                 <div className="w-full h-full rounded-full bg-white flex items-center justify-center overflow-hidden">
                   {baby?.avatarUrl ? (
                     <img
-                      src={baby.avatarUrl}
+                      src={`${baby.avatarUrl}${baby.avatarUrl.includes("?") ? "&" : "?"}export_cors=1`}
                       alt={summary.babyName}
                       className="w-full h-full object-cover"
                       crossOrigin="anonymous"
@@ -220,14 +247,14 @@ ${summary.sections.tomorrowTips}
 
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
-                  <h2 className="text-lg font-black text-text-primary tracking-tight truncate">
+                  <h2 className="text-lg font-black text-[#4A252B] tracking-tight truncate">
                     {summary.babyName || "宝宝"}
                   </h2>
                   <span className="px-2 py-0.5 rounded-full bg-pink-100/80 text-pink-600 text-[10px] font-bold shrink-0">
                     {baby?.gender === "male" ? "👦 男宝" : "👧 女宝"}
                   </span>
                 </div>
-                <p className="text-xs font-bold text-text-secondary mt-0.5">
+                <p className="text-xs font-bold text-[#8F7076] mt-0.5">
                   🍼 {summary.babyAgeLabel || "快乐成长中"}
                 </p>
               </div>
@@ -238,7 +265,7 @@ ${summary.sections.tomorrowTips}
                   <Sparkles size={13} className="text-amber-500" />
                   <span>{summary.overallScore}</span>
                 </div>
-                <div className="text-[10px] font-bold text-text-muted mt-0.5">
+                <div className="text-[10px] font-bold text-[#B6A0A5] mt-0.5">
                   {summary.overallRating.toFixed(1)} / 5.0
                 </div>
               </div>
@@ -248,7 +275,7 @@ ${summary.sections.tomorrowTips}
             <div className="bg-gradient-to-br from-pink-50/90 via-amber-50/50 to-white/90 p-4 rounded-2xl border border-pink-200/50 shadow-xs relative z-10 space-y-2.5">
               <div className="flex items-start gap-1.5">
                 <span className="text-base text-pink-500 font-serif leading-none select-none">“</span>
-                <p className="text-xs sm:text-[13px] font-bold text-text-primary leading-relaxed flex-1">
+                <p className="text-xs sm:text-[13px] font-bold text-[#4A252B] leading-relaxed flex-1">
                   {summary.headline}
                 </p>
                 <span className="text-base text-pink-500 font-serif leading-none select-none">”</span>
@@ -259,7 +286,7 @@ ${summary.sections.tomorrowTips}
                 {summary.highlights.slice(0, 3).map((tag, idx) => (
                   <span
                     key={idx}
-                    className="text-[10px] font-bold px-2.5 py-1 rounded-lg bg-white text-text-primary border border-pink-100 shadow-xs flex items-center gap-1"
+                    className="text-[10px] font-bold px-2.5 py-1 rounded-lg bg-white text-[#4A252B] border border-pink-100 shadow-xs flex items-center gap-1"
                   >
                     <span className="text-pink-500">✓</span> {tag}
                   </span>
@@ -286,7 +313,7 @@ ${summary.sections.tomorrowTips}
                   </span>
                   <span className="text-xs font-bold text-sky-500">ml</span>
                 </div>
-                <p className="text-[10px] text-text-muted truncate">
+                <p className="text-[10px] text-[#8F7076] truncate">
                   {metrics.totalBreastMinutes > 0
                     ? `亲喂 ${metrics.totalBreastMinutes} 分钟`
                     : "配方奶/瓶喂摄入"}
@@ -310,7 +337,7 @@ ${summary.sections.tomorrowTips}
                   </span>
                   <span className="text-xs font-bold text-purple-500">小时</span>
                 </div>
-                <p className="text-[10px] text-text-muted truncate">
+                <p className="text-[10px] text-[#8F7076] truncate">
                   夜睡 {nightSleepHours}h · 白天 {daySleepHours}h
                 </p>
               </div>
@@ -331,11 +358,11 @@ ${summary.sections.tomorrowTips}
                     {metrics.poopCount}
                   </span>
                   <span className="text-xs font-bold text-emerald-500">次便便</span>
-                  <span className="text-xs text-text-muted font-bold ml-1.5">
+                  <span className="text-xs text-[#8F7076] font-bold ml-1.5">
                     · {metrics.peeCount}次尿
                   </span>
                 </div>
-                <p className="text-[10px] text-text-muted truncate">
+                <p className="text-[10px] text-[#8F7076] truncate">
                   便状: {metrics.poopColors[0] || "正常黄色"}
                 </p>
               </div>
@@ -357,7 +384,7 @@ ${summary.sections.tomorrowTips}
                   </span>
                   <span className="text-xs font-bold text-amber-500">种食材</span>
                 </div>
-                <p className="text-[10px] text-text-muted truncate">
+                <p className="text-[10px] text-[#8F7076] truncate">
                   {metrics.foodsTried.length > 0
                     ? metrics.foodsTried.slice(0, 2).join("、")
                     : "今日未打卡辅食"}
@@ -368,7 +395,7 @@ ${summary.sections.tomorrowTips}
             {/* 5. Key Daily Rhythm Milestones (Mini Timeline) */}
             {keyEvents.length > 0 && (
               <div className="bg-white/90 p-3.5 rounded-2xl border border-pink-100/70 shadow-xs relative z-10 space-y-2">
-                <div className="flex items-center gap-1.5 text-xs font-bold text-text-primary">
+                <div className="flex items-center gap-1.5 text-xs font-bold text-[#4A252B]">
                   <Clock size={13} className="text-pink-500" />
                   <span>今日作息高光时刻</span>
                 </div>
@@ -406,10 +433,10 @@ ${summary.sections.tomorrowTips}
                       >
                         <span className="text-sm">{icon}</span>
                         <div className="min-w-0 flex-1">
-                          <p className="font-bold text-text-primary leading-tight">
+                          <p className="font-bold text-[#4A252B] leading-tight">
                             {timeStr} {label}
                           </p>
-                          <p className="text-[10px] text-text-muted truncate">{detail}</p>
+                          <p className="text-[10px] text-[#8F7076] truncate">{detail}</p>
                         </div>
                       </div>
                     );
@@ -424,16 +451,16 @@ ${summary.sections.tomorrowTips}
                 <Lightbulb size={14} className="text-amber-600" />
                 <span>儿科专家明日照护贴士</span>
               </div>
-              <p className="text-[11px] text-text-primary leading-relaxed line-clamp-3">
+              <p className="text-[11px] text-[#4A252B] leading-relaxed line-clamp-3">
                 {summary.sections.tomorrowTips || summary.sections.growthAndCare}
               </p>
             </div>
 
             {/* 7. Poster Footer Watermark */}
-            <div className="pt-2 border-t border-pink-200/40 flex items-center justify-between text-[10px] text-text-muted relative z-10">
+            <div className="pt-2 border-t border-pink-200/40 flex items-center justify-between text-[10px] text-[#B6A0A5] relative z-10">
               <div className="flex items-center gap-1">
                 <Heart size={11} className="text-pink-500 fill-pink-500" />
-                <span className="font-bold text-text-secondary">用心记录宝宝成长的每一刻</span>
+                <span className="font-bold text-[#8F7076]">用心记录宝宝成长的每一刻</span>
               </div>
               <span>Baby Panel 专属档案</span>
             </div>
@@ -475,7 +502,7 @@ ${summary.sections.tomorrowTips}
               <span>{copiedText ? "已复制文字版" : "复制文字版日报"}</span>
             </button>
             <span className="text-[11px] text-text-muted">
-              Retina 2.5x 高清输出 · 适合微信/小红书/朋友圈分享
+              Retina 2.5x 高清输出 · 自动适配深浅色与移动端
             </span>
           </div>
         </div>
