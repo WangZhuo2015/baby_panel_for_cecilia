@@ -47,14 +47,30 @@ export async function GET(
     babyId: session.babyId,
     createdAt: session.createdAt.toISOString(),
     updatedAt: session.updatedAt.toISOString(),
-    messages: session.messages.map((m) => ({
-      id: m.id,
-      role: m.role,
-      content: m.content,
-      image: m.image,
-      tools: m.toolsJson ? safeJsonParse(m.toolsJson, []) : [],
-      createdAt: m.createdAt.toISOString(),
-    })),
+    messages: session.messages.map((m) => {
+      let imagesList: string[] = [];
+      if (m.image) {
+        if (m.image.startsWith("[")) {
+          try {
+            const parsed = JSON.parse(m.image);
+            if (Array.isArray(parsed)) imagesList = parsed;
+          } catch {
+            imagesList = [m.image];
+          }
+        } else {
+          imagesList = [m.image];
+        }
+      }
+      return {
+        id: m.id,
+        role: m.role,
+        content: m.content,
+        image: m.image,
+        images: imagesList.length > 0 ? imagesList : undefined,
+        tools: m.toolsJson ? safeJsonParse(m.toolsJson, []) : [],
+        createdAt: m.createdAt.toISOString(),
+      };
+    }),
   };
 
   return NextResponse.json({ session: formatted });

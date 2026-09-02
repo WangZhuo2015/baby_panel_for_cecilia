@@ -103,11 +103,22 @@ export async function POST(request: Request) {
     if (babyResult.errorResponse) return babyResult.errorResponse;
     const targetBaby = babyResult.baby;
 
+    const rawImages: unknown = body.images ?? body.image;
+    const imageList: string[] = Array.isArray(rawImages)
+      ? rawImages.filter((x): x is string => typeof x === "string" && Boolean(x.trim()))
+      : typeof rawImages === "string" && rawImages.trim()
+        ? [rawImages.trim()]
+        : [];
+
     const lastUser = [...messages].reverse().find((m: { role?: string }) => m.role === "user");
     const promptText =
       (typeof lastUser?.content === "string" && lastUser.content.trim()) ||
-      (image ? "请帮我识别并解读这张图片/单据" : "");
-    if (!promptText && !image) {
+      (imageList.length > 0
+        ? imageList.length > 1
+          ? `请帮我同时对比和解读这 ${imageList.length} 张图片/单据`
+          : "请帮我识别并解读这张图片/单据"
+        : "");
+    if (!promptText && imageList.length === 0) {
       return NextResponse.json({ error: "消息内容不能为空" }, { status: 400 });
     }
 
@@ -167,12 +178,19 @@ export async function POST(request: Request) {
             (m: { role?: string }, idx: number) =>
               idx < messages.length - 1 && (m.role === "user" || m.role === "assistant")
           );
-          const resolvedImage = await resolveImageContent(image);
+          
+          // Resolve multiple images (up to 6)
+          const resolvedImages = [];
+          for (const imgStr of imageList.slice(0, 6)) {
+            const resolved = await resolveImageContent(imgStr);
+            if (resolved) resolvedImages.push(resolved);
+          }
+
           await runBabyAgent({
             systemPrompt,
             history: toHistory(prior.slice(-8)),
             prompt: promptText,
-            images: resolvedImage ? [resolvedImage] : undefined,
+            images: resolvedImages.length > 0 ? resolvedImages : undefined,
             tools: createBabyPanelTools({ userId: user.id, baby: targetBaby }),
             abortSignal: request.signal,
             onEvent: (event) => {
@@ -196,12 +214,19 @@ export async function POST(request: Request) {
           try {
             if (activeSession) {
               const sid = activeSession.id;
+              const imagePersistStr =
+                imageList.length === 1
+                  ? imageList[0]
+                  : imageList.length > 1
+                    ? JSON.stringify(imageList)
+                    : null;
+
               await prisma.aiChatMessage.create({
                 data: {
                   sessionId: sid,
                   role: "user",
                   content: promptText,
-                  image: typeof image === "string" ? image : null,
+                  image: imagePersistStr,
                 },
               });
               await prisma.aiChatMessage.create({

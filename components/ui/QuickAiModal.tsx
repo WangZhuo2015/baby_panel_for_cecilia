@@ -47,6 +47,7 @@ import { calculateAge } from "@/lib/age";
 import { AiActionCard, ActionCardData } from "@/components/ui/AiActionCard";
 import { VoiceRecordingBar } from "@/components/ui/VoiceRecordingBar";
 import { useToast } from "@/components/ui/Toast";
+import { compressImageForOcr } from "@/lib/upload";
 import type { AiDailySummaryResult } from "@/types/daily-summary";
 
 export type AiContextType =
@@ -175,6 +176,7 @@ interface Message {
   role: "user" | "assistant";
   content: string;
   image?: string;
+  images?: string[];
   timestamp: string;
   isStreaming?: boolean;
   tools?: ToolTrace[];
@@ -426,7 +428,7 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
   }, []);
 
   const [inputText, setInputText] = useState("");
-  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [selectedImages, setSelectedImages] = useState<string[]>([]);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [loading, setLoading] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -501,17 +503,35 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
       setSessionTitle(s.title);
       if (s.messages && s.messages.length > 0) {
         setMessages(
-          s.messages.map((m: any) => ({
-            id: m.id,
-            role: m.role,
-            content: m.content,
-            image: m.image || undefined,
-            timestamp: new Date(m.createdAt).toLocaleTimeString([], {
-              hour: "2-digit",
-              minute: "2-digit",
-            }),
-            tools: Array.isArray(m.tools) ? m.tools : [],
-          }))
+          s.messages.map((m: any) => {
+            let imgs: string[] = [];
+            if (Array.isArray(m.images)) {
+              imgs = m.images;
+            } else if (m.image) {
+              if (m.image.startsWith("[")) {
+                try {
+                  const parsed = JSON.parse(m.image);
+                  if (Array.isArray(parsed)) imgs = parsed;
+                } catch {
+                  imgs = [m.image];
+                }
+              } else {
+                imgs = [m.image];
+              }
+            }
+            return {
+              id: m.id,
+              role: m.role,
+              content: m.content,
+              image: m.image || undefined,
+              images: imgs.length > 0 ? imgs : undefined,
+              timestamp: new Date(m.createdAt).toLocaleTimeString([], {
+                hour: "2-digit",
+                minute: "2-digit",
+              }),
+              tools: Array.isArray(m.tools) ? m.tools : [],
+            };
+          })
         );
       }
       setShowHistory(false);
@@ -567,8 +587,8 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
   messagesRef.current = messages;
   const inputTextRef = useRef(inputText);
   inputTextRef.current = inputText;
-  const selectedImageRef = useRef(selectedImage);
-  selectedImageRef.current = selectedImage;
+  const selectedImagesRef = useRef<string[]>(selectedImages);
+  selectedImagesRef.current = selectedImages;
 
   const [recording, setRecording] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
@@ -647,10 +667,15 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
   };
 
   const handleSend = useCallback(
-    async (textToSend?: string, imageOverride?: string, customContext?: AiContextType) => {
+    async (textToSend?: string, imagesOverride?: string[] | string, customContext?: AiContextType) => {
       const query = (textToSend || inputTextRef.current).trim();
-      const currentImg = imageOverride || selectedImageRef.current;
-      if ((!query && !currentImg) || loadingRef.current) return;
+      const currentImgs: string[] = Array.isArray(imagesOverride)
+        ? imagesOverride
+        : typeof imagesOverride === "string" && imagesOverride
+          ? [imagesOverride]
+          : selectedImagesRef.current;
+
+      if ((!query && currentImgs.length === 0) || loadingRef.current) return;
 
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
@@ -663,8 +688,9 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
       const userMsg: Message = {
         id: `user_${Date.now()}`,
         role: "user",
-        content: query || (currentImg ? "请帮我结构化识别这张单据并提供儿科解读" : ""),
-        image: currentImg || undefined,
+        content: query || (currentImgs.length > 1 ? `请帮我同时对比和解读这 ${currentImgs.length} 张图片/单据` : "请帮我结构化识别这张单据并提供儿科解读"),
+        image: currentImgs.length === 1 ? currentImgs[0] : undefined,
+        images: currentImgs.length > 0 ? currentImgs : undefined,
         timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
       };
 
@@ -679,7 +705,7 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
 
       setMessages((prev) => [...prev, userMsg, initialAiMsg]);
       setInputText("");
-      setSelectedImage(null);
+      setSelectedImages([]);
       setLoading(true);
       setActiveTab("chat");
 
@@ -697,13 +723,14 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
               ...history,
               {
                 role: "user",
-                content: query || "请帮我结构化识别这张单据并提供儿科解读",
+                content: query || (currentImgs.length > 1 ? `请帮我同时对比和解读这 ${currentImgs.length} 张图片/单据` : "请帮我结构化识别这张单据并提供儿科解读"),
               },
             ],
             contextType: targetContext,
             contextDetail,
             babyId: baby?.id,
-            image: currentImg,
+            images: currentImgs,
+            image: currentImgs.length === 1 ? currentImgs[0] : undefined,
             sessionId: sessionIdRef.current || undefined,
           }),
         });
@@ -840,7 +867,7 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
         setSessionId(null);
         sessionIdRef.current = null;
         setSessionTitle(null);
-        setSelectedImage(null);
+        setSelectedImages([]);
         setCurrentContextType(initialContextType || "general");
       }
 
@@ -887,41 +914,65 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
     }
   }, [messages, loading, isOpen, activeTab]);
 
-  const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>, autoSendPrompt?: string, targetContext?: AiContextType) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const handleImageSelect = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+    autoSendPrompt?: string,
+    targetContext?: AiContextType
+  ) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
 
-    if (file.size > 8 * 1024 * 1024) {
-      alert("照片大小不能超过 8MB，请压缩后重试");
+    const maxAllowed = 6;
+    const currentCount = selectedImagesRef.current.length;
+    const availableSlots = maxAllowed - currentCount;
+
+    if (availableSlots <= 0) {
+      showToast(`一次最多支持附加 ${maxAllowed} 张图片`);
+      if (e.target) e.target.value = "";
       return;
+    }
+
+    const filesToProcess = files.slice(0, availableSlots);
+    if (files.length > availableSlots) {
+      showToast(`单次最多 ${maxAllowed} 张，已自动选择前 ${availableSlots} 张`);
     }
 
     setUploadingImage(true);
     try {
-      const formData = new FormData();
-      formData.append("file", file);
-      const res = await fetch("/api/medical/upload", {
-        method: "POST",
-        body: formData,
+      const uploadPromises = filesToProcess.map(async (file) => {
+        const compressed = await compressImageForOcr(file);
+        const formData = new FormData();
+        formData.append("file", compressed);
+        const res = await fetch("/api/medical/upload", {
+          method: "POST",
+          body: formData,
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error || "上传图片失败");
+        }
+        const data = await res.json();
+        return data.imageUrl as string;
       });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || "上传图片失败");
-      }
-      const data = await res.json();
-      setSelectedImage(data.imageUrl);
+
+      const uploadedUrls = await Promise.all(uploadPromises);
+      const updatedImages = [...selectedImagesRef.current, ...uploadedUrls];
+      setSelectedImages(updatedImages);
 
       if (autoSendPrompt) {
-        handleSend(autoSendPrompt, data.imageUrl, targetContext);
+        handleSend(autoSendPrompt, updatedImages, targetContext);
       }
     } catch (err: any) {
-      alert(err?.message || "图片上传失败，请重新选择或拍照");
-      setSelectedImage(null);
+      showToast(err?.message || "部分图片上传失败，请重试");
     } finally {
       setUploadingImage(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
       if (visionInputRef.current) visionInputRef.current.value = "";
     }
+  };
+
+  const handleRemoveImage = (indexToRemove: number) => {
+    setSelectedImages((prev) => prev.filter((_, i) => i !== indexToRemove));
   };
 
   const handleCopy = (id: string, text: string) => {
@@ -1328,11 +1379,33 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
                           </div>
                         ) : isUser ? (
                           <div className="space-y-2">
-                            {m.image && (
-                              <div className="rounded-xl overflow-hidden max-w-[200px] border border-white/30 shadow-xs">
-                                <img src={m.image} alt="上传单据" className="w-full h-auto max-h-48 object-cover" />
-                              </div>
-                            )}
+                            {(() => {
+                              const imgs = m.images && m.images.length > 0 ? m.images : m.image ? [m.image] : [];
+                              if (imgs.length === 0) return null;
+                              if (imgs.length === 1) {
+                                return (
+                                  <div
+                                    className="rounded-xl overflow-hidden max-w-[220px] border border-white/30 shadow-xs cursor-pointer hover:opacity-95"
+                                    onClick={() => window.open(imgs[0], "_blank")}
+                                  >
+                                    <img src={imgs[0]} alt="上传单据" className="w-full h-auto max-h-48 object-cover" />
+                                  </div>
+                                );
+                              }
+                              return (
+                                <div className={`grid ${imgs.length === 2 ? "grid-cols-2" : "grid-cols-3"} gap-1.5 rounded-xl overflow-hidden max-w-[280px] border border-white/30 shadow-xs p-1 bg-black/10`}>
+                                  {imgs.map((imgUrl, i) => (
+                                    <div
+                                      key={i}
+                                      className="aspect-square rounded-lg overflow-hidden cursor-pointer hover:opacity-90 bg-black/20"
+                                      onClick={() => window.open(imgUrl, "_blank")}
+                                    >
+                                      <img src={imgUrl} alt={`图片 ${i + 1}`} className="w-full h-full object-cover" />
+                                    </div>
+                                  ))}
+                                </div>
+                              );
+                            })()}
                             <div className="whitespace-pre-wrap">{m.content}</div>
                           </div>
                         ) : (
@@ -1527,19 +1600,37 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
                   <div aria-hidden className="absolute left-0 right-0 top-full h-[40vh] bg-card pointer-events-none" />
                 )}
                 
-                {selectedImage && (
-                  <div className="flex items-center gap-2 bg-primary-light/40 p-1.5 px-3 rounded-2xl border border-primary/20 w-fit animate-fade-in">
-                    <div className="w-8 h-8 rounded-lg overflow-hidden border border-primary/30">
-                      <img src={selectedImage} alt="预览" className="w-full h-full object-cover" />
-                    </div>
-                    <span className="text-[11px] text-text-primary font-medium">已附加单据照片</span>
-                    <button
-                      type="button"
-                      onClick={() => setSelectedImage(null)}
-                      className="tap-hotzone w-5 h-5 rounded-full bg-primary/20 text-primary hover:bg-primary/30 flex items-center justify-center cursor-pointer"
-                    >
-                      <X size={12} />
-                    </button>
+                {selectedImages.length > 0 && (
+                  <div className="flex items-center gap-2 overflow-x-auto py-1 px-1 max-w-full animate-fade-in no-scrollbar">
+                    <span className="text-[11px] font-bold text-primary px-2.5 py-1.5 rounded-xl bg-primary-light/60 shrink-0 flex items-center gap-1.5 border border-primary/20">
+                      <ImageIcon size={13} />
+                      <span>已选 {selectedImages.length} 张图片</span>
+                    </span>
+                    {selectedImages.map((imgUrl, idx) => (
+                      <div key={idx} className="relative group shrink-0 w-11 h-11 rounded-xl overflow-hidden border-2 border-primary/30 shadow-2xs">
+                        <img src={imgUrl} alt={`图片 ${idx + 1}`} className="w-full h-full object-cover" />
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveImage(idx)}
+                          className="absolute top-0.5 right-0.5 w-4 h-4 rounded-full bg-black/70 text-white flex items-center justify-center text-[10px] hover:bg-red-500 transition-colors cursor-pointer"
+                          title="移除此图片"
+                        >
+                          <X size={10} />
+                        </button>
+                      </div>
+                    ))}
+                    {selectedImages.length < 6 && (
+                      <button
+                        type="button"
+                        disabled={uploadingImage}
+                        onClick={() => fileInputRef.current?.click()}
+                        className="w-11 h-11 rounded-xl border-2 border-dashed border-primary/40 hover:border-primary text-primary flex flex-col items-center justify-center shrink-0 hover:bg-primary-light/30 transition-all cursor-pointer"
+                        title="继续添加图片（最多6张）"
+                      >
+                        <Plus size={14} />
+                        <span className="text-[8px] font-bold">{selectedImages.length}/6</span>
+                      </button>
+                    )}
                   </div>
                 )}
 
@@ -1564,6 +1655,7 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
                       ref={fileInputRef}
                       type="file"
                       accept="image/*"
+                      multiple
                       className="hidden"
                       onChange={(e) => handleImageSelect(e)}
                     />
@@ -1572,13 +1664,20 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
                       type="button"
                       disabled={loading || uploadingImage}
                       onClick={() => fileInputRef.current?.click()}
-                      className="w-10 h-10 rounded-2xl bg-slate-100 dark:bg-card hover:bg-primary-light text-text-secondary hover:text-primary flex items-center justify-center border border-primary/15 transition-all shrink-0 active:scale-95 cursor-pointer disabled:opacity-40 btn-press"
-                      title="拍照 / 上传化验单或图片"
+                      className="w-10 h-10 rounded-2xl bg-slate-100 dark:bg-card hover:bg-primary-light text-text-secondary hover:text-primary flex items-center justify-center border border-primary/15 transition-all shrink-0 active:scale-95 cursor-pointer disabled:opacity-40 btn-press relative"
+                      title="拍照 / 上传化验单或图片（支持一次选择多张）"
                     >
                       {uploadingImage ? (
                         <Loader2 size={16} className="animate-spin text-primary" />
                       ) : (
-                        <ImageIcon size={18} />
+                        <>
+                          <ImageIcon size={18} />
+                          {selectedImages.length > 0 && (
+                            <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-primary text-white text-[9px] font-bold flex items-center justify-center shadow-xs">
+                              {selectedImages.length}
+                            </span>
+                          )}
+                        </>
                       )}
                     </button>
 
@@ -1597,14 +1696,14 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
                       type="text"
                       value={inputText}
                       onChange={(e) => setInputText(e.target.value)}
-                      placeholder={selectedImage ? "可补充说明，如'帮我解读并存入档案'..." : meta.placeholder}
+                      placeholder={selectedImages.length > 0 ? `已附加 ${selectedImages.length} 张图片，可输入说明或直接发送...` : meta.placeholder}
                       disabled={loading}
                       className="flex-1 px-4 py-2.5 bg-slate-50/90 hover:bg-white focus:bg-white dark:bg-card rounded-2xl text-xs sm:text-sm text-text-primary font-medium border-2 border-primary/20 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all placeholder:text-text-muted/70 shadow-2xs"
                     />
 
                     <button
                       type="submit"
-                      disabled={(!inputText.trim() && !selectedImage) || loading}
+                      disabled={(!inputText.trim() && selectedImages.length === 0) || loading}
                       className="w-10 h-10 rounded-2xl bg-gradient-to-r from-primary to-pink-500 text-white flex items-center justify-center shadow-button hover:opacity-95 disabled:opacity-35 transition-all shrink-0 active:scale-95 cursor-pointer btn-spring"
                       title="发送提问或一句话记账"
                     >
@@ -1775,6 +1874,7 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
                 ref={visionInputRef}
                 type="file"
                 accept="image/*"
+                multiple
                 className="hidden"
                 onChange={(e) => {
                   let promptText = "请帮我解读这张单据并提取结构化指标";
