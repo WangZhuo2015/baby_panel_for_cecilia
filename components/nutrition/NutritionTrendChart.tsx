@@ -110,7 +110,7 @@ export function NutritionTrendChart({ trends, daysCount = 7, className = "" }: N
               />
               <ReferenceLine y={400} stroke="#10B981" strokeDasharray="4 4" label={{ value: "目标 400 IU", fill: "#10B981", fontSize: 10, position: "insideTopRight" }} />
               <ReferenceLine y={800} stroke="#EF4444" strokeDasharray="4 4" label={{ value: "上限 800 IU", fill: "#EF4444", fontSize: 10, position: "insideTopRight" }} />
-              <Line type="monotone" dataKey="vitaminD" stroke="#FF6F9F" strokeWidth={2.5} dot={{ fill: "#FF6F9F", r: 4 }} name="实测维生素D (IU)" />
+              <Line type="monotone" dataKey="vitaminD" stroke="#FF6F9F" strokeWidth={2.5} dot={{ fill: "#FF6F9F", r: 4 }} name="实测维生素D (IU)" animationDuration={250} animationEasing="ease-out" />
             </LineChart>
           ) : metric === "milk" ? (
             <LineChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
@@ -125,9 +125,9 @@ export function NutritionTrendChart({ trends, daysCount = 7, className = "" }: N
                   fontSize: "12px",
                 }}
               />
-              <Line type="monotone" dataKey="totalFeedingMl" stroke="#0284C7" strokeWidth={2.5} dot={{ fill: "#0284C7", r: 4 }} name="总奶量 (ml)" />
-              <Line type="monotone" dataKey="formulaMl" stroke="#38BDF8" strokeWidth={1.5} dot={false} strokeDasharray="3 3" name="配方奶 (ml)" />
-              <Line type="monotone" dataKey="breastMl" stroke="#F472B6" strokeWidth={1.5} dot={false} strokeDasharray="3 3" name="母乳 (ml)" />
+              <Line type="monotone" dataKey="totalFeedingMl" stroke="#0284C7" strokeWidth={2.5} dot={{ fill: "#0284C7", r: 4 }} name="总奶量 (ml)" animationDuration={250} animationEasing="ease-out" />
+              <Line type="monotone" dataKey="formulaMl" stroke="#38BDF8" strokeWidth={1.5} dot={false} strokeDasharray="3 3" name="配方奶 (ml)" isAnimationActive={false} />
+              <Line type="monotone" dataKey="breastMl" stroke="#F472B6" strokeWidth={1.5} dot={false} strokeDasharray="3 3" name="母乳 (ml)" isAnimationActive={false} />
               <Legend wrapperStyle={{ fontSize: "11px", paddingTop: "8px" }} />
             </LineChart>
           ) : metric === "calcium" ? (
@@ -137,7 +137,7 @@ export function NutritionTrendChart({ trends, daysCount = 7, className = "" }: N
               <YAxis tick={{ fontSize: 10, fill: "#999" }} axisLine={false} tickLine={false} />
               <Tooltip contentStyle={{ background: "white", borderRadius: "16px", fontSize: "12px" }} />
               <ReferenceLine y={250} stroke="#10B981" strokeDasharray="4 4" label={{ value: "参考 250mg", fill: "#10B981", fontSize: 10 }} />
-              <Line type="monotone" dataKey="calcium" stroke="#10B981" strokeWidth={2.5} dot={{ fill: "#10B981", r: 4 }} name="钙摄入 (mg)" />
+              <Line type="monotone" dataKey="calcium" stroke="#10B981" strokeWidth={2.5} dot={{ fill: "#10B981", r: 4 }} name="钙摄入 (mg)" animationDuration={250} animationEasing="ease-out" />
             </LineChart>
           ) : (
             <LineChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
@@ -146,7 +146,7 @@ export function NutritionTrendChart({ trends, daysCount = 7, className = "" }: N
               <YAxis tick={{ fontSize: 10, fill: "#999" }} axisLine={false} tickLine={false} />
               <Tooltip contentStyle={{ background: "white", borderRadius: "16px", fontSize: "12px" }} />
               <ReferenceLine y={10} stroke="#F59E0B" strokeDasharray="4 4" label={{ value: "参考 10mg", fill: "#F59E0B", fontSize: 10 }} />
-              <Line type="monotone" dataKey="iron" stroke="#F59E0B" strokeWidth={2.5} dot={{ fill: "#F59E0B", r: 4 }} name="铁摄入 (mg)" />
+              <Line type="monotone" dataKey="iron" stroke="#F59E0B" strokeWidth={2.5} dot={{ fill: "#F59E0B", r: 4 }} name="铁摄入 (mg)" animationDuration={250} animationEasing="ease-out" />
             </LineChart>
           )}
         </ResponsiveContainer>

@@ -1,7 +1,20 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { Upload, Loader2, AlertTriangle, CheckCircle2 } from "lucide-react";
+import {
+  Upload,
+  Loader2,
+  AlertTriangle,
+  CheckCircle2,
+  Camera,
+  Image as ImageIcon,
+  Calendar,
+  Scale,
+  Ruler,
+  CircleDot,
+  TrendingUp,
+  RefreshCw,
+} from "lucide-react";
 import { CuteButton } from "@/components/ui/CuteButton";
 import { CuteInput } from "@/components/ui/CuteInput";
 import { CuteCard } from "@/components/ui/CuteCard";
@@ -58,7 +71,8 @@ export function GrowthForm({
   const [uploadedImageUrl, setUploadedImageUrl] = useState<string | null>(
     initialData?.imageUrl || null
   );
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const galleryInputRef = useRef<HTMLInputElement>(null);
 
   const handleOcrUpload = async (file: File | null | undefined) => {
     if (!file) return;
@@ -118,7 +132,9 @@ export function GrowthForm({
         <>
           <div className="flex items-center justify-between bg-white dark:bg-card px-3.5 py-2.5 rounded-2xl border border-primary/20 shadow-2xs">
             <div className="flex items-center gap-2">
-              <span className="text-base">📈</span>
+              <div className="w-7 h-7 rounded-lg bg-primary-light flex items-center justify-center text-primary shrink-0">
+                <TrendingUp size={15} />
+              </div>
               <span className="text-xs font-medium text-text-primary">生长曲线或百分位疑问？</span>
             </div>
             <QuickAiButton
@@ -149,12 +165,25 @@ export function GrowthForm({
       {inputMode === "ocr" && !isEdit && (
         <>
           <input
-            ref={fileInputRef}
+            ref={cameraInputRef}
             type="file"
             accept="image/*"
             capture="environment"
             className="hidden"
-            onChange={(e) => handleOcrUpload(e.target.files?.[0])}
+            onChange={(e) => {
+              handleOcrUpload(e.target.files?.[0]);
+              e.target.value = "";
+            }}
+          />
+          <input
+            ref={galleryInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => {
+              handleOcrUpload(e.target.files?.[0]);
+              e.target.value = "";
+            }}
           />
           <CuteCard className="p-4">
             <div className="flex flex-col items-center py-4">
@@ -167,28 +196,44 @@ export function GrowthForm({
                   />
                 </div>
               ) : (
-                <div className="w-14 h-14 rounded-full bg-primary-light flex items-center justify-center mb-3">
+                <div className="w-14 h-14 rounded-full bg-gradient-to-br from-primary-light to-primary/10 flex items-center justify-center mb-3 shadow-inner">
                   {ocrLoading ? (
                     <Loader2 size={24} className="text-primary animate-spin" />
                   ) : (
-                    <Upload size={24} className="text-primary" />
+                    <Camera size={24} className="text-primary" />
                   )}
                 </div>
               )}
               {!ocrLoading ? (
                 ocrDone ? (
                   <>
-                    <p className="text-xs font-medium text-mint mb-2">识别完成，请核对下方数据</p>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        fileInputRef.current?.click();
-                        setOcrDone(false);
-                      }}
-                      className="text-xs text-primary underline font-medium"
-                    >
-                      重新拍照识别
-                    </button>
+                    <p className="text-xs font-medium text-mint mb-2 flex items-center gap-1">
+                      <CheckCircle2 size={14} /> 识别完成，请核对下方数据
+                    </p>
+                    <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          cameraInputRef.current?.click();
+                          setOcrDone(false);
+                        }}
+                        className="text-xs text-primary underline font-medium flex items-center gap-1 cursor-pointer"
+                      >
+                        <Camera size={13} />
+                        重新拍照
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          galleryInputRef.current?.click();
+                          setOcrDone(false);
+                        }}
+                        className="text-xs text-text-secondary underline font-medium flex items-center gap-1 cursor-pointer"
+                      >
+                        <ImageIcon size={13} />
+                        从相册重选
+                      </button>
+                    </div>
                   </>
                 ) : (
                   <>
@@ -197,15 +242,19 @@ export function GrowthForm({
                       <CuteButton
                         variant="primary"
                         size="sm"
-                        onClick={() => fileInputRef.current?.click()}
+                        onClick={() => cameraInputRef.current?.click()}
+                        className="flex items-center gap-1.5"
                       >
+                        <Camera size={15} />
                         拍照上传
                       </CuteButton>
                       <CuteButton
                         variant="secondary"
                         size="sm"
-                        onClick={() => fileInputRef.current?.click()}
+                        onClick={() => galleryInputRef.current?.click()}
+                        className="flex items-center gap-1.5"
                       >
+                        <ImageIcon size={15} />
                         从相册选
                       </CuteButton>
                     </div>
@@ -228,10 +277,24 @@ export function GrowthForm({
 
       {/* Manual / Verified Fields */}
       <div className="space-y-3">
-        <FormSection title="测量日期">
+        <FormSection
+          title={
+            <span className="flex items-center gap-1.5 text-text-primary text-xs font-bold">
+              <Calendar size={14} className="text-primary" />
+              <span>测量日期</span>
+            </span>
+          }
+        >
           <CuteInput type="date" value={date} onChange={(e) => setDate(e.target.value)} />
         </FormSection>
-        <FormSection title="体重 (kg)">
+        <FormSection
+          title={
+            <span className="flex items-center gap-1.5 text-text-primary text-xs font-bold">
+              <Scale size={14} className="text-primary" />
+              <span>体重 (kg)</span>
+            </span>
+          }
+        >
           <CuteInput
             type="number"
             value={weight}
@@ -240,7 +303,14 @@ export function GrowthForm({
             placeholder="例: 7.35"
           />
         </FormSection>
-        <FormSection title="身长 (cm)">
+        <FormSection
+          title={
+            <span className="flex items-center gap-1.5 text-text-primary text-xs font-bold">
+              <Ruler size={14} className="text-primary" />
+              <span>身长 (cm)</span>
+            </span>
+          }
+        >
           <CuteInput
             type="number"
             value={height}
@@ -249,7 +319,14 @@ export function GrowthForm({
             placeholder="例: 67.2"
           />
         </FormSection>
-        <FormSection title="头围 (cm)">
+        <FormSection
+          title={
+            <span className="flex items-center gap-1.5 text-text-primary text-xs font-bold">
+              <CircleDot size={14} className="text-primary" />
+              <span>头围 (cm)</span>
+            </span>
+          }
+        >
           <CuteInput
             type="number"
             value={head}
