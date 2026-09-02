@@ -64,12 +64,15 @@ export async function GET(
     const fileBuffer = await readFile(/* turbopackIgnore: true */ targetPath);
     const ext = path.extname(targetPath).toLowerCase();
     const contentType = MIME_TYPES[ext] || "application/octet-stream";
+    const origin = request.headers.get("origin") || "*";
 
     return new NextResponse(fileBuffer, {
       status: 200,
       headers: {
         "Content-Type": contentType,
         "Cache-Control": "private, max-age=3600",
+        "Access-Control-Allow-Origin": origin,
+        "Access-Control-Allow-Credentials": "true",
       },
     });
   } catch (error) {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import {
   X,
   Download,
@@ -45,6 +45,37 @@ export function DailySummaryPosterModal({
   const [copyingImage, setCopyingImage] = useState(false);
   const [copiedImage, setCopiedImage] = useState(false);
   const [copiedText, setCopiedText] = useState(false);
+  const [avatarDataUrl, setAvatarDataUrl] = useState<string | null>(null);
+
+  // Preload avatar as Base64 Data URL to prevent CORS / Canvas taint in html-to-image
+  useEffect(() => {
+    if (!baby?.avatarUrl) {
+      setAvatarDataUrl(null);
+      return;
+    }
+    let cancelled = false;
+    fetch(baby.avatarUrl, { credentials: "include" })
+      .then((res) => {
+        if (!res.ok) throw new Error(`Avatar HTTP ${res.status}`);
+        return res.blob();
+      })
+      .then((blob) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          if (!cancelled && typeof reader.result === "string") {
+            setAvatarDataUrl(reader.result);
+          }
+        };
+        reader.readAsDataURL(blob);
+      })
+      .catch((err) => {
+        console.warn("Avatar preload failed, will use direct URL:", err);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [baby?.avatarUrl]);
 
   if (!isOpen) return null;
 
@@ -116,6 +147,26 @@ export function DailySummaryPosterModal({
   // Generate poster blob with Retina 2.5x resolution
   const generatePosterBlob = async (): Promise<Blob | null> => {
     if (!posterRef.current) return null;
+
+    // Ensure avatar is loaded as Data URL before snapshotting
+    if (baby?.avatarUrl && !avatarDataUrl) {
+      try {
+        const res = await fetch(baby.avatarUrl, { credentials: "include" });
+        if (res.ok) {
+          const blob = await res.blob();
+          const dataUrl = await new Promise<string>((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result as string);
+            reader.readAsDataURL(blob);
+          });
+          setAvatarDataUrl(dataUrl);
+          await new Promise((r) => setTimeout(r, 50));
+        }
+      } catch (e) {
+        console.warn("Synchronous avatar load before snapshot failed:", e);
+      }
+    }
+
     return await toBlob(posterRef.current, {
       cacheBust: true,
       pixelRatio: 2.5,
@@ -286,10 +337,9 @@ ${summary.sections.tomorrowTips}
                 <div className="w-full h-full rounded-full bg-white flex items-center justify-center overflow-hidden">
                   {baby?.avatarUrl ? (
                     <img
-                      src={`${baby.avatarUrl}${baby.avatarUrl.includes("?") ? "&" : "?"}export_cors=1`}
-                      alt={summary.babyName}
+                      src={avatarDataUrl || baby.avatarUrl}
+                      alt={summary.babyName || "宝宝头像"}
                       className="w-full h-full object-cover"
-                      crossOrigin="anonymous"
                     />
                   ) : (
                     <BabyIcon size={24} className="text-pink-500" />
