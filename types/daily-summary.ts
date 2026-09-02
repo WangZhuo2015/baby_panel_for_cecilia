@@ -103,6 +103,7 @@ export interface AiDailySummaryResult {
   date: string;
   babyId: string;
   babyName: string;
+  babyAvatarUrl?: string | null;
   babyAgeLabel: string;
   isPreterm: boolean;
   correctedAgeLabel?: string;

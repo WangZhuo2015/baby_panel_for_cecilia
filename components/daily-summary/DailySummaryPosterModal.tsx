@@ -18,7 +18,7 @@ import {
   Share2,
   Clock,
 } from "lucide-react";
-import { toBlob } from "html-to-image";
+import { toCanvas } from "html-to-image";
 import type { AiDailySummaryResult } from "@/types/daily-summary";
 import type { Baby } from "@/types";
 import { getWeekdayStr } from "@/lib/date";
@@ -47,14 +47,16 @@ export function DailySummaryPosterModal({
   const [copiedText, setCopiedText] = useState(false);
   const [avatarDataUrl, setAvatarDataUrl] = useState<string | null>(null);
 
-  // Preload avatar as Base64 Data URL to prevent CORS / Canvas taint in html-to-image
+  const effectiveAvatarUrl = baby?.avatarUrl || summary.babyAvatarUrl;
+
+  // Preload avatar as Base64 Data URL to guarantee Canvas drawing
   useEffect(() => {
-    if (!baby?.avatarUrl) {
+    if (!effectiveAvatarUrl) {
       setAvatarDataUrl(null);
       return;
     }
     let cancelled = false;
-    fetch(baby.avatarUrl, { credentials: "include" })
+    fetch(effectiveAvatarUrl, { credentials: "include" })
       .then((res) => {
         if (!res.ok) throw new Error(`Avatar HTTP ${res.status}`);
         return res.blob();
@@ -75,7 +77,7 @@ export function DailySummaryPosterModal({
     return () => {
       cancelled = true;
     };
-  }, [baby?.avatarUrl]);
+  }, [effectiveAvatarUrl]);
 
   if (!isOpen) return null;
 
@@ -148,31 +150,76 @@ export function DailySummaryPosterModal({
   const generatePosterBlob = async (): Promise<Blob | null> => {
     if (!posterRef.current) return null;
 
-    // Ensure avatar is loaded as Data URL before snapshotting
-    if (baby?.avatarUrl && !avatarDataUrl) {
+    // 1. Ensure avatar is loaded as Data URL
+    let currentAvatarDataUrl = avatarDataUrl;
+    if (effectiveAvatarUrl && !currentAvatarDataUrl) {
       try {
-        const res = await fetch(baby.avatarUrl, { credentials: "include" });
+        const res = await fetch(effectiveAvatarUrl, { credentials: "include" });
         if (res.ok) {
           const blob = await res.blob();
-          const dataUrl = await new Promise<string>((resolve) => {
+          currentAvatarDataUrl = await new Promise<string>((resolve) => {
             const reader = new FileReader();
             reader.onloadend = () => resolve(reader.result as string);
             reader.readAsDataURL(blob);
           });
-          setAvatarDataUrl(dataUrl);
-          await new Promise((r) => setTimeout(r, 50));
+          setAvatarDataUrl(currentAvatarDataUrl);
         }
       } catch (e) {
-        console.warn("Synchronous avatar load before snapshot failed:", e);
+        console.warn("Synchronous avatar load failed:", e);
       }
     }
 
-    return await toBlob(posterRef.current, {
+    // 2. Render base canvas with html-to-image
+    const canvas = await toCanvas(posterRef.current, {
       cacheBust: true,
       pixelRatio: 2.5,
       quality: 0.98,
       backgroundColor: "#FFF9FB",
       skipFonts: true,
+    });
+
+    // 3. Direct Canvas 2D Overdraw for Avatar (Bypasses Safari WebKit foreignObject bug 100%)
+    if (currentAvatarDataUrl) {
+      try {
+        const avatarBox = posterRef.current.querySelector<HTMLElement>("[data-poster-avatar]");
+        if (avatarBox) {
+          const posterRect = posterRef.current.getBoundingClientRect();
+          const avatarRect = avatarBox.getBoundingClientRect();
+          const scale = canvas.width / posterRect.width;
+
+          // Inner circular content box (excluding outer 2px gradient ring)
+          const pad = 2 * scale;
+          const x = (avatarRect.left - posterRect.left) * scale + pad;
+          const y = (avatarRect.top - posterRect.top) * scale + pad;
+          const w = avatarRect.width * scale - pad * 2;
+          const h = avatarRect.height * scale - pad * 2;
+
+          const img = new Image();
+          await new Promise<void>((resolve, reject) => {
+            img.onload = () => resolve();
+            img.onerror = reject;
+            img.src = currentAvatarDataUrl!;
+          });
+
+          const ctx = canvas.getContext("2d");
+          if (ctx) {
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(x + w / 2, y + h / 2, Math.min(w, h) / 2, 0, Math.PI * 2);
+            ctx.closePath();
+            ctx.clip();
+            ctx.drawImage(img, x, y, w, h);
+            ctx.restore();
+          }
+        }
+      } catch (overdrawErr) {
+        console.warn("Direct canvas avatar overdraw error:", overdrawErr);
+      }
+    }
+
+    // 4. Return Blob
+    return await new Promise<Blob | null>((resolve) => {
+      canvas.toBlob((b) => resolve(b), "image/png", 0.98);
     });
   };
 
@@ -333,11 +380,21 @@ ${summary.sections.tomorrowTips}
 
             {/* 2. Baby Identity Card */}
             <div className="flex items-center gap-3 bg-white/90 backdrop-blur-md p-3 rounded-2xl border border-pink-100/80 shadow-xs relative z-10">
-              <div className="w-12 h-12 rounded-full p-0.5 bg-gradient-to-tr from-pink-400 via-amber-300 to-sky-400 shrink-0 shadow-xs">
-                <div className="w-full h-full rounded-full bg-white flex items-center justify-center overflow-hidden">
-                  {baby?.avatarUrl ? (
+              <div
+                data-poster-avatar="true"
+                className="w-12 h-12 rounded-full p-0.5 bg-gradient-to-tr from-pink-400 via-amber-300 to-sky-400 shrink-0 shadow-xs"
+              >
+                <div
+                  className="w-full h-full rounded-full bg-white flex items-center justify-center overflow-hidden bg-cover bg-center"
+                  style={
+                    avatarDataUrl || effectiveAvatarUrl
+                      ? { backgroundImage: `url("${avatarDataUrl || effectiveAvatarUrl}")` }
+                      : undefined
+                  }
+                >
+                  {effectiveAvatarUrl ? (
                     <img
-                      src={avatarDataUrl || baby.avatarUrl}
+                      src={avatarDataUrl || effectiveAvatarUrl}
                       alt={summary.babyName || "宝宝头像"}
                       className="w-full h-full object-cover"
                     />
