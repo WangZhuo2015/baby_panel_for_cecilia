@@ -331,34 +331,33 @@ export default function GrowthPage() {
                     heightCm: m.heightCm ?? undefined,
                     headCircumferenceCm: m.headCircumferenceCm ?? undefined,
                   });
+                  const whoMap = Object.fromEntries(whoRes.map((w) => [w.key, w]));
 
                   return (
                     <div
                       key={m.id}
                       className="p-3 rounded-2xl bg-white dark:bg-card border border-primary/15 hover:border-primary/30 transition-all shadow-2xs space-y-2 group/item"
                     >
-                      {/* Top line: Date & Age on Left, Value & Delete on Right */}
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <div className="w-7 h-7 rounded-lg bg-primary-light/60 flex items-center justify-center text-primary shrink-0">
-                            <TrendingUp size={13} />
+                      {/* Top Header: Date & Age on Left, Notes / Delete on Right */}
+                      <div className="flex items-center justify-between gap-2 border-b border-divider/30 pb-1.5">
+                        <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                          <div className="w-5 h-5 rounded-md bg-primary-light/60 flex items-center justify-center text-primary shrink-0">
+                            <TrendingUp size={11} />
                           </div>
-                          <div className="flex items-center gap-1.5 min-w-0">
-                            <span className="text-xs font-bold text-text-primary whitespace-nowrap">{m.date}</span>
-                            {m.ageLabel && (
-                              <span className="text-[10px] px-1.5 py-0.2 rounded-md bg-primary-soft text-primary font-semibold whitespace-nowrap">
-                                {m.ageLabel}
-                              </span>
-                            )}
-                          </div>
+                          <span className="text-xs font-bold text-text-primary whitespace-nowrap">{m.date}</span>
+                          {m.ageLabel && (
+                            <span className="text-[10px] px-1.5 py-0.2 rounded-md bg-primary-soft text-primary font-semibold truncate max-w-[130px]">
+                              {m.ageLabel}
+                            </span>
+                          )}
                         </div>
 
-                        <div className="flex items-center gap-2 shrink-0">
-                          <div className="text-xs font-black text-primary whitespace-nowrap">
-                            {m.weightKg != null && <span>{m.weightKg}kg</span>}
-                            {m.heightCm != null && <span className="ml-1.5">· {m.heightCm}cm</span>}
-                            {m.headCircumferenceCm != null && <span className="ml-1.5">· 头围{m.headCircumferenceCm}cm</span>}
-                          </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {m.imageUrl && (
+                            <span className="text-[10px] text-primary bg-primary-soft px-1.5 py-0.2 rounded flex items-center gap-0.5">
+                              <Camera size={10} /> 有图
+                            </span>
+                          )}
                           <button
                             type="button"
                             onClick={(e) => handleDeleteMeasurement(m.id, m.date, e)}
@@ -372,17 +371,68 @@ export default function GrowthPage() {
                         </div>
                       </div>
 
-                      {/* Bottom line: WHO Percentile Badges */}
-                      {whoRes.length > 0 ? (
-                        <div className="pt-1.5 border-t border-divider/40 flex items-center justify-between gap-1 flex-wrap">
-                          <span className="text-[10px] text-text-muted font-medium shrink-0">WHO 百分位:</span>
-                          <WhoPercentileChips metrics={whoRes} showValue={false} />
-                        </div>
-                      ) : m.percentile != null ? (
-                        <div className="pt-1.5 border-t border-divider/40 flex items-center justify-end">
-                          <span className="text-[10px] text-text-muted font-medium">WHO P{m.percentile}</span>
-                        </div>
-                      ) : null}
+                      {/* Metric Values & WHO Percentiles Grid */}
+                      <div className={`grid ${
+                        ((m.weightKg != null ? 1 : 0) + (m.heightCm != null ? 1 : 0) + (m.headCircumferenceCm != null ? 1 : 0)) === 2
+                          ? "grid-cols-2"
+                          : ((m.weightKg != null ? 1 : 0) + (m.heightCm != null ? 1 : 0) + (m.headCircumferenceCm != null ? 1 : 0)) === 1
+                          ? "grid-cols-1 max-w-[180px]"
+                          : "grid-cols-3"
+                      } gap-1.5 pt-0.5`}>
+                        {/* Weight */}
+                        {m.weightKg != null && (
+                          <div className="flex flex-col items-center justify-center p-1.5 rounded-xl bg-primary-light/25 border border-primary/15 text-center">
+                            <span className="text-[11px] text-text-muted flex items-center gap-0.5 mb-0.5">
+                              <span>⚖️</span>
+                              <span>体重</span>
+                            </span>
+                            <span className="text-xs font-black text-text-primary whitespace-nowrap">
+                              {m.weightKg} <span className="text-[10px] font-normal text-text-muted">kg</span>
+                            </span>
+                            {whoMap.weight && (
+                              <span className={`mt-1 text-[10px] font-bold px-1.5 py-0.2 rounded border ${whoMap.weight.evaluation.badgeBg} ${whoMap.weight.evaluation.badgeColor}`}>
+                                P{whoMap.weight.percentile}
+                              </span>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Height */}
+                        {m.heightCm != null && (
+                          <div className="flex flex-col items-center justify-center p-1.5 rounded-xl bg-primary-light/25 border border-primary/15 text-center">
+                            <span className="text-[11px] text-text-muted flex items-center gap-0.5 mb-0.5">
+                              <span>📏</span>
+                              <span>身长</span>
+                            </span>
+                            <span className="text-xs font-black text-text-primary whitespace-nowrap">
+                              {m.heightCm} <span className="text-[10px] font-normal text-text-muted">cm</span>
+                            </span>
+                            {whoMap.height && (
+                              <span className={`mt-1 text-[10px] font-bold px-1.5 py-0.2 rounded border ${whoMap.height.evaluation.badgeBg} ${whoMap.height.evaluation.badgeColor}`}>
+                                P{whoMap.height.percentile}
+                              </span>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Head Circumference */}
+                        {m.headCircumferenceCm != null && (
+                          <div className="flex flex-col items-center justify-center p-1.5 rounded-xl bg-primary-light/25 border border-primary/15 text-center">
+                            <span className="text-[11px] text-text-muted flex items-center gap-0.5 mb-0.5">
+                              <span>👶</span>
+                              <span>头围</span>
+                            </span>
+                            <span className="text-xs font-black text-text-primary whitespace-nowrap">
+                              {m.headCircumferenceCm} <span className="text-[10px] font-normal text-text-muted">cm</span>
+                            </span>
+                            {whoMap.head && (
+                              <span className={`mt-1 text-[10px] font-bold px-1.5 py-0.2 rounded border ${whoMap.head.evaluation.badgeBg} ${whoMap.head.evaluation.badgeColor}`}>
+                                P{whoMap.head.percentile}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   );
                 })}
