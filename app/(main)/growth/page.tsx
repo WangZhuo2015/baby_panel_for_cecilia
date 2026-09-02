@@ -16,6 +16,8 @@ import {
   Info,
   Camera,
   TrendingUp,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import dynamic from "next/dynamic";
 import { useBabyStore } from "@/stores/useBabyStore";
@@ -47,6 +49,7 @@ export default function GrowthPage() {
   const deleteGrowthMeasurement = useBabyStore((s) => s.deleteGrowthMeasurement);
 
   const [activeTab, setActiveTab] = useState<GrowthTab>("weight");
+  const [showAllMeasurements, setShowAllMeasurements] = useState(false);
   const [whoPercentiles, setWhoPercentiles] = useState<Record<string, Record<string, number[]>>>({
     weight: {},
     height: {},
@@ -321,8 +324,8 @@ export default function GrowthPage() {
                 <p className="text-xs text-text-muted">暂无生长测量记录，点击上方按钮添加</p>
               </div>
             ) : (
-              <div className="space-y-2.5 max-h-[360px] overflow-y-auto pr-1">
-                {measurements.slice(0, 15).map((m) => {
+              <div className="space-y-2.5">
+                {(showAllMeasurements ? measurements : measurements.slice(0, 8)).map((m) => {
                   const whoRes = getWhoMetricsForBaby(baby, m.date, {
                     weightKg: m.weightKg ?? undefined,
                     heightCm: m.heightCm ?? undefined,
@@ -383,6 +386,17 @@ export default function GrowthPage() {
                     </div>
                   );
                 })}
+
+                {measurements.length > 8 && (
+                  <button
+                    type="button"
+                    onClick={() => setShowAllMeasurements((prev) => !prev)}
+                    className="w-full py-2.5 mt-2 rounded-xl text-xs font-semibold text-primary bg-primary-light/40 hover:bg-primary-light flex items-center justify-center gap-1 transition-all cursor-pointer btn-press border border-primary/20"
+                  >
+                    <span>{showAllMeasurements ? "收起部分记录" : `展开更多历史记录 (共 ${measurements.length} 条)`}</span>
+                    {showAllMeasurements ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                  </button>
+                )}
               </div>
             )}
           </CuteCard>
