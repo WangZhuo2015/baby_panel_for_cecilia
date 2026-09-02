@@ -13,6 +13,7 @@ import {
   Send,
   Smartphone,
   RefreshCw,
+  X,
 } from "lucide-react";
 import { CuteCard } from "@/components/ui/CuteCard";
 import { SectionTitle } from "@/components/ui/SectionTitle";
@@ -20,6 +21,13 @@ import { AppHeader } from "@/components/ui/AppHeader";
 import { useBabyStore } from "@/stores/useBabyStore";
 import { useToast } from "@/components/ui/Toast";
 import { InstallGuideModal } from "@/components/ui/InstallGuideModal";
+import {
+  getReadNotificationIds,
+  saveReadNotificationIds,
+  getClearedNotificationIds,
+  saveClearedNotificationIds,
+  filterVisibleNotifications,
+} from "@/lib/notifications-storage";
 
 interface NotificationItem {
   id: string;
@@ -31,27 +39,6 @@ interface NotificationItem {
   icon: string;
   actorId?: string | null;
   actorLabel?: string | null;
-}
-
-const READ_NOTIFICATIONS_KEY = "baby_read_notifications";
-
-function getReadIds(): Set<string> {
-  if (typeof window === "undefined") return new Set();
-  try {
-    const stored = localStorage.getItem(READ_NOTIFICATIONS_KEY);
-    return stored ? new Set(JSON.parse(stored)) : new Set();
-  } catch {
-    return new Set();
-  }
-}
-
-function saveReadIds(ids: Set<string>) {
-  if (typeof window === "undefined") return;
-  try {
-    localStorage.setItem(READ_NOTIFICATIONS_KEY, JSON.stringify(Array.from(ids)));
-  } catch {
-    // localStorage full or unavailable
-  }
 }
 
 /** 将 VAPID Base64 字符串转换为浏览器 PushManager 必需的 Uint8Array */
@@ -174,7 +161,8 @@ export default function NotificationsPage() {
       const res = await fetch(url);
       if (res.ok) {
         const data = await res.json();
-        setNotifications(data);
+        const visible = filterVisibleNotifications(Array.isArray(data) ? data : []);
+        setNotifications(visible);
       }
     } catch {
       // Offline fallback
@@ -187,14 +175,25 @@ export default function NotificationsPage() {
     setReadIds((prev) => {
       const next = new Set(prev);
       next.add(id);
-      saveReadIds(next);
+      saveReadNotificationIds(next);
       return next;
     });
     window.dispatchEvent(new CustomEvent("notifications-read"));
   }, []);
 
+  const handleDismiss = useCallback((id: string, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    const currentCleared = getClearedNotificationIds();
+    currentCleared.add(id);
+    saveClearedNotificationIds(currentCleared);
+
+    setNotifications((prev) => prev.filter((n) => n.id !== id));
+    window.dispatchEvent(new CustomEvent("notifications-read"));
+    showToast("已清除此条通知 ✨");
+  }, [showToast]);
+
   useEffect(() => {
-    setReadIds(getReadIds());
+    setReadIds(getReadNotificationIds());
     checkAndSyncPush();
     fetchNotifications();
   }, [fetchNotifications, checkAndSyncPush]);
@@ -296,13 +295,20 @@ export default function NotificationsPage() {
   };
 
   const handleClearAll = () => {
-    setNotifications([]);
+    const currentCleared = getClearedNotificationIds();
+    for (const n of notifications) {
+      currentCleared.add(n.id);
+    }
+    saveClearedNotificationIds(currentCleared);
+
     const allIds = new Set(notifications.map((n) => n.id));
     const merged = new Set([...readIds, ...allIds]);
     setReadIds(merged);
-    saveReadIds(merged);
+    saveReadNotificationIds(merged);
+
+    setNotifications([]);
     window.dispatchEvent(new CustomEvent("notifications-read"));
-    showToast("已全部清除");
+    showToast("已清除全部通知 ✨", "success");
   };
 
   const familyNotifs = notifications.filter((n) => n.type === "family");
@@ -321,10 +327,10 @@ export default function NotificationsPage() {
           notifications.length > 0 ? (
             <button
               onClick={handleClearAll}
-              className="btn-press flex items-center gap-1 text-xs text-text-muted"
+              className="btn-press flex items-center gap-1 text-xs text-text-muted hover:text-primary transition-colors cursor-pointer"
             >
               <Trash2 size={14} />
-              <span>清除</span>
+              <span>全部清除</span>
             </button>
           ) : undefined
         }
@@ -419,7 +425,7 @@ export default function NotificationsPage() {
               type="button"
               onClick={handleSendTestPush}
               disabled={testingPush}
-              className="px-3.5 py-1.5 rounded-full bg-primary/10 hover:bg-primary/20 text-primary text-xs font-bold btn-press transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+              className="px-3.5 py-1.5 rounded-full bg-primary/10 hover:bg-primary/20 text-primary text-xs font-semibold btn-press transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
             >
               <Send size={13} />
               <span>{testingPush ? "正在发送..." : "发送测试推送"}</span>
@@ -451,7 +457,7 @@ export default function NotificationsPage() {
             <span className="text-3xl">🔔</span>
           </div>
           <p className="text-base font-medium text-text-primary mb-1">暂无通知</p>
-          <p className="text-sm text-text-muted">一切安好，没有新消息哦～</p>
+          <p className="text-sm text-text-muted">通知已全部清空，有新动态会及时提醒您 ✨</p>
         </div>
       ) : (
         <div className="space-y-5">
@@ -475,6 +481,7 @@ export default function NotificationsPage() {
                     notification={notif}
                     read={readIds.has(notif.id)}
                     onRead={markRead}
+                    onDismiss={handleDismiss}
                   />
                 ))}
               </div>
@@ -501,6 +508,7 @@ export default function NotificationsPage() {
                     notification={notif}
                     read={readIds.has(notif.id)}
                     onRead={markRead}
+                    onDismiss={handleDismiss}
                   />
                 ))}
               </div>
@@ -527,6 +535,7 @@ export default function NotificationsPage() {
                     notification={notif}
                     read={readIds.has(notif.id)}
                     onRead={markRead}
+                    onDismiss={handleDismiss}
                   />
                 ))}
               </div>
@@ -547,10 +556,12 @@ function NotificationCard({
   notification,
   read,
   onRead,
+  onDismiss,
 }: {
   notification: NotificationItem;
   read: boolean;
   onRead: (id: string) => void;
+  onDismiss?: (id: string, e: React.MouseEvent) => void;
 }) {
   const router = useRouter();
 
@@ -595,7 +606,7 @@ function NotificationCard({
 
   return (
     <CuteCard
-      className={`${!read ? "ring-1 ring-primary/20" : ""} border-l-[3px] ${borderColor} card-press cursor-pointer`}
+      className={`${!read ? "ring-1 ring-primary/20" : ""} border-l-[3px] ${borderColor} card-press cursor-pointer relative group`}
       onClick={handleClick}
     >
       <div className="flex items-start gap-3">
@@ -603,7 +614,7 @@ function NotificationCard({
           <span className="text-lg">{notification.icon}</span>
         </div>
 
-        <div className="flex-1 min-w-0">
+        <div className="flex-1 min-w-0 pr-6">
           <div className="flex items-center gap-2">
             <p
               className={`text-sm ${!read ? "font-semibold" : "font-medium"} text-text-primary truncate`}
@@ -621,6 +632,18 @@ function NotificationCard({
             {notification.time}
           </p>
         </div>
+
+        {/* 单条通知快速清除按钮 */}
+        {onDismiss && (
+          <button
+            type="button"
+            onClick={(e) => onDismiss(notification.id, e)}
+            title="清除此条通知"
+            className="absolute top-3 right-3 w-6 h-6 rounded-full hover:bg-gray-100 flex items-center justify-center text-text-muted hover:text-text-primary transition-colors cursor-pointer opacity-70 group-hover:opacity-100"
+          >
+            <X size={14} />
+          </button>
+        )}
       </div>
     </CuteCard>
   );

@@ -36,6 +36,7 @@ import { formatIsoToLocalTime } from "@/lib/date";
 import { APP_VERSION } from "@/lib/version";
 import { openRecordDrawer, RecordDrawerType } from "@/lib/drawer-bus";
 import { openQuickAI } from "@/lib/quickai-bus";
+import { calculateUnreadCount } from "@/lib/notifications-storage";
 
 function NotificationBell() {
   const [unreadCount, setUnreadCount] = useState(0);
@@ -47,12 +48,7 @@ function NotificationBell() {
       if (res.ok) {
         const data = await res.json();
         const list = Array.isArray(data) ? data : [];
-        const readRaw = localStorage.getItem("notification-read-ids");
-        const readIds = new Set(readRaw ? JSON.parse(readRaw) : []);
-        const unread = list.filter(
-          (n: { id: string }) => !readIds.has(n.id)
-        ).length;
-        setUnreadCount(unread);
+        setUnreadCount(calculateUnreadCount(list));
       }
     } catch {
       // ignore

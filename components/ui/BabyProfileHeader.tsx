@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Bell } from "lucide-react";
 import { useBabyStore } from "@/stores/useBabyStore";
 import { calculateAge } from "@/lib/age";
+import { calculateUnreadCount } from "@/lib/notifications-storage";
 
 interface BabyProfileHeaderProps {
   showNotification?: boolean;
@@ -32,12 +33,7 @@ export const BabyProfileHeader: React.FC<BabyProfileHeaderProps> = ({
       if (res.ok) {
         const data = await res.json();
         const list = Array.isArray(data) ? data : [];
-        const readRaw = localStorage.getItem("notification-read-ids");
-        const readIds = new Set(readRaw ? JSON.parse(readRaw) : []);
-        const unread = list.filter(
-          (n: { id: string }) => !readIds.has(n.id)
-        ).length;
-        setUnreadCount(unread);
+        setUnreadCount(calculateUnreadCount(list));
       }
     } catch {
       // ignore
@@ -48,7 +44,11 @@ export const BabyProfileHeader: React.FC<BabyProfileHeaderProps> = ({
     fetchCount();
     const handler = () => fetchCount();
     window.addEventListener("notifications-read", handler);
-    return () => window.removeEventListener("notifications-read", handler);
+    window.addEventListener("baby:data-polled", handler);
+    return () => {
+      window.removeEventListener("notifications-read", handler);
+      window.removeEventListener("baby:data-polled", handler);
+    };
   }, [fetchCount]);
 
   if (!baby) return null;

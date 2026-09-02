@@ -28,3 +28,14 @@ test("Push Test Route: exports POST handler", async () => {
   assert.strictEqual(typeof mod.POST, "function", "POST handler should be exported");
 });
 
+test("Notifications Storage: exports persistence and calculation helpers", async () => {
+  const storage = await import("@/lib/notifications-storage");
+  assert.strictEqual(typeof storage.getReadNotificationIds, "function");
+  assert.strictEqual(typeof storage.getClearedNotificationIds, "function");
+  assert.strictEqual(typeof storage.filterVisibleNotifications, "function");
+  assert.strictEqual(typeof storage.calculateUnreadCount, "function");
+  const filtered = storage.filterVisibleNotifications([{ id: "1" }, { id: "2" }]);
+  assert.strictEqual(filtered.length, 2);
+});
+
+
