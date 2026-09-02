@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import type { TimelineEntry } from "@/types";
-import { X, Baby, Moon, Droplets, UtensilsCrossed } from "lucide-react";
+import { X, Baby, Moon, Droplets, UtensilsCrossed, Pill } from "lucide-react";
 import { FeedingForm } from "@/components/records/FeedingForm";
 import { DiaperForm } from "@/components/records/DiaperForm";
 import { SleepForm } from "@/components/records/SleepForm";
@@ -26,6 +26,7 @@ const typeMeta: Record<
   sleep: { title: "修改睡眠记录", icon: Moon, color: "text-lavender bg-lavender/15" },
   diaper: { title: "修改尿布记录", icon: Droplets, color: "text-sky bg-sky/15" },
   food: { title: "修改辅食记录", icon: UtensilsCrossed, color: "text-mint bg-mint/15" },
+  supplement: { title: "补剂打卡详情", icon: Pill, color: "text-emerald-700 bg-emerald-100" },
 };
 
 /**
@@ -134,6 +135,34 @@ export const RecordEditDialog: React.FC<RecordEditDialogProps> = ({ item, onClos
               onCancel={onClose}
               saving={saving}
             />
+          )}
+
+          {item.type === "supplement" && (
+            <div className="space-y-4 py-2">
+              <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-100 text-emerald-950 space-y-2">
+                <div className="flex items-center justify-between font-bold text-sm">
+                  <span>{item.rawRecord?.productName || item.title}</span>
+                  <span className="text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full text-xs">
+                    {item.rawRecord?.dose || 1.0} {item.rawRecord?.unitName || "剂"}
+                  </span>
+                </div>
+                <div className="text-xs text-emerald-800/80">
+                  <p>打卡日期：{item.rawRecord?.date || item.time}</p>
+                  <p>打卡时间：{item.rawRecord?.time || item.time}</p>
+                  {item.rawRecord?.notes && <p>备注信息：{item.rawRecord.notes}</p>}
+                </div>
+              </div>
+              <p className="text-xs text-text-muted text-center">
+                若需调整剂量或重复打卡，可在操作面板中删除本条后重新打卡。
+              </p>
+              <button
+                type="button"
+                onClick={onClose}
+                className="w-full py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm btn-press shadow-xs"
+              >
+                我知道了
+              </button>
+            </div>
           )}
         </div>
       </div>

@@ -17,7 +17,7 @@ export interface SnapshotContext {
 export async function captureRecordSnapshot(params: {
   ctx: SnapshotContext;
   action: "delete" | "update" | "batch_overwrite";
-  entityType: "feeding" | "sleep" | "diaper" | "food" | "growth" | "medical_report" | "vaccine" | "food_plan";
+  entityType: "feeding" | "sleep" | "diaper" | "food" | "growth" | "medical_report" | "vaccine" | "food_plan" | "supplement";
   entityId: string;
   payload: Record<string, any>;
 }) {
@@ -189,6 +189,23 @@ export async function restoreSnapshot(ctx: SnapshotContext, snapshotId: string) 
           steps: payload.steps || "[]",
           nutrition: payload.nutrition || "",
           tags: payload.tags || "[]",
+        },
+      });
+      break;
+    }
+
+    case "supplement": {
+      restoredEntity = await prisma.supplementRecord.create({
+        data: {
+          id: payload.id || undefined,
+          babyId: ctx.babyId,
+          productId: payload.productId,
+          recordedById: ctx.userId || payload.recordedById || null,
+          date: payload.date,
+          time: payload.time,
+          dose: payload.dose,
+          unitName: payload.unitName || null,
+          notes: payload.notes || null,
         },
       });
       break;

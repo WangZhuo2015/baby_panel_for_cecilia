@@ -496,11 +496,12 @@ export async function getTimeline(ctx: RecordContext, date?: string) {
       recorderOf = (id) => (id && map.get(id)) || null;
     } catch {}
   }
-  const [feedingRecords, sleepRecords, diaperRecords, foodLogs] = await Promise.all([
+  const [feedingRecords, sleepRecords, diaperRecords, foodLogs, supplementRecords] = await Promise.all([
     prisma.feedingRecord.findMany({ where: { babyId: ctx.babyId, timestamp: { gte: start, lt: end } }, orderBy: { timestamp: "desc" } }),
     prisma.sleepRecord.findMany({ where: { babyId: ctx.babyId, startTime: { lt: end }, endTime: { gt: start } }, orderBy: { startTime: "desc" } }),
     prisma.diaperRecord.findMany({ where: { babyId: ctx.babyId, timestamp: { gte: start, lt: end } }, orderBy: { timestamp: "desc" } }),
     prisma.foodLogRecord.findMany({ where: { babyId: ctx.babyId, date: targetDate }, orderBy: { time: "desc" } }),
+    prisma.supplementRecord.findMany({ where: { babyId: ctx.babyId, date: targetDate }, include: { product: true }, orderBy: { time: "desc" } }),
   ]);
   const typeLabels: Record<string, string> = {
     breast: "母乳亲喂", formula: "配方奶", bottle_breast: "瓶喂母乳", mixed: "混合喂养", solid: "辅食餐点",
@@ -626,12 +627,35 @@ export async function getTimeline(ctx: RecordContext, date?: string) {
       },
     });
   }
+  for (const r of supplementRecords) {
+    const suppMs = new Date(`${targetDate}T${(r.time || "12:00").padStart(5, "0")}:00+08:00`).getTime();
+    timeline.push({
+      id: r.id,
+      time: r.time,
+      sortMs: Number.isNaN(suppMs) ? dayStartMs : suppMs,
+      type: "supplement" as const,
+      title: "补剂打卡",
+      detail: `${r.product?.name || "营养补充剂"} ${r.dose}${r.unitName || r.product?.unitName || "剂"}${r.notes ? ` · ${r.notes}` : ""}`,
+      icon: "💊",
+      recorderName: recorderOf(r.recordedById),
+      rawRecord: {
+        id: r.id,
+        date: r.date,
+        time: r.time,
+        productId: r.productId,
+        productName: r.product?.name,
+        dose: r.dose,
+        unitName: r.unitName || r.product?.unitName,
+        notes: r.notes,
+      },
+    });
+  }
   timeline.sort((a: any, b: any) => (b.sortMs ?? 0) - (a.sortMs ?? 0));
   return timeline.map(({ sortMs: _s, ...rest }: any) => rest);
 }
 
 // ── Mutations with ownership ──
-export async function deleteRecord(ctx: RecordContext, type: "feeding"|"sleep"|"diaper"|"food"|"growth", id: string) {
+export async function deleteRecord(ctx: RecordContext, type: "feeding"|"sleep"|"diaper"|"food"|"growth"|"supplement", id: string) {
   if (!id || typeof id !== "string") throw new ValidationError("请提供要删除的记录 ID");
   let record: any = null;
   if (type === "feeding") record = await prisma.feedingRecord.findUnique({ where: { id } });
@@ -639,7 +663,8 @@ export async function deleteRecord(ctx: RecordContext, type: "feeding"|"sleep"|"
   else if (type === "diaper") record = await prisma.diaperRecord.findUnique({ where: { id } });
   else if (type === "food") record = await prisma.foodLogRecord.findUnique({ where: { id } });
   else if (type === "growth") record = await prisma.growthMeasurement.findUnique({ where: { id } });
-  if (!record) throw new NotFoundError(type === "feeding" ? "未找到指定的喂养记录" : type === "sleep" ? "未找到指定的睡眠记录" : type === "diaper" ? "未找到指定的排便/尿布记录" : type === "food" ? "未找到指定的辅食记录" : "未找到指定的生长记录");
+  else if (type === "supplement") record = await prisma.supplementRecord.findUnique({ where: { id } });
+  if (!record) throw new NotFoundError(type === "feeding" ? "未找到指定的喂养记录" : type === "sleep" ? "未找到指定的睡眠记录" : type === "diaper" ? "未找到指定的排便/尿布记录" : type === "food" ? "未找到指定的辅食记录" : type === "growth" ? "未找到指定的生长记录" : "未找到指定的补剂记录");
   if (record.babyId !== ctx.babyId) throw new ForbiddenError();
 
   // Automatically capture pre-deletion snapshot for safe rollback
@@ -657,6 +682,7 @@ export async function deleteRecord(ctx: RecordContext, type: "feeding"|"sleep"|"
   else if (type === "diaper") await prisma.diaperRecord.delete({ where: { id } });
   else if (type === "food") await prisma.foodLogRecord.delete({ where: { id } });
   else if (type === "growth") await prisma.growthMeasurement.delete({ where: { id } });
+  else if (type === "supplement") await prisma.supplementRecord.delete({ where: { id } });
   return { success: true, id };
 }
 

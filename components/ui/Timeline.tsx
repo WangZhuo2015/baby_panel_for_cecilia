@@ -1,6 +1,6 @@
 import React from 'react';
 import type { TimelineEntry } from '@/types';
-import { Baby, Moon, Droplets, UtensilsCrossed } from 'lucide-react';
+import { Baby, Moon, Droplets, UtensilsCrossed, Pill } from 'lucide-react';
 
 interface TimelineProps {
   items: TimelineEntry[];
@@ -13,6 +13,7 @@ const iconMap: Record<TimelineEntry['type'], React.FC<{ size?: number; className
   sleep: Moon,
   diaper: Droplets,
   food: UtensilsCrossed,
+  supplement: Pill,
 };
 
 const colorMap: Record<TimelineEntry['type'], string> = {
@@ -20,6 +21,7 @@ const colorMap: Record<TimelineEntry['type'], string> = {
   sleep: 'bg-lavender/20 text-lavender',
   diaper: 'bg-sky/20 text-sky',
   food: 'bg-mint/20 text-mint',
+  supplement: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400',
 };
 
 const TimelineImpl: React.FC<TimelineProps> = ({ items, onItemTap }) => {

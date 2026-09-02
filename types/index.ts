@@ -397,7 +397,7 @@ export interface HourlyForecast {
 export interface TimelineEntry {
   id: string;
   time: string;
-  type: 'feeding' | 'sleep' | 'diaper' | 'food';
+  type: 'feeding' | 'sleep' | 'diaper' | 'food' | 'supplement';
   title: string;
   detail?: string;
   icon: string;

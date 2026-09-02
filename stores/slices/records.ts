@@ -368,17 +368,19 @@ export const createRecordsSlice = (set: any, get: any): RecordsSlice => ({
   },
 
   deleteTimelineRecord: async (type, id) => {
-    const endpoint = type === "food" ? "/api/food/logs" : `/api/records/${type}`;
+    const endpoint = type === "food" ? "/api/food/logs" : type === "supplement" ? "/api/nutrition/records" : `/api/records/${type}`;
     try {
       await request<{ success: boolean }>(endpoint, {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id }),
       });
-      const listKey = type === "feeding" ? "feedingRecords" : type === "sleep" ? "sleepRecords" : type === "diaper" ? "diaperRecords" : "foodLogRecords";
-      set((state: any) => ({
-        [listKey]: (state as any)[listKey].filter((r: { id: string }) => r.id !== id),
-      } as any));
+      const listKey = type === "feeding" ? "feedingRecords" : type === "sleep" ? "sleepRecords" : type === "diaper" ? "diaperRecords" : type === "food" ? "foodLogRecords" : null;
+      if (listKey) {
+        set((state: any) => ({
+          [listKey]: (state as any)[listKey]?.filter((r: { id: string }) => r.id !== id) || [],
+        } as any));
+      }
       invalidateCache("feedingRecords");
       invalidateCache("sleepRecords");
       invalidateCache("diaperRecords");

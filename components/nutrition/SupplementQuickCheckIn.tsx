@@ -7,6 +7,8 @@ import { CuteButton } from "@/components/ui/CuteButton";
 import { getLocalDateStr } from "@/lib/date";
 import type { SupplementSchedule, SupplementProduct, ConflictCheckResult } from "@/types/nutrition";
 
+import { useBabyStore } from "@/stores/useBabyStore";
+
 export interface SupplementQuickCheckInProps {
   babyId?: string;
   date?: string;
@@ -108,6 +110,11 @@ export function SupplementQuickCheckIn({ babyId, date, refreshKey, onRecordSucce
         await fetchData();
         if (onRecordSuccess) onRecordSuccess();
         window.dispatchEvent(new CustomEvent("baby:nutrition-updated"));
+        // 刷新时间轴与每日概览，确保打卡流水立即呈现在时间轴上
+        try {
+          useBabyStore.getState().fetchTimeline(undefined, true);
+          useBabyStore.getState().fetchDailySummary(undefined, true);
+        } catch {}
       } else {
         const err = await res.json();
         alert(err.error || "打卡失败，请重试");

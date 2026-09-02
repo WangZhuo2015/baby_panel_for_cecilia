@@ -161,7 +161,7 @@ export default function HomePage() {
     fetchAiTips,
   ]);
 
-  // Tab visibility change: auto-refresh if baby is selected
+  // Tab visibility change & nutrition updates: auto-refresh if baby is selected
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.visibilityState === "visible" && baby?.id) {
@@ -172,8 +172,18 @@ export default function HomePage() {
         fetchSleepRecords(true);
       }
     };
+    const handleNutritionUpdate = () => {
+      if (baby?.id) {
+        fetchDailySummary(undefined, true);
+        fetchTimeline(undefined, true);
+      }
+    };
     document.addEventListener("visibilitychange", handleVisibilityChange);
-    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("baby:nutrition-updated", handleNutritionUpdate);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("baby:nutrition-updated", handleNutritionUpdate);
+    };
   }, [baby?.id, fetchDailySummary, fetchAiDailySummary, fetchTimeline, fetchFeedingRecords, fetchSleepRecords]);
 
   // Safety fallback: if auth takes longer than 2s, stop blocking screen
