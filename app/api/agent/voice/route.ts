@@ -25,6 +25,9 @@ function cleanReplyForSpeech(raw: string): string {
     .replace(/\*([^*]+)\*/g, "$1")
     .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
     .replace(/^[#\-\*\s]+/gm, "")
+    // Remove emojis so Siri TTS doesn't awkwardly read out "奶瓶", "闪光" etc.
+    .replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu, "")
+    .replace(/[|><]/g, " ")
     .replace(/\n{2,}/g, "\n")
     .trim();
 }
@@ -51,53 +54,40 @@ async function resolveVoiceMvpPrincipal(request: Request) {
   if (mvpSecret && authHeader) {
     const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : authHeader.trim();
     if (token === mvpSecret) {
-      // Optional explicit userId/babyId from env
       const envUserId = process.env.VOICE_MVP_USER_ID;
       const envBabyId = process.env.VOICE_MVP_BABY_ID;
 
-      if (envUserId && envBabyId) {
-        const mvpUser = await prisma.user.findUnique({
-          where: { id: envUserId },
-          select: { id: true, username: true, displayName: true },
-        });
-        const mvpBaby = await prisma.baby.findUnique({
-          where: { id: envBabyId },
-        });
-        if (mvpUser && mvpBaby) {
-          return { user: mvpUser, baby: mvpBaby };
-        }
+      // Strict requirement: Never fallback to findFirst across arbitrary users/families
+      if (!envUserId || !envBabyId) {
+        console.error(
+          "[Voice API Auth] VOICE_MVP_SECRET provided, but VOICE_MVP_USER_ID or VOICE_MVP_BABY_ID is not configured in .env!"
+        );
+        return null;
       }
 
-      // Default: Find the first user with an active baby
-      const firstUser = await prisma.user.findFirst({
-        include: {
-          memberships: {
-            include: {
-              family: {
-                include: {
-                  babies: {
-                    orderBy: { createdAt: "asc" },
-                  },
-                },
-              },
-            },
-          },
+      const mvpUser = await prisma.user.findUnique({
+        where: { id: envUserId },
+        select: {
+          id: true,
+          username: true,
+          displayName: true,
+          memberships: { select: { familyId: true } },
         },
       });
 
-      if (firstUser) {
-        const baby = firstUser.memberships
-          .flatMap((m) => m.family.babies)[0];
-        if (baby) {
-          return {
-            user: {
-              id: firstUser.id,
-              username: firstUser.username,
-              displayName: firstUser.displayName,
-            },
-            baby,
-          };
+      const mvpBaby = await prisma.baby.findUnique({
+        where: { id: envBabyId },
+      });
+
+      if (mvpUser && mvpBaby) {
+        // Multi-tenant check: ensure baby belongs to user's family
+        const userFamilyIds = new Set(mvpUser.memberships.map((m) => m.familyId));
+        if (userFamilyIds.has(mvpBaby.familyId)) {
+          return { user: mvpUser, baby: mvpBaby };
         }
+        console.error(
+          `[Voice API Auth] Multi-tenant boundary violation: Baby ${envBabyId} does not belong to User ${envUserId}`
+        );
       }
     }
   }
@@ -175,12 +165,12 @@ export async function POST(request: Request) {
     );
 
     // Timeout configuration:
-    // - Default: 0 (disabled / synchronous blocking until completion)
-    // - Can be configured globally via process.env.VOICE_TIMEOUT_MS (e.g. 8000)
+    // - Default: 13500ms (13.5s, allowing a safety buffer before iOS Shortcuts 15s client timeout)
+    // - Can be configured globally via process.env.VOICE_TIMEOUT_MS (e.g. 15000)
     // - Can be overridden per-request via body.timeoutMs
-    const envTimeout = parseInt(process.env.VOICE_TIMEOUT_MS || "0", 10);
+    const envTimeout = parseInt(process.env.VOICE_TIMEOUT_MS || "13500", 10);
     const reqTimeout = typeof body.timeoutMs === "number" && body.timeoutMs >= 0 ? body.timeoutMs : undefined;
-    const timeoutMs = reqTimeout !== undefined ? reqTimeout : (Number.isNaN(envTimeout) ? 0 : envTimeout);
+    const timeoutMs = reqTimeout !== undefined ? reqTimeout : (Number.isNaN(envTimeout) ? 13500 : envTimeout);
 
     const timeoutReply =
       (typeof body.timeoutReply === "string" && body.timeoutReply.trim()) ||
@@ -295,7 +285,7 @@ export async function POST(request: Request) {
       });
     }
 
-    const reply = cleanReplyForSpeech(raceResult.assistantFull) || "未能获取有效回复，请稍后重试。";
+    const reply = cleanReplyForSpeech(raceResult.assistantFull) || "好的，已为您处理完成。";
     const duration = Date.now() - startTime;
     console.log(
       `[Voice API] Completed within ${timeoutMs}ms (${duration}ms) -> Reply: "${reply.slice(0, 100)}..."`

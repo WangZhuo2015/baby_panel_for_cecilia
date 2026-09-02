@@ -49,6 +49,10 @@ test("Voice Agent MVP API: /api/agent/voice", async () => {
     username: testUser.username,
   });
 
+  const originalEnvSecret = process.env.VOICE_MVP_SECRET;
+  const originalEnvUser = process.env.VOICE_MVP_USER_ID;
+  const originalEnvBaby = process.env.VOICE_MVP_BABY_ID;
+
   const mvpSecret = "voice_mvp_test_secret_abc123";
   process.env.VOICE_MVP_SECRET = mvpSecret;
   process.env.VOICE_MVP_USER_ID = testUser.id;
@@ -142,7 +146,10 @@ test("Voice Agent MVP API: /api/agent/voice", async () => {
           Authorization: `Bearer ${mvpSecret}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ text: "宝宝刚刚喝了120毫升配方奶" }),
+        body: JSON.stringify({
+          text: "宝宝刚刚喝了120毫升配方奶",
+          timeoutMs: 60000,
+        }),
       })
     );
     assert.equal(resWrite.status, 200);
@@ -170,7 +177,10 @@ test("Voice Agent MVP API: /api/agent/voice", async () => {
           Authorization: `Bearer ${validToken}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ text: "宝宝喝奶了" }),
+        body: JSON.stringify({
+          text: "宝宝喝奶了",
+          timeoutMs: 60000,
+        }),
       })
     );
     assert.equal(resIncomplete.status, 200);
@@ -206,6 +216,11 @@ test("Voice Agent MVP API: /api/agent/voice", async () => {
     console.log("   Incomplete Info Clarification:", jsonIncomplete.reply);
 
   } finally {
+    // Restore environment variables
+    process.env.VOICE_MVP_SECRET = originalEnvSecret;
+    process.env.VOICE_MVP_USER_ID = originalEnvUser;
+    process.env.VOICE_MVP_BABY_ID = originalEnvBaby;
+
     // Cleanup test data to prevent database pollution
     console.log("-> Cleaning up test user and family data...");
     await prisma.user.deleteMany({
