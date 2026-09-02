@@ -1,6 +1,7 @@
 // WHO Child Growth Standards (0–36 months)
 // Source: World Health Organization (WHO) Child Growth Standards
 // Covers Boys & Girls for Weight (kg), Length/Height (cm), and Head Circumference (cm)
+import { calculateAgeDetail } from "@/lib/age";
 
 export interface PercentileData {
   P97: number[];
@@ -123,3 +124,156 @@ export function estimatePercentile(
   const span = p15 - p3;
   return span > 0 ? Math.min(15, Math.round(3 + ((value - p3) / span) * 12)) : 3;
 }
+
+export function getPercentileEvaluation(percentile: number): {
+  level: "very_low" | "low" | "normal" | "high" | "very_high";
+  label: string;
+  badgeColor: string;
+  badgeBg: string;
+} {
+  if (percentile < 3) {
+    return { level: "very_low", label: "偏低 (需关注)", badgeColor: "text-red-700 dark:text-red-300", badgeBg: "bg-red-50 dark:bg-red-950/40 border-red-200 dark:border-red-800" };
+  }
+  if (percentile < 15) {
+    return { level: "low", label: "偏小/偏轻", badgeColor: "text-amber-700 dark:text-amber-300", badgeBg: "bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800" };
+  }
+  if (percentile <= 85) {
+    return { level: "normal", label: "正常发育区间", badgeColor: "text-emerald-700 dark:text-emerald-300", badgeBg: "bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800" };
+  }
+  if (percentile <= 97) {
+    return { level: "high", label: "偏大/偏重", badgeColor: "text-blue-700 dark:text-blue-300", badgeBg: "bg-blue-50 dark:bg-blue-950/40 border-blue-200 dark:border-blue-800" };
+  }
+  return { level: "very_high", label: "偏高 (需关注)", badgeColor: "text-purple-700 dark:text-purple-300", badgeBg: "bg-purple-50 dark:bg-purple-950/40 border-purple-200 dark:border-purple-800" };
+}
+
+export interface WhoMetricResult {
+  key: "weight" | "height" | "head";
+  name: string;
+  icon: string;
+  unit: string;
+  value: number;
+  percentile: number;
+  median: number;
+  range: string;
+  diff: number;
+  evaluation: ReturnType<typeof getPercentileEvaluation>;
+}
+
+export function getWhoMetricsSummary(
+  gender: string = "female",
+  ageInMonths: number,
+  values: { weightKg?: number; heightCm?: number; headCircumferenceCm?: number }
+): WhoMetricResult[] {
+  const std = getWhoStandard(gender);
+  const clampedAge = Math.min(Math.max(0, ageInMonths), 36);
+  const lowIdx = Math.floor(clampedAge);
+  const highIdx = Math.min(36, Math.ceil(clampedAge));
+  const fraction = clampedAge - lowIdx;
+  const lerp = (arr: number[]) => {
+    const vLow = arr[lowIdx] ?? arr[0];
+    const vHigh = arr[highIdx] ?? vLow;
+    return vLow + (vHigh - vLow) * fraction;
+  };
+
+  const results: WhoMetricResult[] = [];
+
+  if (values.weightKg != null && values.weightKg > 0) {
+    const p = estimatePercentile(gender, "weight", clampedAge, values.weightKg);
+    const med = Math.round(lerp(std.weight.P50) * 100) / 100;
+    const p3 = Math.round(lerp(std.weight.P3) * 100) / 100;
+    const p97 = Math.round(lerp(std.weight.P97) * 100) / 100;
+    results.push({
+      key: "weight",
+      name: "体重",
+      icon: "⚖️",
+      unit: "kg",
+      value: values.weightKg,
+      percentile: p,
+      median: med,
+      range: `${p3} ~ ${p97}`,
+      diff: Math.round((values.weightKg - med) * 100) / 100,
+      evaluation: getPercentileEvaluation(p),
+    });
+  }
+
+  if (values.heightCm != null && values.heightCm > 0) {
+    const p = estimatePercentile(gender, "height", clampedAge, values.heightCm);
+    const med = Math.round(lerp(std.height.P50) * 10) / 10;
+    const p3 = Math.round(lerp(std.height.P3) * 10) / 10;
+    const p97 = Math.round(lerp(std.height.P97) * 10) / 10;
+    results.push({
+      key: "height",
+      name: "身长",
+      icon: "📏",
+      unit: "cm",
+      value: values.heightCm,
+      percentile: p,
+      median: med,
+      range: `${p3} ~ ${p97}`,
+      diff: Math.round((values.heightCm - med) * 10) / 10,
+      evaluation: getPercentileEvaluation(p),
+    });
+  }
+
+  if (values.headCircumferenceCm != null && values.headCircumferenceCm > 0) {
+    const p = estimatePercentile(gender, "headCircumference", clampedAge, values.headCircumferenceCm);
+    const med = Math.round(lerp(std.headCircumference.P50) * 10) / 10;
+    const p3 = Math.round(lerp(std.headCircumference.P3) * 10) / 10;
+    const p97 = Math.round(lerp(std.headCircumference.P97) * 10) / 10;
+    results.push({
+      key: "head",
+      name: "头围",
+      icon: "👶",
+      unit: "cm",
+      value: values.headCircumferenceCm,
+      percentile: p,
+      median: med,
+      range: `${p3} ~ ${p97}`,
+      diff: Math.round((values.headCircumferenceCm - med) * 10) / 10,
+      evaluation: getPercentileEvaluation(p),
+    });
+  }
+
+  return results;
+}
+
+export function extractReportGrowthMetrics(report: {
+  growthData?: { weightKg?: number; heightCm?: number; headCircumferenceCm?: number } | null;
+  items?: { name: string; value: string | number }[] | null;
+}): { weightKg?: number; heightCm?: number; headCircumferenceCm?: number } {
+  let weightKg = report.growthData?.weightKg;
+  let heightCm = report.growthData?.heightCm;
+  let headCircumferenceCm = report.growthData?.headCircumferenceCm;
+
+  if (report.items && Array.isArray(report.items)) {
+    for (const it of report.items) {
+      const name = it.name?.trim() || "";
+      const val = typeof it.value === "number" ? it.value : parseFloat(String(it.value).replace(/[^0-9.]/g, ""));
+      if (!Number.isNaN(val) && val > 0) {
+        if (!weightKg && (name === "体重" || name.includes("体重") || name.toLowerCase().includes("weight"))) {
+          if (val >= 0.5 && val <= 50) weightKg = val;
+        }
+        if (!heightCm && (name === "身长" || name === "身高" || name.includes("身长") || name.includes("身高") || name.toLowerCase().includes("height") || name.toLowerCase().includes("length"))) {
+          if (val >= 20 && val <= 150) heightCm = val;
+        }
+        if (!headCircumferenceCm && (name === "头围" || name.includes("头围") || name.toLowerCase().includes("head"))) {
+          if (val >= 20 && val <= 60) headCircumferenceCm = val;
+        }
+      }
+    }
+  }
+
+  return { weightKg, heightCm, headCircumferenceCm };
+}
+
+export function getWhoMetricsForBaby(
+  baby: { gender?: string; birthDate?: string | null } | null | undefined,
+  recordDate: string,
+  measurements: { weightKg?: number; heightCm?: number; headCircumferenceCm?: number }
+): WhoMetricResult[] {
+  if (!baby?.birthDate) return [];
+  const age = calculateAgeDetail(baby.birthDate, recordDate);
+  const fractionalMonths = Math.max(0, age.months + age.days / 30.4375);
+  return getWhoMetricsSummary(baby.gender || "female", fractionalMonths, measurements);
+}
+

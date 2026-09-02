@@ -24,6 +24,8 @@ import { SegmentControl } from "@/components/ui/SegmentControl";
 import { CuteCard } from "@/components/ui/CuteCard";
 import { QuickAiButton } from "@/components/ui/QuickAiButton";
 import { openRecordDrawer } from "@/lib/drawer-bus";
+import { WhoPercentileChips } from "@/components/growth/WhoPercentileCard";
+import { getWhoMetricsForBaby } from "@/lib/who-growth-standards";
 
 const GrowthLineChart = dynamic(() => import("@/components/growth/GrowthLineChart"), {
   ssr: false,
@@ -338,15 +340,25 @@ export default function GrowthPage() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2.5">
-                      <div className="text-right">
+                      <div className="text-right space-y-1">
                         <p className="text-xs font-black text-primary">
                           {m.weightKg != null ? `${m.weightKg}kg` : ""}
                           {m.heightCm != null ? ` · ${m.heightCm}cm` : ""}
                           {m.headCircumferenceCm != null ? ` · 头围${m.headCircumferenceCm}cm` : ""}
                         </p>
-                        {m.percentile != null && (
-                          <p className="text-[10px] text-text-muted mt-0.5">WHO P{m.percentile}</p>
-                        )}
+                        {(() => {
+                          const whoRes = getWhoMetricsForBaby(baby, m.date, {
+                            weightKg: m.weightKg ?? undefined,
+                            heightCm: m.heightCm ?? undefined,
+                            headCircumferenceCm: m.headCircumferenceCm ?? undefined,
+                          });
+                          if (whoRes.length === 0) {
+                            return m.percentile != null ? (
+                              <p className="text-[10px] text-text-muted mt-0.5">WHO P{m.percentile}</p>
+                            ) : null;
+                          }
+                          return <WhoPercentileChips metrics={whoRes} className="justify-end" />;
+                        })()}
                       </div>
                       <button
                         type="button"

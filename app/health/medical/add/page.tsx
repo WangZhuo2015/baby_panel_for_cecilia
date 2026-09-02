@@ -24,6 +24,8 @@ import { getLocalDateStr } from "@/lib/date";
 import { composeMedicalAiSummary } from "@/lib/medical-summary";
 import { MarkdownBody } from "@/components/ui/MarkdownBody";
 import { compressImageForOcr } from "@/lib/upload";
+import { WhoPercentileBreakdown } from "@/components/growth/WhoPercentileCard";
+import { getWhoMetricsForBaby } from "@/lib/who-growth-standards";
 import type { MedicalReportCategory, MedicalReportItem } from "@/types";
 
 export default function MedicalAddPage() {
@@ -500,6 +502,28 @@ export default function MedicalAddPage() {
                 />
               </div>
             </div>
+
+            {(() => {
+              const wNum = weightKg ? parseFloat(weightKg) : undefined;
+              const hNum = heightCm ? parseFloat(heightCm) : undefined;
+              const hdNum = headCm ? parseFloat(headCm) : undefined;
+              const whoMetrics = getWhoMetricsForBaby(baby, date, {
+                weightKg: wNum && !Number.isNaN(wNum) && wNum > 0 ? wNum : undefined,
+                heightCm: hNum && !Number.isNaN(hNum) && hNum > 0 ? hNum : undefined,
+                headCircumferenceCm: hdNum && !Number.isNaN(hdNum) && hdNum > 0 ? hdNum : undefined,
+              });
+
+              if (whoMetrics.length === 0) return null;
+
+              return (
+                <div className="pt-2">
+                  <WhoPercentileBreakdown
+                    metrics={whoMetrics}
+                    title="WHO 生长发育百分位（实时对照）"
+                  />
+                </div>
+              );
+            })()}
           </CuteCard>
         )}
 

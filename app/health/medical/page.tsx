@@ -27,6 +27,8 @@ import { useToast } from "@/components/ui/Toast";
 import { useBabyStore } from "@/stores/useBabyStore";
 import { composeMedicalAiSummary } from "@/lib/medical-summary";
 import { MarkdownBody } from "@/components/ui/MarkdownBody";
+import { WhoPercentileChips, ReportWhoSection } from "@/components/growth/WhoPercentileCard";
+import { extractReportGrowthMetrics, getWhoMetricsForBaby } from "@/lib/who-growth-standards";
 import type { MedicalReport, MedicalReportItem } from "@/types";
 
 const CATEGORY_MAP: Record<string, { label: string; emoji: string; color: string }> = {
@@ -40,7 +42,7 @@ const CATEGORY_MAP: Record<string, { label: string; emoji: string; color: string
 export default function MedicalReportsPage() {
   const router = useRouter();
   const { showToast } = useToast();
-  const { medicalReports, fetchMedicalReports, deleteMedicalReport, fetchBaby } = useBabyStore();
+  const { medicalReports, fetchMedicalReports, deleteMedicalReport, fetchBaby, baby } = useBabyStore();
 
   const [activeCategory, setActiveCategory] = useState<string>("all");
   const [selectedReport, setSelectedReport] = useState<MedicalReport | null>(null);
@@ -267,6 +269,8 @@ export default function MedicalReportsPage() {
             const summaryText =
               (report.aiSummary && report.aiSummary.trim()) ||
               composeMedicalAiSummary(report.items || []);
+            const growthMetrics = extractReportGrowthMetrics(report);
+            const whoResults = getWhoMetricsForBaby(baby, report.date, growthMetrics);
 
             return (
               <CuteCard
@@ -298,8 +302,14 @@ export default function MedicalReportsPage() {
                   </span>
                 </div>
 
+                {whoResults.length > 0 && (
+                  <div className="my-2.5">
+                    <WhoPercentileChips metrics={whoResults} />
+                  </div>
+                )}
+
                 {/* Status and summary badge */}
-                <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-divider/60">
+                <div className="flex items-center justify-between mt-2.5 pt-2.5 border-t border-divider/60">
                   <div className="flex items-center gap-1.5 text-xs">
                     {abnormalCount > 0 ? (
                       <span className="flex items-center gap-1 text-amber-600 font-medium text-[11px] bg-amber-50 px-2 py-0.5 rounded-md">
@@ -423,6 +433,9 @@ export default function MedicalReportsPage() {
                   </p>
                 </div>
               )}
+
+              {/* WHO Growth Percentiles Section */}
+              <ReportWhoSection report={selectedReport} baby={baby} />
 
               {/* Indicators Table */}
               <div>

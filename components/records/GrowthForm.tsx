@@ -25,6 +25,9 @@ import { VoiceConfirmEntry } from "@/components/ui/VoiceConfirmEntry";
 import { QuickAiButton } from "@/components/ui/QuickAiButton";
 import { getLocalDateStr } from "@/lib/date";
 import { compressImageForOcr } from "@/lib/upload";
+import { useBabyStore } from "@/stores/useBabyStore";
+import { WhoPercentileBreakdown } from "@/components/growth/WhoPercentileCard";
+import { getWhoMetricsForBaby } from "@/lib/who-growth-standards";
 import type { GrowthMeasurement } from "@/types";
 
 type InputMode = "manual" | "ocr";
@@ -52,6 +55,7 @@ export function GrowthForm({
 }: GrowthFormProps) {
   const isEdit = formMode === "edit";
   const { showToast } = useToast();
+  const { baby } = useBabyStore();
 
   const [inputMode, setInputMode] = useState<InputMode>("manual");
   const [date, setDate] = useState(() => initialData?.date || getLocalDateStr());
@@ -376,6 +380,29 @@ export function GrowthForm({
           />
         </FormSection>
       </div>
+
+      {/* Live WHO Percentile Evaluation Preview */}
+      {(() => {
+        const wNum = weight ? parseFloat(weight) : undefined;
+        const hNum = height ? parseFloat(height) : undefined;
+        const hdNum = head ? parseFloat(head) : undefined;
+        const whoMetrics = getWhoMetricsForBaby(baby, date, {
+          weightKg: wNum && !Number.isNaN(wNum) && wNum > 0 ? wNum : undefined,
+          heightCm: hNum && !Number.isNaN(hNum) && hNum > 0 ? hNum : undefined,
+          headCircumferenceCm: hdNum && !Number.isNaN(hdNum) && hdNum > 0 ? hdNum : undefined,
+        });
+
+        if (whoMetrics.length === 0) return null;
+
+        return (
+          <div className="pt-1">
+            <WhoPercentileBreakdown
+              metrics={whoMetrics}
+              title="WHO 生长发育百分位（实时对照）"
+            />
+          </div>
+        );
+      })()}
 
       {/* Buttons */}
       <div className="pt-2 flex gap-3">
