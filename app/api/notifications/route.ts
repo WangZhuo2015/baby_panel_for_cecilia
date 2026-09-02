@@ -65,7 +65,8 @@ export async function GET(request: Request) {
     const notifications: NotificationItem[] = []
     const todayStr = getLocalDateStr()
     const { start, end } = getLocalDayUtcRange(todayStr)
-    const since48h = new Date(Date.now() - 48 * 60 * 60 * 1000)
+    const nowMs = Date.now()
+    const since24h = new Date(nowMs - 24 * 60 * 60 * 1000)
 
     // 1. Vaccine reminders — upcoming within 7 days
     const vaccines = await prisma.vaccineRecord.findMany({
@@ -75,7 +76,7 @@ export async function GET(request: Request) {
 
     for (const v of vaccines) {
       const scheduledDate = new Date(v.scheduledDate)
-      const diffMs = scheduledDate.getTime() - Date.now()
+      const diffMs = scheduledDate.getTime() - nowMs
       const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24))
 
       if (diffDays <= 7) {
@@ -93,7 +94,8 @@ export async function GET(request: Request) {
           detail: `计划接种日期：${v.scheduledDate}`,
           time: timeLabel,
           urgent: diffDays <= 3,
-          icon: '💉'
+          icon: '💉',
+          createdAt: nowMs,
         })
       }
     }
@@ -128,7 +130,8 @@ export async function GET(request: Request) {
         detail: '该记录今天的喂奶了',
         time: '今天',
         urgent: false,
-        icon: '🍼'
+        icon: '🍼',
+        createdAt: nowMs,
       })
     }
 
@@ -140,7 +143,8 @@ export async function GET(request: Request) {
         detail: '该记录今天的睡眠了',
         time: '今天',
         urgent: false,
-        icon: '😴'
+        icon: '😴',
+        createdAt: nowMs,
       })
     }
 
@@ -152,11 +156,12 @@ export async function GET(request: Request) {
         detail: '该记录今天的辅食了',
         time: '今天',
         urgent: false,
-        icon: '🍚'
+        icon: '🍚',
+        createdAt: nowMs,
       })
     }
 
-    // 4. Family Member Activities (Submissions, Edits, Deletions)
+    // 4. Family Member Activities (Submissions, Edits, Deletions in last 24h)
     const [
       recentFeedings,
       recentSleeps,
@@ -168,38 +173,38 @@ export async function GET(request: Request) {
       familyMembers
     ] = await Promise.all([
       prisma.feedingRecord.findMany({
-        where: { babyId, createdAt: { gte: since48h } },
+        where: { babyId, createdAt: { gte: since24h } },
         orderBy: { createdAt: 'desc' },
         take: 10,
       }),
       prisma.sleepRecord.findMany({
-        where: { babyId, createdAt: { gte: since48h } },
+        where: { babyId, createdAt: { gte: since24h } },
         orderBy: { createdAt: 'desc' },
         take: 10,
       }),
       prisma.diaperRecord.findMany({
-        where: { babyId, createdAt: { gte: since48h } },
+        where: { babyId, createdAt: { gte: since24h } },
         orderBy: { createdAt: 'desc' },
         take: 10,
       }),
       prisma.foodLogRecord.findMany({
-        where: { babyId, createdAt: { gte: since48h } },
+        where: { babyId, createdAt: { gte: since24h } },
         orderBy: { createdAt: 'desc' },
         take: 10,
       }),
       prisma.growthMeasurement.findMany({
-        where: { babyId, createdAt: { gte: since48h } },
+        where: { babyId, createdAt: { gte: since24h } },
         orderBy: { createdAt: 'desc' },
         take: 5,
       }),
       prisma.supplementRecord.findMany({
-        where: { babyId, createdAt: { gte: since48h } },
+        where: { babyId, createdAt: { gte: since24h } },
         include: { product: true },
         orderBy: { createdAt: 'desc' },
         take: 5,
       }),
       prisma.recordSnapshot.findMany({
-        where: { babyId, createdAt: { gte: since48h } },
+        where: { babyId, createdAt: { gte: since24h } },
         orderBy: { createdAt: 'desc' },
         take: 10,
       }),

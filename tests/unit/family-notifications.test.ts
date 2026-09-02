@@ -28,14 +28,22 @@ test("Push Test Route: exports POST handler", async () => {
   assert.strictEqual(typeof mod.POST, "function", "POST handler should be exported");
 });
 
-test("Notifications Storage: exports persistence and calculation helpers", async () => {
+test("Notifications Storage: exports persistence and 24h rolling helpers", async () => {
   const storage = await import("@/lib/notifications-storage");
   assert.strictEqual(typeof storage.getReadNotificationIds, "function");
-  assert.strictEqual(typeof storage.getClearedNotificationIds, "function");
+  assert.strictEqual(typeof storage.setClearedBeforeTime, "function");
+  assert.strictEqual(typeof storage.addDismissedNotificationId, "function");
   assert.strictEqual(typeof storage.filterVisibleNotifications, "function");
   assert.strictEqual(typeof storage.calculateUnreadCount, "function");
-  const filtered = storage.filterVisibleNotifications([{ id: "1" }, { id: "2" }]);
-  assert.strictEqual(filtered.length, 2);
+
+  // Items older than 24h are automatically filtered out
+  const now = Date.now();
+  const recentItem = { id: "recent-1", createdAt: now - 1000 };
+  const oldItem = { id: "old-1", createdAt: now - 25 * 60 * 60 * 1000 };
+  const filtered = storage.filterVisibleNotifications([recentItem, oldItem]);
+  assert.strictEqual(filtered.length, 1);
+  assert.strictEqual(filtered[0].id, "recent-1");
 });
+
 
 

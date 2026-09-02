@@ -23,9 +23,10 @@ import { useToast } from "@/components/ui/Toast";
 import { InstallGuideModal } from "@/components/ui/InstallGuideModal";
 import {
   getReadNotificationIds,
-  saveReadNotificationIds,
-  getClearedNotificationIds,
-  saveClearedNotificationIds,
+  markNotificationRead,
+  markAllNotificationsRead,
+  setClearedBeforeTime,
+  addDismissedNotificationId,
   filterVisibleNotifications,
 } from "@/lib/notifications-storage";
 
@@ -39,6 +40,7 @@ interface NotificationItem {
   icon: string;
   actorId?: string | null;
   actorLabel?: string | null;
+  createdAt?: number;
 }
 
 /** 将 VAPID Base64 字符串转换为浏览器 PushManager 必需的 Uint8Array */
@@ -172,22 +174,17 @@ export default function NotificationsPage() {
   }, [baby?.id]);
 
   const markRead = useCallback((id: string) => {
-    setReadIds((prev) => {
-      const next = new Set(prev);
-      next.add(id);
-      saveReadNotificationIds(next);
-      return next;
-    });
+    markNotificationRead(id);
+    setReadIds(getReadNotificationIds());
     window.dispatchEvent(new CustomEvent("notifications-read"));
   }, []);
 
   const handleDismiss = useCallback((id: string, e?: React.MouseEvent) => {
     e?.stopPropagation();
-    const currentCleared = getClearedNotificationIds();
-    currentCleared.add(id);
-    saveClearedNotificationIds(currentCleared);
-
+    addDismissedNotificationId(id);
+    markNotificationRead(id);
     setNotifications((prev) => prev.filter((n) => n.id !== id));
+    setReadIds(getReadNotificationIds());
     window.dispatchEvent(new CustomEvent("notifications-read"));
     showToast("已清除此条通知 ✨");
   }, [showToast]);
@@ -295,18 +292,10 @@ export default function NotificationsPage() {
   };
 
   const handleClearAll = () => {
-    const currentCleared = getClearedNotificationIds();
-    for (const n of notifications) {
-      currentCleared.add(n.id);
-    }
-    saveClearedNotificationIds(currentCleared);
-
-    const allIds = new Set(notifications.map((n) => n.id));
-    const merged = new Set([...readIds, ...allIds]);
-    setReadIds(merged);
-    saveReadNotificationIds(merged);
-
+    setClearedBeforeTime(Date.now());
+    markAllNotificationsRead(notifications.map((n) => n.id));
     setNotifications([]);
+    setReadIds(getReadNotificationIds());
     window.dispatchEvent(new CustomEvent("notifications-read"));
     showToast("已清除全部通知 ✨", "success");
   };
