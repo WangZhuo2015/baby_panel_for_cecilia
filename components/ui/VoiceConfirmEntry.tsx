@@ -3,6 +3,7 @@
 import React, { useCallback, useRef, useState } from "react";
 import { Loader2, Mic, Square, X } from "lucide-react";
 import { AiActionCard, type ActionCardData } from "@/components/ui/AiActionCard";
+import { VoiceRecordingBar } from "@/components/ui/VoiceRecordingBar";
 import { useToast } from "@/components/ui/Toast";
 import { useBabyStore } from "@/stores/useBabyStore";
 
@@ -14,6 +15,7 @@ export function VoiceConfirmEntry({ contextType }: VoiceConfirmEntryProps) {
   const { showToast } = useToast();
   const baby = useBabyStore((s) => s.baby);
   const [recording, setRecording] = useState(false);
+  const [recordingStream, setRecordingStream] = useState<MediaStream | null>(null);
   const [busy, setBusy] = useState<"transcribe" | "parse" | null>(null);
   const [transcript, setTranscript] = useState("");
   const [actions, setActions] = useState<ActionCardData[]>([]);
@@ -27,8 +29,22 @@ export function VoiceConfirmEntry({ contextType }: VoiceConfirmEntryProps) {
     if (mr && mr.state === "recording") mr.stop();
     streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
+    setRecordingStream(null);
     setRecording(false);
   }, []);
+
+  const cancelRecording = useCallback(() => {
+    const mr = mediaRecorderRef.current;
+    if (mr && mr.state === "recording") {
+      mr.onstop = null;
+      mr.stop();
+    }
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
+    setRecordingStream(null);
+    setRecording(false);
+    showToast("已取消录音");
+  }, [showToast]);
 
   const parseText = async (text: string) => {
     setBusy("parse");
@@ -58,6 +74,7 @@ export function VoiceConfirmEntry({ contextType }: VoiceConfirmEntryProps) {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
+      setRecordingStream(stream);
       const mime = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
         ? "audio/webm;codecs=opus"
         : MediaRecorder.isTypeSupported("audio/mp4")
@@ -68,6 +85,7 @@ export function VoiceConfirmEntry({ contextType }: VoiceConfirmEntryProps) {
       mr.ondataavailable = (e) => e.data.size > 0 && chunksRef.current.push(e.data);
       mr.onstop = async () => {
         setBusy("transcribe");
+        setRecordingStream(null);
         try {
           const blob = new Blob(chunksRef.current, { type: mr.mimeType || "audio/webm" });
           if (blob.size < 800) throw new Error("录音太短");
@@ -102,37 +120,36 @@ export function VoiceConfirmEntry({ contextType }: VoiceConfirmEntryProps) {
     setTranscript("");
   };
 
-  const busyLabel =
-    busy === "transcribe" ? "正在听写…" : busy === "parse" ? "正在整理成记录…" : null;
-
   return (
     <>
-      <button
-        type="button"
-        onClick={toggle}
-        disabled={Boolean(busy)}
-        className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-2xl border shadow-2xs text-left transition-colors ${
-          recording
-            ? "bg-red-50 border-red-200 text-red-700"
-            : "bg-white/70 border-primary/20 text-text-primary"
-        }`}
-      >
-        <span
-          className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${
-            recording ? "bg-red-500 text-white animate-pulse" : "bg-primary-soft text-primary"
-          }`}
+      {recording || busy ? (
+        <VoiceRecordingBar
+          recording={recording}
+          transcribing={Boolean(busy)}
+          stream={recordingStream}
+          onStop={stopRecording}
+          onCancel={cancelRecording}
+          hint="正在听… 说完点击完成，会自动整理出卡片"
+        />
+      ) : (
+        <button
+          type="button"
+          onClick={toggle}
+          className="w-full flex items-center gap-3 px-3.5 py-3 rounded-2xl border border-primary/20 bg-white/80 dark:bg-card shadow-2xs text-left transition-all hover:border-primary/40 hover:shadow-xs group btn-press cursor-pointer"
         >
-          {busy ? <Loader2 size={18} className="animate-spin" /> : recording ? <Square size={16} /> : <Mic size={18} />}
-        </span>
-        <span className="min-w-0">
-          <span className="block text-sm font-semibold">
-            {recording ? "正在听… 再点一下结束" : busyLabel || "语音录入"}
+          <span className="w-10 h-10 rounded-full flex items-center justify-center shrink-0 bg-primary-soft text-primary group-hover:scale-105 transition-transform">
+            <Mic size={18} />
           </span>
-          <span className="block text-[11px] text-text-muted mt-0.5">
-            说完后会弹出卡片，确认才写入档案
+          <span className="min-w-0">
+            <span className="block text-sm font-semibold text-text-primary">
+              语音快速录入
+            </span>
+            <span className="block text-[11px] text-text-muted mt-0.5">
+              说完后会弹出卡片，确认才写入档案
+            </span>
           </span>
-        </span>
-      </button>
+        </button>
+      )}
 
       {open && (
         <div

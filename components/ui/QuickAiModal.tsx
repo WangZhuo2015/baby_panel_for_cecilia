@@ -45,6 +45,7 @@ import {
 import { useBabyStore } from "@/stores/useBabyStore";
 import { calculateAge } from "@/lib/age";
 import { AiActionCard, ActionCardData } from "@/components/ui/AiActionCard";
+import { VoiceRecordingBar } from "@/components/ui/VoiceRecordingBar";
 import { useToast } from "@/components/ui/Toast";
 import type { AiDailySummaryResult } from "@/types/daily-summary";
 
@@ -571,6 +572,7 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
 
   const [recording, setRecording] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
+  const [recordingStream, setRecordingStream] = useState<MediaStream | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
@@ -580,13 +582,28 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
     if (mr && mr.state === "recording") mr.stop();
     streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
+    setRecordingStream(null);
     setRecording(false);
   }, []);
+
+  const cancelRecording = React.useCallback(() => {
+    const mr = mediaRecorderRef.current;
+    if (mr && mr.state === "recording") {
+      mr.onstop = null;
+      mr.stop();
+    }
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
+    setRecordingStream(null);
+    setRecording(false);
+    showToast("已取消录音");
+  }, [showToast]);
 
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
+      setRecordingStream(stream);
       const mime = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
         ? "audio/webm;codecs=opus"
         : MediaRecorder.isTypeSupported("audio/mp4")
@@ -597,6 +614,7 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
       mr.ondataavailable = (e) => e.data.size > 0 && chunksRef.current.push(e.data);
       mr.onstop = async () => {
         setTranscribing(true);
+        setRecordingStream(null);
         try {
           const blob = new Blob(chunksRef.current, { type: mr.mimeType || "audio/webm" });
           if (blob.size < 800) throw new Error("录音太短");
@@ -1525,74 +1543,75 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
                   </div>
                 )}
 
-                <form
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    handleSend();
-                  }}
-                  className="flex items-center gap-2"
-                >
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={(e) => handleImageSelect(e)}
+                {recording || transcribing ? (
+                  <VoiceRecordingBar
+                    recording={recording}
+                    transcribing={transcribing}
+                    stream={recordingStream}
+                    onStop={stopRecording}
+                    onCancel={cancelRecording}
+                    hint="正在倾听中... 说出记录如'喝了150ml奶粉'或'睡了1小时'"
                   />
-
-                  <button
-                    type="button"
-                    disabled={loading || uploadingImage}
-                    onClick={() => fileInputRef.current?.click()}
-                    className="w-10 h-10 rounded-2xl bg-slate-100 dark:bg-card hover:bg-primary-light text-text-secondary hover:text-primary flex items-center justify-center border border-primary/15 transition-all shrink-0 active:scale-95 cursor-pointer disabled:opacity-40 btn-press"
-                    title="拍照 / 上传化验单或图片"
+                ) : (
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      handleSend();
+                    }}
+                    className="flex items-center gap-2"
                   >
-                    {uploadingImage ? (
-                      <Loader2 size={16} className="animate-spin text-primary" />
-                    ) : (
-                      <ImageIcon size={18} />
-                    )}
-                  </button>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => handleImageSelect(e)}
+                    />
 
-                  <button
-                    type="button"
-                    disabled={loading || transcribing}
-                    onClick={() => (recording ? stopRecording() : startRecording())}
-                    className={`w-10 h-10 rounded-2xl flex items-center justify-center border transition-all shrink-0 active:scale-95 cursor-pointer disabled:opacity-40 btn-spring ${
-                      recording
-                        ? "bg-red-500 text-white border-red-500 animate-pulse"
-                        : "bg-slate-100 dark:bg-card hover:bg-primary-light text-text-secondary hover:text-primary border-primary/15"
-                    }`}
-                    title={recording ? "点击停止并发送识别" : "按一下说话，自动转成文字"}
-                  >
-                    {transcribing ? (
-                      <Loader2 size={18} className="animate-spin text-primary" />
-                    ) : recording ? (
-                      <span className="w-3 h-3 bg-white rounded-sm" />
-                    ) : (
-                      <Mic size={18} />
-                    )}
-                  </button>
+                    <button
+                      type="button"
+                      disabled={loading || uploadingImage}
+                      onClick={() => fileInputRef.current?.click()}
+                      className="w-10 h-10 rounded-2xl bg-slate-100 dark:bg-card hover:bg-primary-light text-text-secondary hover:text-primary flex items-center justify-center border border-primary/15 transition-all shrink-0 active:scale-95 cursor-pointer disabled:opacity-40 btn-press"
+                      title="拍照 / 上传化验单或图片"
+                    >
+                      {uploadingImage ? (
+                        <Loader2 size={16} className="animate-spin text-primary" />
+                      ) : (
+                        <ImageIcon size={18} />
+                      )}
+                    </button>
 
-                  <input
-                    ref={inputRef}
-                    type="text"
-                    value={inputText}
-                    onChange={(e) => setInputText(e.target.value)}
-                    placeholder={selectedImage ? "可补充说明，如'帮我解读并存入档案'..." : meta.placeholder}
-                    disabled={loading}
-                    className="flex-1 px-4 py-2.5 bg-slate-50/90 hover:bg-white focus:bg-white dark:bg-card rounded-2xl text-xs sm:text-sm text-text-primary font-medium border-2 border-primary/20 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all placeholder:text-text-muted/70 shadow-2xs"
-                  />
+                    <button
+                      type="button"
+                      disabled={loading || transcribing}
+                      onClick={() => (recording ? stopRecording() : startRecording())}
+                      className="w-10 h-10 rounded-2xl flex items-center justify-center border transition-all shrink-0 active:scale-95 cursor-pointer disabled:opacity-40 btn-spring bg-slate-100 dark:bg-card hover:bg-primary-light text-text-secondary hover:text-primary border-primary/15 hover:border-primary/40 hover:shadow-xs group"
+                      title="按一下说话，自动转成文字并分析"
+                    >
+                      <Mic size={18} className="group-hover:scale-110 transition-transform" />
+                    </button>
 
-                  <button
-                    type="submit"
-                    disabled={(!inputText.trim() && !selectedImage) || loading}
-                    className="w-10 h-10 rounded-2xl bg-gradient-to-r from-primary to-pink-500 text-white flex items-center justify-center shadow-button hover:opacity-95 disabled:opacity-35 transition-all shrink-0 active:scale-95 cursor-pointer btn-spring"
-                    title="发送提问或一句话记账"
-                  >
-                    <Send size={15} />
-                  </button>
-                </form>
+                    <input
+                      ref={inputRef}
+                      type="text"
+                      value={inputText}
+                      onChange={(e) => setInputText(e.target.value)}
+                      placeholder={selectedImage ? "可补充说明，如'帮我解读并存入档案'..." : meta.placeholder}
+                      disabled={loading}
+                      className="flex-1 px-4 py-2.5 bg-slate-50/90 hover:bg-white focus:bg-white dark:bg-card rounded-2xl text-xs sm:text-sm text-text-primary font-medium border-2 border-primary/20 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all placeholder:text-text-muted/70 shadow-2xs"
+                    />
+
+                    <button
+                      type="submit"
+                      disabled={(!inputText.trim() && !selectedImage) || loading}
+                      className="w-10 h-10 rounded-2xl bg-gradient-to-r from-primary to-pink-500 text-white flex items-center justify-center shadow-button hover:opacity-95 disabled:opacity-35 transition-all shrink-0 active:scale-95 cursor-pointer btn-spring"
+                      title="发送提问或一句话记账"
+                    >
+                      <Send size={15} />
+                    </button>
+                  </form>
+                )}
 
                 <p className="text-[10px] text-text-muted/70 text-center flex items-center justify-center gap-1">
                   <AlertCircle size={10} className="text-amber-500/70 shrink-0" />
