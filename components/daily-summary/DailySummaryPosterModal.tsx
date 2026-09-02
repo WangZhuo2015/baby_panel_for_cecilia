@@ -176,8 +176,8 @@ ${summary.sections.tomorrowTips}
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm animate-fade-in overflow-y-auto">
-      <div className="relative w-full max-w-lg bg-white dark:bg-card rounded-[32px] shadow-2xl border border-primary/20 overflow-hidden flex flex-col max-h-[92vh]">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm animate-fade-in overflow-y-auto pb-[calc(1rem+env(safe-area-inset-bottom,0px))] pt-[calc(1rem+env(safe-area-inset-top,0px))]">
+      <div className="relative w-full max-w-lg bg-white dark:bg-card rounded-[32px] shadow-2xl border border-primary/20 overflow-hidden flex flex-col max-h-[calc(100dvh-2rem)] sm:max-h-[90vh] my-auto">
         {/* Modal Top Action Bar */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-primary/10 bg-primary-light/40 dark:bg-card shrink-0">
           <div className="flex items-center gap-2">
@@ -468,7 +468,7 @@ ${summary.sections.tomorrowTips}
         </div>
 
         {/* Modal Bottom Action Controls */}
-        <div className="p-4 sm:p-5 border-t border-primary/10 bg-white dark:bg-card shrink-0 space-y-2.5">
+        <div className="p-4 sm:p-5 border-t border-primary/10 bg-white dark:bg-card shrink-0 space-y-2.5 pb-[max(1rem,env(safe-area-inset-bottom,1rem))]">
           <div className="grid grid-cols-2 gap-3">
             <button
               onClick={handleDownload}
