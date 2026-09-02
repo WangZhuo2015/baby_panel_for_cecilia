@@ -41,6 +41,7 @@ import {
 } from "@/lib/date";
 import { calculateAge } from "@/lib/age";
 import type { AiDailySummaryResult } from "@/types/daily-summary";
+import { DailySummaryPosterModal } from "@/components/daily-summary/DailySummaryPosterModal";
 
 export default function DailySummaryPage() {
   const router = useRouter();
@@ -60,6 +61,7 @@ export default function DailySummaryPage() {
   const [loading, setLoading] = useState<boolean>(true);
   const [regenerating, setRegenerating] = useState<boolean>(false);
   const [copied, setCopied] = useState<boolean>(false);
+  const [showPosterModal, setShowPosterModal] = useState<boolean>(false);
   const [showTimeline, setShowTimeline] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<"all" | "feeding" | "sleep" | "diaper" | "growth" | "tips">("all");
   const [isPending, startTransition] = useTransition();
@@ -270,17 +272,26 @@ ${summary.sections.tomorrowTips}
             </button>
 
             <button
+              onClick={() => setShowPosterModal(true)}
+              disabled={!summary}
+              className="flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold bg-gradient-to-r from-primary via-pink-500 to-rose-400 text-white hover:opacity-90 shadow-button btn-press cursor-pointer"
+              title="生成精美长图海报，方便分享到朋友圈或群聊"
+            >
+              <Share2 size={13} />
+              <span>生成海报</span>
+            </button>
+
+            <button
               onClick={handleCopyReport}
               disabled={!summary}
-              className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all btn-press cursor-pointer ${
+              className={`p-2 rounded-xl text-xs font-bold transition-all btn-press cursor-pointer border ${
                 copied
-                  ? "bg-emerald-500 text-white shadow-sm"
-                  : "bg-primary text-white hover:bg-primary-hover shadow-button"
+                  ? "bg-emerald-500 text-white border-emerald-500 shadow-sm"
+                  : "bg-white dark:bg-card text-text-secondary hover:text-primary border-primary/15 shadow-xs"
               }`}
-              title="复制日报到剪贴板，方便发送到微信家庭群"
+              title="复制纯文本日报到剪贴板"
             >
-              {copied ? <Check size={13} /> : <Share2 size={13} />}
-              <span>{copied ? "已复制" : "分享日报"}</span>
+              {copied ? <Check size={14} /> : <Copy size={14} />}
             </button>
           </div>
         </div>
@@ -331,6 +342,24 @@ ${summary.sections.tomorrowTips}
                   <span className="text-primary font-bold">✓</span> {tag}
                 </span>
               ))}
+            </div>
+
+            {/* Quick Share Poster Banner */}
+            <div className="pt-1.5">
+              <button
+                onClick={() => setShowPosterModal(true)}
+                className="w-full flex items-center justify-between p-2.5 sm:p-3 rounded-2xl bg-gradient-to-r from-pink-100/90 via-rose-50/70 to-amber-50/80 hover:from-pink-100 hover:to-amber-100 border border-pink-200/60 text-xs font-bold text-pink-700 transition-all shadow-xs btn-press group cursor-pointer"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="w-6 h-6 rounded-xl bg-gradient-to-tr from-pink-500 to-rose-400 text-white flex items-center justify-center text-xs shadow-xs">
+                    🎨
+                  </span>
+                  <span>一键生成精美手账长图（可直接保存或发送群聊）</span>
+                </div>
+                <span className="text-[11px] text-pink-600 font-bold group-hover:translate-x-0.5 transition-transform flex items-center gap-0.5">
+                  生成海报 <ChevronRight size={13} />
+                </span>
+              </button>
             </div>
           </CuteCard>
 
@@ -533,6 +562,18 @@ ${summary.sections.tomorrowTips}
             立即生成总结
           </CuteButton>
         </CuteCard>
+      )}
+
+      {/* Daily Summary Shareable Poster Modal */}
+      {summary && (
+        <DailySummaryPosterModal
+          isOpen={showPosterModal}
+          onClose={() => setShowPosterModal(false)}
+          summary={summary}
+          baby={baby}
+          selectedDate={selectedDate}
+          timeline={timeline}
+        />
       )}
     </div>
   );
