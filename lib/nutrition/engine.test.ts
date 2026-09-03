@@ -302,3 +302,73 @@ test("Multi-day trend calculation: 7-day average and trends", () => {
   assert.equal(summary.dailyTrends.length, 2);
   assert.ok(summary.averageIntakes.vitamin_d.averageAmount > 400);
 });
+
+test("Formula Selection: honors specific product even if archived, and falls back to default active formula when null", () => {
+  const archivedFormula1: FormulaProduct = {
+    id: "f_archived_1",
+    familyId: "fam1",
+    name: "老版爱他美1段(已归档)",
+    brand: "爱他美",
+    scoopWeightG: 4.3,
+    waterPerScoopMl: 30.0,
+    reconstitutionRatio: 0.135,
+    servingSizeUnit: "per_100g",
+    isActive: false, // 已归档
+    isDefault: false,
+    nutrients: {
+      protein: { amount: 10.0, unit: "g" },
+      calcium: { amount: 300, unit: "mg" },
+    },
+  };
+
+  const activeDefaultFormula: FormulaProduct = {
+    id: "f_active_default_2",
+    familyId: "fam1",
+    name: "新版爱他美2段(主力)",
+    brand: "爱他美",
+    scoopWeightG: 4.5,
+    waterPerScoopMl: 30.0,
+    reconstitutionRatio: 0.145,
+    servingSizeUnit: "per_100g",
+    isActive: true,
+    isDefault: true, // 主力默认
+    nutrients: {
+      protein: { amount: 15.0, unit: "g" },
+      calcium: { amount: 600, unit: "mg" },
+    },
+  };
+
+  const formulaMap: Record<string, FormulaProduct> = {
+    // 故意让归档的放在最前面，测试系统是否会盲选 [0]
+    [archivedFormula1.id]: archivedFormula1,
+    [activeDefaultFormula.id]: activeDefaultFormula,
+  };
+
+  // Case A: 历史记录显式关联了归档奶粉 -> 必须依然准确使用归档奶粉的配方，历史数据不被篡改
+  const resHistorical = calculateDailyNutrition({
+    date: "2026-05-01",
+    babyAgeMonths: 3,
+    feedings: [
+      { id: "feed_old", timestamp: "2026-05-01T08:00:00Z", type: "formula", amountMl: 200, formulaProductId: "f_archived_1", spitUp: false },
+    ],
+    supplements: [],
+    formulaProductsMap: formulaMap,
+  });
+  // 200ml * 0.135 = 27g dry powder. 27g * (10g / 100g) = 2.7g protein.
+  assert.equal(resHistorical.coreMetrics.protein?.formulaAmount, 2.7);
+
+  // Case B: 未指定奶粉的记录 (null) -> 必须精准兜底到 active & default 的新版2段，而不是盲选 [0] 的归档1段！
+  const resUnassigned = calculateDailyNutrition({
+    date: "2026-09-01",
+    babyAgeMonths: 7,
+    feedings: [
+      { id: "feed_new", timestamp: "2026-09-01T08:00:00Z", type: "formula", amountMl: 200, formulaProductId: null, spitUp: false },
+    ],
+    supplements: [],
+    formulaProductsMap: formulaMap,
+  });
+  // 200ml * 0.145 = 29g dry powder. 29g * (15g / 100g) = 4.35g protein.
+  assert.equal(resUnassigned.coreMetrics.protein?.formulaAmount, 4.35);
+  // 来源列表中明确标明来源是主力奶粉
+  assert.ok(resUnassigned.coreMetrics.protein?.sources.some((s) => s.sourceId === "f_active_default_2"));
+});

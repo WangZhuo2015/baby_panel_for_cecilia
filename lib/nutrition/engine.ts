@@ -176,12 +176,22 @@ export function calculateDailyNutrition(input: EngineInput): DailyNutritionAnaly
     }
   };
 
+  // 找出当前主力/默认奶粉（用于历史未指定奶粉记录的精准兜底，避免盲选 [0]）
+  const allFormulaProducts = Object.values(formulaProductsMap);
+  const defaultFormulaProduct =
+    allFormulaProducts.find((p) => p.isActive && p.isDefault) ||
+    allFormulaProducts.find((p) => p.isActive) ||
+    allFormulaProducts[0] ||
+    null;
+
   // 1. 处理喂养记录 (Formula & Breastmilk)
   for (const feeding of feedings) {
     if (feeding.type === "formula") {
       const ml = feeding.amountMl || 0;
       formulaMl += ml;
-      const product = feeding.formulaProductId ? formulaProductsMap[feeding.formulaProductId] : Object.values(formulaProductsMap)[0] || null;
+      const product = feeding.formulaProductId
+        ? formulaProductsMap[feeding.formulaProductId] || defaultFormulaProduct
+        : defaultFormulaProduct;
       const formulaNutrients = getFormulaNutrientsForAmount(ml, product);
       const productName = product ? product.name : "配方奶粉";
 
@@ -234,7 +244,9 @@ export function calculateDailyNutrition(input: EngineInput): DailyNutritionAnaly
       // 混合喂养：按记录的 formula 奶量 + 亲喂时长
       const ml = feeding.amountMl || 0;
       formulaMl += ml;
-      const product = feeding.formulaProductId ? formulaProductsMap[feeding.formulaProductId] : Object.values(formulaProductsMap)[0] || null;
+      const product = feeding.formulaProductId
+        ? formulaProductsMap[feeding.formulaProductId] || defaultFormulaProduct
+        : defaultFormulaProduct;
       const formulaNutrients = getFormulaNutrientsForAmount(ml, product);
 
       for (const [nId, val] of Object.entries(formulaNutrients)) {

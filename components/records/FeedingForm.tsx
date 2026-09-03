@@ -120,10 +120,11 @@ export function FeedingForm({
     fetch("/api/nutrition/products?type=formula")
       .then((res) => res.json())
       .then((data) => {
-        const list = data.formulas || [];
+        const list = (data.formulas || []).filter((f: any) => f.isActive !== false);
         setFormulaProducts(list);
         if (!selectedFormulaId && list.length > 0) {
-          setSelectedFormulaId(list[0].id);
+          const defaultOne = list.find((f: any) => f.isDefault) || list[0];
+          setSelectedFormulaId(defaultOne.id);
         }
       })
       .catch(() => {});

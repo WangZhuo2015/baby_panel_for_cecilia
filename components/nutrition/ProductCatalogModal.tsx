@@ -89,7 +89,7 @@ export function ProductCatalogModal({ isOpen, onClose, babyId, onUpdated }: Prod
     try {
       setLoading(true);
       const [prodRes, schedRes] = await Promise.all([
-        fetch("/api/nutrition/products"),
+        fetch("/api/nutrition/products?includeInactive=true"),
         fetch(`/api/nutrition/schedules${babyId ? `?babyId=${babyId}` : ""}`),
       ]);
 
@@ -251,12 +251,36 @@ export function ProductCatalogModal({ isOpen, onClose, babyId, onUpdated }: Prod
     }
   };
 
-  // 删除产品
+  // 删除或归档产品
   const handleDeleteProduct = async (type: "formula" | "supplement", id: string, name: string) => {
-    if (!window.confirm(`确定删除「${name}」吗？`)) return;
+    if (!window.confirm(`确定要移除「${name}」吗？\n（若已有历史记录使用该档案，系统将为您安全归档停用，以保护历史营养数据完整准确）`)) return;
     try {
       const res = await fetch(`/api/nutrition/products?type=${type}&id=${id}`, {
         method: "DELETE",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        if (data.archived && data.message) {
+          alert(data.message);
+        }
+        await fetchData();
+        if (onUpdated) onUpdated();
+        window.dispatchEvent(new CustomEvent("baby:nutrition-updated"));
+      } else {
+        alert(data.error || "操作失败");
+      }
+    } catch (e) {
+      console.error("Delete product error:", e);
+    }
+  };
+
+  // 设为默认主力奶粉
+  const handleSetDefaultFormula = async (id: string) => {
+    try {
+      const res = await fetch("/api/nutrition/products", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "formula", id, isDefault: true, isActive: true }),
       });
       if (res.ok) {
         await fetchData();
@@ -264,7 +288,25 @@ export function ProductCatalogModal({ isOpen, onClose, babyId, onUpdated }: Prod
         window.dispatchEvent(new CustomEvent("baby:nutrition-updated"));
       }
     } catch (e) {
-      console.error("Delete product error:", e);
+      console.error("Set default formula error:", e);
+    }
+  };
+
+  // 恢复/重新启用归档奶粉
+  const handleRestoreFormula = async (id: string) => {
+    try {
+      const res = await fetch("/api/nutrition/products", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "formula", id, isActive: true }),
+      });
+      if (res.ok) {
+        await fetchData();
+        if (onUpdated) onUpdated();
+        window.dispatchEvent(new CustomEvent("baby:nutrition-updated"));
+      }
+    } catch (e) {
+      console.error("Restore formula error:", e);
     }
   };
 
@@ -502,52 +544,129 @@ export function ProductCatalogModal({ isOpen, onClose, babyId, onUpdated }: Prod
 
               {/* 已有奶粉列表 */}
               <div className="space-y-2">
-                <span className="text-[11px] font-bold text-text-secondary uppercase block px-1">
-                  当前正在使用的配方奶粉 ({formulas.length})
-                </span>
-                {formulas.length > 0 ? (
-                  formulas.map((f) => (
-                    <div
-                      key={f.id}
-                      className="p-3 bg-white dark:bg-[#251D25] rounded-2xl border border-primary/20 shadow-xs flex items-start justify-between gap-2"
-                    >
-                      <div>
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-xs font-bold text-text-primary dark:text-white">{f.name}</span>
-                          {f.stage && (
-                            <span className="px-1.5 py-0.2 bg-primary-soft text-primary text-[10px] rounded font-bold">
-                              {f.stage}段
-                            </span>
-                          )}
+                {(() => {
+                  const activeFormulas = formulas.filter((f) => f.isActive !== false);
+                  const archivedFormulas = formulas.filter((f) => f.isActive === false);
+
+                  return (
+                    <>
+                      <span className="text-[11px] font-bold text-text-secondary uppercase block px-1">
+                        当前正在使用的配方奶粉 ({activeFormulas.length})
+                      </span>
+                      {activeFormulas.length > 0 ? (
+                        activeFormulas.map((f) => (
+                          <div
+                            key={f.id}
+                            className={`p-3 bg-white dark:bg-[#251D25] rounded-2xl border shadow-xs flex items-start justify-between gap-2 ${
+                              f.isDefault ? "border-amber-400/60 ring-2 ring-amber-400/20" : "border-primary/20"
+                            }`}
+                          >
+                            <div>
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="text-xs font-bold text-text-primary dark:text-white">{f.name}</span>
+                                {f.stage && (
+                                  <span className="px-1.5 py-0.2 bg-primary-soft text-primary text-[10px] rounded font-bold">
+                                    {f.stage}段
+                                  </span>
+                                )}
+                                {f.isDefault ? (
+                                  <span className="px-1.5 py-0.2 bg-amber-50 dark:bg-amber-950 text-amber-700 dark:text-amber-300 text-[10px] rounded-full font-bold border border-amber-200 dark:border-amber-800">
+                                    ⭐ 默认主力
+                                  </span>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleSetDefaultFormula(f.id)}
+                                    className="px-1.5 py-0.2 text-[10px] text-text-muted hover:text-amber-600 rounded border border-divider hover:border-amber-300 transition-colors"
+                                    title="设为默认奶粉（未指定奶粉的喂奶记录将按此款计算营养）"
+                                  >
+                                    设为主力
+                                  </button>
+                                )}
+                              </div>
+                              <p className="text-[11px] text-text-secondary dark:text-gray-300 mt-0.5">
+                                {f.brand} · 标准比例: 1勺({f.scoopWeightG}g):{f.waterPerScoopMl}ml水 ({(f.reconstitutionRatio * 100).toFixed(1)}%)
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => setReconstitutionModal({ isOpen: true, product: f })}
+                                className="px-2 py-1 bg-sky-50 dark:bg-sky-950 text-sky-700 dark:text-sky-300 text-[10px] font-bold rounded-lg border border-sky-200 dark:border-sky-800 hover:bg-sky-100"
+                              >
+                                调冲调比
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteProduct("formula", f.id, f.name)}
+                                className="p-1 text-text-muted hover:text-red-500"
+                                title="移除或归档奶粉"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="p-3 bg-gray-50 dark:bg-[#251D25] rounded-2xl text-center border border-dashed border-divider">
+                          <p className="text-xs text-text-muted">暂未添加使用中的奶粉，可在下方预置库一键导入</p>
                         </div>
-                        <p className="text-[11px] text-text-secondary dark:text-gray-300 mt-0.5">
-                          {f.brand} · 标准比例: 1勺({f.scoopWeightG}g):{f.waterPerScoopMl}ml水 ({(f.reconstitutionRatio * 100).toFixed(1)}%)
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        <button
-                          type="button"
-                          onClick={() => setReconstitutionModal({ isOpen: true, product: f })}
-                          className="px-2 py-1 bg-sky-50 dark:bg-sky-950 text-sky-700 dark:text-sky-300 text-[10px] font-bold rounded-lg border border-sky-200 dark:border-sky-800 hover:bg-sky-100"
-                        >
-                          调冲调比
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteProduct("formula", f.id, f.name)}
-                          className="p-1 text-text-muted hover:text-red-500"
-                          title="删除奶粉"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  <div className="p-3 bg-gray-50 dark:bg-[#251D25] rounded-2xl text-center border border-dashed border-divider">
-                    <p className="text-xs text-text-muted">暂未添加使用中的奶粉，可在下方预置库一键导入</p>
-                  </div>
-                )}
+                      )}
+
+                      {/* 历史归档奶粉 */}
+                      {archivedFormulas.length > 0 && (
+                        <div className="space-y-1.5 pt-2 border-t border-divider/60">
+                          <span className="text-[11px] font-bold text-text-muted uppercase block px-1">
+                            📦 历史归档奶粉 ({archivedFormulas.length})
+                            <span className="font-normal text-[10px] ml-1">（历史营养分析继续保留，新记录不再可选）</span>
+                          </span>
+                          {archivedFormulas.map((f) => (
+                            <div
+                              key={f.id}
+                              className="p-2.5 bg-gray-50/80 dark:bg-card/40 rounded-xl border border-divider/70 flex items-center justify-between gap-2 opacity-85 hover:opacity-100 transition-all"
+                            >
+                              <div>
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-xs font-semibold text-text-secondary line-through decoration-text-muted/40">
+                                    {f.name}
+                                  </span>
+                                  {f.stage && (
+                                    <span className="px-1 text-[9px] bg-gray-200 text-text-secondary rounded">
+                                      {f.stage}段
+                                    </span>
+                                  )}
+                                  <span className="text-[9px] px-1.5 py-0.2 bg-gray-200/80 text-text-muted rounded-full font-medium">
+                                    已归档
+                                  </span>
+                                </div>
+                                <p className="text-[10px] text-text-muted mt-0.5">
+                                  1勺({f.scoopWeightG}g):{f.waterPerScoopMl}ml水 · 历史营养保留
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={() => handleRestoreFormula(f.id)}
+                                  className="px-2 py-0.5 bg-white dark:bg-card text-primary text-[10px] font-bold rounded-lg border border-primary/30 hover:bg-primary-soft btn-press"
+                                >
+                                  重新启用
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteProduct("formula", f.id, f.name)}
+                                  className="p-1 text-text-muted hover:text-red-500"
+                                  title="彻底清除"
+                                >
+                                  <Trash2 size={13} />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
               </div>
 
               {/* 预置奶粉库一键导入与检索 */}

@@ -23,6 +23,7 @@ export interface FormulaProduct {
   nutrients: NutrientsMap;
   notes?: string | null;
   isActive: boolean;
+  isDefault?: boolean;
   createdAt?: string;
   updatedAt?: string;
 }

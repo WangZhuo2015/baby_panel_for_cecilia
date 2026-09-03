@@ -26,14 +26,15 @@ export async function GET(request: Request) {
 
     const { searchParams } = new URL(request.url);
     const type = searchParams.get("type"); // 'formula' | 'supplement'
+    const includeInactive = searchParams.get("includeInactive") === "true";
 
     let formulas: FormulaProduct[] = [];
     let supplements: SupplementProduct[] = [];
 
     if (!type || type === "formula") {
       const dbFormulas = await prisma.formulaProduct.findMany({
-        where: { familyId, isActive: true },
-        orderBy: { createdAt: "desc" },
+        where: includeInactive ? { familyId } : { familyId, isActive: true },
+        orderBy: [{ isDefault: "desc" }, { createdAt: "desc" }],
       });
       formulas = dbFormulas.map((f) => ({
         id: f.id,
@@ -48,6 +49,7 @@ export async function GET(request: Request) {
         nutrients: (f.nutrientsJson ? JSON.parse(f.nutrientsJson) : {}) as NutrientsMap,
         notes: f.notes,
         isActive: f.isActive,
+        isDefault: Boolean(f.isDefault),
         createdAt: f.createdAt.toISOString(),
         updatedAt: f.updatedAt.toISOString(),
       }));
@@ -55,7 +57,7 @@ export async function GET(request: Request) {
 
     if (!type || type === "supplement") {
       const dbSupplements = await prisma.supplementProduct.findMany({
-        where: { familyId, isActive: true },
+        where: includeInactive ? { familyId } : { familyId, isActive: true },
         orderBy: { createdAt: "desc" },
       });
       supplements = dbSupplements.map((s) => ({
@@ -115,10 +117,24 @@ export async function POST(request: Request) {
         servingSizeUnit = "per_100g",
         nutrients = {},
         notes,
+        isDefault = false,
       } = body;
 
       if (!name || typeof name !== "string" || !name.trim()) {
         return NextResponse.json({ error: "奶粉名称必填" }, { status: 400 });
+      }
+
+      // 检查当前家庭是否已有活跃奶粉。若没有，则将此款自动设为默认主力奶粉
+      const existingCount = await prisma.formulaProduct.count({
+        where: { familyId, isActive: true },
+      });
+      const shouldBeDefault = Boolean(isDefault) || existingCount === 0;
+
+      if (shouldBeDefault) {
+        await prisma.formulaProduct.updateMany({
+          where: { familyId },
+          data: { isDefault: false },
+        });
       }
 
       const created = await prisma.formulaProduct.create({
@@ -133,6 +149,8 @@ export async function POST(request: Request) {
           servingSizeUnit: servingSizeUnit || "per_100g",
           nutrientsJson: JSON.stringify(nutrients || {}),
           notes: notes ? String(notes).trim() : null,
+          isActive: true,
+          isDefault: shouldBeDefault,
         },
       });
 
@@ -140,6 +158,7 @@ export async function POST(request: Request) {
         {
           ...created,
           nutrients: JSON.parse(created.nutrientsJson),
+          isDefault: created.isDefault,
         },
         { status: 201 }
       );
@@ -209,6 +228,27 @@ export async function PUT(request: Request) {
         return NextResponse.json({ error: "未找到指定的奶粉档案" }, { status: 404 });
       }
 
+      const willBeDefault = body.isDefault !== undefined ? Boolean(body.isDefault) : existing.isDefault;
+      const willBeActive = body.isActive !== undefined ? Boolean(body.isActive) : existing.isActive;
+
+      if (willBeDefault) {
+        await prisma.formulaProduct.updateMany({
+          where: { familyId, id: { not: id } },
+          data: { isDefault: false },
+        });
+      } else if (existing.isDefault && !willBeActive) {
+        const nextActive = await prisma.formulaProduct.findFirst({
+          where: { familyId, isActive: true, id: { not: id } },
+          orderBy: { createdAt: "desc" },
+        });
+        if (nextActive) {
+          await prisma.formulaProduct.update({
+            where: { id: nextActive.id },
+            data: { isDefault: true },
+          });
+        }
+      }
+
       const updated = await prisma.formulaProduct.update({
         where: { id },
         data: {
@@ -222,13 +262,15 @@ export async function PUT(request: Request) {
           servingSizeUnit: body.servingSizeUnit !== undefined ? body.servingSizeUnit : existing.servingSizeUnit,
           nutrientsJson: body.nutrients !== undefined ? JSON.stringify(body.nutrients) : existing.nutrientsJson,
           notes: body.notes !== undefined ? (body.notes ? String(body.notes).trim() : null) : existing.notes,
-          isActive: body.isActive !== undefined ? Boolean(body.isActive) : existing.isActive,
+          isActive: willBeActive,
+          isDefault: willBeActive ? willBeDefault : false,
         },
       });
 
       return NextResponse.json({
         ...updated,
         nutrients: JSON.parse(updated.nutrientsJson),
+        isDefault: updated.isDefault,
       });
     } else if (type === "supplement") {
       const existing = await prisma.supplementProduct.findUnique({ where: { id } });
@@ -275,6 +317,7 @@ export async function DELETE(request: Request) {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");
     const type = searchParams.get("type") || "formula";
+    const force = searchParams.get("force") === "true";
 
     if (!id) {
       return NextResponse.json({ error: "请提供产品 ID" }, { status: 400 });
@@ -285,8 +328,57 @@ export async function DELETE(request: Request) {
       if (!existing || existing.familyId !== familyId) {
         return NextResponse.json({ error: "未找到指定产品" }, { status: 404 });
       }
+
+      // 检查是否有历史喂养记录引用该奶粉
+      const refCount = await prisma.feedingRecord.count({
+        where: { formulaProductId: id },
+      });
+
+      // 若已有历史喂养记录绑定，且未强制硬删除：执行归档停用（软删除）以保护历史分析准确
+      if (refCount > 0 && !force) {
+        await prisma.formulaProduct.update({
+          where: { id },
+          data: { isActive: false, isDefault: false },
+        });
+
+        if (existing.isDefault) {
+          const nextActive = await prisma.formulaProduct.findFirst({
+            where: { familyId, isActive: true, id: { not: id } },
+            orderBy: { createdAt: "desc" },
+          });
+          if (nextActive) {
+            await prisma.formulaProduct.update({
+              where: { id: nextActive.id },
+              data: { isDefault: true },
+            });
+          }
+        }
+
+        return NextResponse.json({
+          success: true,
+          id,
+          archived: true,
+          message: `已有 ${refCount} 条历史喂养记录引用「${existing.name}」。为保护历史营养数据不被篡改，已自动为您归档停用（历史记录和分析继续保留，新记录不再可选）。`,
+        });
+      }
+
+      // 未曾被使用或明确要求硬删除
       await prisma.formulaProduct.delete({ where: { id } });
-      return NextResponse.json({ success: true, id });
+
+      if (existing.isDefault) {
+        const nextActive = await prisma.formulaProduct.findFirst({
+          where: { familyId, isActive: true },
+          orderBy: { createdAt: "desc" },
+        });
+        if (nextActive) {
+          await prisma.formulaProduct.update({
+            where: { id: nextActive.id },
+            data: { isDefault: true },
+          });
+        }
+      }
+
+      return NextResponse.json({ success: true, id, archived: false });
     } else {
       const existing = await prisma.supplementProduct.findUnique({ where: { id } });
       if (!existing || existing.familyId !== familyId) {

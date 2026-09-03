@@ -127,6 +127,7 @@ model FormulaProduct {
   nutrientsJson       String          // JSON map: Record<string, { amount: number, unit: string }>
   notes               String?
   isActive            Boolean         @default(true)
+  isDefault           Boolean         @default(false)
   createdAt           DateTime        @default(now())
   updatedAt           DateTime        @updatedAt
   feedingRecords      FeedingRecord[]
