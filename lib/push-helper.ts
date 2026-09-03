@@ -87,11 +87,20 @@ export async function notifyFamilyMembers(options: NotifyFamilyOptions): Promise
             endpoint: sub.endpoint,
             keys: JSON.parse(sub.keysJson),
           };
-          await webPush.sendNotification(pushSub, payload);
+          await webPush.sendNotification(pushSub, payload, { urgency: "high" });
           sent++;
         } catch (err) {
           const statusCode = (err as webPush.WebPushError)?.statusCode;
-          if ([401, 403, 404, 410].includes(statusCode)) {
+          const body = (err as webPush.WebPushError)?.body;
+          console.error("[PushHelper] notifyFamilyMembers error for sub:", {
+            subId: sub.id,
+            endpoint: sub.endpoint.slice(0, 60),
+            statusCode,
+            body,
+            message: (err as any)?.message,
+          });
+          // 仅 404 (Not Found) 或 410 (Gone) 表明客户端订阅失效，401/403 为服务端鉴权错误切勿误删
+          if (statusCode === 404 || statusCode === 410) {
             await prisma.pushSubscription.delete({ where: { id: sub.id } }).catch(() => {});
           }
           failed++;

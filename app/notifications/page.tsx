@@ -92,11 +92,15 @@ export default function NotificationsPage() {
         });
 
         // 立即上传并绑定到当前用户
-        await fetch("/api/push/subscribe", {
+        const subRes = await fetch("/api/push/subscribe", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(newSub.toJSON()),
         });
+        if (!subRes.ok) {
+          const errData = await subRes.json().catch(() => ({}));
+          throw new Error(errData.error || "保存推送订阅失败");
+        }
 
         setPushEnabled(true);
         return newSub;
@@ -287,6 +291,9 @@ export default function NotificationsPage() {
         setPushEnabled(true);
         showToast("测试推送已发出，请查看手机/电脑系统通知栏 ✨", "success");
       } else {
+        if (res.status === 400 && data.error?.includes("失效")) {
+          setPushEnabled(false);
+        }
         showToast(data.error || "发送测试推送失败", "error");
       }
     } catch {

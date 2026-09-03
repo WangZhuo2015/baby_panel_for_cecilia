@@ -136,7 +136,12 @@ export const PUSH_CONFIG = {
     return process.env.VAPID_PRIVATE_KEY || "";
   },
   get subject() {
-    return process.env.VAPID_SUBJECT || "mailto:cecilia@baby-app.local";
+    const raw = process.env.VAPID_SUBJECT?.trim();
+    // Apple APNs (iOS Safari Web Push) 严格校验 sub 字段，若含有 .local 或 localhost 会直接拒收并返回 403 BadJwtToken
+    if (raw && !raw.includes(".local") && !raw.includes("localhost")) {
+      return raw;
+    }
+    return "https://baby.zwang.fun";
   },
   get sendToken() {
     return process.env.PUSH_SEND_TOKEN || "";

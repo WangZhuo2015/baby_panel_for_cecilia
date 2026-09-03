@@ -52,15 +52,21 @@ export async function POST(request: Request) {
             endpoint: sub.endpoint,
             keys: JSON.parse(sub.keysJson),
           };
-          await webPush.sendNotification(subscription, payload);
+          await webPush.sendNotification(subscription, payload, { urgency: "high" });
           success += 1;
         } catch (error) {
           const statusCode = (error as webPush.WebPushError)?.statusCode;
-          // 404/410=订阅过期；401/403=VAPID 密钥不匹配（如密钥轮换后），均属永久性失败，清理
-          if ([401, 403, 404, 410].includes(statusCode)) {
-            await prisma.pushSubscription.delete({ where: { id: sub.id } });
-          } else {
-            console.error("Push send error:", error);
+          const body = (error as webPush.WebPushError)?.body;
+          console.error("[PushSend] Push send error:", {
+            subId: sub.id,
+            endpoint: sub.endpoint.slice(0, 60),
+            statusCode,
+            body,
+            message: (error as any)?.message,
+          });
+          // 仅 404 (Not Found) 或 410 (Gone) 表明订阅在推送中心已注销，401/403 为服务端鉴权错误切勿误删
+          if (statusCode === 404 || statusCode === 410) {
+            await prisma.pushSubscription.delete({ where: { id: sub.id } }).catch(() => {});
           }
           failed += 1;
         }

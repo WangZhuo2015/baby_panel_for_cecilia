@@ -10,7 +10,7 @@ const envPaths = [
   path.join(process.cwd(), '.env'),
 ];
 
-const block = `\n\n# VAPID keys for Web Push Notifications\nVAPID_PUBLIC_KEY=${keys.publicKey}\nVAPID_PRIVATE_KEY=${keys.privateKey}\nVAPID_SUBJECT=mailto:cecilia@baby-app.local\n`;
+const block = `\n\n# VAPID keys for Web Push Notifications\nVAPID_PUBLIC_KEY=${keys.publicKey}\nVAPID_PRIVATE_KEY=${keys.privateKey}\nVAPID_SUBJECT=https://baby.zwang.fun\n`;
 
 for (const envPath of envPaths) {
   let envContent = '';

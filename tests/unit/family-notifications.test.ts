@@ -45,5 +45,11 @@ test("Notifications Storage: exports persistence and 24h rolling helpers", async
   assert.strictEqual(filtered[0].id, "recent-1");
 });
 
-
-
+test("PUSH_CONFIG: subject must be a valid public URI without .local or localhost", async () => {
+  const { PUSH_CONFIG } = await import("@/lib/config");
+  const subject = PUSH_CONFIG.subject;
+  assert.ok(subject, "subject should be defined");
+  assert.strictEqual(subject.includes(".local"), false, "subject cannot contain .local");
+  assert.strictEqual(subject.includes("localhost"), false, "subject cannot contain localhost");
+  assert.ok(subject.startsWith("https://") || subject.startsWith("mailto:"), "subject must start with https:// or mailto:");
+});

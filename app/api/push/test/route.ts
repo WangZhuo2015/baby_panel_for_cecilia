@@ -64,6 +64,9 @@ export async function POST(request: Request) {
 
     let sent = 0;
     let failed = 0;
+    let hadExpiredSub = false;
+    type PushErrorRecord = { statusCode?: number; body?: string; message?: string };
+    let lastError: PushErrorRecord | null = null;
 
     await Promise.allSettled(
       subscriptions.map(async (sub) => {
@@ -72,26 +75,64 @@ export async function POST(request: Request) {
             endpoint: sub.endpoint,
             keys: JSON.parse(sub.keysJson),
           };
-          const sendPromise = webPush.sendNotification(pushSub, payload);
+          const sendPromise = webPush.sendNotification(pushSub, payload, {
+            urgency: "high",
+          });
           const timeoutPromise = new Promise((_, reject) =>
-            setTimeout(() => reject(new Error("Push gateway timeout")), 4000)
+            setTimeout(() => reject(new Error("Push gateway timeout")), 10000)
           );
           await Promise.race([sendPromise, timeoutPromise]);
           sent++;
         } catch (err: any) {
           const statusCode = (err as webPush.WebPushError)?.statusCode;
-          if ([401, 403, 404, 410].includes(statusCode)) {
+          const body = (err as webPush.WebPushError)?.body;
+          console.error("[PushTest] Failed to send push:", {
+            subId: sub.id,
+            endpoint: sub.endpoint.slice(0, 60),
+            statusCode,
+            body,
+            message: err?.message,
+          });
+
+          // 仅 404 (Not Found) 或 410 (Gone) 表明该设备订阅凭据在推送中心已被注销或永久失效
+          // 401/403 属于服务端 VAPID 配置或授权问题，切勿误删合法的客户端订阅
+          if (statusCode === 404 || statusCode === 410) {
             await prisma.pushSubscription.delete({ where: { id: sub.id } }).catch(() => {});
+            hadExpiredSub = true;
           }
           failed++;
+          lastError = {
+            statusCode,
+            body,
+            message: err?.message || String(err),
+          };
         }
       })
     );
 
     if (sent === 0 && failed > 0) {
+      const errInfo: PushErrorRecord = lastError || {};
+      if (hadExpiredSub) {
+        return NextResponse.json(
+          { error: "设备推送凭据已在推送服务中失效，已自动清理，请点击「重新绑定设备」" },
+          { status: 400 }
+        );
+      }
+      if (errInfo.statusCode === 401 || errInfo.statusCode === 403) {
+        return NextResponse.json(
+          { error: `推送服务鉴权失败(${errInfo.statusCode})，请检查服务端 VAPID 配置` },
+          { status: 502 }
+        );
+      }
+      if (errInfo.message?.includes("timeout") || errInfo.message?.includes("Timeout")) {
+        return NextResponse.json(
+          { error: "连接推送网关超时，请稍后重试" },
+          { status: 504 }
+        );
+      }
       return NextResponse.json(
-        { error: "设备推送凭据已失效，已自动清理，请点击「重新绑定设备」" },
-        { status: 400 }
+        { error: `发送测试推送失败: ${errInfo.message || "未知错误"}` },
+        { status: 500 }
       );
     }
 
