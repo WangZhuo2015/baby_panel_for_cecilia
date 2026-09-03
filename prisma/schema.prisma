@@ -22,6 +22,8 @@ model User {
   oauthCodes        OAuthAuthorizationCode[]
   oauthTokens       OAuthRefreshToken[]
   oauthConsents     OAuthConsent[]
+  personalAccessTokens PersonalAccessToken[]
+  agentVoiceLogs       AgentVoiceLog[]
 }
 
 model Family {
@@ -82,6 +84,7 @@ model Baby {
   oauthTokens         OAuthRefreshToken[]
   oauthConsents       OAuthConsent[]
   recordSnapshots     RecordSnapshot[]
+  agentVoiceLogs      AgentVoiceLog[]
 
   @@index([familyId])
 }
@@ -856,5 +859,40 @@ model RecordSnapshot {
 
   @@index([babyId, createdAt])
   @@index([entityType, entityId])
+}
+
+// ─── Personal Access Tokens for Shortcuts / Voice Siri ───────────────────────
+
+model PersonalAccessToken {
+  id         String    @id @default(uuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name       String    @default("我的快捷指令")
+  token      String    @unique
+  lastUsedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@index([userId])
+  @@index([token])
+}
+
+// ─── Agent Voice Interaction Logs (Result feedback upon user return) ────────
+
+model AgentVoiceLog {
+  id           String    @id @default(uuid())
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  babyId       String
+  baby         Baby      @relation(fields: [babyId], references: [id], onDelete: Cascade)
+  prompt       String
+  reply        String
+  isAsync      Boolean   @default(false)
+  isFastPath   Boolean   @default(false)
+  acknowledged Boolean   @default(false)
+  createdAt    DateTime  @default(now())
+
+  @@index([userId, acknowledged, createdAt])
+  @@index([babyId, createdAt])
 }
 

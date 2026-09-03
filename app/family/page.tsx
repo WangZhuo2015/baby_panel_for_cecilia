@@ -8,9 +8,10 @@ import { CuteButton } from "@/components/ui/CuteButton";
 import { CuteInput } from "@/components/ui/CuteInput";
 import { useToast } from "@/components/ui/Toast";
 import { useBabyStore } from "@/stores/useBabyStore";
-import { Users, Copy, Check, UserPlus, LogOut, ShieldCheck, Smartphone, Sparkles, ChevronRight, Baby, Camera, Link as LinkIcon, Share2, BookOpen } from "lucide-react";
+import { Users, Copy, Check, UserPlus, LogOut, ShieldCheck, Smartphone, Sparkles, ChevronRight, Baby, Camera, Link as LinkIcon, Share2, BookOpen, Key } from "lucide-react";
 import { InstallGuideModal } from "@/components/ui/InstallGuideModal";
 import { FeatureTourModal } from "@/components/ui/FeatureTourModal";
+import { PersonalTokenModal } from "@/components/user/PersonalTokenModal";
 import { APP_VERSION } from "@/lib/version";
 
 export default function FamilyPage() {
@@ -35,6 +36,7 @@ export default function FamilyPage() {
   const [joining, setJoining] = useState(false);
   const [isInstallModalOpen, setIsInstallModalOpen] = useState(false);
   const [isTourModalOpen, setIsTourModalOpen] = useState(false);
+  const [isTokenModalOpen, setIsTokenModalOpen] = useState(false);
 
   useEffect(() => {
     fetchBaby();
@@ -306,6 +308,31 @@ export default function FamilyPage() {
         </div>
       </CuteCard>
 
+      {/* 🔑 个人设备专属设置（与家庭完全解耦） */}
+      <h3 className="text-sm font-semibold text-text-secondary mb-3 px-1">个人设备与 Siri 接入</h3>
+      <CuteCard
+        className="p-4 mb-6 bg-gradient-to-r from-indigo-50/70 via-primary-light/40 to-pink-50/50 dark:from-indigo-950/20 dark:to-primary/10 border border-primary/25 cursor-pointer hover:shadow-md transition-all"
+        onClick={() => setIsTokenModalOpen(true)}
+      >
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-primary to-indigo-600 text-white flex items-center justify-center shadow-button shrink-0">
+              <Key size={20} />
+            </div>
+            <div>
+              <p className="text-xs font-bold text-text-primary flex items-center gap-1.5">
+                个人专属 Siri / 快捷指令 Token
+                <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-primary/15 text-primary font-bold">每人专属</span>
+              </p>
+              <p className="text-[11px] text-text-secondary mt-0.5">
+                独立于家庭 · 绑定您的 iPhone / HomePod，Siri 自动识别您的个人身份
+              </p>
+            </div>
+          </div>
+          <ChevronRight size={16} className="text-text-muted" />
+        </div>
+      </CuteCard>
+
       {/* 📱 PWA / Add to Home Screen Setting Card */}
       <h3 className="text-sm font-semibold text-text-secondary mb-3 px-1">应用安装与体验</h3>
       <CuteCard
@@ -362,6 +389,11 @@ export default function FamilyPage() {
       <FeatureTourModal
         isOpen={isTourModalOpen}
         onClose={() => setIsTourModalOpen(false)}
+      />
+
+      <PersonalTokenModal
+        isOpen={isTokenModalOpen}
+        onClose={() => setIsTokenModalOpen(false)}
       />
     </div>
   );

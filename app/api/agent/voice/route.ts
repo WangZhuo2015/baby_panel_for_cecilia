@@ -10,6 +10,7 @@ import {
 } from "@/lib/agent";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import { tryVoiceFastPath } from "@/lib/agent/voice-fast-path";
+import { verifyPersonalAccessToken } from "@/lib/tokens";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -48,13 +49,24 @@ async function resolveVoiceMvpPrincipal(request: Request) {
     }
   }
 
-  // 2. Try development-only VOICE_MVP_SECRET
+  // 2. Try database-backed Personal Access Token (PAT)
   const authHeader = request.headers.get("authorization");
-  const mvpSecret = process.env.VOICE_MVP_SECRET;
-
-  if (mvpSecret && authHeader) {
+  if (authHeader) {
     const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : authHeader.trim();
-    if (token === mvpSecret) {
+
+    if (token.startsWith("bp_pat_")) {
+      const verified = await verifyPersonalAccessToken(token);
+      if (verified) {
+        const babyResult = await getActiveBaby(verified.user.id);
+        if (babyResult.baby) {
+          return { user: verified.user, baby: babyResult.baby };
+        }
+      }
+    }
+
+    // 3. Backward-compatible legacy VOICE_MVP_SECRET fallback
+    const mvpSecret = process.env.VOICE_MVP_SECRET;
+    if (mvpSecret && token === mvpSecret) {
       const envUserId = process.env.VOICE_MVP_USER_ID;
       const envBabyId = process.env.VOICE_MVP_BABY_ID;
 
@@ -118,13 +130,6 @@ export async function POST(request: Request) {
       );
     }
 
-    if (!createLlmBackend().getApiKey()) {
-      return NextResponse.json(
-        { success: false, error: "未配置 AI 服务 API Key，无法使用语音助手" },
-        { status: 503 }
-      );
-    }
-
     const body = await request.json().catch(() => ({}));
     let rawText = "";
     if (typeof body === "string") {
@@ -178,6 +183,21 @@ export async function POST(request: Request) {
       console.log(
         `[Voice API Fast-Path] Completed in ${duration}ms -> Reply: "${reply.slice(0, 100)}..."`
       );
+
+      void prisma.agentVoiceLog
+        .create({
+          data: {
+            userId: user.id,
+            babyId: baby.id,
+            prompt: rawText,
+            reply,
+            isAsync: false,
+            isFastPath: true,
+            acknowledged: true,
+          },
+        })
+        .catch((e) => console.warn("[Voice API] Failed to log fast-path:", e));
+
       return NextResponse.json({
         success: true,
         async: false,
@@ -203,6 +223,13 @@ export async function POST(request: Request) {
       body.asyncPush !== undefined
         ? Boolean(body.asyncPush)
         : process.env.VOICE_ASYNC_PUSH !== "false";
+
+    if (!createLlmBackend().getApiKey()) {
+      return NextResponse.json(
+        { success: false, error: "未配置 AI 服务 API Key，无法使用语音助手" },
+        { status: 503 }
+      );
+    }
 
     // 1. Build context & system prompt
     const systemPrompt = buildAgentSystemPrompt({
@@ -282,14 +309,38 @@ export async function POST(request: Request) {
             `[Voice API Async] Background agent completed in ${totalDuration}ms -> "${finalReply.slice(0, 80)}..."`
           );
 
+          // 1. Create AgentVoiceLog with acknowledged: false (unseen by user)
+          let createdLogId: string | null = null;
+          try {
+            const logRecord = await prisma.agentVoiceLog.create({
+              data: {
+                userId: user.id,
+                babyId: baby.id,
+                prompt: rawText,
+                reply: finalReply,
+                isAsync: true,
+                isFastPath: false,
+                acknowledged: false,
+              },
+            });
+            createdLogId = logRecord.id;
+          } catch (logErr) {
+            console.warn("[Voice API Async] Failed to create voice log:", logErr);
+          }
+
+          // 2. Dispatch push notification with direct deep link to the result
           if (shouldPushOnTimeout && baby.familyId) {
             try {
               const { notifyFamilyMembers } = await import("@/lib/push-helper");
+              const targetUrl = createdLogId
+                ? `/?agentVoiceLogId=${createdLogId}`
+                : "/daily-summary";
+
               await notifyFamilyMembers({
                 familyId: baby.familyId,
                 title: `🍼 ${baby.nickname}的育儿助手`,
                 body: finalReply,
-                url: "/daily-summary",
+                url: targetUrl,
               });
             } catch (pushErr) {
               console.warn("[Voice API Async] Push notification failed:", pushErr);
@@ -312,6 +363,20 @@ export async function POST(request: Request) {
     console.log(
       `[Voice API] Completed within ${timeoutMs}ms (${duration}ms) -> Reply: "${reply.slice(0, 100)}..."`
     );
+
+    void prisma.agentVoiceLog
+      .create({
+        data: {
+          userId: user.id,
+          babyId: baby.id,
+          prompt: rawText,
+          reply,
+          isAsync: false,
+          isFastPath: false,
+          acknowledged: true,
+        },
+      })
+      .catch((e) => console.warn("[Voice API] Failed to log sync agent:", e));
 
     return NextResponse.json({
       success: true,

@@ -21,6 +21,7 @@ import {
   Baby,
   Camera,
   HelpCircle,
+  Key,
 } from "lucide-react";
 import { useBabyStore } from "@/stores/useBabyStore";
 import { calculateAge } from "@/lib/age";
@@ -28,6 +29,7 @@ import { openQuickAI } from "@/lib/quickai-bus";
 import { openRecordDrawer, RecordDrawerType } from "@/lib/drawer-bus";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { FeatureTourModal } from "@/components/ui/FeatureTourModal";
+import { PersonalTokenModal } from "@/components/user/PersonalTokenModal";
 
 
 const mainNavItems = [
@@ -57,6 +59,7 @@ export function DesktopSidebar() {
   const baby = useBabyStore((s) => s.baby);
   const age = baby ? calculateAge(baby.birthDate) : { label: "0月0天" };
   const [isTourOpen, setIsTourOpen] = React.useState(false);
+  const [isTokenOpen, setIsTokenOpen] = React.useState(false);
 
   const isActive = (path: string) => {
     if (path === "/") return pathname === "/" || pathname === "/today";
@@ -165,15 +168,26 @@ export function DesktopSidebar() {
 
         {/* System Bar (Theme, Settings, Guide) */}
         <div className="flex items-center justify-between px-2 pt-1">
-          <button
-            type="button"
-            onClick={() => setIsTourOpen(true)}
-            className="text-[11px] text-text-muted hover:text-primary transition-colors flex items-center gap-1 cursor-pointer"
-            title="查看功能使用指南"
-          >
-            <HelpCircle size={13} />
-            <span>功能指南</span>
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setIsTokenOpen(true)}
+              className="text-[11px] text-text-muted hover:text-primary transition-colors flex items-center gap-1 cursor-pointer"
+              title="管理个人专属 Siri 快捷指令 Token"
+            >
+              <Key size={13} />
+              <span>Siri Token</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsTourOpen(true)}
+              className="text-[11px] text-text-muted hover:text-primary transition-colors flex items-center gap-1 cursor-pointer"
+              title="查看功能使用指南"
+            >
+              <HelpCircle size={13} />
+              <span>指南</span>
+            </button>
+          </div>
           <ThemeToggle />
         </div>
       </div>
@@ -181,6 +195,11 @@ export function DesktopSidebar() {
       <FeatureTourModal
         isOpen={isTourOpen}
         onClose={() => setIsTourOpen(false)}
+      />
+
+      <PersonalTokenModal
+        isOpen={isTokenOpen}
+        onClose={() => setIsTokenOpen(false)}
       />
     </aside>
   );

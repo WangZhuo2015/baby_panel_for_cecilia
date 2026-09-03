@@ -1,13 +1,14 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, Suspense } from "react";
 import { BottomNav } from "@/components/navigation/BottomNav";
 import { DesktopSidebar } from "@/components/navigation/DesktopSidebar";
 import { OfflineBanner } from "@/components/ui/OfflineBanner";
 import { QuickAiHost } from "@/components/ui/QuickAiHost";
 import { RecordDrawerHost } from "@/components/records/RecordDrawerHost";
 import { SmartPollingHost } from "@/components/ui/SmartPollingHost";
+import { AgentVoiceResultHost } from "@/components/ui/AgentVoiceResultHost";
 import { useBabyStore } from "@/stores/useBabyStore";
 
 const hideNavRoutes = [
@@ -58,6 +59,11 @@ export default function MainLayout({
 
       {/* 全局前台智能轮询（防休眠、多端数据即时同步） */}
       <SmartPollingHost />
+
+      {/* 语音 / Agent 异步执行反馈直出弹窗宿主 */}
+      <Suspense fallback={null}>
+        <AgentVoiceResultHost />
+      </Suspense>
     </div>
   );
 }
