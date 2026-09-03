@@ -517,7 +517,7 @@ export default function VaccinesPage() {
             onClick={() => router.push("/onboarding")}
             title="点击修改宝宝资料与头像"
           >
-            <div className="w-11 h-11 rounded-full bg-gradient-to-br from-primary-soft to-primary/30 flex items-center justify-center overflow-hidden shadow-xs shrink-0 group-hover:ring-2 group-hover:ring-primary/40 transition-all">
+            <div className="w-11 h-11 rounded-full bg-gradient-to-br from-primary-soft to-primary/30 flex items-center justify-center overflow-hidden shadow-xs shrink-0 group-hover:ring-2 group-hover:ring-primary/40 transition-all lg:hidden">
               {baby?.avatarUrl ? (
                 <img src={baby.avatarUrl} alt={baby.nickname} className="w-full h-full object-cover" />
               ) : (
@@ -526,7 +526,7 @@ export default function VaccinesPage() {
             </div>
             <div>
               <p className="text-sm font-bold text-text-primary group-hover:text-primary transition-colors">
-                {baby?.nickname ?? "宝宝"} 疫苗接种规划
+                <span className="lg:hidden">{baby?.nickname ?? "宝宝"} </span>疫苗接种规划
               </p>
               <p className="text-xs text-text-secondary">
                 当前月龄 {calculateAge(birthDate || getLocalDateStr()).label} · 0–3岁接种时间表

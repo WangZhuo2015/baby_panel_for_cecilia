@@ -116,10 +116,11 @@ export default function NutritionPage() {
 
   return (
     <div className="px-4 pt-safe-6 pb-36 max-w-md md:max-w-xl lg:max-w-6xl mx-auto space-y-5">
-      {/* 头部导航与宝宝信息 */}
+      {/* 头部导航与宝宝信息 / Desktop Title */}
       <div className="flex items-center justify-between">
+        {/* 移动端宝宝头像与信息卡片，PC端由左侧边栏统一承载 */}
         <div
-          className="flex items-center gap-3 cursor-pointer group"
+          className="flex items-center gap-3 cursor-pointer group lg:hidden"
           onClick={() => router.push("/onboarding")}
           title="修改宝宝资料"
         >
@@ -141,6 +142,11 @@ export default function NutritionPage() {
             </div>
             <span className="text-xs text-text-secondary">{age.label}</span>
           </div>
+        </div>
+
+        {/* PC 端主标题 */}
+        <div className="hidden lg:block">
+          <h1 className="text-xl font-bold text-text-primary">DRIs 全量营养分析</h1>
         </div>
 
         <div className="flex items-center gap-2">

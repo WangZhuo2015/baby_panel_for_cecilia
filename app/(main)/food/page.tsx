@@ -123,10 +123,11 @@ export default function FoodPage() {
 
   return (
     <div className="min-h-[100dvh] bg-bg pb-36 px-4 max-w-md md:max-w-xl lg:max-w-6xl mx-auto space-y-5">
-      {/* Baby info header */}
+      {/* Baby info header / Desktop Title */}
       <div className="pt-safe-4 flex items-center justify-between">
+        {/* 移动端宝宝头像与信息卡片，PC端由左侧边栏统一承载 */}
         <div
-          className="flex items-center gap-3 cursor-pointer group"
+          className="flex items-center gap-3 cursor-pointer group lg:hidden"
           onClick={() => router.push("/onboarding")}
           title="点击修改宝宝资料与头像"
         >
@@ -143,6 +144,11 @@ export default function FoodPage() {
             </h2>
             <p className="text-xs text-text-secondary">{age.label}</p>
           </div>
+        </div>
+
+        {/* PC 端主标题 */}
+        <div className="hidden lg:block">
+          <h1 className="text-xl font-bold text-text-primary">辅食食谱与日记</h1>
         </div>
 
         <div className="flex items-center gap-2">

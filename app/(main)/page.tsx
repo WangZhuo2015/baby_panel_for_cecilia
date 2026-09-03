@@ -326,10 +326,11 @@ export default function HomePage() {
 
   return (
     <div className="px-4 pt-safe-6 pb-36 max-w-md md:max-w-xl lg:max-w-6xl mx-auto space-y-5">
-      {/* 1. Header (Mobile & Tablet Bar) */}
+      {/* 1. Header (Mobile & Tablet Bar, Desktop Title & Actions) */}
       <div className="flex items-center justify-between">
+        {/* 移动端宝宝头像与信息卡片，PC端由左侧边栏统一承载 */}
         <div
-          className="flex items-center gap-3 cursor-pointer group"
+          className="flex items-center gap-3 cursor-pointer group lg:hidden"
           onClick={() => router.push("/onboarding")}
           title="点击更换头像与修改宝宝资料"
         >
@@ -358,6 +359,12 @@ export default function HomePage() {
             </span>
           </div>
         </div>
+
+        {/* PC 端主标题 */}
+        <div className="hidden lg:block">
+          <h1 className="text-xl font-bold text-text-primary">今日作息看板</h1>
+        </div>
+
         <div className="flex items-center gap-2">
           <button
             type="button"
