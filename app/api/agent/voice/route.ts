@@ -9,6 +9,7 @@ import {
   runBabyAgent,
 } from "@/lib/agent";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
+import { tryVoiceFastPath } from "@/lib/agent/voice-fast-path";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -17,7 +18,7 @@ export const runtime = "nodejs";
  * Strips JSON action code blocks, raw markdown formatting, and citations
  * to produce clean, natural spoken Chinese suitable for HomePod / Siri TTS.
  */
-function cleanReplyForSpeech(raw: string): string {
+export function cleanReplyForSpeech(raw: string): string {
   return raw
     .replace(/```(?:json:action|action)[\s\S]*?```/g, "")
     .replace(/```[\s\S]*?```/g, "")
@@ -164,6 +165,27 @@ export async function POST(request: Request) {
       `[Voice API] Incoming request from ${ip} (user: ${user.username}, baby: ${baby.nickname}): "${rawText}"`
     );
 
+    // ── Fast-Path Query Engine for Ultra-Low Latency Voice (<100ms) ──
+    const fastReply = await tryVoiceFastPath({
+      text: rawText,
+      baby,
+      userId: user.id,
+    });
+
+    if (fastReply) {
+      const reply = cleanReplyForSpeech(fastReply);
+      const duration = Date.now() - startTime;
+      console.log(
+        `[Voice API Fast-Path] Completed in ${duration}ms -> Reply: "${reply.slice(0, 100)}..."`
+      );
+      return NextResponse.json({
+        success: true,
+        async: false,
+        fastPath: true,
+        reply,
+      });
+    }
+
     // Timeout configuration:
     // - Default: 13500ms (13.5s, allowing a safety buffer before iOS Shortcuts 15s client timeout)
     // - Can be configured globally via process.env.VOICE_TIMEOUT_MS (e.g. 15000)
@@ -184,7 +206,7 @@ export async function POST(request: Request) {
 
     // 1. Build context & system prompt
     const systemPrompt = buildAgentSystemPrompt({
-      contextType: "general",
+      contextType: "voice",
       baby,
     });
 

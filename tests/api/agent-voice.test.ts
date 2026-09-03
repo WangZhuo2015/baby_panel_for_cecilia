@@ -201,7 +201,7 @@ test("Voice Agent MVP API: /api/agent/voice", async () => {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          text: "宝宝今天一共喝了多少奶？",
+          text: "宝宝发烧了有什么物理降温方法？",
           timeoutMs: 10,
           timeoutReply: "正在后台为您加速计算，稍后将通过通知发送给您。",
         }),
