@@ -18,6 +18,7 @@ import {
   Camera,
   FileText,
   MessageSquare,
+  BookOpen,
 } from "lucide-react";
 import type { TimelineEntry } from "@/types";
 import { useBabyStore } from "@/stores/useBabyStore";
@@ -32,6 +33,8 @@ import { CuteButton } from "@/components/ui/CuteButton";
 import { QuickAiButton } from "@/components/ui/QuickAiButton";
 import { InstallGuideBanner } from "@/components/ui/InstallGuideBanner";
 import { SupplementQuickCheckIn } from "@/components/nutrition/SupplementQuickCheckIn";
+import { FeatureTourModal } from "@/components/ui/FeatureTourModal";
+
 import { formatIsoToLocalTime } from "@/lib/date";
 import { APP_VERSION } from "@/lib/version";
 import { openRecordDrawer, RecordDrawerType } from "@/lib/drawer-bus";
@@ -116,8 +119,10 @@ export default function HomePage() {
   const [pageRefreshing, setPageRefreshing] = useState(false);
   const [liveSleepStart, setLiveSleepStart] = useState<string | null>(null);
   const [liveSleepElapsed, setLiveSleepElapsed] = useState<string>("");
+  const [isTourModalOpen, setIsTourModalOpen] = useState(false);
 
   const refreshAll = useBabyStore((s) => s.refreshAll);
+
 
   const handleManualRefresh = async () => {
     if (pageRefreshing) return;
@@ -310,10 +315,27 @@ export default function HomePage() {
               </CuteButton>
             </div>
           )}
+
+          <div className="mt-4 pt-3 border-t border-divider/60">
+            <button
+              type="button"
+              onClick={() => setIsTourModalOpen(true)}
+              className="text-xs text-primary font-medium hover:underline inline-flex items-center gap-1 cursor-pointer"
+            >
+              <BookOpen size={13} />
+              <span>查看功能全景介绍与育儿指南</span>
+            </button>
+          </div>
         </CuteCard>
+
+        <FeatureTourModal
+          isOpen={isTourModalOpen}
+          onClose={() => setIsTourModalOpen(false)}
+        />
       </div>
     );
   }
+
 
   const age = calculateAge(baby.birthDate);
   const summary = dailySummary ?? { totalFeedingMl: 0, totalSleepMinutes: 0, diaperCount: 0, foodCount: 0 };

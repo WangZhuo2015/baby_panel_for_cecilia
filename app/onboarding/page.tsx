@@ -13,11 +13,13 @@ import { useBabyStore } from "@/stores/useBabyStore";
 import { getLocalDateStr } from "@/lib/date";
 import { APP_VERSION } from "@/lib/version";
 import { AvatarCropModal } from "@/components/ui/AvatarCropModal";
+import { FamilyCreatedShareModal } from "@/components/ui/FamilyCreatedShareModal";
 
 export default function OnboardingPage() {
   const router = useRouter();
   const { showToast } = useToast();
   const baby = useBabyStore((s) => s.baby);
+  const family = useBabyStore((s) => s.family);
   const fetchBaby = useBabyStore((s) => s.fetchBaby);
   const fetchUser = useBabyStore((s) => s.fetchUser);
   const saveBaby = useBabyStore((s) => s.saveBaby);
@@ -34,6 +36,11 @@ export default function OnboardingPage() {
   // Avatar cropping modal state
   const [cropImageSrc, setCropImageSrc] = useState<string | null>(null);
   const [isCropModalOpen, setIsCropModalOpen] = useState(false);
+
+  // 建档成功邀请家人分享弹窗状态
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [createdBabyName, setCreatedBabyName] = useState("");
+
 
   useEffect(() => {
     let isMounted = true;
@@ -108,6 +115,7 @@ export default function OnboardingPage() {
     setSaving(true);
     try {
       const gAge = gestationalAge ? parseInt(gestationalAge, 10) : undefined;
+      const isNewBaby = !baby;
       await saveBaby({
         nickname: name,
         birthDate,
@@ -115,14 +123,23 @@ export default function OnboardingPage() {
         gestationalAge: Number.isFinite(gAge) ? gAge : undefined,
         avatarUrl: avatarUrl || undefined,
       });
-      showToast(baby ? "宝宝信息已更新 ✨" : "欢迎加入，记录从今天开始 ✨", "success");
-      router.replace("/");
+
+      if (isNewBaby) {
+        showToast("欢迎加入，记录从今天开始 ✨", "success");
+        await fetchUser();
+        setCreatedBabyName(name);
+        setIsShareModalOpen(true);
+      } else {
+        showToast("宝宝信息已更新 ✨", "success");
+        router.replace("/");
+      }
     } catch (err: any) {
       showToast(err?.message || "保存失败，请重试", "error");
     } finally {
       setSaving(false);
     }
   };
+
 
   if (pageLoading) {
     return (
@@ -270,6 +287,18 @@ export default function OnboardingPage() {
         }}
         onCropComplete={handleCropComplete}
       />
+
+      <FamilyCreatedShareModal
+        isOpen={isShareModalOpen}
+        onClose={() => {
+          setIsShareModalOpen(false);
+          router.replace("/");
+        }}
+        babyName={createdBabyName}
+        familyName={family?.name}
+        inviteCode={family?.inviteCode}
+      />
     </div>
   );
 }
+

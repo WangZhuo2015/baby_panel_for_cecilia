@@ -20,12 +20,15 @@ import {
   Plus,
   Baby,
   Camera,
+  HelpCircle,
 } from "lucide-react";
 import { useBabyStore } from "@/stores/useBabyStore";
 import { calculateAge } from "@/lib/age";
 import { openQuickAI } from "@/lib/quickai-bus";
 import { openRecordDrawer, RecordDrawerType } from "@/lib/drawer-bus";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
+import { FeatureTourModal } from "@/components/ui/FeatureTourModal";
+
 
 const mainNavItems = [
   { path: "/", label: "今日看板", icon: Home },
@@ -53,11 +56,13 @@ export function DesktopSidebar() {
   const router = useRouter();
   const baby = useBabyStore((s) => s.baby);
   const age = baby ? calculateAge(baby.birthDate) : { label: "0月0天" };
+  const [isTourOpen, setIsTourOpen] = React.useState(false);
 
   const isActive = (path: string) => {
     if (path === "/") return pathname === "/" || pathname === "/today";
     return pathname.startsWith(path);
   };
+
 
   return (
     <aside className="hidden lg:flex flex-col fixed left-0 top-0 bottom-0 w-64 bg-card/95 backdrop-blur-xl border-r border-primary/15 z-40 select-none">
@@ -158,12 +163,26 @@ export function DesktopSidebar() {
           </span>
         </button>
 
-        {/* System Bar (Theme, Settings) */}
+        {/* System Bar (Theme, Settings, Guide) */}
         <div className="flex items-center justify-between px-2 pt-1">
-          <span className="text-[11px] text-text-muted">深色 / 浅色模式</span>
+          <button
+            type="button"
+            onClick={() => setIsTourOpen(true)}
+            className="text-[11px] text-text-muted hover:text-primary transition-colors flex items-center gap-1 cursor-pointer"
+            title="查看功能使用指南"
+          >
+            <HelpCircle size={13} />
+            <span>功能指南</span>
+          </button>
           <ThemeToggle />
         </div>
       </div>
+
+      <FeatureTourModal
+        isOpen={isTourOpen}
+        onClose={() => setIsTourOpen(false)}
+      />
     </aside>
   );
 }
+

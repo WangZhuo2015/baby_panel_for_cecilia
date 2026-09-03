@@ -16,3 +16,6 @@ export { InstallGuideModal } from './InstallGuideModal';
 export { InstallGuideBanner } from './InstallGuideBanner';
 export { QuickAiModal } from './QuickAiModal';
 export { QuickAiButton } from './QuickAiButton';
+export { FeatureTourCards } from './FeatureTourCards';
+export { FeatureTourModal } from './FeatureTourModal';
+export { FamilyCreatedShareModal } from './FamilyCreatedShareModal';
