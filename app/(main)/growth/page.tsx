@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
   Plus,
@@ -69,8 +69,6 @@ export default function GrowthPage() {
       .catch(() => {});
   }, [fetchGrowthMeasurements]);
 
-  const latest = measurements[0];
-
   const tabs = [
     { value: "weight", label: "⚖️ 体重" },
     { value: "height", label: "📏 身长" },
@@ -83,57 +81,141 @@ export default function GrowthPage() {
     head: "headCircumference",
   };
 
-
   const percentiles = whoPercentiles[tabPercentileKey[activeTab]];
 
-  // Build chart data with percentile lines
-  const chartData = monthLabels.map((month, i) => {
-    const point: Record<string, any> = { month: `${month}月` };
-    if (percentiles?.P97 && i < percentiles.P97.length) {
-      point.P97 = percentiles.P97[i];
-      point.P85 = percentiles.P85[i];
-      point.P50 = percentiles.P50[i];
-      point.P15 = percentiles.P15[i];
-      point.P3 = percentiles.P3[i];
-    }
-    // Add baby's data point
-    const babyData = measurements.find((m) => Math.abs((m.ageInMonths ?? 0) - month) < 0.6);
-    if (babyData) {
-      point.date = babyData.date;
-      point.ageLabel = babyData.ageLabel;
-      point.percentile = babyData.percentile;
-      if (activeTab === "weight" && babyData.weightKg !== undefined) {
-        point.baby = babyData.weightKg;
-      } else if (activeTab === "height" && babyData.heightCm !== undefined) {
-        point.baby = babyData.heightCm;
-      } else if (activeTab === "head" && babyData.headCircumferenceCm !== undefined) {
-        point.baby = babyData.headCircumferenceCm;
-      }
-    }
-    return point;
-  });
+  // 1. 各指标回溯查找最新一条有效测量记录（避免最新单次只测体重导致身高头围展示为--）
+  const latestWeightRec = useMemo(
+    () => measurements.find((m) => m.weightKg != null),
+    [measurements]
+  );
+  const latestHeightRec = useMemo(
+    () => measurements.find((m) => m.heightCm != null),
+    [measurements]
+  );
+  const latestHeadRec = useMemo(
+    () => measurements.find((m) => m.headCircumferenceCm != null),
+    [measurements]
+  );
 
-  const getPercentileLevelText = (p?: number | null) => {
-    if (p == null) return "暂无分位数据";
-    if (p >= 97) return "处于高百分位区间 (>P97)";
-    if (p >= 85) return "处于偏高百分位区间 (P85-P97)";
-    if (p >= 50) return "处于标准中等水平 (P50-P85)";
-    if (p >= 15) return "处于标准中等水平 (P15-P50)";
-    if (p >= 3) return "处于偏低水平 (P3-P15)";
-    return "处于低百分位区间 (<P3)";
-  };
+  const activeRecord =
+    activeTab === "weight"
+      ? latestWeightRec
+      : activeTab === "height"
+      ? latestHeightRec
+      : latestHeadRec;
 
   const currentTabLabel = tabs.find((t) => t.value === activeTab)?.label || "生长";
   const currentUnit =
     activeTab === "weight" ? "kg" : activeTab === "height" ? "cm" : activeTab === "head" ? "cm" : "";
+
   const currentLatestValue =
     activeTab === "weight"
-      ? latest?.weightKg
+      ? activeRecord?.weightKg
       : activeTab === "height"
-      ? latest?.heightCm
-      : activeTab === "head"
-      ? latest?.headCircumferenceCm
-      : undefined;
+      ? activeRecord?.heightCm
+      : activeRecord?.headCircumferenceCm;
+
+  // 2. 针对当前选中的指标和测量日期，使用 WHO 权威曲线精准计算百分位
+  const activeWhoMetrics = useMemo(() => {
+    if (!activeRecord || !baby) return null;
+    const res = getWhoMetricsForBaby(baby, activeRecord.date, {
+      weightKg: activeTab === "weight" ? activeRecord.weightKg ?? undefined : undefined,
+      heightCm: activeTab === "height" ? activeRecord.heightCm ?? undefined : undefined,
+      headCircumferenceCm: activeTab === "head" ? activeRecord.headCircumferenceCm ?? undefined : undefined,
+    });
+    return res[0] ?? null;
+  }, [activeRecord, baby, activeTab]);
+
+  // 3. 计算三项指标各自的最新 WHO 评估结果（用于三项指标快览）
+  const allLatestMetrics = useMemo(() => {
+    if (!baby) return [];
+    return [
+      {
+        tab: "weight" as GrowthTab,
+        name: "体重",
+        icon: "⚖️",
+        unit: "kg",
+        record: latestWeightRec,
+        value: latestWeightRec?.weightKg,
+        who: latestWeightRec
+          ? getWhoMetricsForBaby(baby, latestWeightRec.date, { weightKg: latestWeightRec.weightKg ?? undefined })[0]
+          : null,
+      },
+      {
+        tab: "height" as GrowthTab,
+        name: "身长",
+        icon: "📏",
+        unit: "cm",
+        record: latestHeightRec,
+        value: latestHeightRec?.heightCm,
+        who: latestHeightRec
+          ? getWhoMetricsForBaby(baby, latestHeightRec.date, { heightCm: latestHeightRec.heightCm ?? undefined })[0]
+          : null,
+      },
+      {
+        tab: "head" as GrowthTab,
+        name: "头围",
+        icon: "👶",
+        unit: "cm",
+        record: latestHeadRec,
+        value: latestHeadRec?.headCircumferenceCm,
+        who: latestHeadRec
+          ? getWhoMetricsForBaby(baby, latestHeadRec.date, { headCircumferenceCm: latestHeadRec.headCircumferenceCm ?? undefined })[0]
+          : null,
+      },
+    ];
+  }, [baby, latestWeightRec, latestHeightRec, latestHeadRec]);
+
+  // 4. 生成曲线图数据：根据当前 Tab 精准采点，避免被无该指标的记录截断
+  const chartData = useMemo(() => {
+    return monthLabels.map((month, i) => {
+      const point: Record<string, any> = { month: `${month}月` };
+      if (percentiles?.P97 && i < percentiles.P97.length) {
+        point.P97 = percentiles.P97[i];
+        point.P85 = percentiles.P85[i];
+        point.P50 = percentiles.P50[i];
+        point.P15 = percentiles.P15[i];
+        point.P3 = percentiles.P3[i];
+      }
+      // 查找该月龄区间且该指标有实际数值的记录
+      const babyData = measurements.find((m) => {
+        if (Math.abs((m.ageInMonths ?? 0) - month) >= 0.6) return false;
+        if (activeTab === "weight") return m.weightKg != null;
+        if (activeTab === "height") return m.heightCm != null;
+        if (activeTab === "head") return m.headCircumferenceCm != null;
+        return false;
+      });
+
+      if (babyData) {
+        point.date = babyData.date;
+        point.ageLabel = babyData.ageLabel;
+        const whoRes = getWhoMetricsForBaby(baby, babyData.date, {
+          weightKg: activeTab === "weight" ? babyData.weightKg ?? undefined : undefined,
+          heightCm: activeTab === "height" ? babyData.heightCm ?? undefined : undefined,
+          headCircumferenceCm: activeTab === "head" ? babyData.headCircumferenceCm ?? undefined : undefined,
+        });
+        point.percentile = whoRes[0]?.percentile ?? babyData.percentile;
+        if (activeTab === "weight" && babyData.weightKg != null) {
+          point.baby = babyData.weightKg;
+        } else if (activeTab === "height" && babyData.heightCm != null) {
+          point.baby = babyData.heightCm;
+        } else if (activeTab === "head" && babyData.headCircumferenceCm != null) {
+          point.baby = babyData.headCircumferenceCm;
+        }
+      }
+      return point;
+    });
+  }, [monthLabels, percentiles, measurements, activeTab, baby]);
+
+  const getPercentileLevelText = (p?: number | null) => {
+    if (p == null) return "暂无分位数据";
+    if (p >= 97) return "处于高百分位区间 (>P97)";
+    if (p >= 85) return "偏大/偏重 (P85-P97)";
+    if (p >= 50) return "处于标准中等水平 (P50-P85)";
+    if (p >= 15) return "处于标准中等水平 (P15-P50)";
+    if (p >= 3) return "偏小/偏轻 (P3-P15)";
+    return "处于低百分位区间 (<P3)";
+  };
 
 
   const [refreshing, setRefreshing] = useState(false);
@@ -235,7 +317,9 @@ export default function GrowthPage() {
             contextDetail={{
               latestTab: currentTabLabel,
               latestValue: currentLatestValue != null ? `${currentLatestValue} ${currentUnit}` : undefined,
-              percentile: latest?.percentile != null ? `P${latest.percentile}` : undefined,
+              percentile: activeWhoMetrics?.percentile != null ? `P${activeWhoMetrics.percentile}` : undefined,
+              evaluation: activeWhoMetrics?.evaluation?.label,
+              measuredDate: activeRecord?.date,
             }}
           />
         </div>
@@ -285,18 +369,62 @@ export default function GrowthPage() {
                 {activeTab === "height" && <Ruler size={14} className="text-primary" />}
                 {activeTab === "head" && <CircleDot size={14} className="text-primary" />}
                 <span>最新{currentTabLabel.replace(/^[^\s]+ /, "")}</span>
+                {activeRecord?.date && (
+                  <span className="text-[10px] text-text-muted">({activeRecord.date} 测)</span>
+                )}
               </div>
               <p className="text-3xl font-black text-primary">
                 {currentLatestValue != null ? `${currentLatestValue} ${currentUnit}` : "--"}
               </p>
               <div className="flex items-center justify-center gap-2 mt-2.5">
-                <span className="px-3 py-1 rounded-full bg-mint/15 text-xs font-bold text-mint">
-                  {latest?.percentile != null ? `P${latest.percentile}` : "标准曲线对照"}
+                <span className={`px-3 py-1 rounded-full text-xs font-bold ${
+                  activeWhoMetrics?.evaluation
+                    ? `${activeWhoMetrics.evaluation.badgeBg} ${activeWhoMetrics.evaluation.badgeColor}`
+                    : "bg-mint/15 text-mint"
+                }`}>
+                  {activeWhoMetrics?.percentile != null ? `P${activeWhoMetrics.percentile}` : "标准曲线对照"}
                 </span>
                 <span className="text-xs text-text-secondary">
-                  {getPercentileLevelText(latest?.percentile)}
+                  {activeWhoMetrics?.evaluation?.label || getPercentileLevelText(activeWhoMetrics?.percentile)}
                 </span>
               </div>
+            </div>
+
+            {/* 三项最新指标快览 (点击可切换 Tab) */}
+            <div className="grid grid-cols-3 gap-2 mt-4 pt-3 border-t border-primary/15">
+              {allLatestMetrics.map((item) => {
+                const isSelected = activeTab === item.tab;
+                return (
+                  <button
+                    key={item.tab}
+                    type="button"
+                    onClick={() => setActiveTab(item.tab)}
+                    className={`p-2 rounded-xl text-center transition-all cursor-pointer border ${
+                      isSelected
+                        ? "bg-white dark:bg-card shadow-sm border-primary ring-2 ring-primary/20"
+                        : "bg-primary-light/30 dark:bg-card/40 border-transparent hover:border-primary/20"
+                    }`}
+                    title={`点击切换至${item.name}`}
+                  >
+                    <div className="text-[10px] text-text-muted font-medium flex items-center justify-center gap-0.5 mb-0.5">
+                      <span>{item.icon}</span>
+                      <span>{item.name}</span>
+                    </div>
+                    <div className="text-xs font-black text-text-primary">
+                      {item.value != null ? `${item.value} ${item.unit}` : "--"}
+                    </div>
+                    <div className="text-[10px] font-bold mt-0.5">
+                      {item.who?.percentile != null ? (
+                        <span className={item.who.evaluation.badgeColor}>
+                          P{item.who.percentile}
+                        </span>
+                      ) : (
+                        <span className="text-text-muted font-normal">--</span>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           </CuteCard>
 
