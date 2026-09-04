@@ -76,7 +76,25 @@ function isNotFoundError(error: unknown): boolean {
   return false;
 }
 
+let testMockStreamFn: StreamFn | null = null;
+let testMockModel: Model<any> | null = null;
+
+export function setTestMockStreamFn(fn: StreamFn | null, model?: Model<any> | null): void {
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("[SECURITY] Mocking streamFn is strictly forbidden in production");
+  }
+  testMockStreamFn = fn;
+  testMockModel = model ?? null;
+}
+
+export function getTestMockStreamFn(): StreamFn | null {
+  return testMockStreamFn;
+}
+
 export async function runBabyAgent(opts: RunBabyAgentOptions): Promise<void> {
+  const activeStreamFn = opts.streamFn ?? testMockStreamFn;
+  const activeModel = opts.model ?? testMockModel;
+
   const hasImages = Boolean(opts.images && opts.images.length > 0);
   // Try Opencode first (chat -> responses), then OpenRouter - keep both endpoints
   const useOpencode = Boolean(process.env.AI_API_KEY);
@@ -105,8 +123,8 @@ export async function runBabyAgent(opts: RunBabyAgentOptions): Promise<void> {
     });
   })() as StreamFn;
 
-  const created = opts.streamFn && opts.model ? null : (opencodeChat ?? openrouter);
-  const model = opts.model ?? created!.model;
+  const created = activeStreamFn && activeModel ? null : (opencodeChat ?? openrouter);
+  const model = activeModel ?? created!.model;
 
   // Unified streamFn with dual endpoint + dual provider fallback + 429 retry
   const streamFn: StreamFn = async (m, context, options) => {
@@ -115,11 +133,11 @@ export async function runBabyAgent(opts: RunBabyAgentOptions): Promise<void> {
     if (opencodeResponsesFn) candidates.push({ fn: opencodeResponsesFn, name: "opencode-responses" });
     candidates.push({ fn: openrouterFn, name: "openrouter" });
 
-    // If opts.streamFn provided, use it directly with retry
-    if (opts.streamFn) {
+    // If activeStreamFn provided, use it directly with retry
+    if (activeStreamFn) {
       let lastError: unknown;
       for (let attempt = 0; attempt <= 10; attempt++) {
-        try { return await opts.streamFn(m, context, options); } catch (e) {
+        try { return await activeStreamFn(m, context, options); } catch (e) {
           lastError = e;
           if (attempt === 10 || !isRateLimitError(e)) throw e;
           const backoff = getRetryAfterMs(e) ?? Math.min(1000 * Math.pow(2, attempt), 10000);

@@ -7,5 +7,5 @@ export {
 } from "@/lib/agent/model";
 export { buildAgentSystemPrompt } from "@/lib/agent/prompt";
 export { createBabyPanelTools } from "@/lib/agent/tools";
-export { runBabyAgent, type AgentStreamEvent } from "@/lib/agent/run";
+export { runBabyAgent, setTestMockStreamFn, getTestMockStreamFn, type AgentStreamEvent } from "@/lib/agent/run";
 export { parseDataImage, resolveImageContent } from "@/lib/agent/images";

@@ -6,6 +6,13 @@ dotenv.config();
 import { prisma } from "../../lib/prisma";
 import { signAuthToken } from "../../lib/auth";
 import { POST } from "../../app/api/agent/voice/route";
+import { setTestMockStreamFn } from "../../lib/agent";
+import {
+  createFauxCore,
+  fauxAssistantMessage,
+  fauxText,
+  fauxToolCall,
+} from "@earendil-works/pi-ai/providers/faux";
 
 test("Voice Agent MVP API: /api/agent/voice", async () => {
   const timestamp = Date.now();
@@ -139,6 +146,15 @@ test("Voice Agent MVP API: /api/agent/voice", async () => {
     // Test 5: Natural Language Write via VOICE_MVP_SECRET
     // -------------------------------------------------------------------------
     console.log("-> Test 5: Write feeding record via VOICE_MVP_SECRET...");
+    const fauxWrite = createFauxCore({ models: [{ id: "mock-model" }] });
+    fauxWrite.setResponses([
+      fauxAssistantMessage([
+        fauxToolCall("record_feeding", { type: "formula", amountMl: 120 }),
+      ]),
+      fauxAssistantMessage([fauxText("好的，已为宝宝记录喝了120毫升配方奶。")]),
+    ]);
+    setTestMockStreamFn(fauxWrite.streamSimple, fauxWrite.getModel());
+
     const resWrite = await POST(
       new Request("http://localhost:3000/api/agent/voice", {
         method: "POST",
@@ -170,6 +186,12 @@ test("Voice Agent MVP API: /api/agent/voice", async () => {
     // Test 6: Incomplete information scenario (should ask for clarification)
     // -------------------------------------------------------------------------
     console.log("-> Test 6: Incomplete information follow-up...");
+    const fauxIncomplete = createFauxCore({ models: [{ id: "mock-model" }] });
+    fauxIncomplete.setResponses([
+      fauxAssistantMessage([fauxText("宝宝喝了多少毫升配方奶呢？还是母乳亲喂？")]),
+    ]);
+    setTestMockStreamFn(fauxIncomplete.streamSimple, fauxIncomplete.getModel());
+
     const resIncomplete = await POST(
       new Request("http://localhost:3000/api/agent/voice", {
         method: "POST",
@@ -193,6 +215,16 @@ test("Voice Agent MVP API: /api/agent/voice", async () => {
     // Test 7: Configurable Timeout Race (immediate fallback on low timeout)
     // -------------------------------------------------------------------------
     console.log("-> Test 7: Configurable Timeout Race (10ms timeout)...");
+    const fauxTimeout = createFauxCore({ models: [{ id: "mock-model" }] });
+    fauxTimeout.setResponses([
+      fauxAssistantMessage([fauxText("建议适量温水擦浴，注意观察宝宝精神状态。")]),
+    ]);
+    const slowStreamSimple = async (...args: Parameters<typeof fauxTimeout.streamSimple>) => {
+      await new Promise((r) => setTimeout(r, 60));
+      return fauxTimeout.streamSimple(...args);
+    };
+    setTestMockStreamFn(slowStreamSimple, fauxTimeout.getModel());
+
     const resTimeout = await POST(
       new Request("http://localhost:3000/api/agent/voice", {
         method: "POST",
@@ -213,9 +245,12 @@ test("Voice Agent MVP API: /api/agent/voice", async () => {
     assert.equal(jsonTimeout.async, true);
     assert.equal(jsonTimeout.reply, "正在后台为您加速计算，稍后将通过通知发送给您。");
     console.log("   Timeout Fallback Reply:", jsonTimeout.reply);
-    console.log("   Incomplete Info Clarification:", jsonIncomplete.reply);
+
+    // Allow background async task to safely write voice log before cleanup
+    await new Promise((r) => setTimeout(r, 400));
 
   } finally {
+    setTestMockStreamFn(null);
     // Restore environment variables
     process.env.VOICE_MVP_SECRET = originalEnvSecret;
     process.env.VOICE_MVP_USER_ID = originalEnvUser;

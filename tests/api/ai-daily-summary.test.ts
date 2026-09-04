@@ -180,6 +180,7 @@ test("AI Daily Summary Service & Metrics Aggregator", async (t) => {
     // 7. Test LLM generation with mocked successful AI response
     console.log("-> Testing LLM JSON parsing with mock fetch...");
     const originalFetch = globalThis.fetch;
+    const origApiKey = process.env.AI_API_KEY;
     try {
       const mockLLMJson = {
         overallScore: "作息规律 🌟",
@@ -197,8 +198,10 @@ test("AI Daily Summary Service & Metrics Aggregator", async (t) => {
         suggestedQuestions: ["明天几点安排午睡最好？", "辅食需要注意什么？"],
       };
 
+      process.env.AI_API_KEY = "test_mock_ai_key";
+
       globalThis.fetch = async (url: any, opts: any) => {
-        if (typeof url === "string" && url.includes("/chat/completions")) {
+        if (typeof url === "string" && (url.includes("/chat/completions") || url.includes("/mock-ai"))) {
           return new Response(
             JSON.stringify({
               choices: [
@@ -225,6 +228,7 @@ test("AI Daily Summary Service & Metrics Aggregator", async (t) => {
       assert.equal(result.headline, "今日宝宝奶量充足，午睡安稳，整体状态非常出色！");
       assert.equal(result.sections.feeding, "🍼 喂养评估：今日奶量摄入充足，喂养时间规律。");
     } finally {
+      process.env.AI_API_KEY = origApiKey;
       globalThis.fetch = originalFetch;
     }
   } finally {

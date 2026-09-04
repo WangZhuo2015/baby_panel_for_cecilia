@@ -7,6 +7,7 @@ import {
   createBabyPanelTools,
   createLlmBackend,
   runBabyAgent,
+  getTestMockStreamFn,
 } from "@/lib/agent";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import { tryVoiceFastPath } from "@/lib/agent/voice-fast-path";
@@ -224,7 +225,7 @@ export async function POST(request: Request) {
         ? Boolean(body.asyncPush)
         : process.env.VOICE_ASYNC_PUSH !== "false";
 
-    if (!createLlmBackend().getApiKey()) {
+    if (!getTestMockStreamFn() && !createLlmBackend().getApiKey()) {
       return NextResponse.json(
         { success: false, error: "未配置 AI 服务 API Key，无法使用语音助手" },
         { status: 503 }
