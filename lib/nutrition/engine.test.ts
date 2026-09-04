@@ -13,7 +13,7 @@ import {
 } from "./engine";
 import { PRESET_FORMULA_PRODUCTS, PRESET_SUPPLEMENT_PRODUCTS } from "./presets";
 import { getDRIForAge, getAgeGroup } from "./dris";
-import { getBreastMilkNutrientsForVolume, estimateNursingVolumeMl } from "./breastmilk";
+import { getBreastMilkNutrientsForVolume, estimateNursingVolumeMl, getFeedingEffectiveMl } from "./breastmilk";
 import type { FormulaProduct, SupplementProduct, SupplementRecord } from "@/types/nutrition";
 import type { FeedingRecord } from "@/types";
 
@@ -371,4 +371,100 @@ test("Formula Selection: honors specific product even if archived, and falls bac
   assert.equal(resUnassigned.coreMetrics.protein?.formulaAmount, 4.35);
   // 来源列表中明确标明来源是主力奶粉
   assert.ok(resUnassigned.coreMetrics.protein?.sources.some((s) => s.sourceId === "f_active_default_2"));
+});
+
+test("Food Nutrition: Complementary solid foods contribute to iron, protein, and micro-nutrients", () => {
+  const analysis = calculateDailyNutrition({
+    date: "2026-09-02",
+    babyAgeMonths: 7, // 6-12m group, iron AI is 10mg
+    feedings: [
+      { id: "feed_1", timestamp: "2026-09-02T08:00:00Z", type: "breast", leftMinutes: 15, rightMinutes: 10, spitUp: false }, // ~110ml BM
+    ],
+    supplements: [],
+    foodLogs: [
+      {
+        id: "food_1",
+        date: "2026-09-02",
+        time: "11:30",
+        foods: ["强化铁婴儿谷物", "牛肉泥"],
+        portion: "all",
+      },
+      {
+        id: "food_2",
+        date: "2026-09-02",
+        time: "17:30",
+        foods: JSON.stringify(["蛋黄泥", "菠菜泥"]),
+        portion: "half",
+      },
+    ],
+  });
+
+  // Food counts and names
+  assert.equal(analysis.foodCount, 2);
+  assert.ok(analysis.foodsTried.includes("强化铁婴儿谷物"));
+  assert.ok(analysis.foodsTried.includes("牛肉泥"));
+  assert.ok(analysis.foodsTried.includes("蛋黄泥"));
+  assert.ok(analysis.foodsTried.includes("菠菜泥"));
+
+  // Breast volume for 25 mins: 90 + (25 - 20) * 2.5 = 103ml
+  assert.equal(analysis.breastMl, 103);
+  assert.equal(analysis.totalFeedingMl, 103);
+
+  // Iron: Cereal (5.0mg) + Beef (1.5mg) + Egg yolk (1.1 * 0.5 = 0.55mg) + Spinach (0.8 * 0.5 = 0.4mg) + BM (110 * 0.0005 = 0.055mg) = ~7.5mg
+  const iron = analysis.coreMetrics.iron;
+  assert.ok(iron.foodAmount > 6.0, `Expected solid food iron > 6.0mg, got ${iron.foodAmount}`);
+  assert.ok(iron.totalAmount > 6.5, `Expected total iron > 6.5mg, got ${iron.totalAmount}`);
+  assert.ok(iron.sources.some((s) => s.sourceType === "food" && s.sourceName.includes("强化铁婴儿谷物")));
+  assert.ok(iron.sources.some((s) => s.sourceType === "food" && s.sourceName.includes("牛肉泥")));
+});
+
+test("Feeding Volume: getFeedingEffectiveMl handles all feeding types and estimations", () => {
+  // Breast with explicit amount
+  assert.equal(getFeedingEffectiveMl({ type: "breast", amountMl: 80, leftMinutes: 10, rightMinutes: 10 }), 80);
+
+  // Breast without amountMl (null or 0) -> estimates based on 25 mins (10 + 15) -> 103ml
+  assert.equal(getFeedingEffectiveMl({ type: "breast", amountMl: null, leftMinutes: 10, rightMinutes: 15 }), 103);
+  assert.equal(getFeedingEffectiveMl({ type: "breast", amountMl: 0, leftMinutes: 10, rightMinutes: 15 }), 103);
+
+  // Formula with amountMl
+  assert.equal(getFeedingEffectiveMl({ type: "formula", amountMl: 150 }), 150);
+
+  // Bottle breast with amountMl
+  assert.equal(getFeedingEffectiveMl({ type: "bottle_breast", amountMl: 120 }), 120);
+
+  // Mixed: formula 60ml + breast 10 mins (left 5, right 5 -> 50ml) = 110ml
+  assert.equal(getFeedingEffectiveMl({ type: "mixed", amountMl: 60, leftMinutes: 5, rightMinutes: 5 }), 110);
+});
+
+test("Multi-day Trend: captures foodLogs and foodCount", () => {
+  const dailyDataList = [
+    {
+      date: "2026-09-01",
+      feedings: [{ id: "1", timestamp: "2026-09-01T08:00:00Z", type: "breast" as const, leftMinutes: 10, rightMinutes: 10, spitUp: false }],
+      supplements: [],
+      foodLogs: [
+        { foods: ["高铁米粉"], portion: "all" },
+      ],
+    },
+    {
+      date: "2026-09-02",
+      feedings: [{ id: "2", timestamp: "2026-09-02T08:00:00Z", type: "formula" as const, amountMl: 500, spitUp: false }],
+      supplements: [],
+      foodLogs: [
+        { foods: ["牛肉泥"], portion: "half" },
+        { foods: ["苹果泥"], portion: "most" },
+      ],
+    },
+  ];
+
+  const summary = calculateMultiDayNutritionTrend({
+    babyAgeMonths: 8,
+    dailyDataList,
+  });
+
+  assert.equal(summary.daysCount, 2);
+  assert.equal(summary.dailyTrends[0].foodCount, 1);
+  assert.equal(summary.dailyTrends[1].foodCount, 2);
+  // Day 1 has ~90ml breast feeding
+  assert.ok(summary.dailyTrends[0].breastMl > 80);
 });

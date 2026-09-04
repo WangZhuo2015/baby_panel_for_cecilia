@@ -136,6 +136,8 @@ export interface DailyNutritionAnalysis {
   formulaMl: number;
   breastMl: number;
   supplementCount: number;
+  foodCount: number;
+  foodsTried: string[];
   coreMetrics: {
     vitaminD: NutrientIntakeItem;
     vitaminA?: NutrientIntakeItem;
@@ -175,6 +177,7 @@ export interface MultiDayTrendItem {
   formulaMl: number;
   breastMl: number;
   totalFeedingMl: number;
+  foodCount?: number;
   vitaminD: number;
   vitaminA?: number;
   calcium: number;

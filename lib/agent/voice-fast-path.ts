@@ -6,6 +6,7 @@ import {
   getLocalDayUtcRange,
   addDays,
 } from "@/lib/date";
+import { getFeedingEffectiveMl, estimateNursingVolumeMl } from "@/lib/nutrition/breastmilk";
 
 export type VoiceQueryDomain =
   | "feeding"
@@ -224,7 +225,13 @@ export async function tryVoiceFastPath(options: VoiceFastPathOptions): Promise<s
           const timeText = formatSpokenTime(latest.timestamp);
           if (latest.type === "breast") {
             const mins = (latest.leftMinutes || 0) + (latest.rightMinutes || 0);
-            return `${babyName}最近一次喂奶是${timeText}，母乳亲喂${mins ? `了${mins}分钟` : ""}。`;
+            const estMl = getFeedingEffectiveMl(latest);
+            return `${babyName}最近一次喂奶是${timeText}，母乳亲喂${mins ? `了${mins}分钟` : ""}${estMl > 0 ? `（预估约${estMl}ml）` : ""}。`;
+          }
+          if (latest.type === "mixed") {
+            const mins = (latest.leftMinutes || 0) + (latest.rightMinutes || 0);
+            const estMl = getFeedingEffectiveMl(latest);
+            return `${babyName}最近一次喂奶是${timeText}，混合喂养（配方奶${latest.amountMl || 0}ml${mins ? ` + 亲喂${mins}分钟` : ""}，合计约${estMl}ml）。`;
           }
           if (latest.amountMl) {
             const typeLabel = latest.type === "bottle_breast" ? "瓶喂母乳" : "配方奶";
@@ -247,13 +254,22 @@ export async function tryVoiceFastPath(options: VoiceFastPathOptions): Promise<s
         let bottleBreastMl = 0;
         let breastCount = 0;
         let breastTotalMinutes = 0;
+        let breastEstimatedMl = 0;
 
         for (const r of records) {
           if (r.type === "breast") {
             breastCount++;
-            breastTotalMinutes += (r.leftMinutes || 0) + (r.rightMinutes || 0);
+            const mins = (r.leftMinutes || 0) + (r.rightMinutes || 0);
+            breastTotalMinutes += mins;
+            breastEstimatedMl += getFeedingEffectiveMl(r);
           } else if (r.type === "bottle_breast") {
             bottleBreastMl += r.amountMl || 0;
+          } else if (r.type === "mixed") {
+            formulaMl += r.amountMl || 0;
+            breastCount++;
+            const mins = (r.leftMinutes || 0) + (r.rightMinutes || 0);
+            breastTotalMinutes += mins;
+            breastEstimatedMl += estimateNursingVolumeMl(r.leftMinutes || 0, r.rightMinutes || 0);
           } else {
             formulaMl += r.amountMl || 0;
           }
@@ -268,7 +284,7 @@ export async function tryVoiceFastPath(options: VoiceFastPathOptions): Promise<s
         }
         if (breastCount > 0) {
           parts.push(
-            `母乳亲喂了${breastCount}次${breastTotalMinutes > 0 ? `（共${breastTotalMinutes}分钟）` : ""}`
+            `母乳亲喂了${breastCount}次${breastTotalMinutes > 0 ? `（共${breastTotalMinutes}分钟）` : ""}${breastEstimatedMl > 0 ? `，预估母乳约${breastEstimatedMl}毫升` : ""}`
           );
         }
 
@@ -444,7 +460,7 @@ export async function tryVoiceFastPath(options: VoiceFastPathOptions): Promise<s
           prisma.foodLogRecord.findMany({ where: { babyId, date: targetDate } }),
         ]);
 
-        const totalFeedingMl = feedings.reduce((sum, r) => sum + (r.amountMl ?? 0), 0);
+        const totalFeedingMl = feedings.reduce((sum, r) => sum + getFeedingEffectiveMl(r), 0);
         const poopCount = diapers.filter((d) => d.type === "poop" || d.type === "both").length;
 
         const dayStartMs = new Date(start).getTime();

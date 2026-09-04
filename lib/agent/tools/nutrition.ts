@@ -143,7 +143,7 @@ export function makeNutritionTools(ctx: { userId: string; baby: Baby }): AgentTo
       }
 
       // 3. Check for conflict / overdose
-      const [todaySupplements, todayFeedings, allFamilyFormulas, allFamilySupplements] =
+      const [todaySupplements, todayFeedings, todayFoodLogs, allFamilyFormulas, allFamilySupplements] =
         await Promise.all([
           prisma.supplementRecord.findMany({
             where: { babyId, date: recordDate },
@@ -158,9 +158,24 @@ export function makeNutritionTools(ctx: { userId: string; baby: Baby }): AgentTo
               },
             },
           }),
+          prisma.foodLogRecord.findMany({
+            where: { babyId, date: recordDate },
+          }),
           prisma.formulaProduct.findMany({ where: { familyId } }),
           prisma.supplementProduct.findMany({ where: { familyId } }),
         ]);
+
+      const foodLogs = todayFoodLogs.map((log) => {
+        let parsedFoods: string[] = [];
+        try {
+          parsedFoods = JSON.parse(log.foods);
+        } catch {}
+        return {
+          foods: parsedFoods,
+          portion: log.portion,
+          time: log.time,
+        };
+      });
 
       const formulaMap: Record<string, FormulaProduct> = {};
       allFamilyFormulas.forEach((f) => {
@@ -186,6 +201,7 @@ export function makeNutritionTools(ctx: { userId: string; baby: Baby }): AgentTo
         babyAgeMonths: getBabyAgeMonths(),
         feedings: todayFeedings as any,
         supplements: todaySupplements as any,
+        foodLogs,
         formulaProductsMap: formulaMap,
         supplementProductsMap: supplementMap,
       });
@@ -196,6 +212,7 @@ export function makeNutritionTools(ctx: { userId: string; baby: Baby }): AgentTo
         incomingDose: dose,
         existingRecordsToday: todaySupplements as any,
         feedingsToday: todayFeedings as any,
+        foodLogsToday: foodLogs,
         formulaProductsMap: formulaMap,
         supplementProductsMap: supplementMap,
       });
@@ -284,7 +301,7 @@ export function makeNutritionTools(ctx: { userId: string; baby: Baby }): AgentTo
       });
 
       if (days === 1) {
-        const [feedings, suppRecords] = await Promise.all([
+        const [feedings, suppRecords, foodLogRecords] = await Promise.all([
           prisma.feedingRecord.findMany({
             where: {
               babyId,
@@ -298,13 +315,29 @@ export function makeNutritionTools(ctx: { userId: string; baby: Baby }): AgentTo
             where: { babyId, date },
             include: { product: true },
           }),
+          prisma.foodLogRecord.findMany({
+            where: { babyId, date },
+          }),
         ]);
+
+        const foodLogs = foodLogRecords.map((log) => {
+          let parsedFoods: string[] = [];
+          try {
+            parsedFoods = JSON.parse(log.foods);
+          } catch {}
+          return {
+            foods: parsedFoods,
+            portion: log.portion,
+            time: log.time,
+          };
+        });
 
         const daily = calculateDailyNutrition({
           date,
           babyAgeMonths: ageMonths,
           feedings: feedings as any,
           supplements: suppRecords as any,
+          foodLogs,
           formulaProductsMap: formulaMap,
           supplementProductsMap: supplementMap,
         });
@@ -317,6 +350,9 @@ export function makeNutritionTools(ctx: { userId: string; baby: Baby }): AgentTo
               totalFeedingMl: daily.totalFeedingMl,
               formulaMl: daily.formulaMl,
               breastMl: daily.breastMl,
+              supplementCount: daily.supplementCount,
+              foodCount: daily.foodCount,
+              foodsTried: daily.foodsTried,
               coreMetrics: daily.coreMetrics,
               alerts: daily.alerts,
             },
@@ -331,11 +367,12 @@ export function makeNutritionTools(ctx: { userId: string; baby: Baby }): AgentTo
         date: string;
         feedings: FeedingRecord[];
         supplements: SupplementRecord[];
+        foodLogs?: Array<{ foods: string[]; portion?: string; time?: string }>;
       }> = [];
 
       for (let i = days - 1; i >= 0; i--) {
         const dStr = new Date(new Date(date).getTime() - i * 86400000).toISOString().split("T")[0];
-        const [fList, sList] = await Promise.all([
+        const [fList, sList, fdList] = await Promise.all([
           prisma.feedingRecord.findMany({
             where: {
               babyId,
@@ -349,11 +386,26 @@ export function makeNutritionTools(ctx: { userId: string; baby: Baby }): AgentTo
             where: { babyId, date: dStr },
             include: { product: true },
           }),
+          prisma.foodLogRecord.findMany({
+            where: { babyId, date: dStr },
+          }),
         ]);
+        const dayFoodLogs = fdList.map((log) => {
+          let parsedFoods: string[] = [];
+          try {
+            parsedFoods = JSON.parse(log.foods);
+          } catch {}
+          return {
+            foods: parsedFoods,
+            portion: log.portion,
+            time: log.time,
+          };
+        });
         dailyDataList.push({
           date: dStr,
           feedings: fList as any,
           supplements: sList as any,
+          foodLogs: dayFoodLogs,
         });
       }
 

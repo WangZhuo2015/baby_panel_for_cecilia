@@ -15,6 +15,7 @@ import type { FeedingRecord } from "@/types";
 import { getAgeGroup, getDRIForAge, getNutrientDefinition, ALL_NUTRIENT_IDS, CORE_NUTRIENT_IDS, NUTRIENT_NAMES_CN } from "./dris";
 import { getBreastMilkNutrientsForVolume, estimateNursingVolumeMl } from "./breastmilk";
 import { PRESET_FORMULA_PRODUCTS, PRESET_SUPPLEMENT_PRODUCTS } from "./presets";
+import { getFoodNutrients, PORTION_LABELS } from "./food-nutrients";
 
 /**
  * 营养素单位标准化与转换工具
@@ -138,11 +139,22 @@ export function getSupplementNutrients(supplementProduct: SupplementProduct, dos
   return result;
 }
 
+export interface FoodLogInputItem {
+  id?: string;
+  date?: string;
+  time?: string;
+  foods: string | string[];
+  portion?: string;
+  acceptance?: number;
+  babyState?: string;
+}
+
 export interface EngineInput {
   date: string;
   babyAgeMonths: number;
   feedings: FeedingRecord[];
   supplements: SupplementRecord[];
+  foodLogs?: FoodLogInputItem[];
   formulaProductsMap?: Record<string, FormulaProduct>;
   supplementProductsMap?: Record<string, SupplementProduct>;
 }
@@ -151,7 +163,15 @@ export interface EngineInput {
  * 确定性单日全量营养素摄入汇总与 DRIs 对比分析
  */
 export function calculateDailyNutrition(input: EngineInput): DailyNutritionAnalysis {
-  const { date, babyAgeMonths, feedings = [], supplements = [], formulaProductsMap = {}, supplementProductsMap = {} } = input;
+  const {
+    date,
+    babyAgeMonths,
+    feedings = [],
+    supplements = [],
+    foodLogs = [],
+    formulaProductsMap = {},
+    supplementProductsMap = {},
+  } = input;
   const ageGroup = getAgeGroup(babyAgeMonths);
   const dri = getDRIForAge(babyAgeMonths);
 
@@ -313,7 +333,53 @@ export function calculateDailyNutrition(input: EngineInput): DailyNutritionAnaly
     }
   }
 
-  // 3. 构建所有营养素的明细与达标计算
+  // 3. 处理辅食餐点打卡记录 (Solid Food Logs - 婴幼儿辅食营养素累加)
+  const foodsTriedSet = new Set<string>();
+  let foodCount = 0;
+
+  for (const foodLog of foodLogs) {
+    let foodsList: string[] = [];
+    if (Array.isArray(foodLog.foods)) {
+      foodsList = foodLog.foods;
+    } else if (typeof foodLog.foods === "string") {
+      try {
+        const parsed = JSON.parse(foodLog.foods);
+        if (Array.isArray(parsed)) foodsList = parsed;
+        else if (foodLog.foods.trim()) foodsList = [foodLog.foods.trim()];
+      } catch {
+        if (foodLog.foods.trim()) foodsList = [foodLog.foods.trim()];
+      }
+    }
+
+    if (foodsList.length > 0) {
+      foodCount += 1;
+    }
+
+    const portion = foodLog.portion || "most";
+    const portionText = PORTION_LABELS[portion] || portion;
+
+    for (const rawFood of foodsList) {
+      if (!rawFood || typeof rawFood !== "string") continue;
+      const cleanName = rawFood.trim();
+      if (!cleanName) continue;
+      foodsTriedSet.add(cleanName);
+
+      const foodNutrients = getFoodNutrients(cleanName, portion);
+      for (const [nId, val] of Object.entries(foodNutrients)) {
+        ensureNutrientSlot(nId);
+        intakeAggregates[nId].food += val.amount;
+        intakeAggregates[nId].sources.push({
+          sourceId: `food_${cleanName}`,
+          sourceName: `辅食: ${cleanName} (${portionText})`,
+          sourceType: "food",
+          amount: val.amount,
+          unit: val.unit,
+        });
+      }
+    }
+  }
+
+  // 4. 构建所有营养素的明细与达标计算
   const allNutrientsMap: Record<string, NutrientIntakeItem> = {};
   const alerts: DailyNutritionAnalysis["alerts"] = [];
 
@@ -370,7 +436,7 @@ export function calculateDailyNutrition(input: EngineInput): DailyNutritionAnaly
     }
   }
 
-  // 4. 专属儿科常规警示 (维生素D摄入不足提示)
+  // 5. 专属儿科常规警示 (维生素D摄入不足提示)
   const vitD = allNutrientsMap["vitamin_d"];
   if (vitD && vitD.totalAmount < 200 && breastMl > 0) {
     alerts.push({
@@ -381,7 +447,7 @@ export function calculateDailyNutrition(input: EngineInput): DailyNutritionAnaly
     });
   }
 
-  // 5. 核心指标聚合
+  // 6. 核心指标聚合
   const coreMetrics = {
     vitaminD: allNutrientsMap["vitamin_d"] || createEmptyNutrientItem("vitamin_d", "维生素D", "IU", "vitamin"),
     vitaminA: allNutrientsMap["vitamin_a"],
@@ -411,6 +477,8 @@ export function calculateDailyNutrition(input: EngineInput): DailyNutritionAnaly
     formulaMl,
     breastMl,
     supplementCount: supplements.length,
+    foodCount,
+    foodsTried: Array.from(foodsTriedSet),
     coreMetrics,
     allNutrients: allNutrientsList,
     alerts,
@@ -451,6 +519,7 @@ export function checkSupplementConflict(params: {
   incomingDose?: number;
   existingRecordsToday: SupplementRecord[];
   feedingsToday?: FeedingRecord[];
+  foodLogsToday?: FoodLogInputItem[];
   formulaProductsMap?: Record<string, FormulaProduct>;
   supplementProductsMap?: Record<string, SupplementProduct>;
 }): ConflictCheckResult {
@@ -460,6 +529,7 @@ export function checkSupplementConflict(params: {
     incomingDose = 1.0,
     existingRecordsToday = [],
     feedingsToday = [],
+    foodLogsToday = [],
     formulaProductsMap = {},
     supplementProductsMap = {},
   } = params;
@@ -470,6 +540,7 @@ export function checkSupplementConflict(params: {
     babyAgeMonths,
     feedings: feedingsToday,
     supplements: existingRecordsToday,
+    foodLogs: foodLogsToday,
     formulaProductsMap,
     supplementProductsMap,
   });
@@ -547,6 +618,7 @@ export function calculateMultiDayNutritionTrend(params: {
     date: string;
     feedings: FeedingRecord[];
     supplements: SupplementRecord[];
+    foodLogs?: FoodLogInputItem[];
   }>;
   formulaProductsMap?: Record<string, FormulaProduct>;
   supplementProductsMap?: Record<string, SupplementProduct>;
@@ -571,6 +643,7 @@ export function calculateMultiDayNutritionTrend(params: {
       babyAgeMonths,
       feedings: day.feedings,
       supplements: day.supplements,
+      foodLogs: day.foodLogs,
       formulaProductsMap,
       supplementProductsMap,
     });
@@ -587,6 +660,7 @@ export function calculateMultiDayNutritionTrend(params: {
       formulaMl: analysis.formulaMl,
       breastMl: analysis.breastMl,
       totalFeedingMl: analysis.totalFeedingMl,
+      foodCount: analysis.foodCount,
       vitaminD: vitD,
       vitaminA: vitA,
       calcium,

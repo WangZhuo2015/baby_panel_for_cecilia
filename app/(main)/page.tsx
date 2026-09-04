@@ -246,11 +246,11 @@ export default function HomePage() {
 
   const latestFeedingDetail = latestFeeding
     ? latestFeeding.type === "breast"
-      ? `母乳 左${latestFeeding.leftMinutes || 0}分·右${latestFeeding.rightMinutes || 0}分`
+      ? `母乳 左${latestFeeding.leftMinutes || 0}分·右${latestFeeding.rightMinutes || 0}分${latestFeeding.amountMl ? `·约${latestFeeding.amountMl}ml` : ""}`
       : latestFeeding.type === "bottle_breast"
       ? `瓶喂母乳 ${latestFeeding.amountMl || 0}ml`
       : latestFeeding.type === "mixed"
-      ? `混合亲喂+奶粉 ${latestFeeding.amountMl || 0}ml`
+      ? `混合喂养 (配方${latestFeeding.amountMl || 0}ml${(latestFeeding.leftMinutes || latestFeeding.rightMinutes) ? `+亲喂${(latestFeeding.leftMinutes || 0) + (latestFeeding.rightMinutes || 0)}分` : ""})`
       : `配方奶 ${latestFeeding.amountMl || 0}ml`
     : null;
 

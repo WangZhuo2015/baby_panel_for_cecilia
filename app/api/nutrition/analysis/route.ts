@@ -67,7 +67,7 @@ export async function GET(request: Request) {
     if (days === 1) {
       // 单日分析
       const { start, end } = getLocalDayUtcRange(date);
-      const [feedings, supplements] = await Promise.all([
+      const [feedings, supplements, foodLogs] = await Promise.all([
         prisma.feedingRecord.findMany({
           where: { babyId: baby.id, timestamp: { gte: start, lt: end } },
           orderBy: { timestamp: "asc" },
@@ -75,6 +75,10 @@ export async function GET(request: Request) {
         prisma.supplementRecord.findMany({
           where: { babyId: baby.id, date },
           include: { product: true },
+          orderBy: { time: "asc" },
+        }),
+        prisma.foodLogRecord.findMany({
+          where: { babyId: baby.id, date },
           orderBy: { time: "asc" },
         }),
       ]);
@@ -103,11 +107,22 @@ export async function GET(request: Request) {
         formulaProductId: f.formulaProductId,
       }));
 
+      const adaptedFoodLogs = foodLogs.map((fl) => ({
+        id: fl.id,
+        date: fl.date,
+        time: fl.time,
+        foods: fl.foods,
+        portion: fl.portion,
+        acceptance: fl.acceptance,
+        babyState: fl.babyState,
+      }));
+
       const analysis = calculateDailyNutrition({
         date,
         babyAgeMonths,
         feedings: adaptedFeedings,
         supplements: adaptedSupplements,
+        foodLogs: adaptedFoodLogs,
         formulaProductsMap,
         supplementProductsMap,
       });
@@ -124,7 +139,7 @@ export async function GET(request: Request) {
       const rangeStartUtc = getLocalDayUtcRange(startDate).start;
       const rangeEndUtc = getLocalDayUtcRange(date).end;
 
-      const [feedings, supplements] = await Promise.all([
+      const [feedings, supplements, foodLogs] = await Promise.all([
         prisma.feedingRecord.findMany({
           where: { babyId: baby.id, timestamp: { gte: rangeStartUtc, lt: rangeEndUtc } },
           orderBy: { timestamp: "asc" },
@@ -133,6 +148,10 @@ export async function GET(request: Request) {
           where: { babyId: baby.id, date: { gte: startDate, lte: date } },
           include: { product: true },
           orderBy: { date: "asc" },
+        }),
+        prisma.foodLogRecord.findMany({
+          where: { babyId: baby.id, date: { gte: startDate, lte: date } },
+          orderBy: [{ date: "asc" }, { time: "asc" }],
         }),
       ]);
 
@@ -172,10 +191,23 @@ export async function GET(request: Request) {
             notes: s.notes,
           }));
 
+        const dayFoodLogs = foodLogs
+          .filter((fl) => fl.date === d)
+          .map((fl) => ({
+            id: fl.id,
+            date: fl.date,
+            time: fl.time,
+            foods: fl.foods,
+            portion: fl.portion,
+            acceptance: fl.acceptance,
+            babyState: fl.babyState,
+          }));
+
         return {
           date: d,
           feedings: dayFeedings,
           supplements: daySupplements,
+          foodLogs: dayFoodLogs,
         };
       });
 
@@ -191,12 +223,14 @@ export async function GET(request: Request) {
         date,
         feedings: [],
         supplements: [],
+        foodLogs: [],
       };
       const todayAnalysis = calculateDailyNutrition({
         date,
         babyAgeMonths,
         feedings: todayDailyData.feedings,
         supplements: todayDailyData.supplements,
+        foodLogs: todayDailyData.foodLogs,
         formulaProductsMap,
         supplementProductsMap,
       });

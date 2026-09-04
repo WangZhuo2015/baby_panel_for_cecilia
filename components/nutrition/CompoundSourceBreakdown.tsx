@@ -43,7 +43,13 @@ export function CompoundSourceBreakdown({ items, className = "" }: CompoundSourc
               {item.sources.map((src, idx) => {
                 const percent = item.totalAmount > 0 ? ((src.amount / item.totalAmount) * 100).toFixed(0) : "0";
                 const typeIcon =
-                  src.sourceType === "formula" ? "🍼" : src.sourceType === "supplement" ? "💊" : "🤱";
+                  src.sourceType === "formula"
+                    ? "🍼"
+                    : src.sourceType === "supplement"
+                    ? "💊"
+                    : src.sourceType === "food"
+                    ? "🥣"
+                    : "🤱";
 
                 return (
                   <div key={idx} className="flex items-center justify-between text-[11px] text-text-secondary pl-1">

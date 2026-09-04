@@ -18,6 +18,7 @@ import { SegmentControl } from "@/components/ui/SegmentControl";
 import { QuickAiButton } from "@/components/ui/QuickAiButton";
 import { VoiceConfirmEntry } from "@/components/ui/VoiceConfirmEntry";
 import { localTimeToUtcIso, getLocalDateStr } from "@/lib/date";
+import { estimateNursingVolumeMl } from "@/lib/nutrition/breastmilk";
 import type { FeedingType, FeedingRecord } from "@/types";
 
 const FORMULA_PRESETS = [60, 90, 120, 150, 180, 210, 240];
@@ -73,6 +74,13 @@ export function FeedingForm({
 
   const [amount, setAmount] = useState<number>(() => {
     return typeof initialData?.amountMl === "number" ? initialData.amountMl : 120;
+  });
+
+  const [customBreastMl, setCustomBreastMl] = useState<number | null>(() => {
+    if (initialData?.type === "breast" && typeof initialData?.amountMl === "number" && initialData.amountMl > 0) {
+      return initialData.amountMl;
+    }
+    return null;
   });
 
   // Breastfeeding state
@@ -143,6 +151,8 @@ export function FeedingForm({
   const leftMin = Math.round(leftSec / 60);
   const rightMin = Math.round(rightSec / 60);
   const totalNursingMin = leftMin + rightMin;
+  const estimatedBreastMl = estimateNursingVolumeMl(leftMin, rightMin);
+  const effectiveBreastMl = customBreastMl ?? estimatedBreastMl;
 
   const handleFormSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -171,7 +181,7 @@ export function FeedingForm({
       amountMl:
         feedingType === "formula" || feedingType === "bottle_breast" || feedingType === "mixed"
           ? Number(amount)
-          : null,
+          : (customBreastMl ?? (estimatedBreastMl > 0 ? estimatedBreastMl : null)),
       leftMinutes: feedingType === "breast" || feedingType === "mixed" ? leftMin : null,
       rightMinutes: feedingType === "breast" || feedingType === "mixed" ? rightMin : null,
       spitUp,
@@ -402,6 +412,77 @@ export function FeedingForm({
                 ))}
               </div>
             </div>
+          </div>
+
+          {/* 预估母乳奶量与微调 */}
+          <div className="p-3 bg-white/90 rounded-2xl border border-pink-200/80 flex items-center justify-between shadow-2xs">
+            <div className="flex items-center gap-2">
+              <span className="text-lg">🍼</span>
+              <div>
+                <div className="text-xs font-bold text-text-primary flex items-center gap-1.5">
+                  <span>{feedingType === "mixed" ? "母乳部分预估量" : "预估母乳摄入量"}</span>
+                  {customBreastMl !== null ? (
+                    <span className="text-[10px] bg-pink-100 text-pink-700 px-1.5 py-0.2 rounded font-bold">
+                      手动修正
+                    </span>
+                  ) : (
+                    <span className="text-[10px] bg-primary-soft text-primary px-1.5 py-0.2 rounded font-medium">
+                      临床模型估算
+                    </span>
+                  )}
+                </div>
+                <p className="text-[10px] text-text-muted mt-0.5">
+                  {feedingType === "mixed"
+                    ? `母乳约${estimatedBreastMl}ml + 配方${amount}ml，合计约${estimatedBreastMl + (amount || 0)}ml`
+                    : "按双侧活跃吸吮时长科学折算，支持微调"}
+                </p>
+              </div>
+            </div>
+
+            {feedingType === "mixed" ? (
+              <div className="text-right">
+                <span className="text-base font-black text-pink-600">
+                  {estimatedBreastMl}
+                </span>
+                <span className="text-[10px] text-text-muted ml-0.5">ml</span>
+                <span className="block text-[9px] text-primary">按分钟自动折算</span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setCustomBreastMl(Math.max(0, effectiveBreastMl - 10))}
+                  className="w-7 h-7 rounded-full bg-pink-50 text-pink-700 border border-pink-200 text-xs font-bold flex items-center justify-center btn-press hover:bg-pink-100"
+                  title="-10ml"
+                >
+                  -
+                </button>
+                <div className="min-w-[52px] text-center">
+                  <span className="text-base font-black text-pink-600">
+                    {effectiveBreastMl}
+                  </span>
+                  <span className="text-[10px] text-text-muted ml-0.5">ml</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setCustomBreastMl(effectiveBreastMl + 10)}
+                  className="w-7 h-7 rounded-full bg-pink-50 text-pink-700 border border-pink-200 text-xs font-bold flex items-center justify-center btn-press hover:bg-pink-100"
+                  title="+10ml"
+                >
+                  +
+                </button>
+                {customBreastMl !== null && (
+                  <button
+                    type="button"
+                    onClick={() => setCustomBreastMl(null)}
+                    className="text-[10px] text-text-muted hover:text-pink-600 underline ml-1 cursor-pointer"
+                    title="恢复自动估算"
+                  >
+                    重置
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         </CuteCard>
       )}

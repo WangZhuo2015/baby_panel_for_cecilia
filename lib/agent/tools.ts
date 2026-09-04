@@ -21,6 +21,7 @@ import { makeRecordDiaperTool } from "./tools/diaper";
 import { makeRecordGrowthTool } from "./tools/growth";
 import { makeRecordFoodTool, makeRecordFoodPlanTool } from "./tools/food";
 import { makeNutritionTools } from "./tools/nutrition";
+import { getFeedingEffectiveMl } from "@/lib/nutrition/breastmilk";
 import { TIME_RE, hhmmToIso, optionalNumber, ok, fail, type Params } from "./tools/helpers";
 export { hhmmToIso } from "./tools/helpers";
 
@@ -227,12 +228,30 @@ export function createBabyPanelTools(ctx: BabyToolContext): AgentTool[] {
 
       for (const f of feedings) {
         const time = formatIsoToLocalTime(f.timestamp);
-        const typeLabel = (f.type as string) === "breast" ? "母乳亲喂" : (f.type as string) === "formula" ? "配方奶" : "母乳瓶喂";
-        const amountStr = (f.amountMl as number | null) ? `${f.amountMl}ml` : (f.leftMinutes || f.rightMinutes) ? `左${(f.leftMinutes as number) || 0}分/右${(f.rightMinutes as number) || 0}分` : "";
+        const fType = f.type as string;
+        const typeLabel =
+          fType === "breast"
+            ? "母乳亲喂"
+            : fType === "formula"
+            ? "配方奶"
+            : fType === "mixed"
+            ? "混合喂养"
+            : "瓶喂母乳";
+        const effectiveMl = getFeedingEffectiveMl(f);
+        let amountStr = "";
+        if (fType === "mixed") {
+          const breastPart = effectiveMl - ((f.amountMl as number) || 0);
+          amountStr = `配方${f.amountMl || 0}ml${breastPart > 0 ? ` + 亲喂约${breastPart}ml (共约${effectiveMl}ml)` : ""}`;
+        } else if (fType === "breast") {
+          const sides = (f.leftMinutes || f.rightMinutes) ? `左${(f.leftMinutes as number) || 0}分/右${(f.rightMinutes as number) || 0}分` : "";
+          amountStr = sides ? `${sides}${effectiveMl > 0 ? `·约${effectiveMl}ml` : ""}` : (effectiveMl > 0 ? `约${effectiveMl}ml` : "");
+        } else {
+          amountStr = (f.amountMl as number | null) ? `${f.amountMl}ml` : "";
+        }
         items.push({
           type: "feeding",
           time,
-          summary: `${typeLabel} ${amountStr}${(f.spitUp as boolean) ? " (有吐奶)" : ""}`,
+          summary: `${typeLabel} ${amountStr}${(f.spitUp as boolean) ? " (有吐奶)" : ""}`.trim(),
           detail: f,
           sortAt: timestampMs(f.timestamp as string),
         });

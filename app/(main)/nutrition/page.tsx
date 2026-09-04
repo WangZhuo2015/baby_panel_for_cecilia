@@ -250,7 +250,7 @@ export default function NutritionPage() {
                 {selectedDate === getLocalDateStr() ? "今日累计进食与补给" : `${selectedDate} 营养摄入`}
               </span>
               <p className="text-sm font-black text-text-primary mt-0.5">
-                总奶量 {dailyAnalysis.totalFeedingMl} ml · 补剂 {dailyAnalysis.supplementCount} 次
+                总奶量 {dailyAnalysis.totalFeedingMl} ml · 辅食 {dailyAnalysis.foodCount || 0} 顿 · 补剂 {dailyAnalysis.supplementCount} 次
               </p>
             </div>
             <div className="text-right text-[11px] text-text-muted">
@@ -258,6 +258,21 @@ export default function NutritionPage() {
               <span className="block">母乳 {dailyAnalysis.breastMl}ml</span>
             </div>
           </div>
+          {dailyAnalysis.foodsTried && dailyAnalysis.foodsTried.length > 0 && (
+            <div className="mt-2.5 pt-2 border-t border-primary/15 flex items-center gap-1.5 flex-wrap">
+              <span className="text-[11px] font-bold text-text-secondary flex items-center gap-1">
+                <span>🥣</span> 今日辅食食材:
+              </span>
+              {dailyAnalysis.foodsTried.map((food, idx) => (
+                <span
+                  key={idx}
+                  className="px-2 py-0.5 rounded-full text-[11px] bg-white/85 border border-primary/25 text-primary font-bold shadow-2xs"
+                >
+                  {food}
+                </span>
+              ))}
+            </div>
+          )}
         </CuteCard>
       )}
 

@@ -100,13 +100,28 @@ export function DailySummaryPosterModal({
 
     for (const f of metrics.feedings || []) {
       const isBreast = f.type === "breast";
+      const isBottleBreast = f.type === "bottle_breast";
+      const isMixed = f.type === "mixed";
+      const label = isBreast
+        ? "母乳亲喂"
+        : isBottleBreast
+        ? "瓶喂母乳"
+        : isMixed
+        ? "混合喂养"
+        : "配方奶";
+      const icon = isBreast ? "🤱" : "🍼";
+      const totalMin = (f.leftMinutes || 0) + (f.rightMinutes || 0);
+      let detail = `${f.amountMl || 0}ml`;
+      if (isBreast) {
+        detail = totalMin > 0 ? `${totalMin}分钟${f.amountMl ? `·约${f.amountMl}ml` : ""}` : `${f.amountMl || 0}ml`;
+      } else if (isMixed) {
+        detail = `配方${f.amountMl || 0}ml${totalMin > 0 ? `+亲喂${totalMin}分` : ""}`;
+      }
       list.push({
         time: f.time,
-        icon: isBreast ? "🤱" : "🍼",
-        label: isBreast ? "母乳亲喂" : "配方奶",
-        detail: isBreast
-          ? `${(f.leftMinutes || 0) + (f.rightMinutes || 0)}分钟`
-          : `${f.amountMl || 0}ml`,
+        icon,
+        label,
+        detail,
         order: f.time,
       });
     }
@@ -468,11 +483,15 @@ ${summary.sections.tomorrowTips}
                   <span className="text-[11px] font-bold text-sky-500">ml</span>
                 </div>
                 <p className="text-[10px] text-[#8F7076] truncate">
-                  {metrics.totalBreastMinutes > 0
-                    ? `亲喂 ${metrics.totalBreastMinutes} 分钟`
-                    : metrics.formulaCount > 0
-                      ? `${metrics.formulaCount}次配方奶`
-                      : "暂无喂养"}
+                  {metrics.totalBreastMinutes > 0 && metrics.formulaCount > 0
+                    ? `亲喂 ${metrics.totalBreastMinutes}分 + 配方 ${metrics.formulaCount}次`
+                    : metrics.totalBreastMinutes > 0
+                      ? `亲喂 ${metrics.totalBreastMinutes} 分钟`
+                      : metrics.formulaCount > 0
+                        ? `${metrics.formulaCount}次配方奶`
+                        : metrics.feedingCount > 0
+                          ? `${metrics.feedingCount}次喂养`
+                          : "暂无喂养"}
                 </p>
               </div>
 

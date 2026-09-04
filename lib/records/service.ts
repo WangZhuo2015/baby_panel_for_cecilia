@@ -3,6 +3,7 @@ import { getLocalDayUtcRange, isValidDateStr, getLocalDateStr, getLocalTimeStr, 
 import { calculateCorrectedAge } from "@/lib/age";
 import { estimatePercentile } from "@/lib/who-growth-standards";
 import { safeJsonParse } from "@/lib/json";
+import { getFeedingEffectiveMl, estimateNursingVolumeMl } from "@/lib/nutrition/breastmilk";
 
 /**
  * Deep Module: RecordService
@@ -184,6 +185,13 @@ export async function createFeeding(ctx: RecordContext, input: CreateFeedingInpu
     throw new ValidationError("rightMinutes 必须为 0-180");
   }
   const clientId = clientIdOrNull(input.clientId);
+  const computedAmountMl =
+    input.amountMl !== undefined && input.amountMl !== null && input.amountMl > 0
+      ? input.amountMl
+      : type === "breast" && (input.leftMinutes || input.rightMinutes)
+      ? estimateNursingVolumeMl(input.leftMinutes || 0, input.rightMinutes || 0)
+      : input.amountMl ?? null;
+
   const data = {
     babyId: ctx.babyId,
     recordedById: ctx.userId,
@@ -191,7 +199,7 @@ export async function createFeeding(ctx: RecordContext, input: CreateFeedingInpu
     sourceAgent: input.sourceAgent || ctx.sourceAgent || null,
     timestamp,
     type,
-    amountMl: input.amountMl ?? null,
+    amountMl: computedAmountMl,
     leftMinutes: input.leftMinutes ?? null,
     rightMinutes: input.rightMinutes ?? null,
     spitUp: !!input.spitUp,
@@ -208,11 +216,14 @@ export async function createFeeding(ctx: RecordContext, input: CreateFeedingInpu
   } else {
     record = await prisma.feedingRecord.create({ data });
   }
+  const effectiveMl = getFeedingEffectiveMl({ type, amountMl: computedAmountMl, leftMinutes: input.leftMinutes, rightMinutes: input.rightMinutes });
   const feedDesc = type === "breast"
-    ? `母乳 亲喂(左${input.leftMinutes || 0}分/右${input.rightMinutes || 0}分)`
+    ? `母乳 亲喂(左${input.leftMinutes || 0}分/右${input.rightMinutes || 0}分${effectiveMl > 0 ? `·约${effectiveMl}ml` : ""})`
     : type === "bottle_breast"
       ? `瓶喂母乳 ${input.amountMl || 0}ml`
-      : `配方奶 ${input.amountMl || 0}ml`;
+      : type === "mixed"
+        ? `混合喂养 (配方${input.amountMl || 0}ml + 亲喂约${effectiveMl - (input.amountMl || 0)}ml)`
+        : `配方奶 ${input.amountMl || 0}ml`;
   void triggerFamilyPush(ctx, "记录了喂奶 🍼", feedDesc, "/records/feeding");
   return record;
 }
@@ -558,7 +569,7 @@ export async function getDailySummary(ctx: RecordContext, date?: string) {
     prisma.diaperRecord.findMany({ where: { babyId: ctx.babyId, timestamp: { gte: start, lt: end } } }),
     prisma.foodLogRecord.findMany({ where: { babyId: ctx.babyId, date: targetDate } }),
   ]);
-  const totalFeedingMl = feedingRecords.reduce((sum, r) => sum + (r.amountMl ?? 0), 0);
+  const totalFeedingMl = feedingRecords.reduce((sum, r) => sum + getFeedingEffectiveMl(r), 0);
   const sleepIntervals = sleepRecords
     .map((record) => ({ startMs: new Date(record.startTime).getTime(), endMs: new Date(record.endTime).getTime() }))
     .filter((iv) => !Number.isNaN(iv.startMs) && !Number.isNaN(iv.endMs) && iv.endMs > iv.startMs)
@@ -613,7 +624,15 @@ export async function getTimeline(ctx: RecordContext, date?: string) {
   for (const r of feedingRecords) {
     const time = formatIsoToLocalTime(r.timestamp);
     let detail = "";
-    if (r.amountMl) detail += `${r.amountMl}ml`;
+    const effectiveMl = getFeedingEffectiveMl(r);
+    if (r.type === "mixed") {
+      const breastPart = effectiveMl - (r.amountMl || 0);
+      detail += `配方${r.amountMl || 0}ml${breastPart > 0 ? ` + 亲喂约${breastPart}ml (共约${effectiveMl}ml)` : ""}`;
+    } else if (r.amountMl) {
+      detail += `${r.type === "breast" ? "约" : ""}${r.amountMl}ml`;
+    } else if (effectiveMl > 0) {
+      detail += `约${effectiveMl}ml`;
+    }
     if (r.leftMinutes || r.rightMinutes) {
       const sides = [];
       if (r.leftMinutes) sides.push(`左${r.leftMinutes}分`);
@@ -830,11 +849,21 @@ export async function updateFeeding(ctx: RecordContext, id: string, patch: Recor
   };
   const parsedTs = new Date(merged.timestamp as string);
   if (Number.isNaN(parsedTs.getTime())) throw new ValidationError("timestamp 格式无效");
+  const rawAmountMl = numOrNull(merged.amountMl, 0, 3000, "amountMl");
+  const rawLeft = numOrNull(merged.leftMinutes, 0, 180, "leftMinutes");
+  const rawRight = numOrNull(merged.rightMinutes, 0, 180, "rightMinutes");
+  const computedAmountMl =
+    rawAmountMl != null && rawAmountMl > 0
+      ? rawAmountMl
+      : merged.type === "breast" && (rawLeft || rawRight)
+      ? estimateNursingVolumeMl(rawLeft || 0, rawRight || 0)
+      : rawAmountMl;
+
   const data = {
     type: merged.type,
-    amountMl: numOrNull(merged.amountMl,0,3000,"amountMl"),
-    leftMinutes: numOrNull(merged.leftMinutes,0,180,"leftMinutes"),
-    rightMinutes: numOrNull(merged.rightMinutes,0,180,"rightMinutes"),
+    amountMl: computedAmountMl,
+    leftMinutes: rawLeft,
+    rightMinutes: rawRight,
     spitUp: !!merged.spitUp,
     notes: merged.notes,
     timestamp: parsedTs.toISOString(),

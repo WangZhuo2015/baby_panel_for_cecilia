@@ -69,7 +69,9 @@ export function getBreastMilkNutrientsForVolume(volumeMl: number): NutrientsMap 
  * 临床经验常规模型：宝宝有效吸吮每分钟约产奶 3-5ml，双侧活跃进食 15-20 分钟约 70-100ml
  */
 export function estimateNursingVolumeMl(leftMinutes: number = 0, rightMinutes: number = 0): number {
-  const totalMinutes = Math.max(0, leftMinutes) + Math.max(0, rightMinutes);
+  const safeLeft = typeof leftMinutes === "number" && Number.isFinite(leftMinutes) ? Math.max(0, leftMinutes) : 0;
+  const safeRight = typeof rightMinutes === "number" && Number.isFinite(rightMinutes) ? Math.max(0, rightMinutes) : 0;
+  const totalMinutes = safeLeft + safeRight;
   if (totalMinutes === 0) return 0;
   // 前5分钟流速最快（~5ml/min），之后逐步放缓（~2.5-3ml/min），单次喂养上限一般 150-180ml
   if (totalMinutes <= 10) {
@@ -79,4 +81,35 @@ export function estimateNursingVolumeMl(leftMinutes: number = 0, rightMinutes: n
     return Math.min(110, Math.round(50 + (totalMinutes - 10) * 4));
   }
   return Math.min(160, Math.round(90 + (totalMinutes - 20) * 2.5));
+}
+
+/**
+ * 获取单次喂养记录的有效摄入奶量（毫升）
+ * - 配方奶 (formula) / 瓶喂母乳 (bottle_breast)：直接取记录的 amountMl
+ * - 母乳亲喂 (breast)：优先取已记录的 amountMl（如测重估算或手动微调），若为空则根据双侧亲喂时长进行临床科学估算
+ * - 混合喂养 (mixed)：配方奶量 amountMl + 亲喂时长科学估算母乳奶量
+ */
+export function getFeedingEffectiveMl(record: {
+  type?: string | null;
+  amountMl?: number | null;
+  leftMinutes?: number | null;
+  rightMinutes?: number | null;
+}): number {
+  if (!record) return 0;
+  const type = record.type || "formula";
+  const recordedMl = typeof record.amountMl === "number" && Number.isFinite(record.amountMl) && record.amountMl > 0 ? record.amountMl : 0;
+  const left = typeof record.leftMinutes === "number" && Number.isFinite(record.leftMinutes) ? record.leftMinutes : 0;
+  const right = typeof record.rightMinutes === "number" && Number.isFinite(record.rightMinutes) ? record.rightMinutes : 0;
+
+  if (type === "breast") {
+    if (recordedMl > 0) return recordedMl;
+    return estimateNursingVolumeMl(left, right);
+  }
+
+  if (type === "mixed") {
+    const nursingMl = estimateNursingVolumeMl(left, right);
+    return recordedMl + nursingMl;
+  }
+
+  return recordedMl;
 }

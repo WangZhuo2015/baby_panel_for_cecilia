@@ -189,6 +189,50 @@ test("API: Nutrition Products, Schedules, Records, and Analysis Domain", async (
   assert.ok(analysisData.analysis.coreMetrics.vitaminD.totalAmount >= 200);
   assert.ok(analysisData.analysis.coreMetrics.calcium.totalAmount >= 100);
 
+  // 5. Test Food Log Record & Breastfeeding Volume Integration in Nutrition Analysis
+  console.log("-> Testing Food Log Record & Breastfeeding Volume Integration...");
+  const createdFeeding = await prisma.feedingRecord.create({
+    data: {
+      babyId: baby.id,
+      recordedById: tenant.userId,
+      type: "breast",
+      leftMinutes: 10,
+      rightMinutes: 10,
+      timestamp: `${today}T12:00:00.000Z`,
+    },
+  });
+
+  const createdFoodLog = await prisma.foodLogRecord.create({
+    data: {
+      babyId: baby.id,
+      recordedById: tenant.userId,
+      date: today,
+      time: "12:30",
+      foods: JSON.stringify(["高铁米粉", "牛肉泥"]),
+      portion: "all",
+      acceptance: 5,
+      babyState: "happy",
+    },
+  });
+
+  const getAnalysisWithFoodReq = new Request(`http://localhost:3000/api/nutrition/analysis?babyId=${baby.id}&date=${today}&days=1`, {
+    method: "GET",
+    headers: authHeaders,
+  });
+  const getAnalysisWithFoodRes = await analysisRoute.GET(getAnalysisWithFoodReq);
+  assert.equal(getAnalysisWithFoodRes.status, 200);
+  const updatedAnalysis = await getAnalysisWithFoodRes.json();
+
+  // Breastfeeding ~90ml calculated from 20 mins
+  assert.ok(updatedAnalysis.analysis.breastMl >= 80, `Expected breastMl >= 80, got ${updatedAnalysis.analysis.breastMl}`);
+  assert.ok(updatedAnalysis.analysis.totalFeedingMl >= 80, `Expected totalFeedingMl >= 80, got ${updatedAnalysis.analysis.totalFeedingMl}`);
+
+  // Food log metrics
+  assert.equal(updatedAnalysis.analysis.foodCount, 1);
+  assert.ok(updatedAnalysis.analysis.foodsTried.includes("高铁米粉"));
+  assert.ok(updatedAnalysis.analysis.foodsTried.includes("牛肉泥"));
+  assert.ok(updatedAnalysis.analysis.coreMetrics.iron.foodAmount > 0, "Iron should have food contribution");
+
   // 7-day trend test
   const get7dReq = new Request(`http://localhost:3000/api/nutrition/analysis?babyId=${baby.id}&date=${today}&days=7`, {
     method: "GET",
@@ -202,6 +246,8 @@ test("API: Nutrition Products, Schedules, Records, and Analysis Domain", async (
   assert.equal(trendData.summary.dailyTrends.length, 7);
 
   // Clean up test entities
+  await prisma.foodLogRecord.deleteMany({ where: { id: createdFoodLog.id } });
+  await prisma.feedingRecord.deleteMany({ where: { id: createdFeeding.id } });
   await prisma.supplementRecord.deleteMany({ where: { id: recordData.record.id } });
   await prisma.supplementSchedule.deleteMany({ where: { id: createdSchedule.id } });
   await prisma.supplementProduct.deleteMany({ where: { id: createdSupp.id } });

@@ -9,6 +9,7 @@ import { calculateAgeDetail, calculateCorrectedAge } from "@/lib/age";
 import { AI_CONFIG } from "@/lib/config";
 import { archiveText } from "@/lib/archive";
 import { safeJsonParse } from "@/lib/json";
+import { getFeedingEffectiveMl } from "@/lib/nutrition/breastmilk";
 import type {
   DailyComprehensiveMetrics,
   DailyFeedingDetail,
@@ -118,12 +119,19 @@ export async function fetchDailyComprehensiveMetrics(
   let spitUpCount = 0;
 
   const feedings: DailyFeedingDetail[] = feedingRecords.map((r) => {
-    if (r.amountMl) totalFeedingMl += r.amountMl;
+    const effectiveMl = getFeedingEffectiveMl(r);
+    totalFeedingMl += effectiveMl;
     const bMins = (r.leftMinutes || 0) + (r.rightMinutes || 0);
     totalBreastMinutes += bMins;
 
-    if (r.type === "breast") breastCount += 1;
-    else if (r.type === "formula" || r.type === "bottle_breast" || r.type === "mixed") formulaCount += 1;
+    if (r.type === "breast" || r.type === "bottle_breast") {
+      breastCount += 1;
+    } else if (r.type === "formula") {
+      formulaCount += 1;
+    } else if (r.type === "mixed") {
+      formulaCount += 1;
+      breastCount += 1;
+    }
     if (r.spitUp) spitUpCount += 1;
 
     return {
@@ -131,7 +139,7 @@ export async function fetchDailyComprehensiveMetrics(
       time: formatIsoToLocalTime(r.timestamp),
       type: r.type,
       typeName: TYPE_LABELS[r.type] || "喂奶",
-      amountMl: r.amountMl,
+      amountMl: r.amountMl ?? (effectiveMl > 0 ? effectiveMl : null),
       leftMinutes: r.leftMinutes,
       rightMinutes: r.rightMinutes,
       spitUp: r.spitUp,
@@ -322,19 +330,19 @@ export function generateCuratedDailySummary(
   const milkTargetMax = months < 6 ? 900 : months < 12 ? 800 : 500;
 
   if (metrics.totalFeedingMl > 0 || metrics.totalBreastMinutes > 0) {
-    if (metrics.totalFeedingMl > 0 && metrics.totalBreastMinutes > 0) {
-      feedingEvaluation = `今日共混合喂养 ${metrics.feedingCount} 次，瓶喂奶量累计 ${metrics.totalFeedingMl}ml，母乳亲喂累计 ${metrics.totalBreastMinutes} 分钟。母乳与奶量搭配充沛，按需哺乳节奏良好。`;
+    if (metrics.formulaCount > 0 && metrics.breastCount > 0) {
+      feedingEvaluation = `今日共混合喂养 ${metrics.feedingCount} 次，总奶量累计约 ${metrics.totalFeedingMl}ml（含母乳亲喂 ${metrics.totalBreastMinutes} 分钟及配方奶/瓶喂）。母乳与奶量搭配充沛，按需哺乳节奏良好。`;
+    } else if (metrics.totalBreastMinutes > 0 && metrics.formulaCount === 0) {
+      feedingEvaluation = `今日母乳亲喂共 ${metrics.feedingCount} 次，累计时长 ${metrics.totalBreastMinutes} 分钟，估算摄入母乳约 ${metrics.totalFeedingMl}ml。亲喂频次与时长均符合月龄需求，妈妈辛苦了！`;
     } else if (metrics.totalFeedingMl > 0) {
       const ml = metrics.totalFeedingMl;
       if (ml >= milkTargetMin && ml <= milkTargetMax + 150) {
-        feedingEvaluation = `今日共摄入配方/瓶喂奶 ${ml}ml（分 ${metrics.feedingCount} 次），达到${months}月龄推荐奶量（${milkTargetMin}–${milkTargetMax}ml/天），喂养量充足稳定。`;
+        feedingEvaluation = `今日共摄入奶量 ${ml}ml（分 ${metrics.feedingCount} 次），达到${months}月龄推荐奶量（${milkTargetMin}–${milkTargetMax}ml/天），喂养量充足稳定。`;
       } else if (ml < milkTargetMin) {
-        feedingEvaluation = `今日记录配方/瓶喂奶 ${ml}ml（共 ${metrics.feedingCount} 次），略低于月龄建议区间（${milkTargetMin}–${milkTargetMax}ml）。若有母乳亲喂未计入或辅食替代，请结合宝宝情绪及排尿情况综合观察。`;
+        feedingEvaluation = `今日记录总奶量 ${ml}ml（共 ${metrics.feedingCount} 次），略低于月龄建议区间（${milkTargetMin}–${milkTargetMax}ml）。若有辅食替代，请结合宝宝情绪及排尿情况综合观察。`;
       } else {
         feedingEvaluation = `今日共喝奶 ${ml}ml（共 ${metrics.feedingCount} 次），奶量胃口很好。注意喂奶后竖抱拍嗝，避免一次性过饱引起吐奶胀气。`;
       }
-    } else {
-      feedingEvaluation = `今日母乳亲喂共 ${metrics.feedingCount} 次，累计时长 ${metrics.totalBreastMinutes} 分钟。亲喂频次与时长均符合月龄需求，妈妈辛苦了！`;
     }
   } else {
     feedingEvaluation = `今日暂未录入喂奶记录。若有喂养请及时记录，以获得更精准的摄入分析。`;

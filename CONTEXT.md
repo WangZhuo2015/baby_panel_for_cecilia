@@ -47,6 +47,10 @@ Terms used in product and architecture talk. Prefer these names over file-level 
 
 **Supplement Record (补剂打卡记录)** — A first-class timeline event logging when a specific supplement was administered to a Baby, how many units/doses were given, and by whom.
 
+**Effective Feeding Volume (`getFeedingEffectiveMl`) (有效喂养量与亲喂折算)** — Universal milk intake parser that deterministically resolves bottle feeding, formula, breastfeeding duration via clinical suckling rates (`estimateNursingVolumeMl`), and mixed feeding additions without dropping breast milk from daily totals.
+
+**Complementary Food Micronutrient Integration (辅食微量元素整合与份量折算)** — Deterministic nutrient accounting of baby complementary food logs (`FoodLogRecord`) benchmarked against Chinese Dietary Guidelines (2022) & China Food Composition Tables, dynamically scaling iron, zinc, calcium, vitamins, and energy by portion multipliers (all/most/half/few).
+
 **Nutrient Intake Engine (营养素摄入计算引擎)** — Deterministic aggregation engine that computes total daily and historical nutrient intakes across formula milk, supplements, and solid food, comparing against China DRIs (WS/T 578) with AI/RNI achievement rates and UL (Upper Intake Level) overdose safety alerts.
 
 ## Responsive Workbench & Device Adaptation
