@@ -4,23 +4,18 @@ import dotenv from "dotenv";
 dotenv.config();
 
 import { prisma } from "../../lib/prisma";
-import { signAuthToken } from "../../lib/auth";
+import { createTestTenant, destroyTestTenant } from "../helpers/tenant";
 
-const BASE_URL = process.env.TEST_BASE_URL?.trim() || "http://127.0.0.1:3088";
+const BASE_URL = process.env.TEST_BASE_URL?.trim() || process.env.BABY_PANEL_URL || "http://127.0.0.1:3089";
 
-test("AI Sessions: Session lifecycle, persistence, rename, and deletion", async () => {
+test("AI Sessions: Session lifecycle, persistence, rename, and deletion", async (t) => {
   let sessionId: string | null = null;
+  const tenant = await createTestTenant(prisma, "aisessions");
+  t.after(() => destroyTestTenant(prisma, tenant.username));
+
+  const headers = tenant.headers;
 
   try {
-    const user = await prisma.user.findFirst();
-    assert.ok(user, "User must exist in DB");
-
-    const token = await signAuthToken({ userId: user.id, username: user.username });
-    const headers = {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    };
-
     // Check if test server is running
     const isReachable = await fetch(`${BASE_URL}/api/nutrition/products`, {
       method: "GET",

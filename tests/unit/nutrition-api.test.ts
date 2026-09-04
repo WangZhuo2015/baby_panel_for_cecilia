@@ -4,27 +4,21 @@ import dotenv from "dotenv";
 dotenv.config();
 
 import { prisma } from "@/lib/prisma";
-import { signAuthToken } from "@/lib/auth";
 import { getLocalDateStr } from "@/lib/date";
+import { createTestTenant, destroyTestTenant } from "../helpers/tenant";
 import * as productsRoute from "@/app/api/nutrition/products/route";
 import * as schedulesRoute from "@/app/api/nutrition/schedules/route";
 import * as recordsRoute from "@/app/api/nutrition/records/route";
 import * as analysisRoute from "@/app/api/nutrition/analysis/route";
 
-test("API: Nutrition Products, Schedules, Records, and Analysis Domain", async () => {
-  const user = await prisma.user.findFirst();
-  const baby = await prisma.baby.findFirst();
-  assert.ok(user && baby, "User and Baby must exist in DB");
+test("API: Nutrition Products, Schedules, Records, and Analysis Domain", async (t) => {
+  // 隔离测试租户（AGENTS.md 合规）：禁止使用 prisma.baby.findFirst() 触碰真实数据
+  const tenant = await createTestTenant(prisma, "nutrition");
+  const baby = { id: tenant.babyId };
+  t.after(() => destroyTestTenant(prisma, tenant.username));
 
-  const token = await signAuthToken({ userId: user.id, username: user.username });
-  const authHeaders = {
-    Authorization: `Bearer ${token}`,
-    "Content-Type": "application/json",
-  };
+  const authHeaders = tenant.headers;
   const today = getLocalDateStr();
-
-  // Clean up any test records from today
-  await prisma.supplementRecord.deleteMany({ where: { babyId: baby.id, date: today } });
 
   // 1. Test Products API
   console.log("-> Testing Nutrition Products API...");

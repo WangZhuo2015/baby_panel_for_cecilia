@@ -66,7 +66,10 @@ export async function GET(request: Request) {
       };
     });
 
-    return NextResponse.json({ schedules });
+    return NextResponse.json({
+      schedules,
+      completedProductIds: Array.from(completedProductIds),
+    });
   } catch (error: any) {
     console.error("GET /api/nutrition/schedules error:", error);
     return NextResponse.json({ error: "获取补剂计划失败" }, { status: 500 });

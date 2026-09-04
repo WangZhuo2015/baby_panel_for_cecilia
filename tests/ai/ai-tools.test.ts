@@ -6,11 +6,14 @@ dotenv.config();
 import { prisma } from "../../lib/prisma";
 import { createBabyPanelTools } from "../../lib/agent/tools";
 import { getLocalDateStr } from "../../lib/date";
+import { createTestTenant, destroyTestTenant } from "../helpers/tenant";
 
-test("AI Tools: Direct invocation of agent tools", async () => {
-  const user = await prisma.user.findFirst();
-  const baby = await prisma.baby.findFirst();
-  assert.ok(user && baby, "User and Baby must exist");
+test("AI Tools: Direct invocation of agent tools", async (t) => {
+  // 隔离测试租户（AGENTS.md 合规）：禁止使用 prisma.baby.findFirst() 触碰真实数据
+  const tenant = await createTestTenant(prisma, "aitools");
+  const baby = await prisma.baby.findUniqueOrThrow({ where: { id: tenant.babyId } });
+  const user = { id: tenant.userId, username: tenant.username };
+  t.after(() => destroyTestTenant(prisma, tenant.username));
 
   const today = getLocalDateStr();
   const createdRecordIds: { type: string; id: string }[] = [];

@@ -79,7 +79,18 @@ test("AI Daily Summary Service & Metrics Aggregator", async (t) => {
   });
   createdRecordIds.push({ type: "food", id: food.id });
 
-  const suppProduct = await prisma.supplementProduct.findFirst();
+  const suppProduct = await prisma.supplementProduct.create({
+    data: {
+      familyId: tenant.familyId,
+      name: "测试维生素D3",
+      brand: "测试品牌",
+      dosageForm: "drops",
+      unitName: "滴",
+      defaultDose: 1,
+      nutrientsJson: JSON.stringify({ vitamin_d: { amount: 400, unit: "IU" } }),
+      isActive: true,
+    },
+  });
   if (suppProduct) {
     const supp = await prisma.supplementRecord.create({
       data: {

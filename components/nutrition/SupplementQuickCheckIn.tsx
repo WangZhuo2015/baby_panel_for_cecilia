@@ -20,6 +20,7 @@ export interface SupplementQuickCheckInProps {
 export function SupplementQuickCheckIn({ babyId, date, refreshKey, onRecordSuccess, className = "" }: SupplementQuickCheckInProps) {
   const [schedules, setSchedules] = useState<SupplementSchedule[]>([]);
   const [supplements, setSupplements] = useState<SupplementProduct[]>([]);
+  const [completedProductIds, setCompletedProductIds] = useState<string[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [submittingId, setSubmittingId] = useState<string | null>(null);
 
@@ -50,6 +51,7 @@ export function SupplementQuickCheckIn({ babyId, date, refreshKey, onRecordSucce
       if (schedulesRes.ok) {
         const data = await schedulesRes.json();
         setSchedules(data.schedules || []);
+        setCompletedProductIds(data.completedProductIds || []);
       }
       if (productsRes.ok) {
         const data = await productsRes.json();
@@ -66,14 +68,16 @@ export function SupplementQuickCheckIn({ babyId, date, refreshKey, onRecordSucce
     fetchData();
   }, [fetchData, refreshKey]);
 
-  // 全局营养/计划变动自动刷新监听
+  // 全局营养/计划变动与数据轮询自动刷新监听
   useEffect(() => {
     const handleUpdate = () => {
       fetchData();
     };
     window.addEventListener("baby:nutrition-updated", handleUpdate);
+    window.addEventListener("baby:data-polled", handleUpdate);
     return () => {
       window.removeEventListener("baby:nutrition-updated", handleUpdate);
+      window.removeEventListener("baby:data-polled", handleUpdate);
     };
   }, [fetchData]);
 
@@ -139,7 +143,7 @@ export function SupplementQuickCheckIn({ babyId, date, refreshKey, onRecordSucce
           frequency: "daily" as const,
           targetDose: p.defaultDose || 1.0,
           isActive: true,
-          isCompletedToday: false,
+          isCompletedToday: completedProductIds.includes(p.id),
         }));
 
   if (loading && displayItems.length === 0) {
