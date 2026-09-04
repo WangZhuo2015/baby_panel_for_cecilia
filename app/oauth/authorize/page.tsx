@@ -141,7 +141,7 @@ function AuthorizeForm() {
               </div>
             </div>
             <div className="px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs rounded-full font-medium">
-              Gemini Spark / MCP
+              {authData?.client?.clientName ? `${authData.client.clientName} / MCP` : "MCP 智能体"}
             </div>
           </div>
 
