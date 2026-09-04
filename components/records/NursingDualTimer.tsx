@@ -114,6 +114,57 @@ export function NursingDualTimer({
     }
   };
 
+  // Ref tracking current seconds without causing effect re-subscriptions
+  const secRef = useRef({ leftSec, rightSec });
+  secRef.current = { leftSec, rightSec };
+
+  // Adjust seconds manually while keeping active timingRef in sync
+  const adjustLeftSec = (newSec: number) => {
+    setLeftSec(newSec);
+    if (activeSide === "left") {
+      const now = Date.now();
+      timingRef.current = { side: "left", baseSec: newSec, startAt: now };
+    }
+    if (!isEdit && typeof window !== "undefined") {
+      try {
+        localStorage.setItem(
+          NURSING_STORAGE_KEY,
+          JSON.stringify({
+            activeSide,
+            baseSec: activeSide === "left" ? newSec : timingRef.current.baseSec,
+            startAt: activeSide === "left" ? Date.now() : timingRef.current.startAt,
+            leftSec: newSec,
+            rightSec: secRef.current.rightSec,
+            updatedAt: Date.now(),
+          })
+        );
+      } catch {}
+    }
+  };
+
+  const adjustRightSec = (newSec: number) => {
+    setRightSec(newSec);
+    if (activeSide === "right") {
+      const now = Date.now();
+      timingRef.current = { side: "right", baseSec: newSec, startAt: now };
+    }
+    if (!isEdit && typeof window !== "undefined") {
+      try {
+        localStorage.setItem(
+          NURSING_STORAGE_KEY,
+          JSON.stringify({
+            activeSide,
+            baseSec: activeSide === "right" ? newSec : timingRef.current.baseSec,
+            startAt: activeSide === "right" ? Date.now() : timingRef.current.startAt,
+            leftSec: secRef.current.leftSec,
+            rightSec: newSec,
+            updatedAt: Date.now(),
+          })
+        );
+      } catch {}
+    }
+  };
+
   // Timestamp-delta interval: immune to background timer throttling
   useEffect(() => {
     if (!activeSide) return;
@@ -135,8 +186,8 @@ export function NursingDualTimer({
               activeSide,
               baseSec: timingRef.current.baseSec,
               startAt: timingRef.current.startAt,
-              leftSec: activeSide === "left" ? current : leftSec,
-              rightSec: activeSide === "right" ? current : rightSec,
+              leftSec: activeSide === "left" ? current : secRef.current.leftSec,
+              rightSec: activeSide === "right" ? current : secRef.current.rightSec,
               updatedAt: now,
             })
           );
@@ -159,7 +210,7 @@ export function NursingDualTimer({
       clearInterval(interval);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [activeSide, leftSec, rightSec, isEdit]);
+  }, [activeSide, isEdit]);
 
   return (
     <div className="grid grid-cols-2 gap-3">
@@ -202,7 +253,7 @@ export function NursingDualTimer({
                   try {
                     localStorage.setItem(
                       NURSING_STORAGE_KEY,
-                      JSON.stringify({ activeSide: null, leftSec: 0, rightSec, updatedAt: Date.now() })
+                      JSON.stringify({ activeSide: null, leftSec: 0, rightSec: secRef.current.rightSec, updatedAt: Date.now() })
                     );
                   } catch {}
                 }
@@ -219,7 +270,7 @@ export function NursingDualTimer({
         <div className={`flex items-center justify-center gap-1 pt-1 ${!isEdit ? "border-t border-divider/50" : "my-2"}`}>
           <button
             type="button"
-            onClick={() => setLeftSec((s) => Math.max(0, s - 60))}
+            onClick={() => adjustLeftSec(Math.max(0, leftSec - 60))}
             className="w-7 h-7 rounded-full bg-gray-100 text-gray-600 text-xs font-bold flex items-center justify-center btn-press hover:bg-gray-200"
           >
             -1
@@ -229,7 +280,7 @@ export function NursingDualTimer({
           </span>
           <button
             type="button"
-            onClick={() => setLeftSec((s) => s + 60)}
+            onClick={() => adjustLeftSec(leftSec + 60)}
             className="w-7 h-7 rounded-full bg-gray-100 text-gray-600 text-xs font-bold flex items-center justify-center btn-press hover:bg-gray-200"
           >
             +1
@@ -242,7 +293,7 @@ export function NursingDualTimer({
             <button
               key={m}
               type="button"
-              onClick={() => setLeftSec(m * 60)}
+              onClick={() => adjustLeftSec(m * 60)}
               className={`px-1.5 py-0.5 rounded text-[10px] ${
                 leftMin === m
                   ? "bg-primary text-white font-bold"
@@ -294,7 +345,7 @@ export function NursingDualTimer({
                   try {
                     localStorage.setItem(
                       NURSING_STORAGE_KEY,
-                      JSON.stringify({ activeSide: null, leftSec, rightSec: 0, updatedAt: Date.now() })
+                      JSON.stringify({ activeSide: null, leftSec: secRef.current.leftSec, rightSec: 0, updatedAt: Date.now() })
                     );
                   } catch {}
                 }
@@ -311,7 +362,7 @@ export function NursingDualTimer({
         <div className={`flex items-center justify-center gap-1 pt-1 ${!isEdit ? "border-t border-divider/50" : "my-2"}`}>
           <button
             type="button"
-            onClick={() => setRightSec((s) => Math.max(0, s - 60))}
+            onClick={() => adjustRightSec(Math.max(0, rightSec - 60))}
             className="w-7 h-7 rounded-full bg-gray-100 text-gray-600 text-xs font-bold flex items-center justify-center btn-press hover:bg-gray-200"
           >
             -1
@@ -321,7 +372,7 @@ export function NursingDualTimer({
           </span>
           <button
             type="button"
-            onClick={() => setRightSec((s) => s + 60)}
+            onClick={() => adjustRightSec(rightSec + 60)}
             className="w-7 h-7 rounded-full bg-gray-100 text-gray-600 text-xs font-bold flex items-center justify-center btn-press hover:bg-gray-200"
           >
             +1
@@ -334,7 +385,7 @@ export function NursingDualTimer({
             <button
               key={m}
               type="button"
-              onClick={() => setRightSec(m * 60)}
+              onClick={() => adjustRightSec(m * 60)}
               className={`px-1.5 py-0.5 rounded text-[10px] ${
                 rightMin === m
                   ? "bg-primary text-white font-bold"

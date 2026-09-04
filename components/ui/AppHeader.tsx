@@ -25,7 +25,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
   const isSpinning = refreshing || internalLoading;
 
   const handleBack = () => {
-    if (typeof window !== 'undefined' && window.history.length > 1 && document.referrer) {
+    if (typeof window !== 'undefined' && window.history.length > 1) {
       window.history.back();
     } else {
       router.push('/');

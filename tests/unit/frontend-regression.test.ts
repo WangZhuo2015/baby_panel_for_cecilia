@@ -45,6 +45,8 @@ test("PWA Long-tail: AppHeader should have fallback routing to prevent standalon
   const content = fs.readFileSync(path.join(process.cwd(), "components/ui/AppHeader.tsx"), "utf-8");
   assert.ok(content.includes("router.push('/')") || content.includes('router.push("/")'), "AppHeader must have router fallback");
   assert.ok(content.includes("useRouter"), "AppHeader must use Next.js useRouter");
+  // F-02: Document referrer must not gate history.back() in standalone PWA SPA navigation
+  assert.ok(!content.includes("document.referrer"), "AppHeader must not require document.referrer for history.back()");
 });
 
 test("PWA Long-tail: NursingDualTimer should prevent drift with timestamp delta and persist to localStorage", () => {
@@ -52,6 +54,11 @@ test("PWA Long-tail: NursingDualTimer should prevent drift with timestamp delta 
   assert.ok(content.includes("baby_active_nursing_timer"), "NursingDualTimer must persist to localStorage");
   assert.ok(content.includes("startAt"), "NursingDualTimer must track real start timestamp");
   assert.ok(content.includes("visibilitychange"), "NursingDualTimer must listen to visibilitychange for instant sync");
+  // F-01: Manual minute adjustments must update timingRef.current
+  assert.ok(content.includes("adjustLeftSec"), "NursingDualTimer must use adjustLeftSec");
+  assert.ok(content.includes("adjustRightSec"), "NursingDualTimer must use adjustRightSec");
+  // F-03: Interval effect must not recreate every second with leftSec/rightSec dependencies
+  assert.ok(content.includes("}, [activeSide, isEdit]);"), "NursingDualTimer interval must only depend on activeSide and isEdit");
 });
 
 test("PWA Long-tail: manifest.json should allow any orientation for iPad/Desktop workbench", () => {
@@ -68,3 +75,4 @@ test("PWA Long-tail: InstallGuideBanner should listen to appinstalled event", ()
   const content = fs.readFileSync(path.join(process.cwd(), "components/ui/InstallGuideBanner.tsx"), "utf-8");
   assert.ok(content.includes("appinstalled"), "InstallGuideBanner must listen to appinstalled event");
 });
+
