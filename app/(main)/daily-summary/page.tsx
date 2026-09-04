@@ -42,6 +42,7 @@ import {
 import { calculateAge } from "@/lib/age";
 import type { AiDailySummaryResult } from "@/types/daily-summary";
 import { DailySummaryPosterModal } from "@/components/daily-summary/DailySummaryPosterModal";
+import { BabyAvatar } from "@/components/ui/BabyAvatar";
 
 function FormattedSectionText({ text }: { text: string }) {
   if (!text) return null;
@@ -300,7 +301,7 @@ ${summary.sections.tomorrowTips}
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-full bg-primary-soft flex items-center justify-center overflow-hidden shrink-0">
               {baby?.avatarUrl ? (
-                <img src={baby.avatarUrl} alt={baby.nickname} className="w-full h-full object-cover" />
+                <BabyAvatar src={baby.avatarUrl} alt={baby.nickname} size={32} />
               ) : (
                 <Baby size={16} className="text-primary" />
               )}

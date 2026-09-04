@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import {
   X,
   Send,
@@ -43,6 +44,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { useBabyStore } from "@/stores/useBabyStore";
+import { BabyAvatar } from "@/components/ui/BabyAvatar";
 import { calculateAge } from "@/lib/age";
 import { AiActionCard, ActionCardData } from "@/components/ui/AiActionCard";
 import { VoiceRecordingBar } from "@/components/ui/VoiceRecordingBar";
@@ -1388,7 +1390,14 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
                                     className="rounded-xl overflow-hidden max-w-[220px] border border-white/30 shadow-xs cursor-pointer hover:opacity-95"
                                     onClick={() => window.open(imgs[0], "_blank")}
                                   >
-                                    <img src={imgs[0]} alt="上传单据" className="w-full h-auto max-h-48 object-cover" />
+                                    <Image
+                                      src={imgs[0]}
+                                      alt="上传单据"
+                                      width={220}
+                                      height={192}
+                                      unoptimized
+                                      className="w-full h-auto max-h-48 object-cover"
+                                    />
                                   </div>
                                 );
                               }
@@ -1400,7 +1409,14 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
                                       className="aspect-square rounded-lg overflow-hidden cursor-pointer hover:opacity-90 bg-black/20"
                                       onClick={() => window.open(imgUrl, "_blank")}
                                     >
-                                      <img src={imgUrl} alt={`图片 ${i + 1}`} className="w-full h-full object-cover" />
+                                      <Image
+                                        src={imgUrl}
+                                        alt={`图片 ${i + 1}`}
+                                        width={90}
+                                        height={90}
+                                        unoptimized
+                                        className="w-full h-full object-cover"
+                                      />
                                     </div>
                                   ))}
                                 </div>
@@ -1574,7 +1590,7 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
                       {isUser && (
                         <div className="w-7 h-7 rounded-full bg-primary-light flex items-center justify-center shrink-0 mt-0.5 overflow-hidden shadow-xs border border-primary/20">
                           {baby?.avatarUrl ? (
-                            <img src={baby.avatarUrl} alt="头像" className="w-full h-full object-cover" />
+                            <BabyAvatar src={baby.avatarUrl} alt="头像" size={28} />
                           ) : (
                             <Baby size={14} className="text-primary" />
                           )}
@@ -1608,7 +1624,14 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
                     </span>
                     {selectedImages.map((imgUrl, idx) => (
                       <div key={idx} className="relative group shrink-0 w-11 h-11 rounded-xl overflow-hidden border-2 border-primary/30 shadow-2xs">
-                        <img src={imgUrl} alt={`图片 ${idx + 1}`} className="w-full h-full object-cover" />
+                        <Image
+                          src={imgUrl}
+                          alt={`图片 ${idx + 1}`}
+                          width={44}
+                          height={44}
+                          unoptimized
+                          className="w-full h-full object-cover"
+                        />
                         <button
                           type="button"
                           onClick={() => handleRemoveImage(idx)}

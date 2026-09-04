@@ -29,6 +29,7 @@ import { QuickAiButton } from "@/components/ui/QuickAiButton";
 import { openRecordDrawer } from "@/lib/drawer-bus";
 import { WhoPercentileChips } from "@/components/growth/WhoPercentileCard";
 import { getWhoMetricsForBaby } from "@/lib/who-growth-standards";
+import { BabyAvatar } from "@/components/ui/BabyAvatar";
 
 const GrowthLineChart = dynamic(() => import("@/components/growth/GrowthLineChart"), {
   ssr: false,
@@ -281,7 +282,7 @@ export default function GrowthPage() {
         >
           <div className="w-12 h-12 rounded-full bg-gradient-to-br from-primary-soft to-primary/30 flex items-center justify-center shadow-soft overflow-hidden group-hover:ring-2 group-hover:ring-primary/40 transition-all">
             {baby?.avatarUrl ? (
-              <img src={baby.avatarUrl} alt={baby.nickname} className="w-full h-full object-cover" />
+              <BabyAvatar src={baby.avatarUrl} alt={baby.nickname} size={48} />
             ) : (
               <Baby size={24} className="text-primary" />
             )}

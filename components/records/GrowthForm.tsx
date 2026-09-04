@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
+import Image from "next/image";
 import {
   Upload,
   Loader2,
@@ -226,9 +227,12 @@ export function GrowthForm({
             <div className="flex flex-col items-center py-4">
               {imagePreview ? (
                 <div className="w-36 h-36 rounded-2xl overflow-hidden mb-3 border border-primary/20">
-                  <img
+                  <Image
                     src={imagePreview}
                     alt="测量照片预览"
+                    width={144}
+                    height={144}
+                    unoptimized={imagePreview.startsWith("data:") || imagePreview.startsWith("blob:")}
                     className="w-full h-full object-cover"
                   />
                 </div>

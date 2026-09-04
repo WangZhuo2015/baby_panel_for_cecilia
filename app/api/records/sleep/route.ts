@@ -8,7 +8,7 @@ export async function GET(request: Request) {
     const auth = await requireAuth(request);
     if (auth.errorResponse) return auth.errorResponse;
     const { searchParams } = new URL(request.url);
-    const babyResult = await requireBaby(auth.user.id, searchParams.get("babyId"));
+    const babyResult = await requireBaby(auth.user, searchParams.get("babyId"));
     if (babyResult.errorResponse) return babyResult.errorResponse;
     const ctx = { userId: auth.user.id, babyId: babyResult.baby.id, baby: babyResult.baby, familyId: babyResult.family.id };
     const data = await records.getSleepRecords(ctx, { date: searchParams.get("date") || undefined, limit: searchParams.get("limit") || undefined });
@@ -25,7 +25,7 @@ export async function POST(request: Request) {
     const auth = await requireAuth(request);
     if (auth.errorResponse) return auth.errorResponse;
     const body = await request.json().catch(() => ({} as any));
-    const babyResult = await requireBaby(auth.user.id, body.babyId);
+    const babyResult = await requireBaby(auth.user, body.babyId);
     if (babyResult.errorResponse) return babyResult.errorResponse;
     const ctx = { userId: auth.user.id, babyId: babyResult.baby.id, baby: babyResult.baby };
     if (!body.startTime || typeof body.startTime !== "string" || !body.endTime || typeof body.endTime !== "string") {

@@ -28,6 +28,7 @@ import { calculateAge } from "@/lib/age";
 import { openQuickAI } from "@/lib/quickai-bus";
 import { openRecordDrawer, RecordDrawerType } from "@/lib/drawer-bus";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
+import { BabyAvatar } from "@/components/ui/BabyAvatar";
 import { FeatureTourModal } from "@/components/ui/FeatureTourModal";
 import { PersonalTokenModal } from "@/components/user/PersonalTokenModal";
 
@@ -79,7 +80,7 @@ export function DesktopSidebar() {
           <div className="relative shrink-0">
             <div className="w-11 h-11 rounded-full bg-gradient-to-br from-primary-soft to-primary/30 flex items-center justify-center overflow-hidden shadow-soft group-hover:ring-2 group-hover:ring-primary/40 transition-all">
               {baby?.avatarUrl ? (
-                <img src={baby.avatarUrl} alt={baby.nickname} className="w-full h-full object-cover" />
+                <BabyAvatar src={baby.avatarUrl} alt={baby.nickname} size={44} />
               ) : (
                 <Baby size={22} className="text-primary" />
               )}

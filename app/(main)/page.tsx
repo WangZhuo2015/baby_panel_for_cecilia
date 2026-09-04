@@ -34,6 +34,7 @@ import { QuickAiButton } from "@/components/ui/QuickAiButton";
 import { InstallGuideBanner } from "@/components/ui/InstallGuideBanner";
 import { SupplementQuickCheckIn } from "@/components/nutrition/SupplementQuickCheckIn";
 import { FeatureTourModal } from "@/components/ui/FeatureTourModal";
+import { BabyAvatar } from "@/components/ui/BabyAvatar";
 
 import { formatIsoToLocalTime } from "@/lib/date";
 import { APP_VERSION } from "@/lib/version";
@@ -359,7 +360,7 @@ export default function HomePage() {
           <div className="relative">
             <div className="w-12 h-12 rounded-full bg-gradient-to-br from-primary-soft to-primary/30 flex items-center justify-center overflow-hidden shadow-soft group-hover:ring-2 group-hover:ring-primary/40 transition-all">
               {baby.avatarUrl ? (
-                <img src={baby.avatarUrl} alt={baby.nickname} className="w-full h-full object-cover" />
+                <BabyAvatar src={baby.avatarUrl} alt={baby.nickname} size={48} priority />
               ) : (
                 <Baby size={24} className="text-primary" />
               )}

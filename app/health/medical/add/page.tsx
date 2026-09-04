@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import {
   Upload,
   Camera,
@@ -330,9 +331,12 @@ export default function MedicalAddPage() {
         <div className="flex flex-col items-center py-4 text-center">
           {imagePreview ? (
             <div className="w-full h-44 rounded-2xl overflow-hidden mb-3 bg-black/5 relative group border border-divider">
-              <img
+              <Image
                 src={imagePreview}
                 alt="单据预览"
+                width={400}
+                height={176}
+                unoptimized={imagePreview.startsWith("data:") || imagePreview.startsWith("blob:")}
                 className="w-full h-full object-contain"
               />
               <div className="absolute top-2 right-2 flex gap-1.5">

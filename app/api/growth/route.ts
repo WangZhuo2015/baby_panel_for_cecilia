@@ -8,7 +8,7 @@ export async function GET(request: Request) {
     const auth = await requireAuth(request);
     if (auth.errorResponse) return auth.errorResponse;
     const { searchParams } = new URL(request.url);
-    const babyResult = await requireBaby(auth.user.id, searchParams.get("babyId"));
+    const babyResult = await requireBaby(auth.user, searchParams.get("babyId"));
     if (babyResult.errorResponse) return babyResult.errorResponse;
     const ctx = { userId: auth.user.id, babyId: babyResult.baby.id, baby: babyResult.baby };
     const data = await records.getGrowthMeasurements(ctx, { limit: searchParams.get("limit") || undefined });
@@ -25,7 +25,7 @@ export async function POST(request: Request) {
     const auth = await requireAuth(request);
     if (auth.errorResponse) return auth.errorResponse;
     const body = await request.json().catch(() => ({} as any));
-    const babyResult = await requireBaby(auth.user.id, body.babyId);
+    const babyResult = await requireBaby(auth.user, body.babyId);
     if (babyResult.errorResponse) return babyResult.errorResponse;
     const ctx = { userId: auth.user.id, babyId: babyResult.baby.id, baby: babyResult.baby };
     const rec = await records.createGrowth(ctx, {
@@ -57,7 +57,7 @@ export async function DELETE(request: Request) {
     const { prisma } = await import("@/lib/prisma");
     const rec = await prisma.growthMeasurement.findUnique({ where: { id } });
     if (!rec) return NextResponse.json({ error: "未找到指定的生长记录" }, { status: 404 });
-    const babyCheck = await getActiveBaby(auth.user.id, rec.babyId);
+    const babyCheck = await getActiveBaby(auth.user, rec.babyId);
     if (babyCheck.errorResponse) return babyCheck.errorResponse;
     await records.deleteRecord({ userId: auth.user.id, babyId: rec.babyId }, "growth", id);
     return NextResponse.json({ success: true, id });

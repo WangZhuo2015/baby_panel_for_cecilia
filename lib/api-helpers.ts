@@ -80,24 +80,35 @@ export async function requireAuth(request: Request): Promise<
  * Returns 404 if the requested baby is not found, or 403 Forbidden if the user's family does not own the baby.
  */
 export async function getActiveBaby(
-  userId: string,
+  userOrUserId: AuthUser | string,
   requestedBabyId?: string | null
 ): Promise<ActiveBabyResult> {
-  const memberships = await prisma.familyMember.findMany({
+  let userFamilies: Array<Family & { babies: Baby[] }> | null = null;
 
-    where: { userId },
-    include: {
-      family: {
-        include: {
-          babies: {
-            orderBy: { createdAt: "asc" },
+  if (typeof userOrUserId === "object" && userOrUserId !== null && Array.isArray((userOrUserId as any).memberships)) {
+    const user = userOrUserId as any;
+    userFamilies = user.memberships.map((m: any) => m.family);
+  } else {
+    const userId = typeof userOrUserId === "string" ? userOrUserId : (userOrUserId as any)?.id;
+    const memberships = await prisma.familyMember.findMany({
+      where: { userId },
+      include: {
+        family: {
+          include: {
+            babies: {
+              orderBy: { createdAt: "asc" },
+            },
           },
         },
       },
-    },
-  });
+    });
 
-  if (!memberships || memberships.length === 0) {
+    if (memberships && memberships.length > 0) {
+      userFamilies = memberships.map((m) => m.family);
+    }
+  }
+
+  if (!userFamilies || userFamilies.length === 0) {
     return {
       baby: null,
       family: null,
@@ -105,11 +116,20 @@ export async function getActiveBaby(
     };
   }
 
-  const userFamilies = memberships.map((m) => m.family);
   const userFamilyIds = new Set(userFamilies.map((f) => f.id));
   const primaryFamily = userFamilies[0] || null;
 
   if (requestedBabyId) {
+    const inMemoryBaby = userFamilies.flatMap((f) => f.babies).find((b) => b.id === requestedBabyId);
+    if (inMemoryBaby) {
+      const matchedFamily = userFamilies.find((f) => f.id === inMemoryBaby.familyId) || primaryFamily;
+      return {
+        baby: inMemoryBaby,
+        family: matchedFamily,
+        errorResponse: null,
+      };
+    }
+
     const baby = await prisma.baby.findUnique({
       where: { id: requestedBabyId },
     });
@@ -146,10 +166,13 @@ export async function getActiveBaby(
 
   const allBabies = userFamilies.flatMap((f) => f.babies);
   const activeBaby = allBabies[0] || null;
+  const matchedFamily = activeBaby
+    ? userFamilies.find((f) => f.id === activeBaby.familyId) || primaryFamily
+    : primaryFamily;
 
   return {
     baby: activeBaby,
-    family: primaryFamily,
+    family: matchedFamily,
     errorResponse: null,
   };
 }
@@ -159,13 +182,13 @@ export async function getActiveBaby(
  * Returns 404 if no baby exists for the user.
  */
 export async function requireBaby(
-  userId: string,
+  userOrUserId: AuthUser | string,
   requestedBabyId?: string | null
 ): Promise<
   | { baby: Baby; family: Family; errorResponse: null }
   | { baby: null; family: Family | null; errorResponse: NextResponse }
 > {
-  const result = await getActiveBaby(userId, requestedBabyId);
+  const result = await getActiveBaby(userOrUserId, requestedBabyId);
   if (result.errorResponse) {
     return {
       baby: null,

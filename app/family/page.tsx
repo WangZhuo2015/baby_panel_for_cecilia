@@ -13,6 +13,7 @@ import { InstallGuideModal } from "@/components/ui/InstallGuideModal";
 import { FeatureTourModal } from "@/components/ui/FeatureTourModal";
 import { PersonalTokenModal } from "@/components/user/PersonalTokenModal";
 import { APP_VERSION } from "@/lib/version";
+import { BabyAvatar } from "@/components/ui/BabyAvatar";
 
 export default function FamilyPage() {
   const router = useRouter();
@@ -207,7 +208,7 @@ export default function FamilyPage() {
             <div className="relative">
               <div className="w-12 h-12 rounded-full bg-primary-soft flex items-center justify-center overflow-hidden shadow-soft">
                 {baby?.avatarUrl ? (
-                  <img src={baby.avatarUrl} alt={baby.nickname} className="w-full h-full object-cover" />
+                  <BabyAvatar src={baby.avatarUrl} alt={baby.nickname} size={48} />
                 ) : (
                   <Baby size={24} className="text-primary" />
                 )}

@@ -17,14 +17,27 @@ import { getLocalDateStr, addDays, getWeekdayStr } from "@/lib/date";
 import { CuteCard } from "@/components/ui/CuteCard";
 import { CuteButton } from "@/components/ui/CuteButton";
 import { SegmentControl } from "@/components/ui/SegmentControl";
-import { QuickAiButton } from "@/components/ui/QuickAiButton";
+import dynamic from "next/dynamic";
 import { CoreNutrientCard } from "@/components/nutrition/CoreNutrientCard";
 import { CompoundSourceBreakdown } from "@/components/nutrition/CompoundSourceBreakdown";
 import { FullNutrientTable } from "@/components/nutrition/FullNutrientTable";
-import { NutritionTrendChart } from "@/components/nutrition/NutritionTrendChart";
 import { SupplementQuickCheckIn } from "@/components/nutrition/SupplementQuickCheckIn";
 import { ProductCatalogModal } from "@/components/nutrition/ProductCatalogModal";
+import { BabyAvatar } from "@/components/ui/BabyAvatar";
+import { QuickAiButton } from "@/components/ui/QuickAiButton";
 import type { DailyNutritionAnalysis, MultiDayNutritionSummary } from "@/types/nutrition";
+
+const NutritionTrendChart = dynamic(
+  () => import("@/components/nutrition/NutritionTrendChart").then((m) => m.NutritionTrendChart),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="h-64 flex items-center justify-center bg-card rounded-2xl border border-divider text-xs text-text-muted">
+        加载营养摄入趋势图表...
+      </div>
+    ),
+  }
+);
 
 function generateWeeklyDates() {
   const todayStr = getLocalDateStr();
@@ -126,7 +139,7 @@ export default function NutritionPage() {
         >
           <div className="w-12 h-12 rounded-full bg-gradient-to-br from-primary-light to-primary/30 flex items-center justify-center overflow-hidden shadow-soft group-hover:ring-2 group-hover:ring-primary/40 transition-all">
             {baby.avatarUrl ? (
-              <img src={baby.avatarUrl} alt={baby.nickname} className="w-full h-full object-cover" />
+              <BabyAvatar src={baby.avatarUrl} alt={baby.nickname} size={48} />
             ) : (
               <Baby size={24} className="text-primary" />
             )}

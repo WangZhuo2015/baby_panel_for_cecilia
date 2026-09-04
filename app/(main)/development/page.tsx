@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { AlertCircle, TrendingUp, Brain, MessageCircle, Hand, Sparkles, Info, AlertTriangle, Baby, PlayCircle } from 'lucide-react'
 import { AppHeader, CuteCard, SegmentControl, SectionTitle, QuickAiButton } from '@/components/ui'
 import DataVersionBadge from '@/components/ui/DataVersionBadge'
+import { BabyAvatar } from '@/components/ui/BabyAvatar'
 import { useBabyStore } from '@/stores/useBabyStore'
 import { calculateAge } from '@/lib/age'
 import type { DevelopmentCategory } from '@/types'
@@ -180,7 +181,7 @@ export default function DevelopmentPage() {
           >
             <div className="w-11 h-11 rounded-full bg-gradient-to-br from-primary-soft to-primary/30 flex items-center justify-center overflow-hidden shadow-xs shrink-0 group-hover:ring-2 group-hover:ring-primary/40 transition-all lg:hidden">
               {baby?.avatarUrl ? (
-                <img src={baby.avatarUrl} alt={baby.nickname} className="w-full h-full object-cover" />
+                <BabyAvatar src={baby.avatarUrl} alt={baby.nickname} size={44} />
               ) : (
                 <Baby size={22} className="text-primary" />
               )}

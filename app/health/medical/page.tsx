@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import {
   Plus,
   Calendar,
@@ -172,7 +173,14 @@ export default function MedicalReportsPage() {
                     化验单识别完成，点击核对入库 →
                   </div>
                   {job.imageUrl && (
-                    <img src={job.imageUrl} alt="" className="mt-2 w-full h-24 object-cover rounded-xl opacity-80" />
+                    <Image
+                      src={job.imageUrl}
+                      alt="化验单缩略图"
+                      width={320}
+                      height={96}
+                      unoptimized={job.imageUrl.startsWith("data:") || job.imageUrl.startsWith("blob:")}
+                      className="mt-2 w-full h-24 object-cover rounded-xl opacity-80"
+                    />
                   )}
                 </Link>
               );
@@ -414,9 +422,12 @@ export default function MedicalReportsPage() {
                     className="w-full h-36 rounded-xl overflow-hidden bg-black/5 cursor-pointer relative group"
                     onClick={() => setLightboxImage(selectedReport.imageUrl!)}
                   >
-                    <img
+                    <Image
                       src={selectedReport.imageUrl}
                       alt={selectedReport.title}
+                      width={400}
+                      height={144}
+                      unoptimized={selectedReport.imageUrl.startsWith("data:") || selectedReport.imageUrl.startsWith("blob:")}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform"
                     />
                     <div className="absolute inset-0 bg-black/20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">

@@ -12,6 +12,7 @@ import { getLocalDateStr, addDays, getWeekdayStr } from "@/lib/date";
 import { Baby, Plus, Utensils, AlertCircle, Trash2, Heart, Smile, Meh, Frown, RefreshCw } from "lucide-react";
 import type { FoodLogRecord } from "@/types";
 import { openRecordDrawer } from "@/lib/drawer-bus";
+import { BabyAvatar } from "@/components/ui/BabyAvatar";
 
 function generateWeeklyDates() {
   const todayStr = getLocalDateStr();
@@ -133,7 +134,7 @@ export default function FoodPage() {
         >
           <div className="w-12 h-12 rounded-full bg-gradient-to-br from-primary-light to-primary-soft flex items-center justify-center overflow-hidden shadow-soft group-hover:ring-2 group-hover:ring-primary/40 transition-all">
             {baby?.avatarUrl ? (
-              <img src={baby.avatarUrl} alt={baby.nickname} className="w-full h-full object-cover" />
+              <BabyAvatar src={baby.avatarUrl} alt={baby.nickname} size={48} />
             ) : (
               <Baby size={24} className="text-primary" />
             )}

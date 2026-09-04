@@ -6,6 +6,7 @@ import { Bell } from "lucide-react";
 import { useBabyStore } from "@/stores/useBabyStore";
 import { calculateAge } from "@/lib/age";
 import { calculateUnreadCount } from "@/lib/notifications-storage";
+import { BabyAvatar } from "@/components/ui/BabyAvatar";
 
 interface BabyProfileHeaderProps {
   showNotification?: boolean;
@@ -63,7 +64,7 @@ export const BabyProfileHeader: React.FC<BabyProfileHeaderProps> = ({
         {/* Avatar */}
         <div className="w-12 h-12 rounded-full bg-primary-soft flex items-center justify-center overflow-hidden shadow-card group-hover:ring-2 group-hover:ring-primary/40 transition-all">
           {baby.avatarUrl ? (
-            <img src={baby.avatarUrl} alt={baby.nickname} className="w-full h-full object-cover" />
+            <BabyAvatar src={baby.avatarUrl} alt={baby.nickname} size={48} priority />
           ) : (
             <span className="text-xl">👶</span>
           )}

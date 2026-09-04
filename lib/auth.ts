@@ -47,7 +47,22 @@ export function generateInviteCode(length = 6): string {
   return code;
 }
 
-export async function getAuthSession(request?: Request) {
+export type AuthSessionUser = NonNullable<Awaited<ReturnType<typeof resolveAuthSession>>>;
+
+const requestSessionCache = new WeakMap<Request, Promise<AuthSessionUser | null>>();
+
+export async function getAuthSession(request?: Request | null): Promise<AuthSessionUser | null> {
+  if (request && typeof request === "object") {
+    const cached = requestSessionCache.get(request);
+    if (cached) return cached;
+    const p = resolveAuthSession(request);
+    requestSessionCache.set(request, p);
+    return p;
+  }
+  return resolveAuthSession(request);
+}
+
+async function resolveAuthSession(request?: Request | null) {
   let token: string | undefined;
 
   if (request) {

@@ -3,6 +3,7 @@
 import React from "react";
 import { Baby, Users, CheckCircle2, AlertCircle } from "lucide-react";
 import { CuteCard } from "@/components/ui/CuteCard";
+import { BabyAvatar } from "@/components/ui/BabyAvatar";
 import { calculateAge } from "@/lib/age";
 
 export interface FamilyPreviewData {
@@ -56,10 +57,10 @@ export function InvitePreviewCard({ previewData, loading }: InvitePreviewCardPro
       <div className="flex items-start gap-3">
         <div className="w-12 h-12 rounded-2xl bg-white dark:bg-card shadow-soft flex items-center justify-center text-primary shrink-0 overflow-hidden border border-primary/20">
           {baby?.avatarUrl ? (
-            <img
+            <BabyAvatar
               src={baby.avatarUrl}
               alt={baby.nickname}
-              className="w-full h-full object-cover"
+              size={48}
             />
           ) : (
             <Baby size={26} />

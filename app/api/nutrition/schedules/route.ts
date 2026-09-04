@@ -10,7 +10,7 @@ export async function GET(request: Request) {
     if (auth.errorResponse) return auth.errorResponse;
 
     const { searchParams } = new URL(request.url);
-    const babyResult = await requireBaby(auth.user.id, searchParams.get("babyId"));
+    const babyResult = await requireBaby(auth.user, searchParams.get("babyId"));
     if (babyResult.errorResponse) return babyResult.errorResponse;
 
     const babyId = babyResult.baby.id;
@@ -82,7 +82,7 @@ export async function POST(request: Request) {
     if (auth.errorResponse) return auth.errorResponse;
 
     const body = await request.json().catch(() => ({}));
-    const babyResult = await requireBaby(auth.user.id, body.babyId);
+    const babyResult = await requireBaby(auth.user, body.babyId);
     if (babyResult.errorResponse) return babyResult.errorResponse;
 
     const babyId = babyResult.baby.id;

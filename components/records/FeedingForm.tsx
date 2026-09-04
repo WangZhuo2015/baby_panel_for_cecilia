@@ -1,15 +1,13 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
-  Play,
-  Pause,
-  RotateCcw,
   CheckCircle2,
   Clock,
   Plus,
   Minus,
 } from "lucide-react";
+import { NursingDualTimer } from "./NursingDualTimer";
 import { CuteButton } from "@/components/ui/CuteButton";
 import { CuteInput } from "@/components/ui/CuteInput";
 import { CuteCard } from "@/components/ui/CuteCard";
@@ -22,12 +20,6 @@ import { estimateNursingVolumeMl } from "@/lib/nutrition/breastmilk";
 import type { FeedingType, FeedingRecord } from "@/types";
 
 const FORMULA_PRESETS = [60, 90, 120, 150, 180, 210, 240];
-
-function formatTimerStatic(totalSec: number) {
-  const m = Math.floor(totalSec / 60);
-  const sec = totalSec % 60;
-  return `${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
-}
 
 function isoToLocalHHMM(iso?: string): string {
   if (!iso) return "";
@@ -83,14 +75,17 @@ export function FeedingForm({
     return null;
   });
 
-  // Breastfeeding state
-  const [activeSide, setActiveSide] = useState<"left" | "right" | null>(null);
-  const [leftSec, setLeftSec] = useState<number>(() => {
-    return (initialData?.leftMinutes || 0) * 60;
+  // Breastfeeding state (isolated to minutes in parent; seconds tick in leaf NursingDualTimer)
+  const [leftMin, setLeftMin] = useState<number>(() => {
+    return initialData?.leftMinutes || 0;
   });
-  const [rightSec, setRightSec] = useState<number>(() => {
-    return (initialData?.rightMinutes || 0) * 60;
+  const [rightMin, setRightMin] = useState<number>(() => {
+    return initialData?.rightMinutes || 0;
   });
+  const handleNursingDurationChange = useCallback((l: number, r: number) => {
+    setLeftMin(l);
+    setRightMin(r);
+  }, []);
 
   const [spitUp, setSpitUp] = useState<boolean>(() => {
     return Boolean(initialData?.spitUp);
@@ -138,18 +133,6 @@ export function FeedingForm({
       .catch(() => {});
   }, [selectedFormulaId]);
 
-  // Stopwatch timer interval
-  useEffect(() => {
-    if (!activeSide) return;
-    const interval = setInterval(() => {
-      if (activeSide === "left") setLeftSec((s) => s + 1);
-      else setRightSec((s) => s + 1);
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [activeSide]);
-
-  const leftMin = Math.round(leftSec / 60);
-  const rightMin = Math.round(rightSec / 60);
   const totalNursingMin = leftMin + rightMin;
   const estimatedBreastMl = estimateNursingVolumeMl(leftMin, rightMin);
   const effectiveBreastMl = customBreastMl ?? estimatedBreastMl;
@@ -245,174 +228,13 @@ export function FeedingForm({
             </div>
           </div>
 
-          {/* Left & Right Dual Cards */}
-          <div className="grid grid-cols-2 gap-3">
-            {/* Left Breast */}
-            <div
-              className={`p-3 rounded-2xl border transition-all text-center ${
-                activeSide === "left"
-                  ? "bg-white border-primary ring-2 ring-primary/20 shadow-soft"
-                  : "bg-white/80 border-divider"
-              }`}
-            >
-              <span className="text-xs font-semibold text-text-secondary">左侧乳房</span>
-              {!isEdit && (
-                <div className="text-2xl font-mono font-bold text-text-primary my-1.5">
-                  {formatTimerStatic(leftSec)}
-                </div>
-              )}
-
-              {!isEdit && (
-                <div className="flex items-center justify-center gap-1.5 mb-2">
-                  <button
-                    type="button"
-                    onClick={() => setActiveSide(activeSide === "left" ? null : "left")}
-                    className={`px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1 transition-all ${
-                      activeSide === "left"
-                        ? "bg-primary text-white shadow-button"
-                        : "bg-primary-soft text-primary hover:bg-primary/20"
-                    }`}
-                  >
-                    {activeSide === "left" ? <Pause size={12} /> : <Play size={12} />}
-                    {activeSide === "left" ? "暂停" : "开始"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (activeSide === "left") setActiveSide(null);
-                      setLeftSec(0);
-                    }}
-                    className="p-1 rounded-full text-gray-400 hover:text-gray-600"
-                    title="重置"
-                  >
-                    <RotateCcw size={12} />
-                  </button>
-                </div>
-              )}
-
-              {/* Minute Adjustment */}
-              <div className={`flex items-center justify-center gap-1 pt-1 ${!isEdit ? "border-t border-divider/50" : "my-2"}`}>
-                <button
-                  type="button"
-                  onClick={() => setLeftSec((s) => Math.max(0, s - 60))}
-                  className="w-7 h-7 rounded-full bg-gray-100 text-gray-600 text-xs font-bold flex items-center justify-center btn-press hover:bg-gray-200"
-                >
-                  -1
-                </button>
-                <span className="text-sm font-bold text-text-primary w-12 text-center">
-                  {leftMin}分
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setLeftSec((s) => s + 60)}
-                  className="w-7 h-7 rounded-full bg-gray-100 text-gray-600 text-xs font-bold flex items-center justify-center btn-press hover:bg-gray-200"
-                >
-                  +1
-                </button>
-              </div>
-
-              {/* Quick minute presets in edit mode */}
-              <div className="flex justify-center gap-1 pt-1">
-                {[5, 10, 15, 20].map((m) => (
-                  <button
-                    key={m}
-                    type="button"
-                    onClick={() => setLeftSec(m * 60)}
-                    className={`px-1.5 py-0.5 rounded text-[10px] ${
-                      leftMin === m
-                        ? "bg-primary text-white font-bold"
-                        : "bg-gray-100 text-text-secondary hover:bg-primary-soft"
-                    }`}
-                  >
-                    {m}m
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Right Breast */}
-            <div
-              className={`p-3 rounded-2xl border transition-all text-center ${
-                activeSide === "right"
-                  ? "bg-white border-primary ring-2 ring-primary/20 shadow-soft"
-                  : "bg-white/80 border-divider"
-              }`}
-            >
-              <span className="text-xs font-semibold text-text-secondary">右侧乳房</span>
-              {!isEdit && (
-                <div className="text-2xl font-mono font-bold text-text-primary my-1.5">
-                  {formatTimerStatic(rightSec)}
-                </div>
-              )}
-
-              {!isEdit && (
-                <div className="flex items-center justify-center gap-1.5 mb-2">
-                  <button
-                    type="button"
-                    onClick={() => setActiveSide(activeSide === "right" ? null : "right")}
-                    className={`px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1 transition-all ${
-                      activeSide === "right"
-                        ? "bg-primary text-white shadow-button"
-                        : "bg-primary-soft text-primary hover:bg-primary/20"
-                    }`}
-                  >
-                    {activeSide === "right" ? <Pause size={12} /> : <Play size={12} />}
-                    {activeSide === "right" ? "暂停" : "开始"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (activeSide === "right") setActiveSide(null);
-                      setRightSec(0);
-                    }}
-                    className="p-1 rounded-full text-gray-400 hover:text-gray-600"
-                    title="重置"
-                  >
-                    <RotateCcw size={12} />
-                  </button>
-                </div>
-              )}
-
-              {/* Minute Adjustment */}
-              <div className={`flex items-center justify-center gap-1 pt-1 ${!isEdit ? "border-t border-divider/50" : "my-2"}`}>
-                <button
-                  type="button"
-                  onClick={() => setRightSec((s) => Math.max(0, s - 60))}
-                  className="w-7 h-7 rounded-full bg-gray-100 text-gray-600 text-xs font-bold flex items-center justify-center btn-press hover:bg-gray-200"
-                >
-                  -1
-                </button>
-                <span className="text-sm font-bold text-text-primary w-12 text-center">
-                  {rightMin}分
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setRightSec((s) => s + 60)}
-                  className="w-7 h-7 rounded-full bg-gray-100 text-gray-600 text-xs font-bold flex items-center justify-center btn-press hover:bg-gray-200"
-                >
-                  +1
-                </button>
-              </div>
-
-              {/* Quick minute presets in edit mode */}
-              <div className="flex justify-center gap-1 pt-1">
-                {[5, 10, 15, 20].map((m) => (
-                  <button
-                    key={m}
-                    type="button"
-                    onClick={() => setRightSec(m * 60)}
-                    className={`px-1.5 py-0.5 rounded text-[10px] ${
-                      rightMin === m
-                        ? "bg-primary text-white font-bold"
-                        : "bg-gray-100 text-text-secondary hover:bg-primary-soft"
-                    }`}
-                  >
-                    {m}m
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
+          {/* Left & Right Dual Cards (Stopwatch isolated in leaf component) */}
+          <NursingDualTimer
+            isEdit={isEdit}
+            initialLeftMin={leftMin}
+            initialRightMin={rightMin}
+            onChange={handleNursingDurationChange}
+          />
 
           {/* 预估母乳奶量与微调 */}
           <div className="p-3 bg-white/90 rounded-2xl border border-pink-200/80 flex items-center justify-between shadow-2xs">

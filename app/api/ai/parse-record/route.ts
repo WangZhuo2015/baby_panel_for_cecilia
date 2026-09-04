@@ -41,7 +41,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "请先说出一条记录" }, { status: 400 });
   }
 
-  const babyResult = await requireBaby(auth.user.id, babyId);
+  const babyResult = await requireBaby(auth.user, babyId);
   if (babyResult.errorResponse) return babyResult.errorResponse;
 
   const system = `你把家长口述整理成待确认的日常记录。只输出 JSON，不要 markdown。

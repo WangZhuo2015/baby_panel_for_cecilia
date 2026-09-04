@@ -14,6 +14,7 @@ import { getLocalDateStr } from "@/lib/date";
 import { APP_VERSION } from "@/lib/version";
 import { AvatarCropModal } from "@/components/ui/AvatarCropModal";
 import { FamilyCreatedShareModal } from "@/components/ui/FamilyCreatedShareModal";
+import { BabyAvatar } from "@/components/ui/BabyAvatar";
 
 export default function OnboardingPage() {
   const router = useRouter();
@@ -183,7 +184,7 @@ export default function OnboardingPage() {
                   {avatarUploading ? (
                     <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
                   ) : avatarUrl ? (
-                    <img src={avatarUrl} alt="宝宝头像" className="w-full h-full object-cover" />
+                    <BabyAvatar src={avatarUrl} alt="宝宝头像" size={80} />
                   ) : (
                     <Camera size={24} className="text-primary/50" />
                   )}

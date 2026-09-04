@@ -33,6 +33,13 @@ if (isProd) {
 const nextConfig: NextConfig = {
   output: "standalone",
   poweredByHeader: false,
+  images: {
+    remotePatterns: [
+      { protocol: "https", hostname: "baby.zwang.fun" },
+      { protocol: "http", hostname: "localhost" },
+      { protocol: "http", hostname: "127.0.0.1" },
+    ],
+  },
   serverExternalPackages: ["@earendil-works/pi-agent-core", "@earendil-works/pi-ai"],
   allowedDevOrigins: [
     "baby.zwang.fun",

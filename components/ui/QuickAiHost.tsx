@@ -1,8 +1,13 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
-import { QuickAiModal } from "@/components/ui/QuickAiModal";
+import { useState, useEffect } from "react";
+import dynamic from "next/dynamic";
 import type { QuickAIOpenDetail } from "@/lib/quickai-bus";
+
+const QuickAiModal = dynamic(
+  () => import("@/components/ui/QuickAiModal").then((m) => m.QuickAiModal),
+  { ssr: false }
+);
 
 /**
  * 全局 QuickAiModal 挂载点（挂在 (main) layout）：
@@ -33,6 +38,8 @@ export const QuickAiHost: React.FC = () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
   }, []);
+
+  if (!isOpen) return null;
 
   return (
     <QuickAiModal
