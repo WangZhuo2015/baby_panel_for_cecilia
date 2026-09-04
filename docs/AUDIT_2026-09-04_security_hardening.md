@@ -111,8 +111,8 @@ SELECT COUNT(*) FROM "Family" WHERE "id" NOT IN (SELECT "familyId" FROM "FamilyM
 
 ## 7. 上线检查单（部署后执行）
 
-- [ ] `npm run deploy`（build + 重启 baby-panel 服务；旧进程 + 新 schema 下 PAT 接口会 500，属预期）
-- [ ] 重启后验证：登录、记一笔喂养、`/uploads` 响应头无 `Access-Control-Allow-Origin`（带 Origin 的 curl）、`mcp` 429 触发
+- [x] `npm run deploy`（commit `14eb364`，2026-09-04 07:50 UTC 重启 baby-panel 服务，`app-config` 200）
+- [x] 冒烟检查：匿名 `/uploads` → 401 且无 `Access-Control-*` 头；匿名 `/mcp`、`/api/records/feeding` → 401
 - [ ] **重建 PAT**（决策 B：旧令牌已全部作废，Siri/快捷指令需重配）
 - [ ] 观察 24h 后跑 `bash scripts/prune-ai-archive.sh --days 90 --dry-run` 看归档水位
 
