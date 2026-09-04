@@ -31,6 +31,8 @@ generated/
 llm-profiles.json
 prisma/*.db*
 .playwright-mcp/
+test-results/
+playwright-report/
 .DS_Store
 *.log
 .baby-panel/
