@@ -2,15 +2,31 @@
  * Centralized Application Configuration and Environment Variable Management
  */
 import path from "node:path";
+import fs from "node:fs";
+import dotenv from "dotenv";
 
-export const NODE_ENV = process.env.NODE_ENV || "development";
-export const IS_PRODUCTION = NODE_ENV === "production";
-export const IS_DEVELOPMENT = NODE_ENV === "development";
-export const IS_TEST =
-  NODE_ENV === "test" ||
+const isTestDetected =
+  process.env.NODE_ENV === "test" ||
   Boolean(process.env.NODE_TEST_CONTEXT) ||
   Boolean(process.env.npm_lifecycle_event?.includes("test")) ||
   process.argv.some((arg) => arg.includes("--test"));
+
+// 测试环境优先强制加载专用 .env.test 配置，防止读到生产环境变量
+if (isTestDetected) {
+  let cwd = process.cwd();
+  if (cwd.endsWith(`${path.sep}.next${path.sep}standalone`) || cwd.endsWith(".next/standalone")) {
+    cwd = path.resolve(cwd, "..", "..");
+  }
+  const testEnvFile = path.resolve(cwd, ".env.test");
+  if (fs.existsSync(testEnvFile)) {
+    dotenv.config({ path: testEnvFile, override: true });
+  }
+}
+
+export const NODE_ENV = process.env.NODE_ENV || (isTestDetected ? "test" : "development");
+export const IS_PRODUCTION = NODE_ENV === "production";
+export const IS_DEVELOPMENT = NODE_ENV === "development";
+export const IS_TEST = isTestDetected;
 
 export const PORT = parseInt(process.env.PORT || (IS_TEST ? "3089" : "3000"), 10);
 // 测试环境默认使用隔离测试库 dev_test.db，非测试环境默认使用 prod.db

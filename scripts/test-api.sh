@@ -7,7 +7,13 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO_ROOT"
 
-PORT="${1:-${PORT:-3088}}"
+if [ -f "$REPO_ROOT/.env.test" ]; then
+  set -a
+  source "$REPO_ROOT/.env.test"
+  set +a
+fi
+
+PORT="${1:-${PORT:-3089}}"
 export DATABASE_URL="${DATABASE_URL:-file:./dev_test.db}"
 export PORT
 export BABY_PANEL_URL="http://127.0.0.1:${PORT}"
@@ -54,7 +60,7 @@ echo "==> [test-api] run api tests (sequential: files share one SQLite file)"
 TEST_EXIT=0
 for f in tests/api/*.test.ts; do
   echo "---- $f"
-  if ! npx tsx --test "$f"; then
+  if ! npx tsx --env-file=.env.test --test "$f"; then
     TEST_EXIT=1
   fi
 done
