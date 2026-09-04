@@ -33,6 +33,22 @@ export const InstallGuideBanner: React.FC = () => {
     const ua = navigator.userAgent.toLowerCase();
     setIsIos(/iphone|ipad|ipod/.test(ua));
     setIsVisible(true);
+
+    const handleAppInstalled = () => {
+      setIsVisible(false);
+    };
+    window.addEventListener("appinstalled", handleAppInstalled);
+
+    const mql = window.matchMedia("(display-mode: standalone)");
+    const handleMqlChange = (e: MediaQueryListEvent) => {
+      if (e.matches) setIsVisible(false);
+    };
+    mql.addEventListener?.("change", handleMqlChange);
+
+    return () => {
+      window.removeEventListener("appinstalled", handleAppInstalled);
+      mql.removeEventListener?.("change", handleMqlChange);
+    };
   }, []);
 
   const handleDismiss = (e: React.MouseEvent) => {

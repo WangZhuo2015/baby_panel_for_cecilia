@@ -1,4 +1,7 @@
+"use client";
+
 import React, { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { ChevronLeft, RefreshCw } from 'lucide-react';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 
@@ -17,11 +20,16 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
   onRefresh,
   refreshing = false,
 }) => {
+  const router = useRouter();
   const [internalLoading, setInternalLoading] = useState(false);
   const isSpinning = refreshing || internalLoading;
 
   const handleBack = () => {
-    window.history.back();
+    if (typeof window !== 'undefined' && window.history.length > 1 && document.referrer) {
+      window.history.back();
+    } else {
+      router.push('/');
+    }
   };
 
   const handleRefreshClick = async () => {

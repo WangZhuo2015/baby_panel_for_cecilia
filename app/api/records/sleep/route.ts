@@ -60,8 +60,8 @@ export async function DELETE(request: Request) {
     if (!id || typeof id !== "string") return NextResponse.json({ error: "请提供要删除的记录 ID" }, { status: 400 });
     const { prisma } = await import("@/lib/prisma");
     const rec = await prisma.sleepRecord.findUnique({ where: { id } });
-    if (!rec) return NextResponse.json({ error: "未找到指定的睡眠记录" }, { status: 404 });
-    const babyCheck = await getActiveBaby(auth.user.id, rec.babyId);
+    if (!rec) return NextResponse.json({ success: true, id, alreadyDeleted: true });
+    const babyCheck = await getActiveBaby(auth.user, rec.babyId);
     if (babyCheck.errorResponse) return babyCheck.errorResponse;
     await records.deleteRecord({ userId: auth.user.id, babyId: rec.babyId }, "sleep", id);
     return NextResponse.json({ success: true, id });
@@ -84,7 +84,7 @@ export async function PUT(request: Request) {
     const { prisma } = await import("@/lib/prisma");
     const existing = await prisma.sleepRecord.findUnique({ where: { id } });
     if (!existing) return NextResponse.json({ error: "未找到指定的睡眠记录" }, { status: 404 });
-    const babyCheck = await getActiveBaby(auth.user.id, existing.babyId);
+    const babyCheck = await getActiveBaby(auth.user, existing.babyId);
     if (babyCheck.errorResponse) return babyCheck.errorResponse;
     const ctx = { userId: auth.user.id, babyId: existing.babyId };
     const updated = await records.updateSleep(ctx, id, body);

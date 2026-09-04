@@ -21,6 +21,8 @@ export interface NursingDualTimerProps {
  * Isolates 1s stopwatch interval ticks to this leaf component,
  * preventing expensive parent form re-renders on every second.
  */
+const NURSING_STORAGE_KEY = "baby_active_nursing_timer";
+
 export function NursingDualTimer({
   isEdit = false,
   initialLeftMin,
@@ -30,6 +32,44 @@ export function NursingDualTimer({
   const [activeSide, setActiveSide] = useState<"left" | "right" | null>(null);
   const [leftSec, setLeftSec] = useState<number>(() => Math.max(0, initialLeftMin * 60));
   const [rightSec, setRightSec] = useState<number>(() => Math.max(0, initialRightMin * 60));
+
+  // Ref tracking base elapsed seconds and real start timestamp to prevent background throttling drift
+  const timingRef = useRef<{ side: "left" | "right" | null; baseSec: number; startAt: number }>({
+    side: null,
+    baseSec: 0,
+    startAt: 0,
+  });
+
+  // Restore active timing state on mount (create mode only)
+  useEffect(() => {
+    if (isEdit || typeof window === "undefined") return;
+    try {
+      const raw = localStorage.getItem(NURSING_STORAGE_KEY);
+      if (!raw) return;
+      const data = JSON.parse(raw);
+      const now = Date.now();
+      // Only restore if within 12 hours
+      if (now - (data.updatedAt || 0) < 12 * 3600 * 1000) {
+        let restoredLeft = data.leftSec || 0;
+        let restoredRight = data.rightSec || 0;
+        if (data.activeSide === "left" && data.startAt) {
+          const delta = Math.floor((now - data.startAt) / 1000);
+          restoredLeft = (data.baseSec || 0) + delta;
+          timingRef.current = { side: "left", baseSec: data.baseSec || 0, startAt: data.startAt };
+          setActiveSide("left");
+        } else if (data.activeSide === "right" && data.startAt) {
+          const delta = Math.floor((now - data.startAt) / 1000);
+          restoredRight = (data.baseSec || 0) + delta;
+          timingRef.current = { side: "right", baseSec: data.baseSec || 0, startAt: data.startAt };
+          setActiveSide("right");
+        }
+        setLeftSec(restoredLeft);
+        setRightSec(restoredRight);
+      }
+    } catch {
+      // Ignore
+    }
+  }, [isEdit]);
 
   const leftMin = Math.round(leftSec / 60);
   const rightMin = Math.round(rightSec / 60);
@@ -43,15 +83,83 @@ export function NursingDualTimer({
     }
   }, [leftMin, rightMin, onChange]);
 
-  // Leaf-level interval - only ticks this component
+  // Handle switching active side
+  const handleToggleSide = (side: "left" | "right") => {
+    if (activeSide === side) {
+      // Pause
+      setActiveSide(null);
+      timingRef.current = { side: null, baseSec: 0, startAt: 0 };
+      if (!isEdit && typeof window !== "undefined") {
+        try {
+          localStorage.setItem(
+            NURSING_STORAGE_KEY,
+            JSON.stringify({ activeSide: null, leftSec, rightSec, updatedAt: Date.now() })
+          );
+        } catch {}
+      }
+    } else {
+      // Start or switch side
+      const baseSec = side === "left" ? leftSec : rightSec;
+      const startAt = Date.now();
+      timingRef.current = { side, baseSec, startAt };
+      setActiveSide(side);
+      if (!isEdit && typeof window !== "undefined") {
+        try {
+          localStorage.setItem(
+            NURSING_STORAGE_KEY,
+            JSON.stringify({ activeSide: side, baseSec, startAt, leftSec, rightSec, updatedAt: startAt })
+          );
+        } catch {}
+      }
+    }
+  };
+
+  // Timestamp-delta interval: immune to background timer throttling
   useEffect(() => {
     if (!activeSide) return;
-    const interval = setInterval(() => {
-      if (activeSide === "left") setLeftSec((s) => s + 1);
-      else setRightSec((s) => s + 1);
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [activeSide]);
+
+    const tick = () => {
+      const now = Date.now();
+      const elapsed = Math.max(0, Math.floor((now - timingRef.current.startAt) / 1000));
+      const current = timingRef.current.baseSec + elapsed;
+      if (activeSide === "left") {
+        setLeftSec(current);
+      } else {
+        setRightSec(current);
+      }
+      if (!isEdit && typeof window !== "undefined") {
+        try {
+          localStorage.setItem(
+            NURSING_STORAGE_KEY,
+            JSON.stringify({
+              activeSide,
+              baseSec: timingRef.current.baseSec,
+              startAt: timingRef.current.startAt,
+              leftSec: activeSide === "left" ? current : leftSec,
+              rightSec: activeSide === "right" ? current : rightSec,
+              updatedAt: now,
+            })
+          );
+        } catch {}
+      }
+    };
+
+    tick();
+    const interval = setInterval(tick, 1000);
+
+    // Sync instantly when user unlocks or re-focuses tab
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        tick();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [activeSide, leftSec, rightSec, isEdit]);
 
   return (
     <div className="grid grid-cols-2 gap-3">
@@ -74,7 +182,7 @@ export function NursingDualTimer({
           <div className="flex items-center justify-center gap-1.5 mb-2">
             <button
               type="button"
-              onClick={() => setActiveSide(activeSide === "left" ? null : "left")}
+              onClick={() => handleToggleSide("left")}
               className={`px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1 transition-all ${
                 activeSide === "left"
                   ? "bg-primary text-white shadow-button"
@@ -88,7 +196,16 @@ export function NursingDualTimer({
               type="button"
               onClick={() => {
                 if (activeSide === "left") setActiveSide(null);
+                timingRef.current = { side: null, baseSec: 0, startAt: 0 };
                 setLeftSec(0);
+                if (!isEdit && typeof window !== "undefined") {
+                  try {
+                    localStorage.setItem(
+                      NURSING_STORAGE_KEY,
+                      JSON.stringify({ activeSide: null, leftSec: 0, rightSec, updatedAt: Date.now() })
+                    );
+                  } catch {}
+                }
               }}
               className="p-1 rounded-full text-gray-400 hover:text-gray-600"
               title="重置"
@@ -157,7 +274,7 @@ export function NursingDualTimer({
           <div className="flex items-center justify-center gap-1.5 mb-2">
             <button
               type="button"
-              onClick={() => setActiveSide(activeSide === "right" ? null : "right")}
+              onClick={() => handleToggleSide("right")}
               className={`px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1 transition-all ${
                 activeSide === "right"
                   ? "bg-primary text-white shadow-button"
@@ -171,7 +288,16 @@ export function NursingDualTimer({
               type="button"
               onClick={() => {
                 if (activeSide === "right") setActiveSide(null);
+                timingRef.current = { side: null, baseSec: 0, startAt: 0 };
                 setRightSec(0);
+                if (!isEdit && typeof window !== "undefined") {
+                  try {
+                    localStorage.setItem(
+                      NURSING_STORAGE_KEY,
+                      JSON.stringify({ activeSide: null, leftSec, rightSec: 0, updatedAt: Date.now() })
+                    );
+                  } catch {}
+                }
               }}
               className="p-1 rounded-full text-gray-400 hover:text-gray-600"
               title="重置"

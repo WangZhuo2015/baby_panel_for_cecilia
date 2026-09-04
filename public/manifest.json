@@ -10,7 +10,7 @@
   "display": "standalone",
   "background_color": "#FFF9FB",
   "theme_color": "#FFF9FB",
-  "orientation": "portrait",
+  "orientation": "any",
   "categories": [
     "lifestyle",
     "health",

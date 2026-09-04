@@ -172,6 +172,12 @@ export function FeedingForm({
       timestamp,
       formulaProductId: (feedingType === "formula" || feedingType === "mixed") ? selectedFormulaId : null,
     });
+
+    if (!isEdit && typeof window !== "undefined") {
+      try {
+        localStorage.removeItem("baby_active_nursing_timer");
+      } catch {}
+    }
   };
 
   return (

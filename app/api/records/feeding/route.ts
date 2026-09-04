@@ -81,8 +81,8 @@ export async function DELETE(request: Request) {
     // Fallback: getActiveBaby check after fetching record via service's internal lookup is not exposed, so we do manual check here like original:
     const { prisma } = await import("@/lib/prisma");
     const rec = await prisma.feedingRecord.findUnique({ where: { id } });
-    if (!rec) return NextResponse.json({ error: "未找到指定的喂养记录" }, { status: 404 });
-    const babyCheck = await getActiveBaby(auth.user.id, rec.babyId);
+    if (!rec) return NextResponse.json({ success: true, id, alreadyDeleted: true });
+    const babyCheck = await getActiveBaby(auth.user, rec.babyId);
     if (babyCheck.errorResponse) return babyCheck.errorResponse;
     await records.deleteRecord({ userId: auth.user.id, babyId: rec.babyId }, "feeding", id);
     return NextResponse.json({ success: true, id });
@@ -104,7 +104,7 @@ export async function PUT(request: Request) {
     const { prisma } = await import("@/lib/prisma");
     const existing = await prisma.feedingRecord.findUnique({ where: { id } });
     if (!existing) return NextResponse.json({ error: "未找到指定的喂养记录" }, { status: 404 });
-    const babyCheck = await getActiveBaby(auth.user.id, existing.babyId);
+    const babyCheck = await getActiveBaby(auth.user, existing.babyId);
     if (babyCheck.errorResponse) return babyCheck.errorResponse;
     const ctx = { userId: auth.user.id, babyId: existing.babyId };
     const updated = await records.updateFeeding(ctx, id, body);
