@@ -64,15 +64,15 @@ export async function GET(
     const fileBuffer = await readFile(/* turbopackIgnore: true */ targetPath);
     const ext = path.extname(targetPath).toLowerCase();
     const contentType = MIME_TYPES[ext] || "application/octet-stream";
-    const origin = request.headers.get("origin") || "*";
 
+    // 注意：刻意不返回 Access-Control-Allow-Origin / Allow-Credentials。
+    // 反射请求 Origin + 允许凭证会让任意网站以用户身份 fetch 读取宝宝/医学影像。
+    // 站内消费均为同源 <img> / CSS 背景，无需 CORS。
     return new NextResponse(fileBuffer, {
       status: 200,
       headers: {
         "Content-Type": contentType,
         "Cache-Control": "private, max-age=3600",
-        "Access-Control-Allow-Origin": origin,
-        "Access-Control-Allow-Credentials": "true",
       },
     });
   } catch (error) {

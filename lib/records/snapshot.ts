@@ -174,7 +174,6 @@ export async function restoreSnapshot(ctx: SnapshotContext, snapshotId: string) 
           scheduledDate: payload.scheduledDate,
           completedDate: payload.completedDate,
           isCompleted: Boolean(payload.isCompleted),
-          countdownDays: payload.countdownDays || 0,
         },
       });
       break;

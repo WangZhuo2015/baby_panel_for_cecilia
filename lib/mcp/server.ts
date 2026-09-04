@@ -548,7 +548,6 @@ export function createMcpServer(principal: UserPrincipal): Server {
               scheduledDate: completedDate,
               completedDate,
               isCompleted: true,
-              countdownDays: 0,
             },
           });
           messages.push(`💉 疫苗接种已登记【${vName} ${dose}】(完成日期: ${completedDate})`);

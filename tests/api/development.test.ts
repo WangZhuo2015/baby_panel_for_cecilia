@@ -4,18 +4,18 @@ import dotenv from "dotenv";
 dotenv.config();
 
 import { prisma } from "../../lib/prisma";
-import { signAuthToken } from "../../lib/auth";
+import { createTestTenant, destroyTestTenant } from "../helpers/tenant";
 
-const BASE_URL = "http://127.0.0.1:3088";
+const BASE_URL = process.env.BABY_PANEL_URL || "http://127.0.0.1:3088";
 
-test("API: Development Domain (Milestones, Activities, Warning Signs)", async () => {
-  const user = await prisma.user.findFirst();
-  const baby = await prisma.baby.findFirst();
-  assert.ok(user && baby, "User and Baby must exist");
+test("API: Development Domain (Milestones, Activities, Warning Signs)", async (t) => {
+  // 隔离租户（本文件仅 GET，但仍不用真实账号）
+  const tenant = await createTestTenant(prisma, "devmt");
+  const baby = { id: tenant.babyId };
+  t.after(() => destroyTestTenant(prisma, tenant.username));
 
-  const token = await signAuthToken({ userId: user.id, username: user.username });
   const headers = {
-    Authorization: `Bearer ${token}`,
+    Authorization: `Bearer ${tenant.token}`,
   };
 
   // 1. Milestones

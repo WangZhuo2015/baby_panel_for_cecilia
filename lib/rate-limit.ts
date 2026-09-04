@@ -19,9 +19,10 @@ function ensureStoreCapacity() {
   }
 }
 
-// Cleanup stale records every 5 minutes
+// Cleanup stale records every 5 minutes.
+// unref(): 短命进程（tsx --test / CLI）跑完可正常退出；长驻服务不受影响。
 if (typeof setInterval !== "undefined") {
-  setInterval(() => {
+  const cleanupTimer = setInterval(() => {
     const now = Date.now();
     for (const [key, record] of store.entries()) {
       record.timestamps = record.timestamps.filter((ts) => now - ts < 300_000);
@@ -29,7 +30,8 @@ if (typeof setInterval !== "undefined") {
         store.delete(key);
       }
     }
-  }, 300_000);
+    }, 300_000);
+  cleanupTimer.unref();
 }
 
 /**

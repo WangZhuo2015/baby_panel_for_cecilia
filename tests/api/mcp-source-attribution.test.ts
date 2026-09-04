@@ -27,6 +27,14 @@ test("MCP Source Attribution (Gemini Spark, ChatGPT, Claude, Custom Agents)", as
   const prefix = `test_${Date.now()}_`;
   const passwordHash = await hashPassword("password123");
 
+  // 跑完清理测试租户（AGENTS.md）
+  t.after(async () => {
+    await prisma.user.deleteMany({ where: { username: { startsWith: prefix } } }).catch(() => {});
+    await prisma.family
+      .deleteMany({ where: { name: { startsWith: prefix }, members: { none: {} } } })
+      .catch(() => {});
+  });
+
   const testUser = await prisma.user.create({
     data: {
       username: `${prefix}mcp_agent_user`,
@@ -37,13 +45,13 @@ test("MCP Source Attribution (Gemini Spark, ChatGPT, Claude, Custom Agents)", as
 
   const testFamily = await prisma.family.create({
     data: {
-      name: "Agent Family",
+      name: `${prefix}agent_family`,
       inviteCode: `AF${Date.now().toString().slice(-4)}`,
       members: { create: [{ userId: testUser.id, role: "admin", relation: "mother" }] },
       babies: {
         create: [
           {
-            nickname: "Agent Baby",
+            nickname: `${prefix}agent_baby`,
             gender: "female",
             birthDate: "2025-01-01",
           },

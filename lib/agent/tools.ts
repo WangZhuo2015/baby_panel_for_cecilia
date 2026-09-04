@@ -457,7 +457,6 @@ export function createBabyPanelTools(ctx: BabyToolContext): AgentTool[] {
           scheduledDate: completedDate,
           completedDate,
           isCompleted: true,
-          countdownDays: 0,
         },
       });
 

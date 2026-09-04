@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth, requireBaby } from "@/lib/api-helpers";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -77,6 +78,15 @@ export async function POST(request: Request) {
   const auth = await requireAuth(request);
   if (auth.errorResponse) return auth.errorResponse;
   const { user } = auth;
+
+  const ip = getClientIp(request);
+  const rateLimit = checkRateLimit(`ai_sessions:${user.id}:${ip}`, 30, 60_000);
+  if (!rateLimit.success) {
+    return NextResponse.json(
+      { error: `创建过于频繁，请 ${rateLimit.resetSeconds} 秒后再试` },
+      { status: 429 }
+    );
+  }
 
   const body = await request.json().catch(() => ({}));
   const { babyId, title } = body;

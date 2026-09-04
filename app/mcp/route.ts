@@ -3,6 +3,7 @@ import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/
 import { verifyMcpAccessToken, OAuthError } from "@/lib/oauth/service";
 import { getBaseUrl } from "@/lib/oauth/config";
 import { createMcpServer } from "@/lib/mcp/server";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -23,6 +24,16 @@ export async function OPTIONS() {
 }
 
 async function handleMcpRequest(request: Request) {
+  // Token 爆破 + 昂贵 agent 调用成本保护（认证前按 IP 限流）
+  const ip = getClientIp(request);
+  const preAuthLimit = checkRateLimit(`mcp:${ip}`, 120, 60_000);
+  if (!preAuthLimit.success) {
+    return NextResponse.json(
+      { error: "rate_limited", error_description: "请求过于频繁，请稍后再试" },
+      { status: 429, headers: getCorsHeaders() }
+    );
+  }
+
   const baseUrl = getBaseUrl(request);
   const resourceMetadataUrl = `${baseUrl}/.well-known/oauth-protected-resource/mcp`;
 

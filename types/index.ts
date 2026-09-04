@@ -357,7 +357,6 @@ export interface VaccineRecord {
   scheduledDate: string;
   completedDate?: string;
   isCompleted: boolean;
-  countdownDays?: number;
 }
 
 // ===== Data Version Types =====

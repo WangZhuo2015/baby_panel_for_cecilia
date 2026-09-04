@@ -2,8 +2,18 @@ import { NextResponse } from "next/server";
 import webPush from "web-push";
 import { prisma } from "@/lib/prisma";
 import { PUSH_CONFIG } from "@/lib/config";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 
 export async function POST(request: Request) {
+  const ip = getClientIp(request);
+  const rateLimit = checkRateLimit(`push_send:${ip}`, 30, 60_000);
+  if (!rateLimit.success) {
+    return NextResponse.json(
+      { error: `请求过于频繁，请 ${rateLimit.resetSeconds} 秒后再试` },
+      { status: 429 }
+    );
+  }
+
   if (!PUSH_CONFIG.sendToken) {
     return NextResponse.json(
       { error: "Push sending is disabled (PUSH_SEND_TOKEN not configured)" },

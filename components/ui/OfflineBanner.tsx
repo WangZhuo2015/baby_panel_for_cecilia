@@ -45,18 +45,21 @@ export const OfflineBanner: React.FC = () => {
     };
   }, []);
 
-  // 手动刷新数据后也刷新计数
+  // 定时重放 outbox。依赖 []（周期不漂移）；是否重放以实时队列长度为准，不读 stale 的 pending。
   useEffect(() => {
     const i = window.setInterval(async () => {
-      if (navigator.onLine && pending > 0) {
+      const items = await listPending();
+      if (navigator.onLine && items.length > 0) {
         setFlushing(true);
         try { await flushOutbox(); } finally { setFlushing(false); }
+        const rest = await listPending();
+        setPending(rest.length);
+      } else {
+        setPending(items.length);
       }
-      const items = await listPending();
-      setPending(items.length);
     }, 60_000);
     return () => window.clearInterval(i);
-  }, [pending]);
+  }, []);
 
   const showOffline = !online;
   const showPending = pending > 0;

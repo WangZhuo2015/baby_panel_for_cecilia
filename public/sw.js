@@ -1,5 +1,5 @@
 // Service Worker – PWA lifecycle + Multi-strategy Caching + Push notifications
-const CACHE_VERSION = 'v1.2.0';
+const CACHE_VERSION = 'v1.2.1';
 const STATIC_CACHE = `static-${CACHE_VERSION}`;
 const IMMUTABLE_CACHE = `immutable-${CACHE_VERSION}`;
 const MEDIA_CACHE = `media-${CACHE_VERSION}`;

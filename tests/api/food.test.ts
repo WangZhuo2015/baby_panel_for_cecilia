@@ -4,22 +4,22 @@ import dotenv from "dotenv";
 dotenv.config();
 
 import { prisma } from "../../lib/prisma";
-import { signAuthToken } from "../../lib/auth";
 import { getLocalDateStr } from "../../lib/date";
+import { createTestTenant, destroyTestTenant } from "../helpers/tenant";
 
-const BASE_URL = "http://127.0.0.1:3088";
+const BASE_URL = process.env.BABY_PANEL_URL || "http://127.0.0.1:3088";
 
-test("API: Food Domain (Food Items, Plans, Food Logs, Feeding Guidelines)", async () => {
-  const user = await prisma.user.findFirst();
-  const baby = await prisma.baby.findFirst();
-  assert.ok(user && baby, "User and Baby must exist");
+test("API: Food Domain (Food Items, Plans, Food Logs, Feeding Guidelines)", async (t) => {
+  // 隔离租户：禁止 findFirst 抓取真实用户/宝宝（AGENTS.md）
+  const tenant = await createTestTenant(prisma, "food");
+  const baby = { id: tenant.babyId };
+  t.after(() => destroyTestTenant(prisma, tenant.username));
 
-  const token = await signAuthToken({ userId: user.id, username: user.username });
-  const headers = {
-    Authorization: `Bearer ${token}`,
-    "Content-Type": "application/json",
-  };
+  const headers = tenant.headers;
   const today = getLocalDateStr();
+  let logId: string | undefined;
+
+  try {
 
   // 1. Food Library Items
   console.log("-> Testing Food Library API...");
@@ -61,7 +61,7 @@ test("API: Food Domain (Food Items, Plans, Food Logs, Feeding Guidelines)", asyn
   });
   assert.ok(foodLogRes.status === 200 || foodLogRes.status === 201, `POST /api/food/logs status ${foodLogRes.status}`);
   const foodLogData = await foodLogRes.json();
-  const logId = foodLogData.id || foodLogData.log?.id;
+  logId = foodLogData.id || foodLogData.log?.id;
   assert.ok(logId, "Food log ID should exist");
 
   const queryLogRes = await fetch(`${BASE_URL}/api/food/logs?babyId=${baby.id}&date=${today}`, { headers });
@@ -69,7 +69,7 @@ test("API: Food Domain (Food Items, Plans, Food Logs, Feeding Guidelines)", asyn
   const queryLogs = await queryLogRes.json();
   const logsList = Array.isArray(queryLogs) ? queryLogs : queryLogs.logs || [];
   assert.ok(logsList.some((l: any) => l.id === logId), "Created food log should be in list");
-
-  // Clean up
-  await prisma.foodLogRecord.delete({ where: { id: logId } }).catch(() => {});
+  } finally {
+    if (logId) await prisma.foodLogRecord.delete({ where: { id: logId } }).catch(() => {});
+  }
 });

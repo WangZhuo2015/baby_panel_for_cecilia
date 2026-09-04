@@ -36,6 +36,14 @@ test("Gemini Spark MCP & OAuth 2.1 Test Matrix", async (t) => {
   const prefix = `test_${Date.now()}_`;
   const passwordHash = await hashPassword("password123");
 
+  // 跑完清理测试租户（AGENTS.md）：用户级联删 membership 等，再清残留空家庭
+  t.after(async () => {
+    await prisma.user.deleteMany({ where: { username: { startsWith: prefix } } }).catch(() => {});
+    await prisma.family
+      .deleteMany({ where: { name: { startsWith: prefix }, members: { none: {} } } })
+      .catch(() => {});
+  });
+
   const userA = await prisma.user.create({
     data: {
       username: `${prefix}user_a`,
@@ -54,13 +62,13 @@ test("Gemini Spark MCP & OAuth 2.1 Test Matrix", async (t) => {
 
   const familyA = await prisma.family.create({
     data: {
-      name: "Family A",
+      name: `${prefix}family_a`,
       inviteCode: `FA${Date.now().toString().slice(-4)}`,
       members: { create: [{ userId: userA.id, role: "admin", relation: "mother" }] },
       babies: {
         create: [
           {
-            nickname: "Baby A",
+            nickname: `${prefix}baby_a`,
             gender: "female",
             birthDate: "2025-01-01",
           },
@@ -73,13 +81,13 @@ test("Gemini Spark MCP & OAuth 2.1 Test Matrix", async (t) => {
 
   const familyB = await prisma.family.create({
     data: {
-      name: "Family B",
+      name: `${prefix}family_b`,
       inviteCode: `FB${Date.now().toString().slice(-4)}`,
       members: { create: [{ userId: userB.id, role: "admin", relation: "father" }] },
       babies: {
         create: [
           {
-            nickname: "Baby B",
+            nickname: `${prefix}baby_b`,
             gender: "male",
             birthDate: "2025-06-01",
           },
@@ -287,7 +295,7 @@ test("Gemini Spark MCP & OAuth 2.1 Test Matrix", async (t) => {
     const callBody = await callRes.json();
     assert.ok(callBody.result?.content?.[0]?.text);
     const overview = JSON.parse(callBody.result.content[0].text);
-    assert.equal(overview.profile.nickname, "Baby A");
+    assert.equal(overview.profile.nickname, babyA.nickname);
     assert.ok(overview.dailySummary !== undefined);
 
     // 3. tools/call: record_baby_events (Composite Multi-event Write)

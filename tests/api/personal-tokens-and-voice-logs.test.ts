@@ -79,7 +79,10 @@ test("Personal Access Tokens & Agent Voice Logs Lifecycle", async (t) => {
     const list = await listPersonalAccessTokens(testUser.id);
     assert.equal(list.length, 1);
     assert.equal(list[0].id, created.id);
-    assert.ok(list[0].maskedToken.includes("••••••••"));
+    // 新契约：列表只给 hint（前后缀），绝不含原文
+    assert.ok(list[0].maskedToken.startsWith("bp_pat_"));
+    assert.ok(list[0].maskedToken.endsWith(created.token.slice(-4)));
+    assert.ok(!list[0].maskedToken.includes(created.token.slice(10, -4)));
   });
 
   await t.test("2. Call /api/agent/voice using Personal Access Token (No .env needed)", async () => {

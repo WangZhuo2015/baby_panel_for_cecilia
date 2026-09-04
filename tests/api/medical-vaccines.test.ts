@@ -4,22 +4,22 @@ import dotenv from "dotenv";
 dotenv.config();
 
 import { prisma } from "../../lib/prisma";
-import { signAuthToken } from "../../lib/auth";
 import { getLocalDateStr } from "../../lib/date";
+import { createTestTenant, destroyTestTenant } from "../helpers/tenant";
 
-const BASE_URL = "http://127.0.0.1:3088";
+const BASE_URL = process.env.BABY_PANEL_URL || "http://127.0.0.1:3088";
 
-test("API: Medical Reports and Vaccines Domain", async () => {
-  const user = await prisma.user.findFirst();
-  const baby = await prisma.baby.findFirst();
-  assert.ok(user && baby, "User and Baby must exist");
+test("API: Medical Reports and Vaccines Domain", async (t) => {
+  // 隔离租户：禁止 findFirst 抓取真实用户/宝宝（AGENTS.md）
+  const tenant = await createTestTenant(prisma, "medvac");
+  const baby = { id: tenant.babyId };
+  t.after(() => destroyTestTenant(prisma, tenant.username));
 
-  const token = await signAuthToken({ userId: user.id, username: user.username });
-  const headers = {
-    Authorization: `Bearer ${token}`,
-    "Content-Type": "application/json",
-  };
+  const headers = tenant.headers;
   const today = getLocalDateStr();
+  let reportId: string | undefined;
+
+  try {
 
   // 1. Vaccines Schedule & Program Query
   console.log("-> Testing Vaccines API...");
@@ -76,9 +76,13 @@ test("API: Medical Reports and Vaccines Domain", async () => {
   });
   assert.ok(createMedRes.status === 200 || createMedRes.status === 201, "POST /api/medical/reports should succeed");
   const createdReport = await createMedRes.json();
-  const reportId = createdReport.id || createdReport.report?.id;
+  reportId = createdReport.id || createdReport.report?.id;
   assert.ok(reportId, "Medical report ID should exist");
-
-  // Clean up
-  await prisma.medicalReport.delete({ where: { id: reportId } }).catch(() => {});
+  } finally {
+    if (reportId) await prisma.medicalReport.delete({ where: { id: reportId } }).catch(() => {});
+    // 恢复疫苗选择：新租户本无此行，直接删掉测试写入的行
+    await prisma.vaccineSelection
+      .deleteMany({ where: { babyId: baby.id, vaccineId: "vac_hepb", doseNumber: 1 } })
+      .catch(() => {});
+  }
 });

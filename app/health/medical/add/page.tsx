@@ -159,7 +159,8 @@ export default function MedicalAddPage() {
     showToast("识别完成！请核对并修改下方各项数据 ✨");
   };
 
-  // 轮询任务状态直至完成/失败
+  // 轮询任务状态直至完成/失败；返回清理函数，unmount 时必须调用防泄漏
+  const pollingTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   const startJobPolling = (id: string) => {
     const tick = async () => {
       try {
@@ -188,10 +189,18 @@ export default function MedicalAddPage() {
     };
 
     void tick();
-    const timer = setInterval(async () => {
+    if (pollingTimer.current) clearInterval(pollingTimer.current);
+    pollingTimer.current = setInterval(async () => {
       setJobElapsed((v) => v + 3);
-      if (await tick()) clearInterval(timer);
+      if (await tick()) {
+        if (pollingTimer.current) clearInterval(pollingTimer.current);
+        pollingTimer.current = null;
+      }
     }, 3000);
+    return () => {
+      if (pollingTimer.current) clearInterval(pollingTimer.current);
+      pollingTimer.current = null;
+    };
   };
 
   // 刷新/离开后回来：恢复未完成任务轮询；支持 ?job= 直达领取
@@ -201,7 +210,8 @@ export default function MedicalAddPage() {
     if (stored && !ocrDone) {
       setJobId(stored);
       setOcrLoading(true);
-      startJobPolling(stored);
+      const stop = startJobPolling(stored);
+      return stop;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

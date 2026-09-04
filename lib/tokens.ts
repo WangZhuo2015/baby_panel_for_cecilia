@@ -3,8 +3,23 @@ import { prisma } from "@/lib/prisma";
 
 export const TOKEN_PREFIX = "bp_pat_";
 
+/** SHA-256 哈希（与 lib/oauth/service.ts 的 hashSecret 同算法）：库中永存原文。 */
+export function hashPersonalAccessToken(rawToken: string): string {
+  return crypto.createHash("sha256").update(rawToken).digest("hex");
+}
+
+/** 列表展示用 hint（如 bp_pat_ab12…9f3c），创建时随哈希一并入库。 */
+export function buildTokenHint(rawToken: string): string {
+  if (rawToken.length <= 14) return `${rawToken.slice(0, 6)}…${rawToken.slice(-4)}`;
+  return `${rawToken.slice(0, 10)}…${rawToken.slice(-4)}`;
+}
+
+/** 每用户最多持有令牌数（防 token 刷库）。 */
+export const MAX_TOKENS_PER_USER = 10;
+
 /**
  * Generates a new Personal Access Token for the specified user.
+ * 仅返回一次原文；库中只存哈希。调用方须做限流与数量上限检查。
  */
 export async function createPersonalAccessToken(
   userId: string,
@@ -17,17 +32,17 @@ export async function createPersonalAccessToken(
     data: {
       userId,
       name: name.trim() || "我的快捷指令",
-      token,
+      tokenHash: hashPersonalAccessToken(token),
+      tokenHint: buildTokenHint(token),
     },
     select: {
       id: true,
       name: true,
-      token: true,
       createdAt: true,
     },
   });
 
-  return created;
+  return { ...created, token };
 }
 
 /**
@@ -40,7 +55,7 @@ export async function verifyPersonalAccessToken(rawToken: string) {
   }
 
   const record = await prisma.personalAccessToken.findUnique({
-    where: { token: rawToken },
+    where: { tokenHash: hashPersonalAccessToken(rawToken) },
     include: {
       user: {
         select: {
@@ -81,7 +96,7 @@ export async function verifyPersonalAccessToken(rawToken: string) {
 }
 
 /**
- * Lists all Personal Access Tokens belonging to a user (with token masked).
+ * Lists all Personal Access Tokens belonging to a user (hint only, 无原文).
  */
 export async function listPersonalAccessTokens(userId: string) {
   const tokens = await prisma.personalAccessToken.findMany({
@@ -90,7 +105,7 @@ export async function listPersonalAccessTokens(userId: string) {
     select: {
       id: true,
       name: true,
-      token: true,
+      tokenHint: true,
       lastUsedAt: true,
       createdAt: true,
     },
@@ -99,7 +114,7 @@ export async function listPersonalAccessTokens(userId: string) {
   return tokens.map((t) => ({
     id: t.id,
     name: t.name,
-    maskedToken: `${t.token.slice(0, 10)}••••••••${t.token.slice(-4)}`,
+    maskedToken: t.tokenHint || "••••••••",
     lastUsedAt: t.lastUsedAt,
     createdAt: t.createdAt,
   }));

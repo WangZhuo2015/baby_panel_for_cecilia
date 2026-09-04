@@ -12,11 +12,14 @@ import {
 import { getLocalDateStr, addDays } from "../../lib/date";
 import { GET, POST } from "../../app/api/ai/daily-summary/route";
 import { signAuthToken } from "../../lib/auth";
+import { createTestTenant, destroyTestTenant } from "../helpers/tenant";
 
-test("AI Daily Summary Service & Metrics Aggregator", async () => {
-  const user = await prisma.user.findFirst();
-  const baby = await prisma.baby.findFirst();
-  assert.ok(user && baby, "User and Baby must exist in test database");
+test("AI Daily Summary Service & Metrics Aggregator", async (t) => {
+  // 隔离租户：禁止 findFirst 抓取真实用户/宝宝（AGENTS.md）
+  const tenant = await createTestTenant(prisma, "summary");
+  t.after(() => destroyTestTenant(prisma, tenant.username));
+  const baby = await prisma.baby.findUniqueOrThrow({ where: { id: tenant.babyId } });
+  const user = { id: tenant.userId, username: tenant.username };
 
   const today = getLocalDateStr();
   const createdRecordIds: { type: string; id: string }[] = [];

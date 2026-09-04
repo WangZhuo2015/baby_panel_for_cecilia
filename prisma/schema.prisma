@@ -24,6 +24,7 @@ model User {
   oauthConsents     OAuthConsent[]
   personalAccessTokens PersonalAccessToken[]
   agentVoiceLogs       AgentVoiceLog[]
+  aiJobs               AiJob[]
 }
 
 model Family {
@@ -85,6 +86,7 @@ model Baby {
   oauthConsents       OAuthConsent[]
   recordSnapshots     RecordSnapshot[]
   agentVoiceLogs      AgentVoiceLog[]
+  aiJobs              AiJob[]
 
   @@index([familyId])
 }
@@ -356,7 +358,7 @@ model SourceRef {
   accessedDate        String?
   notes               String?
   dataReleaseId       String?
-  dataRelease         DataRelease?         @relation(fields: [dataReleaseId], references: [id])
+  dataRelease         DataRelease?         @relation(fields: [dataReleaseId], references: [id], onDelete: Cascade)
   vaccineSourceRefs   VaccineSourceRef[]   @relation("vaccineSourceRefs")
   milestoneSourceRefs MilestoneSourceRef[] @relation("milestoneSourceRefs")
 
@@ -405,7 +407,7 @@ model Vaccine {
 model VaccineDose {
   id                              String   @id @default(uuid())
   vaccineId                       String
-  vaccine                         Vaccine  @relation(fields: [vaccineId], references: [id])
+  vaccine                         Vaccine  @relation(fields: [vaccineId], references: [id], onDelete: Cascade)
   doseNumber                      Int
   doseLabel                       String
   recommendedAgeMonths            Int?
@@ -427,9 +429,9 @@ model VaccineDose {
 model VaccineSourceRef {
   id          String    @id @default(uuid())
   vaccineId   String
-  vaccine     Vaccine   @relation(fields: [vaccineId], references: [id])
+  vaccine     Vaccine   @relation(fields: [vaccineId], references: [id], onDelete: Cascade)
   sourceRefId String
-  sourceRef   SourceRef @relation("vaccineSourceRefs", fields: [sourceRefId], references: [id])
+  sourceRef   SourceRef @relation("vaccineSourceRefs", fields: [sourceRefId], references: [id], onDelete: Cascade)
 }
 
 model VaccineStrategyGroup {
@@ -495,9 +497,9 @@ model DevelopmentMilestone {
 model MilestoneSourceRef {
   id          String               @id @default(uuid())
   milestoneId String
-  milestone   DevelopmentMilestone @relation(fields: [milestoneId], references: [id])
+  milestone   DevelopmentMilestone @relation(fields: [milestoneId], references: [id], onDelete: Cascade)
   sourceRefId String
-  sourceRef   SourceRef            @relation("milestoneSourceRefs", fields: [sourceRefId], references: [id])
+  sourceRef   SourceRef            @relation("milestoneSourceRefs", fields: [sourceRefId], references: [id], onDelete: Cascade)
 }
 
 model DevelopmentWarningSign {
@@ -645,7 +647,6 @@ model VaccineRecord {
   scheduledDate String
   completedDate String?
   isCompleted   Boolean  @default(false)
-  countdownDays Int?
 
   @@index([babyId, scheduledDate])
 }
@@ -683,7 +684,9 @@ model PushSubscription {
 model AiJob {
   id           String    @id @default(uuid())
   userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   babyId       String?
+  baby         Baby?     @relation(fields: [babyId], references: [id], onDelete: SetNull)
   type         String    // medical_ocr | growth_ocr | ...
   status       String    @default("processing") // processing | done | failed
   inputArchiveId String?
@@ -781,7 +784,6 @@ model OAuthAuthorizationCode {
 
   @@index([clientId])
   @@index([userId])
-  @@index([code])
 }
 
 model OAuthRefreshToken {
@@ -801,7 +803,6 @@ model OAuthRefreshToken {
 
   @@index([clientId])
   @@index([userId])
-  @@index([tokenHash])
 }
 
 model OAuthConsent {
@@ -868,13 +869,14 @@ model PersonalAccessToken {
   userId     String
   user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   name       String    @default("我的快捷指令")
-  token      String    @unique
+  // 仅存 SHA-256 哈希，原文仅在创建响应中返回一次；tokenHint 供列表展示（如 bp_pat_ab12…9f3c）
+  tokenHash  String    @unique
+  tokenHint  String    @default("")
   lastUsedAt DateTime?
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
 
   @@index([userId])
-  @@index([token])
 }
 
 // ─── Agent Voice Interaction Logs (Result feedback upon user return) ────────

@@ -107,10 +107,28 @@ function normalizeTimestamp(raw?: string): string {
     const date = getLocalDateStr();
     return new Date(`${date}T${trimmed}:00+08:00`).toISOString();
   }
-  const parsed = new Date(trimmed);
-  if (Number.isNaN(parsed.getTime())) throw new ValidationError("timestamp 格式无效");
-  return parsed.toISOString();
+  return assertIsoTimestamp(trimmed);
 }
+
+/**
+ * 严格 ISO 8601 时间断言（入库前统一口径）：
+ * 要求完整日期+T时间+时区（如 2026-09-04T08:30:00+08:00），拒绝 YYYY/MM/DD、
+ * 纯日期、无时区等宽松写法，避免字典序排序被脏数据破坏。
+ * 返回归一化后的 UTC ISO 字符串。
+ */
+export function assertIsoTimestamp(raw: unknown, field = "timestamp"): string {
+  const s = typeof raw === "string" ? raw.trim() : "";
+  const m = ISO_TS_RE.exec(s);
+  if (!m) {
+    throw new ValidationError(`${field} 必须为 ISO 8601 时间（如 2026-09-04T08:30:00+08:00）`);
+  }
+  const ms = Date.parse(s);
+  if (Number.isNaN(ms)) throw new ValidationError(`${field} 不是有效时间`);
+  return new Date(ms).toISOString();
+}
+
+const ISO_TS_RE =
+  /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])T([01]\d|2[0-3]):([0-5]\d)(?::([0-5]\d)(\.\d{1,3})?)?(Z|[+-]([01]\d|2[0-3]):?([0-5]\d))$/;
 
 function guardFutureAndBirth(baby: any, timestamp: string) {
   if (new Date(timestamp).getTime() > Date.now() + 24 * 60 * 60 * 1000) {
@@ -217,8 +235,7 @@ export function validateFeedingStrict(input: { type?: unknown; amountMl?: unknow
     if (Number.isNaN(n) || n < 0 || n > 180) throw new ValidationError("rightMinutes 必须为 0-180 之间的有效数值");
   }
   if (input.timestamp !== undefined && input.timestamp !== null && String(input.timestamp).trim() !== "") {
-    const parsed = new Date(String(input.timestamp).trim());
-    if (Number.isNaN(parsed.getTime())) throw new ValidationError("timestamp 格式无效");
+    assertIsoTimestamp(input.timestamp);
   }
   if (input.notes !== undefined && input.notes !== null && String(input.notes).trim().length > 1000) {
     throw new ValidationError("notes 不能超过 1000 个字符");
@@ -233,8 +250,12 @@ export async function createSleep(ctx: RecordContext, input: CreateSleepInput) {
   if (!TIME_RE.test(start) || !TIME_RE.test(end)) {
     // If HH:MM invalid, try ISO path for agent compatibility
     const tryIso = (s: string) => {
-      const ms = new Date(s).getTime();
-      return Number.isNaN(ms) ? null : new Date(ms).toISOString();
+      if (!s) return null;
+      try {
+        return assertIsoTimestamp(s);
+      } catch {
+        return null;
+      }
     };
     const startIsoTry = tryIso(start);
     const endIsoTry = tryIso(end);
@@ -259,6 +280,10 @@ export async function createSleep(ctx: RecordContext, input: CreateSleepInput) {
       };
       if (clientId) return prisma.sleepRecord.upsert({ where: { babyId_clientId: { babyId: ctx.babyId, clientId } }, create: { ...data, clientId }, update: {} });
       return prisma.sleepRecord.create({ data });
+    }
+    // 给了值但既不是 HH:MM 也不是合法 ISO：直接 400，不再静默回退成"1小时前"（防脏数据）
+    if ((start && !startIsoTry) || (end && !endIsoTry)) {
+      throw new ValidationError("startTime/endTime 必须为 HH:MM 或 ISO 8601 时间");
     }
     // Fallback to duration-based (used by tools)
     const duration = 60;
@@ -315,9 +340,7 @@ export async function createDiaper(ctx: RecordContext, input: CreateDiaperInput)
   if (!input.type || !valid.includes(input.type)) throw new ValidationError("type 必填且只能为 pee、poop 或 both");
   let timestamp = new Date().toISOString();
   if (input.timestamp) {
-    const parsed = new Date(input.timestamp);
-    if (Number.isNaN(parsed.getTime())) throw new ValidationError("timestamp 格式无效");
-    timestamp = parsed.toISOString();
+    timestamp = assertIsoTimestamp(input.timestamp);
   }
   if (input.notes && String(input.notes).trim().length > 1000) throw new ValidationError("notes 不能超过 1000 个字符");
   if (input.poopColor && String(input.poopColor).trim().length > 100) throw new ValidationError("poopColor 不能超过 100 个字符");
