@@ -4,6 +4,7 @@
 import path from "node:path";
 import fs from "node:fs";
 import dotenv from "dotenv";
+import { getActiveLlmProfile } from "./llm-profiles";
 
 const isTestDetected =
   process.env.NODE_ENV === "test" ||
@@ -110,34 +111,54 @@ function preferOpenRouter(): boolean {
 
 export const AI_CONFIG = {
   get baseUrl() {
+    const profile = getActiveLlmProfile();
+    if (profile.baseUrl && !isAbandonedHermesUpstream(profile.baseUrl)) {
+      return profile.baseUrl.replace(/\/+$/, "");
+    }
     if (preferOpenRouter()) return OPENROUTER_BASE;
     const url = process.env.AI_BASE_URL || process.env.OPENAI_BASE_URL || "";
     if (url && !isAbandonedHermesUpstream(url)) return url.replace(/\/+$/, "");
     return OPENROUTER_BASE;
   },
   get apiKey() {
+    const profile = getActiveLlmProfile();
+    if (profile.apiKey && !isAbandonedHermesUpstream(profile.baseUrl)) {
+      return profile.apiKey;
+    }
     if (preferOpenRouter()) return process.env.OPENROUTER_API_KEY || "";
     const url = process.env.AI_BASE_URL || process.env.OPENAI_BASE_URL || "";
     if (isAbandonedHermesUpstream(url)) return "";
     return process.env.AI_API_KEY || process.env.OPENAI_API_KEY || "";
   },
   get model() {
+    const profile = getActiveLlmProfile();
+    if (profile.model) {
+      if (profile.model === "hermes-agent" || (this.baseUrl.includes("opencode.ai") && profile.model.includes("muse-spark"))) {
+        return "deepseek-v4-flash-vision-exp";
+      }
+      return profile.model;
+    }
     if (preferOpenRouter()) return process.env.OPENROUTER_MODEL || "muse-spark-1.2-contributor";
     const model = process.env.AI_MODEL || process.env.OPENAI_MODEL || "";
     if (!model || model === "hermes-agent" || (this.baseUrl.includes("opencode.ai") && model.includes("muse-spark"))) {
       return "deepseek-v4-flash-vision-exp";
     }
-    return model;
+    return model || "muse-spark-1.2-contributor";
   },
   get visionModel() {
+    const profile = getActiveLlmProfile();
+    if (profile.visionModel && profile.visionModel !== "hermes-agent") {
+      return profile.visionModel;
+    }
     const vision = process.env.AI_VISION_MODEL;
     if (vision && vision !== "hermes-agent") return vision;
     return "deepseek-v4-flash-vision-exp";
   },
   get headers(): Record<string, string> {
-    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    const profile = getActiveLlmProfile();
+    const headers: Record<string, string> = { "Content-Type": "application/json", ...(profile.headers || {}) };
     if (this.apiKey) headers.Authorization = `Bearer ${this.apiKey}`;
-    if (this.baseUrl.includes("openrouter.ai")) {
+    if (this.baseUrl.includes("openrouter.ai") && !headers["HTTP-Referer"]) {
       headers["HTTP-Referer"] = "https://baby.zwang.fun";
       headers["X-Title"] = "Baby Panel";
     }
@@ -145,6 +166,8 @@ export const AI_CONFIG = {
   },
   /** Ox Alpha spends thinking tokens; without this, OCR/tips can return empty content. */
   get completionExtras(): Record<string, unknown> {
+    const profile = getActiveLlmProfile();
+    if (profile.completionExtras) return profile.completionExtras;
     if (!this.baseUrl.includes("openrouter.ai")) return {};
     return { reasoning: { effort: "low" } };
   },

@@ -67,7 +67,7 @@ export async function POST(request: Request) {
 
     if (!createLlmBackend().getApiKey()) {
       return NextResponse.json(
-        { error: "未配置 OPENROUTER_API_KEY，无法使用 AI 助手" },
+        { error: "未配置 LLM API Key，无法使用 AI 助手" },
         { status: 503 }
       );
     }

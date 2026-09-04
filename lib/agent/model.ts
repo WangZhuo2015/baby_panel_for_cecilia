@@ -6,6 +6,7 @@ import {
 } from "@earendil-works/pi-ai";
 import { openAICompletionsApi } from "@earendil-works/pi-ai/api/openai-completions.lazy";
 import { openAIResponsesApi } from "@earendil-works/pi-ai/api/openai-responses.lazy";
+import { getActiveLlmProfile } from "@/lib/llm-profiles";
 
 export type LlmBackendId = "openrouter" | "opencode";
 
@@ -41,34 +42,43 @@ function openrouterModelId(): string {
 }
 
 function opencodeBaseUrl(): string {
+  const profile = getActiveLlmProfile();
+  if (profile.baseUrl) return profile.baseUrl;
   return process.env.AI_BASE_URL || OPENCODE_BASE;
 }
 
 function opencodeApiKey(): string {
+  const profile = getActiveLlmProfile();
+  if (profile.apiKey) return profile.apiKey;
   return process.env.AI_API_KEY || "";
 }
 
 function opencodeModelId(): string {
+  const profile = getActiveLlmProfile();
+  if (profile.model) return profile.model;
   return process.env.AI_MODEL || "muse-spark-1.2-contributor";
 }
 
 function opencodeVisionModelId(): string {
+  const profile = getActiveLlmProfile();
+  if (profile.visionModel && profile.visionModel !== "hermes-agent") return profile.visionModel;
   const v = process.env.AI_VISION_MODEL;
   if (v && v !== "hermes-agent") return v;
   return "deepseek-v4-flash-vision-exp";
 }
 
 export function listLlmBackends(): LlmBackendPublic[] {
+  const profile = getActiveLlmProfile();
   return [
     {
       id: "opencode",
-      label: "Opencode Muse Spark",
+      label: profile.name || "Primary Profile",
       model: opencodeModelId(),
       available: Boolean(opencodeApiKey()),
     },
     {
       id: "openrouter",
-      label: "OpenRouter Muse Spark",
+      label: "OpenRouter",
       model: openrouterModelId(),
       available: Boolean(openrouterApiKey()),
     },
@@ -81,16 +91,17 @@ export function resolveLlmBackendId(_raw?: unknown): LlmBackendId {
 }
 
 export function createLlmBackend(
-  _id: LlmBackendId = "openrouter",
+  _id: LlmBackendId = resolveLlmBackendId(),
   options?: { isVision?: boolean }
 ): LlmBackendSession {
   const isVision = Boolean(options?.isVision);
 
-  // Opencode provider (primary)
+  // Opencode / Primary provider
   if (_id === "opencode" || (opencodeApiKey() && _id !== "openrouter")) {
     const models = createModels();
     const modelId = isVision ? opencodeVisionModelId() : opencodeModelId();
-    const usesResponsesApi = modelId.includes("muse-spark") && !isVision;
+    const isOpencodeZen = opencodeBaseUrl().includes("opencode.ai");
+    const usesResponsesApi = modelId.includes("muse-spark") && !isVision && isOpencodeZen;
 
     if (usesResponsesApi) {
       const model: Model<"openai-responses"> = {

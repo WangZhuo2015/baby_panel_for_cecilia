@@ -28,6 +28,7 @@ node_modules/
 .next/
 generated/
 .env
+llm-profiles.json
 prisma/*.db*
 .playwright-mcp/
 .DS_Store

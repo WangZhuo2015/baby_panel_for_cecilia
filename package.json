@@ -25,7 +25,8 @@
     "db:restore": "bash scripts/restore-db.sh",
     "db:switch": "bash scripts/switch-db.sh",
     "db:push": "prisma db push",
-    "db:deploy": "prisma migrate deploy"
+    "db:deploy": "prisma migrate deploy",
+    "llm:switch": "tsx scripts/switch-llm.ts"
   },
   "dependencies": {
     "@earendil-works/pi-agent-core": "^0.84.3",

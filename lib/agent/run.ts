@@ -81,7 +81,8 @@ export async function runBabyAgent(opts: RunBabyAgentOptions): Promise<void> {
   // Try Opencode first (chat -> responses), then OpenRouter - keep both endpoints
   const useOpencode = Boolean(process.env.AI_API_KEY);
   const opencodeChat = useOpencode ? createLlmBackend("opencode", { isVision: hasImages }) : null;
-  const opencodeResponses = useOpencode && !hasImages ? createOpencodeResponsesBackend() : null;
+  const isOpencodeZen = (process.env.AI_BASE_URL || "").includes("opencode.ai") && (process.env.AI_MODEL || "").includes("muse-spark");
+  const opencodeResponses = useOpencode && !hasImages && isOpencodeZen ? createOpencodeResponsesBackend() : null;
   const openrouter = createLlmBackend("openrouter", { isVision: hasImages });
 
   const makeStreamFn = (backend: { models: { streamSimple: StreamFn }, model: Model<any> }, providerHeader: Record<string,string>): StreamFn => {

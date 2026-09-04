@@ -1,0 +1,35 @@
+{
+  "activeProfile": "amd",
+  "profiles": {
+    "amd": {
+      "name": "AMD Radeon (DeepSeek-V4-Flash-Vision)",
+      "baseUrl": "https://developer.amd.com.cn/radeon/api/v1",
+      "apiKey": "rc-your-amd-key-here",
+      "model": "DeepSeek-V4-Flash-Vision-Exp",
+      "visionModel": "DeepSeek-V4-Flash-Vision-Exp"
+    },
+    "opencode": {
+      "name": "OpenCode Zen (mimo-v2.5)",
+      "baseUrl": "https://opencode.ai/zen/go/v1",
+      "apiKey": "sk-your-opencode-key-here",
+      "model": "mimo-v2.5",
+      "visionModel": "mimo-v2.5"
+    },
+    "openrouter": {
+      "name": "OpenRouter (xiaomi/mimo-v2.5)",
+      "baseUrl": "https://openrouter.ai/api/v1",
+      "apiKey": "sk-or-v1-your-openrouter-key-here",
+      "model": "xiaomi/mimo-v2.5",
+      "visionModel": "xiaomi/mimo-v2.5",
+      "headers": {
+        "HTTP-Referer": "https://baby.zwang.fun",
+        "X-Title": "Baby Panel"
+      },
+      "completionExtras": {
+        "reasoning": {
+          "effort": "low"
+        }
+      }
+    }
+  }
+}
