@@ -9,7 +9,14 @@ if ! command -v python3 >/dev/null 2>&1; then
 fi
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-DB="${1:-$REPO_ROOT/dev.db}"
+
+if [ -n "${1:-}" ]; then
+  DB="$1"
+elif [ -f "$REPO_ROOT/prod.db" ]; then
+  DB="$REPO_ROOT/prod.db"
+else
+  DB="$REPO_ROOT/dev.db"
+fi
 # 先解析为绝对路径，再做任何 cd，避免相对路径被错误重锚定
 case "$DB" in
   /*) ;;

@@ -12,11 +12,15 @@ async function main() {
   });
   const families = await prisma.family.deleteMany({
     where: {
-      OR: [{ name: { startsWith: "test_" } }, { name: { startsWith: "e2e_" } }],
       members: { none: {} },
     },
   });
-  console.log(`purged users=${users.count} orphan_families=${families.count}`);
+  const testClients = await prisma.oAuthClient.deleteMany({
+    where: {
+      clientName: "Gemini Spark Test Client",
+    },
+  });
+  console.log(`purged users=${users.count} orphan_families=${families.count} test_clients=${testClients.count}`);
 }
 
 main()

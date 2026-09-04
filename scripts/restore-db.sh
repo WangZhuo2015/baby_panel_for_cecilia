@@ -14,7 +14,7 @@ if [ -n "${1:-}" ]; then
 elif [ -f "$BACKUP_DIR/rollback_checkpoint.db" ]; then
   SRC="$BACKUP_DIR/rollback_checkpoint.db"
 else
-  SRC="$(ls -1t "$BACKUP_DIR"/dev_*.db 2>/dev/null | head -n 1 || true)"
+  SRC="$(ls -1t "$BACKUP_DIR"/prod_*.db "$BACKUP_DIR"/dev_*.db 2>/dev/null | head -n 1 || true)"
 fi
 
 if [ -z "$SRC" ] || [ ! -f "$SRC" ]; then
@@ -28,7 +28,13 @@ case "$SRC" in
 esac
 
 # 确定目标数据库
-TARGET="${2:-$REPO_ROOT/dev.db}"
+if [ -n "${2:-}" ]; then
+  TARGET="$2"
+elif [ -f "$REPO_ROOT/prod.db" ]; then
+  TARGET="$REPO_ROOT/prod.db"
+else
+  TARGET="$REPO_ROOT/dev.db"
+fi
 case "$TARGET" in
   /*) ;;
   *) TARGET="$PWD/$TARGET" ;;

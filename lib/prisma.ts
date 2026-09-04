@@ -13,8 +13,8 @@ function isFileUrl(url: string): boolean {
 function createPrismaClient(): PrismaClient {
   const resolvedUrl = resolveDatabaseUrl(DATABASE_URL);
 
-  // 🔒 生产数据库硬熔断器：绝对禁止测试环境直连包含真实数据的 dev.db 生产库
-  if (IS_TEST && resolvedUrl.includes("dev.db") && !resolvedUrl.includes("dev_test.db")) {
+  // 🔒 生产数据库硬熔断器：绝对禁止测试环境直连包含真实数据的 prod.db / dev.db 生产库
+  if (IS_TEST && (resolvedUrl.includes("prod.db") || (resolvedUrl.includes("dev.db") && !resolvedUrl.includes("dev_test.db")))) {
     throw new Error(
       `[FATAL DATABASE SAFETY GUARD] 检测到测试进程试图直连生产数据库: ${resolvedUrl}！\n` +
       `测试必须使用独立测试库 (DATABASE_URL="file:./dev_test.db")，已紧急熔断以保护真实用户数据。`

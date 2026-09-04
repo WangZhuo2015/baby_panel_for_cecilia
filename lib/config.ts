@@ -13,9 +13,9 @@ export const IS_TEST =
   process.argv.some((arg) => arg.includes("--test"));
 
 export const PORT = parseInt(process.env.PORT || (IS_TEST ? "3089" : "3000"), 10);
-// 测试环境默认使用隔离测试库 dev_test.db，非测试环境默认使用 dev.db
+// 测试环境默认使用隔离测试库 dev_test.db，非测试环境默认使用 prod.db
 export const DATABASE_URL =
-  process.env.DATABASE_URL || (IS_TEST ? "file:./dev_test.db" : "file:./dev.db");
+  process.env.DATABASE_URL || (IS_TEST ? "file:./dev_test.db" : "file:./prod.db");
 
 /** Resolve file: URLs to absolute paths to avoid dual-DB when cwd differs (migrate vs runtime) */
 export function resolveDatabaseUrl(url: string): string {

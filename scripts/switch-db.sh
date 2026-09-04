@@ -12,11 +12,11 @@ ENV_FILE="$REPO_ROOT/.env"
 
 TARGET_MODE="${1:-toggle}"
 
-CURRENT_URL=$(grep -E "^DATABASE_URL=" "$ENV_FILE" | cut -d '=' -f2- | tr -d '"' || echo "file:./dev.db")
+CURRENT_URL=$(grep -E "^DATABASE_URL=" "$ENV_FILE" | cut -d '=' -f2- | tr -d '"' || echo "file:./prod.db")
 
 if [ "$TARGET_MODE" = "toggle" ]; then
   if [[ "$CURRENT_URL" =~ temp\.db$ ]]; then
-    TARGET_MODE="dev"
+    TARGET_MODE="prod"
   else
     TARGET_MODE="temp"
   fi
@@ -24,6 +24,8 @@ fi
 
 if [ "$TARGET_MODE" = "temp" ]; then
   TARGET_DB="temp.db"
+elif [ "$TARGET_MODE" = "prod" ]; then
+  TARGET_DB="prod.db"
 elif [ "$TARGET_MODE" = "dev" ]; then
   TARGET_DB="dev.db"
 else
