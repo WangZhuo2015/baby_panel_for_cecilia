@@ -349,10 +349,8 @@ function guardSleepNotes(notes: unknown) {
 export async function createDiaper(ctx: RecordContext, input: CreateDiaperInput) {
   const valid = ["pee", "poop", "both"];
   if (!input.type || !valid.includes(input.type)) throw new ValidationError("type 必填且只能为 pee、poop 或 both");
-  let timestamp = new Date().toISOString();
-  if (input.timestamp) {
-    timestamp = assertIsoTimestamp(input.timestamp);
-  }
+  const timestamp = normalizeTimestamp(input.timestamp);
+  guardFutureAndBirth(ctx.baby, timestamp);
   if (input.notes && String(input.notes).trim().length > 1000) throw new ValidationError("notes 不能超过 1000 个字符");
   if (input.poopColor && String(input.poopColor).trim().length > 100) throw new ValidationError("poopColor 不能超过 100 个字符");
   if (input.poopConsistency && String(input.poopConsistency).trim().length > 100) throw new ValidationError("poopConsistency 不能超过 100 个字符");
@@ -544,14 +542,23 @@ export async function getFoodLogRecords(ctx: RecordContext, opts: { date?: strin
   return records.map((r) => ({ ...r, foods: safeJsonParse(r.foods, []) }));
 }
 
-export async function getGrowthMeasurements(ctx: RecordContext, opts: { limit?: number | string } = {}) {
+export async function getGrowthMeasurements(ctx: RecordContext, opts: { date?: string; limit?: number | string } = {}) {
+  const where: any = { babyId: ctx.babyId };
+  if (opts.date) {
+    if (!isValidDateStr(opts.date)) throw new ValidationError("Invalid date format, expected YYYY-MM-DD");
+    where.date = opts.date;
+  }
   const limit = parseLimit(opts.limit, 50);
-  return prisma.growthMeasurement.findMany({ where: { babyId: ctx.babyId }, orderBy: [{ date: "desc" }, { createdAt: "desc" }], take: limit });
+  return prisma.growthMeasurement.findMany({ where, orderBy: [{ date: "desc" }, { createdAt: "desc" }], take: limit });
 }
 
-export async function getMedicalReports(ctx: RecordContext, opts: { category?: string; limit?: number | string } = {}) {
+export async function getMedicalReports(ctx: RecordContext, opts: { category?: string; date?: string; limit?: number | string } = {}) {
   const where: any = { babyId: ctx.babyId };
   if (opts.category && opts.category !== "all") where.category = opts.category;
+  if (opts.date) {
+    if (!isValidDateStr(opts.date)) throw new ValidationError("Invalid date format, expected YYYY-MM-DD");
+    where.date = opts.date;
+  }
   const limit = parseLimit(opts.limit, 50);
   const reports = await prisma.medicalReport.findMany({ where, orderBy: { date: "desc" }, take: limit });
   return reports.map((r) => ({ ...r, items: safeJsonParse(r.itemsJson, []) }));
@@ -807,7 +814,12 @@ export async function deleteRecord(ctx: RecordContext, type: "feeding"|"sleep"|"
   // Automatically capture pre-deletion snapshot for safe rollback
   const { captureRecordSnapshot } = await import("./snapshot");
   await captureRecordSnapshot({
-    ctx: { babyId: ctx.babyId, userId: ctx.userId, source: "ui_manual" },
+    ctx: {
+      babyId: ctx.babyId,
+      userId: ctx.userId,
+      source: (ctx.source as any) || "ui_manual",
+      sourceAgent: ctx.sourceAgent || null,
+    },
     action: "delete",
     entityType: type,
     entityId: id,

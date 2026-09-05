@@ -72,12 +72,18 @@ export interface UserPrincipal {
   clientId: string;
   clientName?: string;
   sourceAgent: string; // e.g. "Gemini Spark" | "ChatGPT" | "Claude" | "外部 Agent (MCP)"
+  relation?: string; // e.g. "mother" | "father" | "caregiver"
+  role?: string; // e.g. "admin" | "member"
+  userAgent?: string;
+  ip?: string;
   baby?: {
     id: string;
     nickname: string;
     gender: string;
     birthDate: string;
     gestationalAge?: number | null;
+    avatarUrl?: string | null;
     familyId: string;
   };
 }
+

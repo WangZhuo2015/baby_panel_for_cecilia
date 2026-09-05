@@ -13,6 +13,7 @@ import {
   STATIC_OAUTH_CLIENTS,
   getBaseUrl,
 } from "./config";
+import { getClientIp } from "@/lib/rate-limit";
 import type {
   OAuthProtectedResourceMetadata,
   OAuthAuthorizationServerMetadata,
@@ -711,7 +712,10 @@ export async function verifyMcpAccessToken(
   } catch {}
 
   const userAgent = request?.headers?.get("user-agent") || undefined;
+  const ip = request ? getClientIp(request) : undefined;
   const sourceAgent = resolveSourceAgent(clientId, clientName, userAgent);
+
+  const activeMembership = user.memberships.find((m) => m.familyId === activeBaby.familyId);
 
   return {
     userId: user.id,
@@ -722,6 +726,10 @@ export async function verifyMcpAccessToken(
     clientId,
     clientName,
     sourceAgent,
+    userAgent,
+    ip,
+    relation: activeMembership?.relation || "caregiver",
+    role: activeMembership?.role || "member",
     baby: activeBaby,
   };
 }

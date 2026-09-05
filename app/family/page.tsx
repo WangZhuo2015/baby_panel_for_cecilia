@@ -8,10 +8,11 @@ import { CuteButton } from "@/components/ui/CuteButton";
 import { CuteInput } from "@/components/ui/CuteInput";
 import { useToast } from "@/components/ui/Toast";
 import { useBabyStore } from "@/stores/useBabyStore";
-import { Users, Copy, Check, UserPlus, LogOut, ShieldCheck, Smartphone, Sparkles, ChevronRight, Baby, Camera, Link as LinkIcon, Share2, BookOpen, Key } from "lucide-react";
+import { Users, Copy, Check, UserPlus, LogOut, ShieldCheck, Smartphone, Sparkles, ChevronRight, Baby, Camera, Link as LinkIcon, Share2, BookOpen, Key, Bot } from "lucide-react";
 import { InstallGuideModal } from "@/components/ui/InstallGuideModal";
 import { FeatureTourModal } from "@/components/ui/FeatureTourModal";
 import { PersonalTokenModal } from "@/components/user/PersonalTokenModal";
+import { AiUsageModal } from "@/components/mcp/AiUsageModal";
 import { APP_VERSION } from "@/lib/version";
 import { BabyAvatar } from "@/components/ui/BabyAvatar";
 
@@ -38,6 +39,7 @@ export default function FamilyPage() {
   const [isInstallModalOpen, setIsInstallModalOpen] = useState(false);
   const [isTourModalOpen, setIsTourModalOpen] = useState(false);
   const [isTokenModalOpen, setIsTokenModalOpen] = useState(false);
+  const [isAiUsageModalOpen, setIsAiUsageModalOpen] = useState(false);
 
   useEffect(() => {
     fetchBaby();
@@ -334,6 +336,31 @@ export default function FamilyPage() {
         </div>
       </CuteCard>
 
+      {/* 🤖 已连接 AI 与访问统计 (MCP) */}
+      <h3 className="text-sm font-semibold text-text-secondary mb-3 px-1">外部 AI 连接与访问统计</h3>
+      <CuteCard
+        className="p-4 mb-6 bg-gradient-to-r from-purple-50/70 via-indigo-50/40 to-sky-50/50 dark:from-purple-950/20 dark:to-indigo-950/20 border border-purple-200/60 dark:border-purple-800/40 cursor-pointer hover:shadow-md transition-all"
+        onClick={() => setIsAiUsageModalOpen(true)}
+      >
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-purple-600 to-indigo-600 text-white flex items-center justify-center shadow-button shrink-0">
+              <Bot size={20} />
+            </div>
+            <div>
+              <p className="text-xs font-bold text-text-primary flex items-center gap-1.5">
+                已连接 AI 与 MCP 访问统计
+                <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-300 font-bold">MCP 协议</span>
+              </p>
+              <p className="text-[11px] text-text-secondary mt-0.5">
+                查看连接过的 Gemini Spark、ChatGPT、Claude 等 AI 及访问次数统计
+              </p>
+            </div>
+          </div>
+          <ChevronRight size={16} className="text-text-muted" />
+        </div>
+      </CuteCard>
+
       {/* 📱 PWA / Add to Home Screen Setting Card */}
       <h3 className="text-sm font-semibold text-text-secondary mb-3 px-1">应用安装与体验</h3>
       <CuteCard
@@ -395,6 +422,12 @@ export default function FamilyPage() {
       <PersonalTokenModal
         isOpen={isTokenModalOpen}
         onClose={() => setIsTokenModalOpen(false)}
+      />
+
+      <AiUsageModal
+        isOpen={isAiUsageModalOpen}
+        onClose={() => setIsAiUsageModalOpen(false)}
+        babyId={baby?.id}
       />
     </div>
   );
