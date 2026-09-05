@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useEffect } from "react";
 import { X, Bot } from "lucide-react";
 import { AiUsageDashboard } from "./AiUsageDashboard";
 
@@ -11,12 +11,27 @@ interface Props {
 }
 
 export function AiUsageModal({ isOpen, onClose, babyId }: Props) {
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm animate-fade-in cursor-pointer"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-label="已连接 AI 与访问统计"
+    >
       <div
-        className="relative w-full max-w-3xl max-h-[92vh] bg-white dark:bg-zinc-900 rounded-3xl shadow-2xl border border-primary/20 flex flex-col overflow-hidden animate-scale-up"
+        className="relative w-full max-w-3xl max-h-[92vh] bg-white dark:bg-zinc-900 rounded-3xl shadow-2xl border border-primary/20 flex flex-col overflow-hidden animate-scale-up cursor-default"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Header */}

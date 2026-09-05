@@ -16,9 +16,14 @@ export async function GET(request: Request) {
     return NextResponse.json({ success: true, data });
   } catch (error: any) {
     console.error("GET /api/mcp/usage error:", error);
+    const message = error?.message || "获取 AI 使用统计失败";
+    const isClientError =
+      message.includes("未加入任何家庭") ||
+      message.includes("不存在或无权访问") ||
+      message.includes("未创建宝宝档案");
     return NextResponse.json(
-      { success: false, error: error?.message || "获取 AI 使用统计失败" },
-      { status: 500 }
+      { success: false, error: message },
+      { status: isClientError ? 400 : 500 }
     );
   }
 }

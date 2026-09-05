@@ -820,6 +820,7 @@ model OAuthConsent {
   @@unique([userId, clientId, babyId])
   @@index([userId])
   @@index([clientId])
+  @@index([babyId])
 }
 
 model OAuthAuditLog {
@@ -838,6 +839,7 @@ model OAuthAuditLog {
   metadataJson String?  // Non-sensitive metadata only (NO tokens or secrets)
   createdAt    DateTime @default(now())
 
+  @@index([babyId, createdAt])
   @@index([userId, createdAt])
   @@index([clientId, createdAt])
   @@index([action, createdAt])

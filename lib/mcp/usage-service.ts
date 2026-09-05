@@ -6,6 +6,24 @@
 import { prisma } from "@/lib/prisma";
 import { resolveSourceAgent } from "@/lib/oauth/service";
 import { getToolMeta, ToolMeta } from "@/lib/mcp/tool-labels";
+import { getLocalDateStr } from "@/lib/date";
+
+export function maskIp(ip?: string | null): string | null {
+  if (!ip) return null;
+  const trimmed = ip.trim();
+  if (trimmed === "127.0.0.1" || trimmed === "::1" || trimmed.toLowerCase() === "localhost") {
+    return "本地网络";
+  }
+  if (trimmed.includes(".")) {
+    const parts = trimmed.split(".");
+    if (parts.length === 4) return `${parts[0]}.${parts[1]}.*.*`;
+  }
+  if (trimmed.includes(":")) {
+    const parts = trimmed.split(":");
+    if (parts.length >= 2) return `${parts[0]}:${parts[1]}:****::****`;
+  }
+  return "***";
+}
 
 export interface ConnectedAgentSummary {
   agentName: string;
@@ -126,6 +144,9 @@ export async function getMcpUsageStatistics(
         break;
       }
     }
+    if (!targetBaby) {
+      throw new Error("指定的宝宝档案不存在或无权访问");
+    }
   }
 
   if (!targetBaby) {
@@ -149,12 +170,15 @@ export async function getMcpUsageStatistics(
   }
 
   // 4. 查询该家庭/宝宝下的全部相关审计日志
-  // 严格隔离：仅查询 babyId 为当前宝宝，或由该家庭成员触发的操作
+  // 严格隔离：精准匹配 targetBaby.id；未归属于特定宝宝的全局日志限定家庭成员且 babyId: null
   const auditLogs = await prisma.oAuthAuditLog.findMany({
     where: {
       OR: [
         { babyId: targetBaby.id },
-        { userId: { in: familyUserIds } },
+        {
+          babyId: null,
+          userId: { in: familyUserIds },
+        },
       ],
     },
     orderBy: { createdAt: "desc" },
@@ -176,7 +200,10 @@ export async function getMcpUsageStatistics(
     where: {
       OR: [
         { babyId: targetBaby.id },
-        { userId: { in: familyUserIds } },
+        {
+          babyId: null,
+          userId: { in: familyUserIds },
+        },
       ],
     },
     include: { client: true },
@@ -380,25 +407,18 @@ export async function getMcpUsageStatistics(
     })
     .sort((a, b) => b.count - a.count);
 
-  // 12. 构建近 14 天趋势数据 (Daily Activity Trend)
+  // 12. 构建近 14 天趋势数据 (Daily Activity Trend - 强制按 Asia/Shanghai 本地日历日对齐)
   const dailyPointsMap = new Map<string, { total: number; success: number; error: number }>();
   const trendDays = 14;
   for (let i = trendDays - 1; i >= 0; i--) {
     const d = new Date(now - i * 24 * 60 * 60 * 1000);
-    const yyyy = d.getFullYear();
-    const mm = String(d.getMonth() + 1).padStart(2, "0");
-    const dd = String(d.getDate()).padStart(2, "0");
-    const key = `${yyyy}-${mm}-${dd}`;
+    const key = getLocalDateStr(d);
     dailyPointsMap.set(key, { total: 0, success: 0, error: 0 });
   }
 
   for (const log of auditLogs) {
     if (log.action !== "mcp_tool_call") continue;
-    const d = log.createdAt;
-    const yyyy = d.getFullYear();
-    const mm = String(d.getMonth() + 1).padStart(2, "0");
-    const dd = String(d.getDate()).padStart(2, "0");
-    const key = `${yyyy}-${mm}-${dd}`;
+    const key = getLocalDateStr(log.createdAt);
 
     const point = dailyPointsMap.get(key);
     if (point) {
@@ -421,7 +441,7 @@ export async function getMcpUsageStatistics(
     }
   );
 
-  // 13. 最近详细审计记录明细 (Latest 50 logs)
+  // 13. 最近详细审计记录明细 (Latest 50 logs - 经过脱敏安全保护)
   const recentAuditLogs: AuditLogItem[] = auditLogs.slice(0, 50).map((log) => {
     let errorMsg: string | null = null;
     if (log.metadataJson) {
@@ -447,7 +467,7 @@ export async function getMcpUsageStatistics(
       userName: userInfo?.displayName || "未知用户",
       userRelation: userInfo?.relation || "家庭成员",
       errorMessage: errorMsg,
-      ip: log.ip,
+      ip: maskIp(log.ip),
     };
   });
 

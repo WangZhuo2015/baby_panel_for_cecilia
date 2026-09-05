@@ -63,9 +63,31 @@ export const MCP_TOOL_METAS: Record<string, ToolMeta> = {
     description: "录入一次换尿布记录（小便/大便/颜色/状态）",
   },
 
-  // 辅食与食谱
+  // 辅食与计划
+  get_food_records: {
+    label: "查询辅食记录",
+    category: "read",
+    description: "查询宝宝每日辅食打卡与食材过敏反应记录",
+  },
+  record_food: {
+    label: "记录辅食喂食",
+    category: "write",
+    description: "录入宝宝尝试新食材或辅食餐次记录",
+  },
+  get_food_plans: {
+    label: "查询辅食排敏计划",
+    category: "read",
+    description: "查询宝宝的辅食引入规划与排敏阶段安排",
+  },
+  record_food_plan: {
+    label: "记录辅食引入计划",
+    category: "write",
+    description: "为宝宝制定并添加新的辅食食材排敏计划",
+  },
+
+  // 别名兼容
   get_food_logs: {
-    label: "查询辅食日记",
+    label: "查询辅食记录",
     category: "read",
     description: "查询宝宝每日辅食打卡与食材过敏反应记录",
   },
@@ -74,18 +96,8 @@ export const MCP_TOOL_METAS: Record<string, ToolMeta> = {
     category: "write",
     description: "录入宝宝尝试新食材或辅食餐次记录",
   },
-  get_food_recipes: {
-    label: "查询辅食食谱库",
-    category: "read",
-    description: "根据月龄与食材查询营养师推荐辅食食谱",
-  },
-  get_food_plans: {
-    label: "查询辅食排敏计划",
-    category: "read",
-    description: "查询宝宝的辅食引入规划与排敏阶段安排",
-  },
   create_food_plan: {
-    label: "创建辅食排敏计划",
+    label: "记录辅食引入计划",
     category: "write",
     description: "为宝宝制定并添加新的辅食食材排敏计划",
   },
@@ -125,6 +137,11 @@ export const MCP_TOOL_METAS: Record<string, ToolMeta> = {
     category: "read",
     description: "查询儿科门诊病历、血常规等化验单及儿保体检表",
   },
+  get_medical_report_detail: {
+    label: "查询体检化验单详情",
+    category: "read",
+    description: "获取单份医学检验报告的具体检测项目与医生诊断",
+  },
   record_medical_report: {
     label: "录入体检或化验单",
     category: "write",
@@ -132,10 +149,25 @@ export const MCP_TOOL_METAS: Record<string, ToolMeta> = {
   },
 
   // 疫苗接种
-  get_vaccine_schedules: {
-    label: "查询疫苗接种进度日历",
+  get_vaccine_records: {
+    label: "查询疫苗接种记录",
     category: "read",
-    description: "查询 0-3 岁一类/二类疫苗规划及已接种明细",
+    description: "查询宝宝已完成接种的疫苗明细与针次",
+  },
+  get_vaccine_schedule: {
+    label: "查询疫苗推荐接种计划",
+    category: "read",
+    description: "查询 0-3 岁一类/二类疫苗规划及待接种日程",
+  },
+  get_vaccine_schedules: {
+    label: "查询疫苗推荐接种计划",
+    category: "read",
+    description: "查询 0-3 岁一类/二类疫苗规划及待接种日程",
+  },
+  record_vaccine: {
+    label: "记录疫苗接种",
+    category: "write",
+    description: "标记并录入某针疫苗的接种完成信息",
   },
   record_vaccine_inoculation: {
     label: "记录疫苗接种",
@@ -150,28 +182,26 @@ export const MCP_TOOL_METAS: Record<string, ToolMeta> = {
     description: "获取宝宝生活照、体检化验单照片及生长曲线图",
   },
 
-  // 绘本早教
-  get_picture_books: {
-    label: "查询早教绘本与借阅",
+  // 早教与知识库查询
+  query_food_item: {
+    label: "查询食材与过敏安全库",
     category: "read",
-    description: "查询宝宝书架、借阅状态与推荐适龄绘本",
+    description: "查询单一食材月龄建议、营养成分与窒息/过敏风险",
   },
-  record_picture_book_read: {
-    label: "记录绘本阅读",
-    category: "write",
-    description: "录入一次绘本亲子共读打卡记录",
-  },
-
-  // 家庭通知
-  get_family_notifications: {
-    label: "查询家庭提醒与通知",
+  query_book: {
+    label: "查询适龄早教绘本",
     category: "read",
-    description: "查询家庭成员收到的喂养、疫苗、用药提醒",
+    description: "查询适龄儿童经典绘本、评分与亲子共读互动指引",
   },
-  create_family_notification: {
-    label: "发送家庭提醒通知",
-    category: "write",
-    description: "向全家成员手机或微信推送育儿提醒通知",
+  query_activity: {
+    label: "查询早教游戏与亲子互动",
+    category: "read",
+    description: "查询适龄感统运动、语言认知游戏与发展建议",
+  },
+  web_search: {
+    label: "联网检索权威儿科信息",
+    category: "read",
+    description: "在权威儿科与医学知识源中搜索最新育儿指南",
   },
 
   // 安全删除与快照恢复
@@ -186,7 +216,7 @@ export const MCP_TOOL_METAS: Record<string, ToolMeta> = {
     description: "根据快照 ID 一键撤销删除，原样恢复被误删的数据",
   },
 
-  // 兼容旧版工具
+  // 兼容旧版复合工具
   get_baby_overview: {
     label: "获取宝宝综合总览 (旧版)",
     category: "read",

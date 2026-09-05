@@ -353,8 +353,8 @@ export function AiUsageDashboard({ babyId, className = "", onNavigateToDocs }: P
         </div>
 
         {/* Visual Bar Chart */}
-        <div className="pt-2">
-          <div className="h-32 flex items-end gap-1 sm:gap-2">
+        <div className="pt-2 overflow-x-auto pb-1">
+          <div className="h-32 min-w-[320px] flex items-end gap-1 sm:gap-2">
             {dailyActivityTrend.map((d) => {
               const heightPercent = maxTrendTotal > 0 ? Math.max((d.total / maxTrendTotal) * 100, 4) : 4;
               return (
@@ -439,7 +439,7 @@ export function AiUsageDashboard({ babyId, className = "", onNavigateToDocs }: P
                         ({tool.toolName})
                       </span>
                       <span
-                        className={`text-[9px] px-1.5 py-0.2 rounded-md font-semibold uppercase shrink-0 ${
+                        className={`text-[9px] px-1.5 py-0.5 rounded-md font-semibold uppercase shrink-0 ${
                           tool.category === "write"
                             ? "bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300"
                             : tool.category === "manage"
@@ -552,7 +552,7 @@ export function AiUsageDashboard({ babyId, className = "", onNavigateToDocs }: P
 
                       {/* Category */}
                       <span
-                        className={`text-[9px] px-1.5 py-0.2 rounded font-medium ${
+                        className={`text-[9px] px-1.5 py-0.5 rounded font-medium ${
                           log.category === "write"
                             ? "bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300"
                             : "bg-sky-100 dark:bg-sky-900/40 text-sky-700 dark:text-sky-300"

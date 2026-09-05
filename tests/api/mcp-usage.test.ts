@@ -257,7 +257,48 @@ test("MCP AI Usage & Audit Statistics (Aggregator & Tenant Isolation)", async (t
     assert.equal(stats2.connectedAgents[0].agentName, "Tenant2 Secret Agent");
   });
 
-  await t.test("GET /api/mcp/usage route handler requires authentication and returns data", async () => {
+  await t.test("Multi-baby isolation: Logs for Baby 2 must never leak into Baby 1 stats when user owns both babies", async () => {
+    // 同一家庭中创建二宝
+    const babySibling = await prisma.baby.create({
+      data: {
+        familyId: family1.id,
+        nickname: `${prefix}baby_sibling`,
+        gender: "male",
+        birthDate: "2025-06-01",
+      },
+    });
+
+    // 为二宝写入审计日志
+    await prisma.oAuthAuditLog.create({
+      data: {
+        clientId: clientGemini.clientId,
+        userId: user1.id,
+        babyId: babySibling.id,
+        action: "mcp_tool_call",
+        toolName: "record_diaper",
+        authResult: "success",
+        durationMs: 30,
+        metadataJson: JSON.stringify({ agent: "Gemini Spark" }),
+      },
+    });
+
+    // 查询大宝的统计，必须严格隔离，调用量维持 4，且绝不包含二宝的换尿布记录
+    const statsBaby1 = await getMcpUsageStatistics(user1.id, baby1.id);
+    assert.equal(statsBaby1.baby.id, baby1.id);
+    assert.equal(statsBaby1.overview.totalCalls, 4, "大宝调用量必须保持为 4，不可混入二宝的数据");
+    const hasSiblingDiaperLog = statsBaby1.recentAuditLogs.some(
+      (l) => l.toolName === "record_diaper" && l.durationMs === 30
+    );
+    assert.equal(hasSiblingDiaperLog, false, "大宝日志流水中绝不能包含二宝的记录");
+
+    // 查询二宝的独立统计
+    const statsSibling = await getMcpUsageStatistics(user1.id, babySibling.id);
+    assert.equal(statsSibling.baby.id, babySibling.id);
+    assert.equal(statsSibling.overview.totalCalls, 1);
+    assert.equal(statsSibling.recentAuditLogs[0].toolName, "record_diaper");
+  });
+
+  await t.test("GET /api/mcp/usage route handler requires authentication, validates babyId, and returns data", async () => {
     // 1. Unauthenticated request -> 401
     const unauthReq = new Request("http://localhost:3089/api/mcp/usage");
     const unauthRes = await usageGet(unauthReq);
@@ -282,5 +323,17 @@ test("MCP AI Usage & Audit Statistics (Aggregator & Tenant Isolation)", async (t
     assert.equal(json.data.baby.id, baby1.id);
     assert.equal(json.data.overview.totalCalls, 4);
     assert.equal(json.data.connectedAgents.length, 2);
+
+    // 3. Invalid babyId -> 400 Bad Request
+    const invalidBabyReq = new Request("http://localhost:3089/api/mcp/usage?babyId=non-existent-id", {
+      headers: {
+        cookie: `${AUTH_COOKIE_NAME}=${sessionToken}`,
+      },
+    });
+    const invalidRes = await usageGet(invalidBabyReq);
+    assert.equal(invalidRes.status, 400);
+    const invalidJson = await invalidRes.json();
+    assert.equal(invalidJson.success, false);
+    assert.match(invalidJson.error, /不存在或无权访问/);
   });
 });
