@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
+import { createPortal } from "react-dom";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useRouter } from "next/navigation";
@@ -989,10 +990,15 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
   };
 
   const [visionMode, setVisionMode] = useState<string>("medical");
+  const [mounted, setMounted] = useState(false);
 
-  if (!isOpen) return null;
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
-  return (
+  if (!isOpen || !mounted) return null;
+
+  const modalContent = (
     <div
       role="dialog"
       aria-modal="true"
@@ -1012,7 +1018,7 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
         <div className="w-12 h-1.5 rounded-full bg-primary/25 dark:bg-white/20 mx-auto mt-2.5 mb-1 sm:hidden shrink-0" />
 
         {/* ===== Desktop/iPad History Sidebar ===== */}
-        <div className="w-72 border-r border-primary/10 hidden md:flex flex-col bg-white/50 dark:bg-card/50 shrink-0 select-none">
+        <div className="w-60 lg:w-72 border-r border-primary/10 hidden md:flex flex-col bg-white/50 dark:bg-card/50 shrink-0 select-none">
           <div className="flex items-center justify-between px-3.5 py-3 pt-[max(12px,env(safe-area-inset-top))] bg-white/90 dark:bg-card/90 backdrop-blur-md border-b border-primary/10 shrink-0">
             <div className="flex items-center gap-2">
               <div className="w-7 h-7 rounded-xl bg-primary-soft/50 text-primary flex items-center justify-center">
@@ -2094,4 +2100,6 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
       </div>
     </div>
   );
+
+  return typeof document !== "undefined" ? createPortal(modalContent, document.body) : null;
 };

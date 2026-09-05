@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { X, Bot } from "lucide-react";
 import { AiUsageDashboard } from "./AiUsageDashboard";
 
@@ -11,6 +12,12 @@ interface Props {
 }
 
 export function AiUsageModal({ isOpen, onClose, babyId }: Props) {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   useEffect(() => {
     if (!isOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -20,9 +27,9 @@ export function AiUsageModal({ isOpen, onClose, babyId }: Props) {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isOpen, onClose]);
 
-  if (!isOpen) return null;
+  if (!isOpen || !mounted) return null;
 
-  return (
+  const modalContent = (
     <div
       className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm animate-fade-in cursor-pointer"
       onClick={onClose}
@@ -67,4 +74,6 @@ export function AiUsageModal({ isOpen, onClose, babyId }: Props) {
       </div>
     </div>
   );
+
+  return typeof document !== "undefined" ? createPortal(modalContent, document.body) : null;
 }
