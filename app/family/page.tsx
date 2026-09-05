@@ -136,7 +136,7 @@ export default function FamilyPage() {
   };
 
   return (
-    <div className="min-h-screen bg-bg-canvas px-4 pt-4 pb-28">
+    <div className="min-h-screen bg-bg-canvas px-4 pt-4 pb-28 max-w-4xl mx-auto">
       <AppHeader title="家庭成员与共享" showBack onRefresh={handleRefresh} refreshing={refreshing} />
 
       {/* Family Info & Invite Card */}

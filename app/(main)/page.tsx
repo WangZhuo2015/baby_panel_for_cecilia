@@ -41,6 +41,7 @@ import { APP_VERSION } from "@/lib/version";
 import { openRecordDrawer, RecordDrawerType } from "@/lib/drawer-bus";
 import { openQuickAI } from "@/lib/quickai-bus";
 import { calculateUnreadCount } from "@/lib/notifications-storage";
+import { isWorkbenchViewport } from "@/lib/responsive";
 
 function NotificationBell() {
   const [unreadCount, setUnreadCount] = useState(0);
@@ -136,7 +137,7 @@ export default function HomePage() {
   };
 
   const handleQuickRecord = (type: RecordDrawerType, fallbackUrl: string) => {
-    if (typeof window !== "undefined" && window.innerWidth >= 1024) {
+    if (isWorkbenchViewport()) {
       openRecordDrawer(type);
     } else {
       router.push(fallbackUrl);
@@ -348,12 +349,12 @@ export default function HomePage() {
   };
 
   return (
-    <div className="px-4 pt-safe-6 pb-36 max-w-md md:max-w-xl lg:max-w-6xl mx-auto space-y-5">
+    <div className="px-4 pt-safe-6 pb-36 workbench:pb-12 max-w-md md:max-w-xl workbench:max-w-none lg:max-w-7xl mx-auto space-y-5">
       {/* 1. Header (Mobile & Tablet Bar, Desktop Title & Actions) */}
       <div className="flex items-center justify-between">
-        {/* 移动端宝宝头像与信息卡片，PC端由左侧边栏统一承载 */}
+        {/* 移动端宝宝头像与信息卡片，PC与平板横屏工作台由左侧边栏统一承载 */}
         <div
-          className="flex items-center gap-3 cursor-pointer group lg:hidden"
+          className="flex items-center gap-3 cursor-pointer group workbench:hidden"
           onClick={() => router.push("/onboarding")}
           title="点击更换头像与修改宝宝资料"
         >
@@ -383,8 +384,8 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* PC 端主标题 */}
-        <div className="hidden lg:block">
+        {/* PC / 平板横屏端主标题 */}
+        <div className="hidden workbench:block">
           <h1 className="text-xl font-bold text-text-primary">今日作息看板</h1>
         </div>
 
@@ -414,10 +415,10 @@ export default function HomePage() {
       {/* 📱 PWA 保存到桌面引导 Banner */}
       <InstallGuideBanner />
 
-      {/* 🌟 2. iPad / PC 6:4 双栏响应式工作台网格 */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
-        {/* ===== 左栏：实时看板与作息主线 (60% / Col 7) ===== */}
-        <div className="lg:col-span-7 space-y-5">
+      {/* 🌟 2. iPad / PC / 小型平板横屏 6:4 双栏响应式工作台网格 */}
+      <div className="grid grid-cols-1 workbench:grid-cols-12 gap-5 items-start">
+        {/* ===== 左栏：实时看板与作息主线 (Col 7) ===== */}
+        <div className="workbench:col-span-7 space-y-5">
           {/* 🍼 上次喂养与睡眠即时状态卡片 */}
           <div className="grid grid-cols-2 gap-2.5">
             {/* 🍼 上次喂养状态 */}
@@ -541,8 +542,8 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* ===== 右栏：智能顾问、补剂打卡与环境分析 (40% / Col 5) ===== */}
-        <div className="lg:col-span-5 space-y-5">
+        {/* ===== 右栏：智能顾问、补剂打卡与环境分析 (Col 5) ===== */}
+        <div className="workbench:col-span-5 space-y-5">
           {/* AI Assistant Advice & Unified AI Hub Launcher */}
           <CuteCard className="bg-gradient-to-br from-primary-light via-pink-50/40 to-lavender/15 border border-primary/20 p-4.5 space-y-3.5 shadow-soft hover:shadow-elevated transition-all">
             <div className="flex items-center justify-between">

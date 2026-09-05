@@ -72,7 +72,7 @@ export function DesktopSidebar() {
 
 
   return (
-    <aside className="hidden lg:flex flex-col fixed left-0 top-0 bottom-0 w-64 bg-card/95 backdrop-blur-xl border-r border-primary/15 z-40 select-none">
+    <aside className="hidden workbench:flex flex-col fixed left-0 top-0 bottom-0 w-56 lg:w-64 bg-card/95 backdrop-blur-xl border-r border-primary/15 z-40 select-none">
       {/* 1. Baby Profile Card Header */}
       <div className="p-4 border-b border-primary/10">
         <div
@@ -171,12 +171,12 @@ export function DesktopSidebar() {
         </button>
 
         {/* System Bar (Theme, Settings, Guide) */}
-        <div className="flex items-center justify-between px-2 pt-1">
-          <div className="flex items-center gap-3">
+        <div className="flex items-center justify-between px-1.5 pt-1">
+          <div className="flex items-center gap-2 lg:gap-3">
             <button
               type="button"
               onClick={() => setIsAiUsageOpen(true)}
-              className="text-[11px] text-text-muted hover:text-primary transition-colors flex items-center gap-1 cursor-pointer"
+              className="text-[10px] lg:text-[11px] text-text-muted hover:text-primary transition-colors flex items-center gap-1 cursor-pointer"
               title="查看已连接外部 AI 与 MCP 访问统计"
             >
               <Bot size={13} />
@@ -185,7 +185,7 @@ export function DesktopSidebar() {
             <button
               type="button"
               onClick={() => setIsTokenOpen(true)}
-              className="text-[11px] text-text-muted hover:text-primary transition-colors flex items-center gap-1 cursor-pointer"
+              className="text-[10px] lg:text-[11px] text-text-muted hover:text-primary transition-colors flex items-center gap-1 cursor-pointer"
               title="管理个人专属 Siri 快捷指令 Token"
             >
               <Key size={13} />
@@ -194,7 +194,7 @@ export function DesktopSidebar() {
             <button
               type="button"
               onClick={() => setIsTourOpen(true)}
-              className="text-[11px] text-text-muted hover:text-primary transition-colors flex items-center gap-1 cursor-pointer"
+              className="text-[10px] lg:text-[11px] text-text-muted hover:text-primary transition-colors flex items-center gap-1 cursor-pointer"
               title="查看功能使用指南"
             >
               <HelpCircle size={13} />

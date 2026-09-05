@@ -24,7 +24,7 @@ export function BottomNav() {
   };
 
   return (
-    <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md lg:hidden bg-white/95 dark:bg-card/95 backdrop-blur-xl border-t border-primary-soft/40 dark:border-white/10 z-50 pb-[max(8px,env(safe-area-inset-bottom,0px))]">
+    <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md workbench:hidden bg-white/95 dark:bg-card/95 backdrop-blur-xl border-t border-primary-soft/40 dark:border-white/10 z-50 pb-[max(8px,env(safe-area-inset-bottom,0px))]">
       <div className="grid grid-cols-5 items-end justify-items-center px-1 pt-1.5 pb-0.5">
         {/* 左侧导航项 */}
         {leftNavItems.map((item) => {

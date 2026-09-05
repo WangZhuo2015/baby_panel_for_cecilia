@@ -117,7 +117,7 @@ export default function BooksPage() {
     <div className="min-h-screen bg-bg pb-8">
       <AppHeader title="绘本馆" onRefresh={handleRefresh} refreshing={refreshing} />
 
-      <div className="px-4 pt-4 space-y-5">
+      <div className="px-4 pt-4 space-y-5 max-w-5xl mx-auto">
         {/* Header */}
         <div className="flex items-center gap-3">
           <div className="flex items-center justify-center w-10 h-10 rounded-2xl bg-pink-100">
