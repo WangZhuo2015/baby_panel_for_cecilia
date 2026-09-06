@@ -414,6 +414,9 @@ export interface TimelineEntry {
   source?: string | null;
   /** 外部 Agent 来源: "Gemini Spark" | "ChatGPT" | "Claude" | "Cursor" 等 */
   sourceAgent?: string | null;
+  /** 关联配方奶粉信息 */
+  formulaProductId?: string | null;
+  formulaProductName?: string | null;
   /** 原始记录详情数据（用于精准回填与编辑） */
   rawRecord?: any;
 }

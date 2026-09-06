@@ -191,6 +191,53 @@ async function getBabyPhotos(babyId: string, type?: string, limit = 50) {
   return photos.slice(0, limit);
 }
 
+export async function resolveFormulaProductId(
+  familyId: string,
+  type: string,
+  formulaProductId?: string | null,
+  formulaName?: string | null
+): Promise<string | null> {
+  if (!familyId || (type !== "formula" && type !== "mixed")) {
+    return null;
+  }
+  if (typeof formulaProductId === "string" && formulaProductId.trim()) {
+    const verified = await prisma.formulaProduct.findFirst({
+      where: { id: formulaProductId.trim(), familyId },
+      select: { id: true },
+    });
+    if (verified) {
+      return verified.id;
+    }
+  }
+  if (typeof formulaName === "string" && formulaName.trim()) {
+    const q = formulaName.trim();
+    const activeProducts = await prisma.formulaProduct.findMany({
+      where: {
+        familyId,
+        isActive: true,
+        OR: [
+          { name: { contains: q } },
+          { brand: { contains: q } },
+        ],
+      },
+      orderBy: [{ isDefault: "desc" }, { createdAt: "desc" }],
+    });
+    if (activeProducts.length > 0) {
+      return activeProducts[0].id;
+    }
+  }
+  // Default fallback: active default formula or first active formula
+  const defaultFormula =
+    (await prisma.formulaProduct.findFirst({
+      where: { familyId, isActive: true, isDefault: true },
+    })) ||
+    (await prisma.formulaProduct.findFirst({
+      where: { familyId, isActive: true },
+      orderBy: { createdAt: "desc" },
+    }));
+  return defaultFormula ? defaultFormula.id : null;
+}
+
 export function createMcpServer(principal: UserPrincipal): Server {
   const babyId = principal.babyId;
   const baby = principal.baby!;
@@ -450,6 +497,14 @@ export function createMcpServer(principal: UserPrincipal): Server {
               spitUp: { type: "boolean", description: "是否有吐奶/溢奶" },
               notes: { type: "string", description: "喂养备注" },
               timestamp: { type: "string", description: "时间 (ISO 8601 或 HH:mm，默认当前时间)" },
+              formulaProductId: {
+                type: "string",
+                description: "指定奶粉产品ID (可选，若不填可传 formulaName 或自动使用默认主力奶粉)",
+              },
+              formulaName: {
+                type: "string",
+                description: "奶粉名称或品牌模糊匹配 (可选，如 '爱他美'、'纽荃星'，若系统有匹配的已建档奶粉则自动关联)",
+              },
             },
           },
         },
@@ -1311,14 +1366,23 @@ export function createMcpServer(principal: UserPrincipal): Server {
           throw new McpError(ErrorCode.InvalidRequest, "Forbidden: Missing baby:write scope");
         }
 
+        const feedingType = args.type || "formula";
+        const formulaProductId = await resolveFormulaProductId(
+          recCtx.familyId,
+          feedingType,
+          args.formulaProductId,
+          args.formulaName
+        );
+
         const result = await records.createFeeding(recCtx, {
-          type: args.type || "formula",
+          type: feedingType,
           amountMl: args.amountMl,
           leftMinutes: args.leftMinutes,
           rightMinutes: args.rightMinutes,
           spitUp: args.spitUp,
           notes: args.notes,
           timestamp: args.timestamp,
+          formulaProductId: formulaProductId || undefined,
         });
 
         const data = {
@@ -2006,14 +2070,22 @@ export function createMcpServer(principal: UserPrincipal): Server {
 
         if (args.feeding) {
           const f = args.feeding;
+          const feedingType = f.type || "formula";
+          const formulaProductId = await resolveFormulaProductId(
+            recCtx.familyId,
+            feedingType,
+            f.formulaProductId,
+            f.formulaName
+          );
           const result = await records.createFeeding(recCtx, {
-            type: f.type || "formula",
+            type: feedingType,
             amountMl: f.amountMl,
             leftMinutes: f.leftMinutes,
             rightMinutes: f.rightMinutes,
             spitUp: f.spitUp,
             notes: f.notes,
             timestamp: f.timestamp,
+            formulaProductId: formulaProductId || undefined,
           });
           savedItems.push(`🍼 喂养记录 (ID: ${result.id})`);
         }

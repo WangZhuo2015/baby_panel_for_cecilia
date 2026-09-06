@@ -192,6 +192,15 @@ export async function createFeeding(ctx: RecordContext, input: CreateFeedingInpu
       ? estimateNursingVolumeMl(input.leftMinutes || 0, input.rightMinutes || 0)
       : input.amountMl ?? null;
 
+  let validatedFormulaId: string | null = null;
+  if (input.formulaProductId && typeof input.formulaProductId === "string") {
+    const famId = ctx.familyId || ctx.baby?.familyId;
+    const where: any = { id: input.formulaProductId.trim() };
+    if (famId) where.familyId = famId;
+    const prod = await prisma.formulaProduct.findFirst({ where, select: { id: true } });
+    if (prod) validatedFormulaId = prod.id;
+  }
+
   const data = {
     babyId: ctx.babyId,
     recordedById: ctx.userId,
@@ -204,7 +213,7 @@ export async function createFeeding(ctx: RecordContext, input: CreateFeedingInpu
     rightMinutes: input.rightMinutes ?? null,
     spitUp: !!input.spitUp,
     notes: input.notes?.trim() || null,
-    formulaProductId: input.formulaProductId || null,
+    formulaProductId: validatedFormulaId,
   };
   let record: any;
   if (clientId) {
@@ -212,18 +221,23 @@ export async function createFeeding(ctx: RecordContext, input: CreateFeedingInpu
       where: { babyId_clientId: { babyId: ctx.babyId, clientId } },
       create: { ...data, clientId },
       update: {},
+      include: { formulaProduct: { select: { id: true, name: true, brand: true } } },
     });
   } else {
-    record = await prisma.feedingRecord.create({ data });
+    record = await prisma.feedingRecord.create({
+      data,
+      include: { formulaProduct: { select: { id: true, name: true, brand: true } } },
+    });
   }
   const effectiveMl = getFeedingEffectiveMl({ type, amountMl: computedAmountMl, leftMinutes: input.leftMinutes, rightMinutes: input.rightMinutes });
+  const formulaLabel = record.formulaProduct?.name ? `(${record.formulaProduct.name})` : "";
   const feedDesc = type === "breast"
     ? `母乳 亲喂(左${input.leftMinutes || 0}分/右${input.rightMinutes || 0}分${effectiveMl > 0 ? `·约${effectiveMl}ml` : ""})`
     : type === "bottle_breast"
       ? `瓶喂母乳 ${input.amountMl || 0}ml`
       : type === "mixed"
-        ? `混合喂养 (配方${input.amountMl || 0}ml + 亲喂约${effectiveMl - (input.amountMl || 0)}ml)`
-        : `配方奶 ${input.amountMl || 0}ml`;
+        ? `混合喂养 (配方${formulaLabel ? `${formulaLabel} ` : ""}${input.amountMl || 0}ml + 亲喂约${effectiveMl - (input.amountMl || 0)}ml)`
+        : `配方奶${formulaLabel ? `${formulaLabel} ` : " "}${input.amountMl || 0}ml`;
   void triggerFamilyPush(ctx, "记录了喂奶 🍼", feedDesc, "/records/feeding");
   return record;
 }
@@ -505,7 +519,12 @@ export async function getFeedingRecords(ctx: RecordContext, opts: { date?: strin
     where.timestamp = { gte: start, lt: end };
   }
   const limit = parseLimit(opts.limit, 50);
-  return prisma.feedingRecord.findMany({ where, orderBy: { timestamp: "desc" }, take: limit });
+  return prisma.feedingRecord.findMany({
+    where,
+    orderBy: { timestamp: "desc" },
+    take: limit,
+    include: { formulaProduct: true },
+  });
 }
 
 export async function getSleepRecords(ctx: RecordContext, opts: { date?: string; limit?: number | string }) {
@@ -613,7 +632,11 @@ export async function getTimeline(ctx: RecordContext, date?: string) {
     } catch {}
   }
   const [feedingRecords, sleepRecords, diaperRecords, foodLogs, supplementRecords] = await Promise.all([
-    prisma.feedingRecord.findMany({ where: { babyId: ctx.babyId, timestamp: { gte: start, lt: end } }, orderBy: { timestamp: "desc" } }),
+    prisma.feedingRecord.findMany({
+      where: { babyId: ctx.babyId, timestamp: { gte: start, lt: end } },
+      orderBy: { timestamp: "desc" },
+      include: { formulaProduct: { select: { id: true, name: true, brand: true } } },
+    }),
     prisma.sleepRecord.findMany({ where: { babyId: ctx.babyId, startTime: { lt: end }, endTime: { gt: start } }, orderBy: { startTime: "desc" } }),
     prisma.diaperRecord.findMany({ where: { babyId: ctx.babyId, timestamp: { gte: start, lt: end } }, orderBy: { timestamp: "desc" } }),
     prisma.foodLogRecord.findMany({ where: { babyId: ctx.babyId, date: targetDate }, orderBy: { time: "desc" } }),
@@ -632,9 +655,15 @@ export async function getTimeline(ctx: RecordContext, date?: string) {
     const time = formatIsoToLocalTime(r.timestamp);
     let detail = "";
     const effectiveMl = getFeedingEffectiveMl(r);
+    const formulaName = (r.type === "formula" || r.type === "mixed") && r.formulaProduct
+      ? (r.formulaProduct.name || r.formulaProduct.brand)
+      : null;
     if (r.type === "mixed") {
       const breastPart = effectiveMl - (r.amountMl || 0);
-      detail += `配方${r.amountMl || 0}ml${breastPart > 0 ? ` + 亲喂约${breastPart}ml (共约${effectiveMl}ml)` : ""}`;
+      const formulaPart = formulaName ? `配方${r.amountMl || 0}ml (${formulaName})` : `配方${r.amountMl || 0}ml`;
+      detail += `${formulaPart}${breastPart > 0 ? ` + 亲喂约${breastPart}ml (共约${effectiveMl}ml)` : ""}`;
+    } else if (r.type === "formula") {
+      detail += formulaName ? `配方${r.amountMl || 0}ml (${formulaName})` : (r.amountMl ? `${r.amountMl}ml` : "");
     } else if (r.amountMl) {
       detail += `${r.type === "breast" ? "约" : ""}${r.amountMl}ml`;
     } else if (effectiveMl > 0) {
@@ -659,6 +688,8 @@ export async function getTimeline(ctx: RecordContext, date?: string) {
       recorderName: recorderOf(r.recordedById),
       source: r.source || (r.sourceAgent ? "mcp" : "ui_manual"),
       sourceAgent: r.sourceAgent || null,
+      formulaProductId: r.formulaProductId || undefined,
+      formulaProductName: formulaName || undefined,
       rawRecord: {
         id: r.id,
         timestamp: r.timestamp,
@@ -670,6 +701,7 @@ export async function getTimeline(ctx: RecordContext, date?: string) {
         notes: r.notes,
         source: r.source,
         sourceAgent: r.sourceAgent,
+        formulaProductId: r.formulaProductId,
       },
     });
   }
@@ -871,6 +903,15 @@ export async function updateFeeding(ctx: RecordContext, id: string, patch: Recor
       ? estimateNursingVolumeMl(rawLeft || 0, rawRight || 0)
       : rawAmountMl;
 
+  let validatedFormulaId: string | null = null;
+  if (merged.formulaProductId) {
+    const famId = ctx.familyId || ctx.baby?.familyId;
+    const where: any = { id: String(merged.formulaProductId).trim() };
+    if (famId) where.familyId = famId;
+    const prod = await prisma.formulaProduct.findFirst({ where, select: { id: true } });
+    if (prod) validatedFormulaId = prod.id;
+  }
+
   const data = {
     type: merged.type,
     amountMl: computedAmountMl,
@@ -879,7 +920,7 @@ export async function updateFeeding(ctx: RecordContext, id: string, patch: Recor
     spitUp: !!merged.spitUp,
     notes: merged.notes,
     timestamp: parsedTs.toISOString(),
-    formulaProductId: merged.formulaProductId ? String(merged.formulaProductId) : null,
+    formulaProductId: validatedFormulaId,
   };
   const updated = await prisma.feedingRecord.update({ where: { id }, data });
   void triggerFamilyPush(ctx, "修改了喂奶记录 ✏️", "修正了喂奶内容", "/records/feeding");

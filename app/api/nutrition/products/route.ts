@@ -124,6 +124,15 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "奶粉名称必填" }, { status: 400 });
       }
 
+      const parsedScoopWeight = Number(scoopWeightG);
+      const parsedWaterPerScoop = Number(waterPerScoopMl);
+      if (Number.isNaN(parsedScoopWeight) || parsedScoopWeight <= 0) {
+        return NextResponse.json({ error: "单勺克重必须为大于 0 的有效数值" }, { status: 400 });
+      }
+      if (Number.isNaN(parsedWaterPerScoop) || parsedWaterPerScoop <= 0) {
+        return NextResponse.json({ error: "每勺加水量必须为大于 0 的有效数值" }, { status: 400 });
+      }
+
       // 检查当前家庭是否已有活跃奶粉。若没有，则将此款自动设为默认主力奶粉
       const existingCount = await prisma.formulaProduct.count({
         where: { familyId, isActive: true },
