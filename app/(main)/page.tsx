@@ -37,6 +37,7 @@ import { FeatureTourModal } from "@/components/ui/FeatureTourModal";
 import { BabyAvatar } from "@/components/ui/BabyAvatar";
 
 import { formatIsoToLocalTime } from "@/lib/date";
+import { formatElapsedDuration } from "@/lib/sleep-timer";
 import { APP_VERSION } from "@/lib/version";
 import { openRecordDrawer, RecordDrawerType } from "@/lib/drawer-bus";
 import { openQuickAI } from "@/lib/quickai-bus";
@@ -209,12 +210,10 @@ export default function HomePage() {
       try {
         const stored = localStorage.getItem("baby_active_sleep_start");
         setLiveSleepStart(stored);
-        if (stored) {
-          const diffMs = Date.now() - new Date(stored).getTime();
-          const totalMins = Math.max(0, Math.floor(diffMs / 60000));
-          const h = Math.floor(totalMins / 60);
-          const m = totalMins % 60;
-          setLiveSleepElapsed(h > 0 ? `${h}小时${m}分` : `${m}分钟`);
+        if (stored && !Number.isNaN(new Date(stored).getTime())) {
+          setLiveSleepElapsed(formatElapsedDuration(stored).shortText);
+        } else {
+          setLiveSleepElapsed("");
         }
       } catch {
         // Ignore
@@ -222,7 +221,14 @@ export default function HomePage() {
     };
     checkLiveSleep();
     const interval = setInterval(checkLiveSleep, 5000);
-    return () => clearInterval(interval);
+    const handleTimerUpdate = () => checkLiveSleep();
+    window.addEventListener("baby:sleep-timer-updated", handleTimerUpdate);
+    window.addEventListener("storage", handleTimerUpdate);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("baby:sleep-timer-updated", handleTimerUpdate);
+      window.removeEventListener("storage", handleTimerUpdate);
+    };
   }, []);
 
   const handleRefreshAi = async () => {
