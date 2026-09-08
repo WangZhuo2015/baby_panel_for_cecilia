@@ -191,7 +191,7 @@ export async function getMcpUsageStatistics(
   ) as string[];
   const clients = await prisma.oAuthClient.findMany({
     where: { clientId: { in: clientIds } },
-    select: { clientId: true, clientName: true, createdAt: true },
+    select: { clientId: true, clientName: true, redirectUrisJson: true, createdAt: true },
   });
   const clientMap = new Map(clients.map((c) => [c.clientId, c]));
 
@@ -218,7 +218,8 @@ export async function getMcpUsageStatistics(
   const recordsWrittenByAgentMap = new Map<string, number>();
   let totalRecordsCreatedByAi = 0;
   for (const s of snapshotCounts) {
-    const agent = s.sourceAgent || "外部 Agent (MCP)";
+    const rawAgent = s.sourceAgent || "外部 Agent (MCP)";
+    const agent = resolveSourceAgent(undefined, rawAgent);
     const count = s._count.id;
     recordsWrittenByAgentMap.set(agent, (recordsWrittenByAgentMap.get(agent) || 0) + count);
     totalRecordsCreatedByAi += count;
@@ -229,15 +230,27 @@ export async function getMcpUsageStatistics(
     if (log.metadataJson) {
       try {
         const meta = JSON.parse(log.metadataJson);
-        if (meta.agent && typeof meta.agent === "string") return meta.agent;
+        if (meta.agent && typeof meta.agent === "string") {
+          return resolveSourceAgent(undefined, meta.agent);
+        }
       } catch {}
     }
     const client = log.clientId ? clientMap.get(log.clientId) : undefined;
     return resolveSourceAgent(
       log.clientId || undefined,
       client?.clientName || undefined,
-      log.userAgent || undefined
+      log.userAgent || undefined,
+      client?.redirectUrisJson || undefined
     );
+  }
+
+  function getCleanClientName(rawClientName?: string | null, agentName?: string): string {
+    if (!rawClientName) return agentName || "MCP 智能连接";
+    const lower = rawClientName.toLowerCase();
+    if (lower === "google" || lower === "gemini") {
+      return "Gemini Spark";
+    }
+    return rawClientName;
   }
 
   // 9. 计算总览数据 (Overview)
@@ -277,13 +290,15 @@ export async function getMcpUsageStatistics(
   for (const consent of consents) {
     const agentName = resolveSourceAgent(
       consent.clientId,
-      consent.client.clientName || undefined
+      consent.client.clientName || undefined,
+      undefined,
+      consent.client.redirectUrisJson || undefined
     );
     if (!agentAggMap.has(agentName)) {
       agentAggMap.set(agentName, {
         agentName,
         clientId: consent.clientId,
-        clientName: consent.client.clientName || agentName,
+        clientName: getCleanClientName(consent.client.clientName, agentName),
         totalCalls: 0,
         todayCalls: 0,
         successCount: 0,
@@ -326,7 +341,7 @@ export async function getMcpUsageStatistics(
       agg = {
         agentName,
         clientId: log.clientId || "unknown",
-        clientName: client?.clientName || agentName,
+        clientName: getCleanClientName(client?.clientName, agentName),
         totalCalls: 0,
         todayCalls: 0,
         successCount: 0,

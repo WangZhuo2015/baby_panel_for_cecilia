@@ -168,11 +168,20 @@ export async function registerClient(
   const responseTypes = body.response_types || ["code"];
   const scope = body.scope || DEFAULT_SCOPES.join(" ");
 
+  const rawClientName = body.client_name ? String(body.client_name).slice(0, 100) : "Dynamic Client";
+  const isGoogleOrGemini =
+    rawClientName.toLowerCase().includes("google") ||
+    rawClientName.toLowerCase().includes("gemini") ||
+    body.redirect_uris?.some(
+      (uri) => uri.includes("googleusercontent.com") || uri.includes("gemini.google.com")
+    );
+  const clientName = isGoogleOrGemini ? "Gemini Spark" : rawClientName;
+
   const client = await prisma.oAuthClient.create({
     data: {
       clientId,
       clientSecret: clientSecretHash,
-      clientName: body.client_name ? String(body.client_name).slice(0, 100) : "Dynamic Client",
+      clientName,
       redirectUrisJson: JSON.stringify(body.redirect_uris),
       grantTypesJson: JSON.stringify(grantTypes),
       responseTypesJson: JSON.stringify(responseTypes),
@@ -208,7 +217,7 @@ export async function registerClient(
  * Validates redirect URI against registered client configuration
  */
 export function validateRedirectUri(
-  client: { clientId?: string; redirectUrisJson: string },
+  client: { clientId?: string; redirectUrisJson: string; clientName?: string | null },
   requestedUri: string
 ): boolean {
   try {
@@ -217,7 +226,14 @@ export function validateRedirectUri(
 
     // Google / Gemini custom MCP connector generates dynamic user-bound redirect URIs
     // Format: https://oauth-redirect.googleusercontent.com/r/user_bound_custom-mcp-...
-    if (client.clientId === "gemini-spark-client") {
+    const isGoogleClient =
+      client.clientId === "gemini-spark-client" ||
+      client.clientId?.toLowerCase().includes("google") ||
+      client.clientId?.toLowerCase().includes("gemini") ||
+      client.clientName?.toLowerCase().includes("google") ||
+      client.clientName?.toLowerCase().includes("gemini");
+
+    if (isGoogleClient) {
       const parsed = new URL(requestedUri);
       const isGoogleOAuthRedirectHost =
         parsed.hostname === "oauth-redirect.googleusercontent.com" ||
@@ -587,12 +603,35 @@ export function normalizeResourceUrl(urlStr: string): string {
 /**
  * Resolves human-readable source agent identity (e.g. "Gemini Spark", "ChatGPT", "Claude")
  */
-export function resolveSourceAgent(clientId?: string, clientName?: string, userAgent?: string): string {
+export function resolveSourceAgent(
+  clientId?: string,
+  clientName?: string,
+  userAgent?: string,
+  redirectUris?: string[] | string
+): string {
   const u = (userAgent || "").toLowerCase();
   const cn = (clientName || "").toLowerCase();
   const cid = (clientId || "").toLowerCase();
+  const rUris = (
+    Array.isArray(redirectUris)
+      ? redirectUris.join(" ")
+      : typeof redirectUris === "string"
+      ? redirectUris
+      : ""
+  ).toLowerCase();
 
-  if (cid.includes("gemini") || cn.includes("gemini") || u.includes("gemini")) {
+  // 1. Google Gemini / Gemini Spark
+  if (
+    cid.includes("gemini") ||
+    cn.includes("gemini") ||
+    u.includes("gemini") ||
+    cid.includes("google") ||
+    cn.includes("google") ||
+    u.includes("google") ||
+    rUris.includes("googleusercontent.com") ||
+    rUris.includes("gemini.google.com") ||
+    rUris.includes("googleapis.com")
+  ) {
     return "Gemini Spark";
   }
   if (cid.includes("chatgpt") || cn.includes("chatgpt") || u.includes("chatgpt") || cn.includes("openai") || u.includes("openai")) {
@@ -706,14 +745,22 @@ export async function verifyMcpAccessToken(
 
   const clientId = typeof payload.client_id === "string" ? payload.client_id : "unknown";
   let clientName: string | undefined;
+  let redirectUrisJson: string | undefined;
   try {
     const client = await findClient(clientId);
     clientName = client?.clientName || undefined;
+    redirectUrisJson = client?.redirectUrisJson || undefined;
   } catch {}
 
   const userAgent = request?.headers?.get("user-agent") || undefined;
   const ip = request ? getClientIp(request) : undefined;
-  const sourceAgent = resolveSourceAgent(clientId, clientName, userAgent);
+  const sourceAgent = resolveSourceAgent(clientId, clientName, userAgent, redirectUrisJson);
+
+  // If client was registered as "Google", normalize display to "Gemini Spark"
+  const resolvedClientName =
+    clientName?.toLowerCase().includes("google") || clientName?.toLowerCase().includes("gemini")
+      ? "Gemini Spark"
+      : clientName;
 
   const activeMembership = user.memberships.find((m) => m.familyId === activeBaby.familyId);
 
@@ -724,7 +771,7 @@ export async function verifyMcpAccessToken(
     babyId: activeBaby.id,
     scopes: new Set(scopesList),
     clientId,
-    clientName,
+    clientName: resolvedClientName,
     sourceAgent,
     userAgent,
     ip,

@@ -145,7 +145,7 @@ export function AiUsageDashboard({ babyId, className = "", onNavigateToDocs }: P
             <span>AI 连接与 MCP 访问统计</span>
           </h2>
           <p className="text-xs text-text-secondary mt-0.5">
-            实时汇总外部 AI（Gemini、ChatGPT、Claude、Cursor 等）对【{data.baby.nickname}】档案的查询与记录统计
+            实时汇总外部 AI（Gemini Spark、ChatGPT、Claude、Cursor 等）对【{data.baby.nickname}】档案的查询与记录统计
           </p>
         </div>
         <button
@@ -246,7 +246,7 @@ export function AiUsageDashboard({ babyId, className = "", onNavigateToDocs }: P
             <Bot size={32} className="mx-auto text-zinc-300 dark:text-zinc-700" />
             <p className="text-xs font-medium text-text-secondary">暂未连接外部 AI 客户端</p>
             <p className="text-[11px] text-text-muted max-w-sm mx-auto">
-              您可以使用 Gemini、ChatGPT、Claude Desktop、Cursor 等支持 MCP 的软件连接宝宝工作台，开启全自动化育儿记录与洞察。
+              您可以使用 Gemini Spark、ChatGPT、Claude Desktop、Cursor 等支持 MCP 的软件连接宝宝工作台，开启全自动化育儿记录与洞察。
             </p>
           </div>
         ) : (
@@ -275,7 +275,9 @@ export function AiUsageDashboard({ babyId, className = "", onNavigateToDocs }: P
                           </span>
                         </div>
                         <span className="text-[11px] text-text-muted truncate block max-w-[140px]">
-                          {agent.clientName !== agent.agentName ? agent.clientName : "MCP 智能连接"}
+                          {agent.clientName && agent.clientName !== agent.agentName && !agent.clientName.toLowerCase().includes("google")
+                            ? agent.clientName
+                            : "MCP 智能连接"}
                         </span>
                       </div>
                     </div>

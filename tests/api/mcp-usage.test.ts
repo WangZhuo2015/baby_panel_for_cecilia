@@ -298,6 +298,61 @@ test("MCP AI Usage & Audit Statistics (Aggregator & Tenant Isolation)", async (t
     assert.equal(statsSibling.recentAuditLogs[0].toolName, "record_diaper");
   });
 
+  await t.test("Clients and audit logs labeled 'Google' are normalized to 'Gemini Spark'", async () => {
+    const testBaby = await prisma.baby.create({
+      data: {
+        familyId: family1.id,
+        nickname: `${prefix}baby_google_test`,
+        gender: "female",
+        birthDate: "2025-07-01",
+      },
+    });
+
+    // 创建一个名为 Google 的客户端与授权
+    const clientGoogle = await prisma.oAuthClient.create({
+      data: {
+        clientId: `${prefix}google-dcr-client`,
+        clientName: "Google",
+        redirectUrisJson: JSON.stringify(["https://oauth-redirect.googleusercontent.com/r/test-123"]),
+      },
+    });
+
+    await prisma.oAuthConsent.create({
+      data: {
+        userId: user1.id,
+        clientId: clientGoogle.clientId,
+        babyId: testBaby.id,
+        scope: "baby:read baby:write",
+      },
+    });
+
+    await prisma.oAuthAuditLog.create({
+      data: {
+        clientId: clientGoogle.clientId,
+        userId: user1.id,
+        babyId: testBaby.id,
+        action: "mcp_tool_call",
+        toolName: "get_baby_profile",
+        authResult: "success",
+        durationMs: 40,
+        metadataJson: JSON.stringify({ agent: "Google", clientName: "Google" }),
+      },
+    });
+
+    const stats = await getMcpUsageStatistics(user1.id, testBaby.id);
+    const googleAgent = stats.connectedAgents.find((a) => a.agentName === "Google");
+    assert.equal(googleAgent, undefined, "AI 面板不应出现名为 Google 的 Agent");
+
+    const sparkAgent = stats.connectedAgents.find((a) => a.agentName === "Gemini Spark");
+    assert.ok(sparkAgent, "原 Google 连接应被归一化为 Gemini Spark");
+    assert.equal(sparkAgent.agentName, "Gemini Spark");
+    assert.equal(sparkAgent.clientName, "Gemini Spark");
+
+    const googleLog = stats.recentAuditLogs.find((l) => l.toolName === "get_baby_profile");
+    assert.ok(googleLog);
+    assert.equal(googleLog.agentName, "Gemini Spark");
+  });
+
   await t.test("GET /api/mcp/usage route handler requires authentication, validates babyId, and returns data", async () => {
     // 1. Unauthenticated request -> 401
     const unauthReq = new Request("http://localhost:3089/api/mcp/usage");
