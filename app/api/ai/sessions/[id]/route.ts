@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/api-helpers";
 import { safeJsonParse } from "@/lib/json";
+import { activeChatRunManager } from "@/lib/agent";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -73,7 +74,17 @@ export async function GET(
     }),
   };
 
-  return NextResponse.json({ session: formatted });
+  const activeRun = activeChatRunManager.get(session.id);
+  const activeRunData =
+    activeRun && activeRun.userId === user.id && activeRun.status === "running"
+      ? {
+          status: "running",
+          fullText: activeRun.fullText,
+          toolTraces: activeRun.toolTraces,
+        }
+      : null;
+
+  return NextResponse.json({ session: formatted, activeRun: activeRunData });
 }
 
 export async function PATCH(
@@ -124,6 +135,9 @@ export async function DELETE(
   if (!session) {
     return NextResponse.json({ error: "对话会话不存在" }, { status: 404 });
   }
+
+  await activeChatRunManager.cancelRun(id, user.id);
+  activeChatRunManager.delete(id);
 
   await prisma.aiChatSession.delete({
     where: { id },
