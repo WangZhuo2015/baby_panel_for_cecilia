@@ -6,9 +6,9 @@
 
 ## 当前状态概览
 
-- **当前批次 / 小任务**：`SH-04G` 已完成 -> 进入 `L3 (SH-04TL: 统一时间线检索与聚合查询)`
+- **当前批次 / 小任务**：`SH-04TL` 已完成 -> 进入 `L3 (SH-05: Web BFF 和第一条联调链路)`
 - **最后更新时间**：2026-09-12 (US/Pacific)
-- **总体状态**：`IN_PROGRESS` (SH-00 R0、SH-01、SH-02A、SH-02B、SH-03A、SH-03B、SH-03C、SH-03D、SH-04F、SH-04D、SH-04S、SH-04FO、SH-04SU、SH-04G 验证完成，自主推进中)
+- **总体状态**：`IN_PROGRESS` (SH-00 R0、SH-01、SH-02A、SH-02B、SH-03A、SH-03B、SH-03C、SH-03D、SH-04F、SH-04D、SH-04S、SH-04FO、SH-04SU、SH-04G、SH-04TL 验证完成，自主推进中)
 
 ---
 
@@ -16,8 +16,8 @@
 
 | 仓库 | 分支 (Branch) | 起始基线 HEAD | 当前最新提交 HEAD | 工作区状态与未提交文件核对 |
 |---|---|---|---|---|
-| `baby_panel_for_cecilia` | `main` | `4901731` | `80e81f8` | Clean |
-| `growdesk-server` | `codex/backend-storage-foundation` | `d9604d5` | `0eb87ca` | **Dirty (严格隔离保留原样)**：<br>- `M deploy/Migration.Dockerfile`<br>- `?? evidence/tasks/LEGACY_IMPORT/host-after.json`<br>- `?? evidence/tasks/LEGACY_IMPORT/remote-migration.txt`<br>- `?? evidence/tasks/LEGACY_IMPORT/target-verification.json`<br>- `?? scripts/legacy-import/ios_backup.py`<br>- `?? scripts/legacy-import/test_ios_backup.py` |
+| `baby_panel_for_cecilia` | `main` | `4901731` | `a854ed2` | Clean |
+| `growdesk-server` | `codex/backend-storage-foundation` | `d9604d5` | `707f5fd` | **Dirty (严格隔离保留原样)**：<br>- `M deploy/Migration.Dockerfile`<br>- `?? evidence/tasks/LEGACY_IMPORT/host-after.json`<br>- `?? evidence/tasks/LEGACY_IMPORT/remote-migration.txt`<br>- `?? evidence/tasks/LEGACY_IMPORT/target-verification.json`<br>- `?? scripts/legacy-import/ios_backup.py`<br>- `?? scripts/legacy-import/test_ios_backup.py` |
 | `growdesk-ios` | `codex/local-storage-policy` | `96aa000` | `96aa000` | **Dirty (严格隔离保留原样)**：<br>- `M BabyPanel.xcodeproj/project.pbxproj`<br>- `?? docs/design-mockups/` |
 
 ---
@@ -90,6 +90,10 @@
     - 执行报告：`../growdesk-server/evidence/tasks/SH-04G/REPORT.md`
     - 交付提交：`growdesk-server: 0eb87ca`
     - 状态：`IMPLEMENTED_VERIFIED_REVIEW_PENDING`（实现成长测量数据 CRUD 5 个端点与 WHO 生长曲线图表端点；收录 WHO 0-36 月龄男女童体重/身长/头围标准数据集与百分位插值计算引擎；UoW 事务原子投影 TimelineEntry、Idempotency 重放、baseVersion 乐观锁、Keyset 游标分页；84 项单元测试与 128 项 PG18 集成测试全量通过）
+15. **`SH-04TL (统一时间线检索与聚合查询)`**：
+    - 执行报告：`../growdesk-server/evidence/tasks/SH-04TL/REPORT.md`
+    - 交付提交：`growdesk-server: 707f5fd`
+    - 状态：`IMPLEMENTED_VERIFIED_REVIEW_PENDING`（实现统一时间线聚合仓储 ScopedTimelineRepository、Keyset 复合游标编解码、GET /api/v1/babies/:babyId/timeline 端点；UoW 跨 6 大护理领域原子投影、软删除联动、逐宝宝 BabyMember 权限隔离；84 项单元测试与 134 项 PG18 集成测试全量通过）
 
 ---
 
@@ -101,24 +105,33 @@
 
 ## 5. 失败与修复、外部阻塞
 
-- **SH-04G 实施期间发现与解决的技术细节**：
-  1. WHO 百分位数据架构归属：WHO 标准集作为纯业务领域数学模型沉淀至 `packages/domain`，杜绝 ORM/HTTP 框架污染，并导出 `estimatePercentile` 与 `buildWhoGrowthChartSet`；
-  2. 测量值存在性与正数检查：数据库级 CHECK 约束确保 `weight_kg`、`height_cm`、`head_circumference_cm` 至少一项非空且均为正数；
-  3. Keyset 游标复合结构：采用 `measurementDate|id` 进行 base64url 编解码，实现稳定按测量日期倒序分页。
+- **SH-04TL 实施期间发现与解决的技术细节**：
+  1. 照护领域请求 Payload 契约严格对齐：Feeding 记录 `amountMl` 必须为 `DecimalString`（字符串格式如 `"120.00"`），且字段名须严格与契约 `feedingType`、`occurredAt` 保持一致；Diaper 记录枚举须为 `"pee" | "poop" | "both"`；Food 记录创建请求必须包含 `foodItemIds: []` 数组；
+  2. 软删除原子联动：软删除任意照护记录时，事务内同步将对应的 `timeline_entries` 投影置为软删除，时间线查询天然排除软删除事件；
+  3. Keyset 复合游标设计：采用 `(occurred_at DESC, id DESC)` 倒序排列，Base64URL 编解码安全传输，保证分页跨领域事件绝对有序无重复。
 - **外部阻塞**：当前无阻塞。
 
 ---
 
 ## 6. 下一条准确操作
 
-- **目标任务**：**`SH-04TL: 统一时间线检索与聚合查询 (Unified Timeline Pipeline)`**
-- **工作目录 (workdir)**：`/Users/wangzhuo/Documents/GitHub/growdesk-server`
+- **目标任务**：**`SH-05: Web BFF 和第一条联调链路 (Web BFF & First Integration Pipeline)`**
+- **工作目录 (workdir)**：`/Users/wangzhuo/Documents/GitHub/baby_panel_for_cecilia`
 - **操作内容**：
-  1. **时间线聚合仓储与领域服务**：利用已在各个照护管道原子投影的 `timeline_entries` 表，实现 `ScopedTimelineRepository` 与 `TimelineService`；
-  2. **多维度聚合与筛选**：支持按宝宝、按时间范围、按实体类型 (`feeding`, `diaper`, `sleep`, `food`, `supplement`, `growth`) 过滤检索；
-  3. **日聚合摘要与 Keyset 游标分页**：按天聚合照护事件统计（总奶量、睡眠总时长、换尿布次数等），支持稳定倒序游标分页；
-  4. **HTTP 路由挂载**：挂载 `/api/v1/babies/:babyId/timeline` 与 `/api/v1/babies/:babyId/timeline/daily-summary` 端点，对齐 TypeBox 契约；
-  5. **真实 PG18 集成测试**：编写 `tests/integration/timeline.test.ts` 覆盖跨领域时间线流、日聚合统计与多租户权限校验。
+  1. **服务端 GrowDesk 专属 HTTP Client (`lib/growdesk/client.ts`)**：
+     - 采用 `server-only` 保证仅在 Next.js 服务端运行，杜绝泄漏至客户端 bundle；
+     - 固定受控的上游 API Origin（配置驱动，杜绝任意代理或用户决定 upstream host）；
+     - 标准错误转换与超时处理，白名单请求头透传（Idempotency-Key、X-Request-ID 等）；
+  2. **BFF 会话管理与安全 Cookie (`__Host-growdesk_web`)**：
+     - 实现 HttpOnly + Secure + SameSite=Lax 安全 Cookie；
+     - 浏览器不持有原始 Access Token 与 Refresh Token，采用随机 256-bit secret，数据库仅存哈希摘要；
+     - CSRF 强校验与 Origin 防护，覆盖所有非 GET 请求；
+  3. **首条联调链路切流 (Feeding 喂养链路)**：
+     - 改造 `app/api/records/feeding/route.ts` 等 Web 路由，将写操作和读操作桥接至 GrowDesk 后端端点；
+     - 严格遵守逐宝宝授权，绝不使用 `prisma.baby.findFirst()` 盲目指派宝宝；
+     - 前端保留 baseVersion 与稳定 mutationId，保证幂等重试与乐观并发控制；
+  4. **测试与验证**：
+     - 编写 API 集成测试与隔离验证，确保旧 SQLite 与新后端职责清晰，绝无写入回退至 SQLite 的静默降级。
 
 ---
 
