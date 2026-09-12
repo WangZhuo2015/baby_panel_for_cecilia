@@ -6,9 +6,9 @@
 
 ## 当前状态概览
 
-- **当前批次 / 小任务**：`SH-04SU` 已完成 -> 进入 `L3 (SH-04G: 成长记录链路与 WHO 百分位引擎)`
+- **当前批次 / 小任务**：`SH-04G` 已完成 -> 进入 `L3 (SH-04TL: 统一时间线检索与聚合查询)`
 - **最后更新时间**：2026-09-12 (US/Pacific)
-- **总体状态**：`IN_PROGRESS` (SH-00 R0、SH-01、SH-02A、SH-02B、SH-03A、SH-03B、SH-03C、SH-03D、SH-04F、SH-04D、SH-04S、SH-04FO、SH-04SU 验证完成，自主推进中)
+- **总体状态**：`IN_PROGRESS` (SH-00 R0、SH-01、SH-02A、SH-02B、SH-03A、SH-03B、SH-03C、SH-03D、SH-04F、SH-04D、SH-04S、SH-04FO、SH-04SU、SH-04G 验证完成，自主推进中)
 
 ---
 
@@ -16,8 +16,8 @@
 
 | 仓库 | 分支 (Branch) | 起始基线 HEAD | 当前最新提交 HEAD | 工作区状态与未提交文件核对 |
 |---|---|---|---|---|
-| `baby_panel_for_cecilia` | `main` | `4901731` | `5a7cb5f` | Clean |
-| `growdesk-server` | `codex/backend-storage-foundation` | `d9604d5` | `aa885bc` | **Dirty (严格隔离保留原样)**：<br>- `M deploy/Migration.Dockerfile`<br>- `?? evidence/tasks/LEGACY_IMPORT/host-after.json`<br>- `?? evidence/tasks/LEGACY_IMPORT/remote-migration.txt`<br>- `?? evidence/tasks/LEGACY_IMPORT/target-verification.json`<br>- `?? scripts/legacy-import/ios_backup.py`<br>- `?? scripts/legacy-import/test_ios_backup.py` |
+| `baby_panel_for_cecilia` | `main` | `4901731` | `80e81f8` | Clean |
+| `growdesk-server` | `codex/backend-storage-foundation` | `d9604d5` | `0eb87ca` | **Dirty (严格隔离保留原样)**：<br>- `M deploy/Migration.Dockerfile`<br>- `?? evidence/tasks/LEGACY_IMPORT/host-after.json`<br>- `?? evidence/tasks/LEGACY_IMPORT/remote-migration.txt`<br>- `?? evidence/tasks/LEGACY_IMPORT/target-verification.json`<br>- `?? scripts/legacy-import/ios_backup.py`<br>- `?? scripts/legacy-import/test_ios_backup.py` |
 | `growdesk-ios` | `codex/local-storage-policy` | `96aa000` | `96aa000` | **Dirty (严格隔离保留原样)**：<br>- `M BabyPanel.xcodeproj/project.pbxproj`<br>- `?? docs/design-mockups/` |
 
 ---
@@ -27,7 +27,7 @@
 - **服务端契约权威**：`growdesk-server/packages/contracts/src`（模块化 TypeBox 契约，覆盖全部 86 路径、122 操作端点）
 - **OpenAPI 规范快照**：`growdesk-server/contracts/openapi.json`（OpenAPI 3.0.3，122 operationId 全局唯一，无 diff 校验通过，Swift 6 测试通过）
 - **iOS 客户端消费快照**：尚未复制引入（待进入原生端任务后同步并记录 `Contracts/source.json`）
-- **PostgreSQL Migration 版本**：`202609120001_identity` + `202609120002_foundation` + `202609120003_care_feeding` + `202609120004_care_diaper` + `202609120005_care_sleep` + `202609120006_care_food` + `202609120007_care_supplement`（通过真实 PG18 顺序升级与复合外键/约束测试）
+- **PostgreSQL Migration 版本**：`202609120001_identity` + `202609120002_foundation` + `202609120003_care_feeding` + `202609120004_care_diaper` + `202609120005_care_sleep` + `202609120006_care_food` + `202609120007_care_supplement` + `202609120008_care_growth`（通过真实 PG18 顺序升级与复合外键/约束测试）
 - **SQLite 数据源状态**：`file:./prod.db`，维持只读参考与旧 Web 生产写权威，严格未触碰
 
 ---
@@ -86,6 +86,10 @@
     - 执行报告：`../growdesk-server/evidence/tasks/SH-04SU/REPORT.md`
     - 交付提交：`growdesk-server: aa885bc`
     - 状态：`IMPLEMENTED_VERIFIED_REVIEW_PENDING`（实现补剂记录 CRUD 5 个端点；多租户与 BabyMember 严格逐宝宝隔离；UoW 事务原子投影 TimelineEntry、Idempotency 重放与 409 防冲突、baseVersion 乐观锁、Keyset 游标分页；84 项单元测试与 118 项 PG18 集成测试全量通过）
+14. **`SH-04G (成长记录链路与 WHO 百分位引擎)`**：
+    - 执行报告：`../growdesk-server/evidence/tasks/SH-04G/REPORT.md`
+    - 交付提交：`growdesk-server: 0eb87ca`
+    - 状态：`IMPLEMENTED_VERIFIED_REVIEW_PENDING`（实现成长测量数据 CRUD 5 个端点与 WHO 生长曲线图表端点；收录 WHO 0-36 月龄男女童体重/身长/头围标准数据集与百分位插值计算引擎；UoW 事务原子投影 TimelineEntry、Idempotency 重放、baseVersion 乐观锁、Keyset 游标分页；84 项单元测试与 128 项 PG18 集成测试全量通过）
 
 ---
 
@@ -97,24 +101,24 @@
 
 ## 5. 失败与修复、外部阻塞
 
-- **SH-04SU 实施期间发现与解决的技术细节**：
-  1. Idempotency Key 冲突检测机制：同一 Idempotency Key 请求若 payload (如新生成的 ISO 时间戳) 发生漂移，UnitOfWork 正确拦截并返回 409 `IDEMPOTENCY_KEY_REUSED`，验证幂等收据哈希校验严密；
-  2. 分页游标响应字段：对齐 TypeBox `PaginatedEnvelope` 标准，游标在 `page.nextCursor` 输出。
+- **SH-04G 实施期间发现与解决的技术细节**：
+  1. WHO 百分位数据架构归属：WHO 标准集作为纯业务领域数学模型沉淀至 `packages/domain`，杜绝 ORM/HTTP 框架污染，并导出 `estimatePercentile` 与 `buildWhoGrowthChartSet`；
+  2. 测量值存在性与正数检查：数据库级 CHECK 约束确保 `weight_kg`、`height_cm`、`head_circumference_cm` 至少一项非空且均为正数；
+  3. Keyset 游标复合结构：采用 `measurementDate|id` 进行 base64url 编解码，实现稳定按测量日期倒序分页。
 - **外部阻塞**：当前无阻塞。
 
 ---
 
 ## 6. 下一条准确操作
 
-- **目标任务**：**`SH-04G: 成长记录链路与 WHO 百分位引擎 (Growth Record Pipeline & WHO Percentiles)`**
+- **目标任务**：**`SH-04TL: 统一时间线检索与聚合查询 (Unified Timeline Pipeline)`**
 - **工作目录 (workdir)**：`/Users/wangzhuo/Documents/GitHub/growdesk-server`
 - **操作内容**：
-  1. **数据模型与迁移**：创建 `growth_records` 表（`id, family_id, baby_id, record_date, weight_kg, height_cm, head_circumference_cm, notes, version, deleted_at`），建立复合外键与时间线索引；
-  2. **WHO 百分位计算引擎**：实现 WHO LMS 算法计算体重、身高、头围百分位（Z-score 与 Percentile）；
-  3. **成长仓储与领域服务**：实现 `ScopedGrowthRepository` 与 `GrowthService`（基于 UnitOfWork 封装 CRUD、Keyset 游标分页、多租户隔离、WHO 百分位计算与历史曲线）；
-  4. **时间线投影与乐观锁**：原子同步更新 `TimelineEntry`，比对 `baseVersion` 乐观锁防冲突；
-  5. **HTTP 路由挂载**：挂载 `/api/v1/babies/:babyId/records/growth` 5 个端点与百分位端点，对齐 TypeBox 契约；
-  6. **真实 PG18 集成测试**：编写 `tests/integration/growth.test.ts` 覆盖成长增改删、百分位校验、并发冲突、重放与软删除。
+  1. **时间线聚合仓储与领域服务**：利用已在各个照护管道原子投影的 `timeline_entries` 表，实现 `ScopedTimelineRepository` 与 `TimelineService`；
+  2. **多维度聚合与筛选**：支持按宝宝、按时间范围、按实体类型 (`feeding`, `diaper`, `sleep`, `food`, `supplement`, `growth`) 过滤检索；
+  3. **日聚合摘要与 Keyset 游标分页**：按天聚合照护事件统计（总奶量、睡眠总时长、换尿布次数等），支持稳定倒序游标分页；
+  4. **HTTP 路由挂载**：挂载 `/api/v1/babies/:babyId/timeline` 与 `/api/v1/babies/:babyId/timeline/daily-summary` 端点，对齐 TypeBox 契约；
+  5. **真实 PG18 集成测试**：编写 `tests/integration/timeline.test.ts` 覆盖跨领域时间线流、日聚合统计与多租户权限校验。
 
 ---
 
