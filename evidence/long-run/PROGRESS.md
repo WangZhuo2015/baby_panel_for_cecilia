@@ -6,9 +6,9 @@
 
 ## 当前状态概览
 
-- **当前批次 / 小任务**：`SH-03B` 已完成 -> 进入 `L2 (SH-03C: 家庭与宝宝逐级授权)`
+- **当前批次 / 小任务**：`SH-03C` 已完成 -> 进入 `L2 (SH-03D: 密码修改与恢复码)`
 - **最后更新时间**：2026-09-12 (US/Pacific)
-- **总体状态**：`IN_PROGRESS` (SH-00 R0、SH-01、SH-02A、SH-02B、SH-03A、SH-03B 验证完成，自主推进中)
+- **总体状态**：`IN_PROGRESS` (SH-00 R0、SH-01、SH-02A、SH-02B、SH-03A、SH-03B、SH-03C 验证完成，自主推进中)
 
 ---
 
@@ -17,15 +17,15 @@
 | 仓库 | 分支 (Branch) | 起始基线 HEAD | 当前最新提交 HEAD | 工作区状态与未提交文件核对 |
 |---|---|---|---|---|
 | `baby_panel_for_cecilia` | `main` | `4901731` | `bd71f7b` | Clean |
-| `growdesk-server` | `codex/backend-storage-foundation` | `d9604d5` | `ab1c6fe` | **Dirty (严格隔离保留原样)**：<br>- `M deploy/Migration.Dockerfile`<br>- `?? evidence/tasks/LEGACY_IMPORT/host-after.json`<br>- `?? evidence/tasks/LEGACY_IMPORT/remote-migration.txt`<br>- `?? evidence/tasks/LEGACY_IMPORT/target-verification.json`<br>- `?? scripts/legacy-import/ios_backup.py`<br>- `?? scripts/legacy-import/test_ios_backup.py` |
+| `growdesk-server` | `codex/backend-storage-foundation` | `d9604d5` | `2a9791d` | **Dirty (严格隔离保留原样)**：<br>- `M deploy/Migration.Dockerfile`<br>- `?? evidence/tasks/LEGACY_IMPORT/host-after.json`<br>- `?? evidence/tasks/LEGACY_IMPORT/remote-migration.txt`<br>- `?? evidence/tasks/LEGACY_IMPORT/target-verification.json`<br>- `?? scripts/legacy-import/ios_backup.py`<br>- `?? scripts/legacy-import/test_ios_backup.py` |
 | `growdesk-ios` | `codex/local-storage-policy` | `96aa000` | `96aa000` | **Dirty (严格隔离保留原样)**：<br>- `M BabyPanel.xcodeproj/project.pbxproj`<br>- `?? docs/design-mockups/` |
 
 ---
 
 ## 2. 契约、迁移与客户端快照版本
 
-- **服务端契约权威**：`growdesk-server/packages/contracts/src`（模块化 TypeBox 契约，覆盖全部 84 路径、119 操作端点）
-- **OpenAPI 规范快照**：`growdesk-server/contracts/openapi.json`（OpenAPI 3.0.3，119 operationId 全局唯一，无 diff 校验通过，Swift 6 测试通过）
+- **服务端契约权威**：`growdesk-server/packages/contracts/src`（模块化 TypeBox 契约，覆盖全部 86 路径、122 操作端点）
+- **OpenAPI 规范快照**：`growdesk-server/contracts/openapi.json`（OpenAPI 3.0.3，122 operationId 全局唯一，无 diff 校验通过，Swift 6 测试通过）
 - **iOS 客户端消费快照**：尚未复制引入（待进入原生端任务后同步并记录 `Contracts/source.json`）
 - **PostgreSQL Migration 版本**：`202609120001_identity` + `202609120002_foundation`（通过真实 PG18 顺序升级与复合外键/约束测试）
 - **SQLite 数据源状态**：`file:./prod.db`，维持只读参考与旧 Web 生产写权威，严格未触碰
@@ -58,6 +58,10 @@
    - 执行报告：`../growdesk-server/evidence/tasks/SH-03B/REPORT.md`
    - 交付提交：`growdesk-server: ab1c6fe`
    - 状态：`IMPLEMENTED_VERIFIED_REVIEW_PENDING`（实现全局锁序原子刷新 `UserSyncState -> DeviceSession -> RefreshCredential`、60 秒同 rotationId 重发容错、不同 rotationId 重用 409 熔断与会话级联吊销，32 项真实 PG18 集成测试全量通过）
+7. **`SH-03C (家庭与宝宝逐级授权)`**：
+   - 执行报告：`../growdesk-server/evidence/tasks/SH-03C/REPORT.md`
+   - 交付提交：`growdesk-server: 2a9791d`
+   - 状态：`IMPLEMENTED_VERIFIED_REVIEW_PENDING`（实现 12 个 Family 端点与 5 个 Baby 端点，双重最后管理员保护 `LAST_FAMILY_ADMIN_PROTECTION` 与 `LAST_BABY_ADMIN_PROTECTION`，严格跨租户隔离与无 BabyMember 默认 Fail Closed，84 项单元测试与 45 项 PG18 集成测试全量通过）
 
 ---
 
@@ -69,22 +73,23 @@
 
 ## 5. 失败与修复、外部阻塞
 
-- **SH-03B 实施期间发现与解决的技术细节**：
-  1. Node.js test runner 中嵌套 `await t.test` 会导致子测试调度死锁，需将串行子测试保持平级调度；
-  2. 吊销整个会话家族后，旧 successor 再次请求刷新时正确返回 `REFRESH_TOKEN_REVOKED`。
+- **SH-03C 实施期间发现与解决的技术细节**：
+  1. PostgreSQL 18 性别 check constraint (`female`, `male`, `unknown`, `unspecified`) 与 OpenAPI 合约 (`boy`, `girl`, `other`) 双向映射；
+  2. 保护最后活跃宝宝管理员：解绑家庭成员或撤销宝宝成员时，递归检查是否为某个宝宝的唯一 active admin，是则返回 409 `LAST_BABY_ADMIN_PROTECTION`；
+  3. 逐级 Fail Closed：加入家庭并不自动继承该家庭宝宝的访问权限，只有在被显式添加为 BabyMember 后才可见并可操作。
 - **外部阻塞**：当前无阻塞。
 
 ---
 
 ## 6. 下一条准确操作
 
-- **目标任务**：**`SH-03C: 家庭与宝宝逐级授权 (Family & Baby Authorization)`**
+- **目标任务**：**`SH-03D: 密码修改与恢复码 (Password Change & Recovery Codes)`**
 - **工作目录 (workdir)**：`/Users/wangzhuo/Documents/GitHub/growdesk-server`
 - **操作内容**：
-  1. **家庭管理与成员**：实现家庭列表/创建、家庭成员列表、邀请码创建（HMAC-SHA256 digest）与加入；
-  2. **宝宝管理与逐级授权**：实现宝宝列表/创建（原子创建创建者 BabyMember admin）、宝宝成员列表；
-  3. **最后活跃宝宝管理员保护**：在事务锁内调用 `canRevokeBabyMember`，严格防止孤儿宝宝；
-  4. 编写两个家庭、多宝宝、admin/member/viewer 跨家庭与跨宝宝越权隔离的真实 PG18 集成测试。
+  1. **密码修改**：实现 `POST /api/v1/auth/password/change`，验证旧密码（支持旧系统明文/弱哈希向 bcrypt cost 12 透明迁移），更新密码并递增 user `version`，提供会话保持或全量撤销选项；
+  2. **恢复码重置与签发**：实现 `POST /api/v1/auth/recovery-codes/regenerate`，生成 8-12 组单次恢复码，以 SHA-256 存入 `recovery_codes` 表，原子作废旧批次，仅明文返回给用户一次；
+  3. **恢复码重置密码**：实现 `POST /api/v1/auth/password/recover`，凭用户名与未使用的恢复码重置密码，原子标记已使用 (`used_at = NOW()`)，吊销全部历史会话并签发新会话；
+  4. 编写真实 PG18 集成测试覆盖修改密码、恢复码单次使用、已用恢复码拒绝、批量恢复码作废与旧会话失效。
 
 ---
 
