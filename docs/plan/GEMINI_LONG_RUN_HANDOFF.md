@@ -17,6 +17,7 @@
 完成以下修复并提交 `docs(compat): correct SH-00 semantic inventory and evidence`：
 
 - 从route→service校验→Prisma→stores逐字段重建映射。尤其喂养使用timestamp/amountMl/leftMinutes/rightMinutes/formulaProductId/notes等真实字段；不得凭空引入喂养endTime、spitUpSeverity、临床程度或新的单位。旧响应、空值、201/错误/删除已不存在等行为同样登记。
+- 同样逐字段复核尿布、睡眠、辅食、成长等全部领域。旧睡眠POST要求非空endTime，新合同的活动睡眠必须作为新增能力单列；保留type/nightWakingCount/notes真实语义。补成长PATCH与growth-chart，避免只修喂养后沿用其他错误表。
 - 对每个CSV method核对auth/helper读写/副作用/callers；补stores；MCP标OAuth Bearer，OPTIONS单列。目标operationId标PROPOSED，不能将旧128方法机械复制成128个新业务端点。
 - 从实际注册和模型重建writer清单，移除不存在的AiDailySummary/AiTip/OAuthToken表和错误MCP工具名。不能用文件存在或方法名猜全部调用链；无法确定的线上启用状态标UNKNOWN。
 - 修正capability的源码路径、占位退出码（实际为2）、身份表与历史档案的schema区别。给每条VERIFIED附可追溯日志/提交/日期；没执行的标NOT_RUN或引用HISTORICAL结果。

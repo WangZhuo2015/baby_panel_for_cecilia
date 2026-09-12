@@ -44,6 +44,12 @@ CSV将/mcp及/api/mcp记为Cookie Session，实际 `app/mcp/route.ts` 使用OAut
 
 本轮新增 `scripts/review/check-sh00-inventory.py` 和 `CODEX_ROUTE_COVERAGE.json`，独立验证73个route、128个method/path、0漏项/额外项/重复项。该脚本明确只验证覆盖，不替代语义检查。
 
+### F4 / P1：睡眠旧行为与新能力混写，成长目标动作遗漏
+
+独立Spec子agent复核后，主审再次检查：旧 `app/api/records/sleep/route.ts` POST明确要求非空字符串endTime，mapping却将其描述为旧接口允许null；新的活动睡眠能力必须单独标为目标行为，并落实旧UI兼容，不能当成已支持。该route使用type/nightWakingCount/notes，文档却列quality/awakeningCount/note。成长映射只列GET/POST/DELETE，遗漏canonical 02资源表要求的PATCH与growth-chart。
+
+修正：R0必须覆盖全部领域的旧输入/旧响应/新合同差异，不能只修喂养示例。旧路由别名可以映射同一目标operationId，但最终OpenAPI每个实际operation必须唯一，不因CSV重复引用就机械新增业务端点。
+
 ## 本轮验证范围
 
 - 读取旧Web源码、服务端当前schema/契约和历史证据；未访问生产、未运行业务测试、未修改运行代码。
