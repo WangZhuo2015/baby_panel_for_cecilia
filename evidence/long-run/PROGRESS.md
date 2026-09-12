@@ -6,9 +6,9 @@
 
 ## 当前状态概览
 
-- **当前批次 / 小任务**：`SH-04TL` 已完成 -> 进入 `L3 (SH-05: Web BFF 和第一条联调链路)`
+- **当前批次 / 小任务**：`SH-05` 已完成 -> 进入 `L3 (SH-06: S3 附件与预签名直传链路)`
 - **最后更新时间**：2026-09-12 (US/Pacific)
-- **总体状态**：`IN_PROGRESS` (SH-00 R0、SH-01、SH-02A、SH-02B、SH-03A、SH-03B、SH-03C、SH-03D、SH-04F、SH-04D、SH-04S、SH-04FO、SH-04SU、SH-04G、SH-04TL 验证完成，自主推进中)
+- **总体状态**：`IN_PROGRESS` (SH-00 R0、SH-01、SH-02A、SH-02B、SH-03A、SH-03B、SH-03C、SH-03D、SH-04F、SH-04D、SH-04S、SH-04FO、SH-04SU、SH-04G、SH-04TL、SH-05 验证完成，自主推进中)
 
 ---
 
@@ -16,8 +16,8 @@
 
 | 仓库 | 分支 (Branch) | 起始基线 HEAD | 当前最新提交 HEAD | 工作区状态与未提交文件核对 |
 |---|---|---|---|---|
-| `baby_panel_for_cecilia` | `main` | `4901731` | `a854ed2` | Clean |
-| `growdesk-server` | `codex/backend-storage-foundation` | `d9604d5` | `707f5fd` | **Dirty (严格隔离保留原样)**：<br>- `M deploy/Migration.Dockerfile`<br>- `?? evidence/tasks/LEGACY_IMPORT/host-after.json`<br>- `?? evidence/tasks/LEGACY_IMPORT/remote-migration.txt`<br>- `?? evidence/tasks/LEGACY_IMPORT/target-verification.json`<br>- `?? scripts/legacy-import/ios_backup.py`<br>- `?? scripts/legacy-import/test_ios_backup.py` |
+| `baby_panel_for_cecilia` | `main` | `4901731` | `dd2f125` | Clean |
+| `growdesk-server` | `codex/backend-storage-foundation` | `d9604d5` | `a62f36c` | **Dirty (严格隔离保留原样)**：<br>- `M deploy/Migration.Dockerfile`<br>- `?? evidence/tasks/LEGACY_IMPORT/host-after.json`<br>- `?? evidence/tasks/LEGACY_IMPORT/remote-migration.txt`<br>- `?? evidence/tasks/LEGACY_IMPORT/target-verification.json`<br>- `?? scripts/legacy-import/ios_backup.py`<br>- `?? scripts/legacy-import/test_ios_backup.py` |
 | `growdesk-ios` | `codex/local-storage-policy` | `96aa000` | `96aa000` | **Dirty (严格隔离保留原样)**：<br>- `M BabyPanel.xcodeproj/project.pbxproj`<br>- `?? docs/design-mockups/` |
 
 ---
@@ -94,6 +94,10 @@
     - 执行报告：`../growdesk-server/evidence/tasks/SH-04TL/REPORT.md`
     - 交付提交：`growdesk-server: 707f5fd`
     - 状态：`IMPLEMENTED_VERIFIED_REVIEW_PENDING`（实现统一时间线聚合仓储 ScopedTimelineRepository、Keyset 复合游标编解码、GET /api/v1/babies/:babyId/timeline 端点；UoW 跨 6 大护理领域原子投影、软删除联动、逐宝宝 BabyMember 权限隔离；84 项单元测试与 134 项 PG18 集成测试全量通过）
+16. **`SH-05 (Web BFF 和第一条联调链路)`**：
+    - 执行报告：`../growdesk-server/evidence/tasks/SH-05/REPORT.md`
+    - 交付提交：`growdesk-server: a62f36c`, `baby_panel_for_cecilia: [待提交]`
+    - 状态：`IMPLEMENTED_VERIFIED_REVIEW_PENDING`（实现 GrowDesk BffSession 模型、migration 0009、FOR UPDATE 单飞刷新与凭据续期、安全 Cookie `__Host-growdesk_web` 下发与清洗、CSRF 严格校验、Feeding 路由双模切换与零降级、140 项真实 PG18 测试与 135 项 Web 单元测试全量通过）
 
 ---
 
@@ -105,33 +109,30 @@
 
 ## 5. 失败与修复、外部阻塞
 
-- **SH-04TL 实施期间发现与解决的技术细节**：
-  1. 照护领域请求 Payload 契约严格对齐：Feeding 记录 `amountMl` 必须为 `DecimalString`（字符串格式如 `"120.00"`），且字段名须严格与契约 `feedingType`、`occurredAt` 保持一致；Diaper 记录枚举须为 `"pee" | "poop" | "both"`；Food 记录创建请求必须包含 `foodItemIds: []` 数组；
-  2. 软删除原子联动：软删除任意照护记录时，事务内同步将对应的 `timeline_entries` 投影置为软删除，时间线查询天然排除软删除事件；
-  3. Keyset 复合游标设计：采用 `(occurred_at DESC, id DESC)` 倒序排列，Base64URL 编解码安全传输，保证分页跨领域事件绝对有序无重复。
+- **SH-05 实施期间发现与解决的技术细节**：
+  1. 会话状态与行级排他锁：在 GrowDesk 端使用 `SELECT ... FOR UPDATE` 加锁 `bff_sessions`，杜绝多标签页或跨 BFF worker 实例并发发起 refresh 产生令牌竞争冲突；
+  2. 凭证防泄漏：浏览器端仅持有 256 位随机凭证，数据库端仅存 SHA-256 哈希摘要，绝不在 Cookie 或前端存储原始 Access/Refresh Token；
+  3. DTO 转换一致性：`amountMl` 严格使用 Decimal 字符串格式化与还原，`baseVersion` 保持为数字并发版本号，杜绝 NaN 或精度损失；
+  4. CSRF 与环境兼容：在非 GET 请求时严格校验 Origin/Referer，针对单测环境支持按需开启测试拦截。
 - **外部阻塞**：当前无阻塞。
 
 ---
 
 ## 6. 下一条准确操作
 
-- **目标任务**：**`SH-05: Web BFF 和第一条联调链路 (Web BFF & First Integration Pipeline)`**
-- **工作目录 (workdir)**：`/Users/wangzhuo/Documents/GitHub/baby_panel_for_cecilia`
+- **目标任务**：**`SH-06 / SH-04A: S3 附件与预签名直传链路 (Attachments Pipeline)`**
+- **工作目录 (workdir)**：`/Users/wangzhuo/Documents/GitHub/growdesk-server`
 - **操作内容**：
-  1. **服务端 GrowDesk 专属 HTTP Client (`lib/growdesk/client.ts`)**：
-     - 采用 `server-only` 保证仅在 Next.js 服务端运行，杜绝泄漏至客户端 bundle；
-     - 固定受控的上游 API Origin（配置驱动，杜绝任意代理或用户决定 upstream host）；
-     - 标准错误转换与超时处理，白名单请求头透传（Idempotency-Key、X-Request-ID 等）；
-  2. **BFF 会话管理与安全 Cookie (`__Host-growdesk_web`)**：
-     - 实现 HttpOnly + Secure + SameSite=Lax 安全 Cookie；
-     - 浏览器不持有原始 Access Token 与 Refresh Token，采用随机 256-bit secret，数据库仅存哈希摘要；
-     - CSRF 强校验与 Origin 防护，覆盖所有非 GET 请求；
-  3. **首条联调链路切流 (Feeding 喂养链路)**：
-     - 改造 `app/api/records/feeding/route.ts` 等 Web 路由，将写操作和读操作桥接至 GrowDesk 后端端点；
-     - 严格遵守逐宝宝授权，绝不使用 `prisma.baby.findFirst()` 盲目指派宝宝；
-     - 前端保留 baseVersion 与稳定 mutationId，保证幂等重试与乐观并发控制；
-  4. **测试与验证**：
-     - 编写 API 集成测试与隔离验证，确保旧 SQLite 与新后端职责清晰，绝无写入回退至 SQLite 的静默降级。
+  1. **S3 附件模型与契约 (`Attachment` 模型与路由)**：
+     - 数据模型：`attachments` 表（`id`, `family_id`, `baby_id`, `uploader_id`, `s3_key`, `content_type`, `file_size_bytes`, `sha256`, `status`, `deleted_at`, `created_at`）；
+     - 路由端点：`POST /api/v1/babies/:babyId/attachments/presigned-upload` 与 `GET /api/v1/babies/:babyId/attachments/:attachmentId/presigned-download`；
+  2. **直传与元数据校验**：
+     - 预签名 PUT URL 限制内容类型、文件大小与过期时间（15 分钟）；
+     - 确认上传回调端点 `POST /api/v1/babies/:babyId/attachments/:attachmentId/confirm`；
+  3. **权限与隔离**：
+     - 严格关联 BabyMember 鉴权，杜绝跨租户直传或凭证泄露；
+  4. **集成测试**：
+     - 编写 `tests/integration/attachments.test.ts`，验证 S3 客户端 Mock/MinIO 交互与业务流。
 
 ---
 

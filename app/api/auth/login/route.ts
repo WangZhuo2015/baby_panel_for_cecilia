@@ -5,9 +5,10 @@ import {
   signAuthToken,
   AUTH_COOKIE_NAME,
 } from "@/lib/auth";
-import { config, AUTH_CONFIG } from "@/lib/config";
+import { config, AUTH_CONFIG, GROWDESK_CONFIG } from "@/lib/config";
 import { validateCsrfOrigin } from "@/lib/api-helpers";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
+import { loginBffSession } from "@/lib/growdesk/session";
 
 export async function POST(request: Request) {
   try {
@@ -26,7 +27,6 @@ export async function POST(request: Request) {
     const body = await request.json().catch(() => ({}));
     const { username, password } = body;
 
-
     if (!username || !password || typeof password !== "string" || password.length > 72) {
       return NextResponse.json(
         { error: "请输入正确的用户名和密码" },
@@ -35,6 +35,31 @@ export async function POST(request: Request) {
     }
 
     const cleanUsername = String(username).trim().toLowerCase();
+
+    if (GROWDESK_CONFIG.enabled) {
+      const bffRes = await loginBffSession(cleanUsername, password);
+      if (!bffRes.success || !bffRes.sessionSecret) {
+        return NextResponse.json(
+          { error: bffRes.error || "用户名或密码错误" },
+          { status: bffRes.status || 401 },
+        );
+      }
+      const response = NextResponse.json({
+        user: bffRes.user,
+        family: bffRes.family,
+        baby: bffRes.baby,
+      });
+      response.cookies.set({
+        name: GROWDESK_CONFIG.cookieName,
+        value: bffRes.sessionSecret,
+        httpOnly: true,
+        secure: config.isProduction,
+        sameSite: "lax",
+        path: "/",
+        maxAge: 30 * 24 * 60 * 60,
+      });
+      return response;
+    }
 
     const user = await prisma.user.findUnique({
       where: { username: cleanUsername },

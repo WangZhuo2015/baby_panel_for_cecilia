@@ -193,6 +193,19 @@ export const PUSH_CONFIG = {
   },
 } as const;
 
+export const GROWDESK_CONFIG = {
+  get enabled(): boolean {
+    return process.env.GROWDESK_ENABLED === "true" || process.env.GROWDESK_ENABLED === "1";
+  },
+  get apiUrl(): string {
+    return (process.env.GROWDESK_API_URL || "http://127.0.0.1:3089").replace(/\/+$/, "");
+  },
+  get cookieName(): string {
+    return "__Host-growdesk_web";
+  },
+  timeoutMs: 10_000,
+} as const;
+
 export const config = {
   nodeEnv: NODE_ENV,
   isProduction: IS_PRODUCTION,
@@ -209,6 +222,7 @@ export const config = {
   auth: AUTH_CONFIG,
   ai: AI_CONFIG,
   push: PUSH_CONFIG,
+  growdesk: GROWDESK_CONFIG,
 } as const;
 
 export default config;
