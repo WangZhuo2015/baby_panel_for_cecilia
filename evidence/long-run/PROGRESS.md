@@ -6,9 +6,9 @@
 
 ## 当前状态概览
 
-- **当前批次 / 小任务**：`SH-04S` 已完成 -> 进入 `L3 (SH-04FO: 辅食记录链路)`
+- **当前批次 / 小任务**：`SH-04FO` 已完成 -> 进入 `L3 (SH-04SU: 补剂记录链路)`
 - **最后更新时间**：2026-09-12 (US/Pacific)
-- **总体状态**：`IN_PROGRESS` (SH-00 R0、SH-01、SH-02A、SH-02B、SH-03A、SH-03B、SH-03C、SH-03D、SH-04F、SH-04D、SH-04S 验证完成，自主推进中)
+- **总体状态**：`IN_PROGRESS` (SH-00 R0、SH-01、SH-02A、SH-02B、SH-03A、SH-03B、SH-03C、SH-03D、SH-04F、SH-04D、SH-04S、SH-04FO 验证完成，自主推进中)
 
 ---
 
@@ -16,8 +16,8 @@
 
 | 仓库 | 分支 (Branch) | 起始基线 HEAD | 当前最新提交 HEAD | 工作区状态与未提交文件核对 |
 |---|---|---|---|---|
-| `baby_panel_for_cecilia` | `main` | `4901731` | `67da93b` | Clean |
-| `growdesk-server` | `codex/backend-storage-foundation` | `d9604d5` | `4d74f31` | **Dirty (严格隔离保留原样)**：<br>- `M deploy/Migration.Dockerfile`<br>- `?? evidence/tasks/LEGACY_IMPORT/host-after.json`<br>- `?? evidence/tasks/LEGACY_IMPORT/remote-migration.txt`<br>- `?? evidence/tasks/LEGACY_IMPORT/target-verification.json`<br>- `?? scripts/legacy-import/ios_backup.py`<br>- `?? scripts/legacy-import/test_ios_backup.py` |
+| `baby_panel_for_cecilia` | `main` | `4901731` | `a73ac0e` | Clean |
+| `growdesk-server` | `codex/backend-storage-foundation` | `d9604d5` | `cd87d32` | **Dirty (严格隔离保留原样)**：<br>- `M deploy/Migration.Dockerfile`<br>- `?? evidence/tasks/LEGACY_IMPORT/host-after.json`<br>- `?? evidence/tasks/LEGACY_IMPORT/remote-migration.txt`<br>- `?? evidence/tasks/LEGACY_IMPORT/target-verification.json`<br>- `?? scripts/legacy-import/ios_backup.py`<br>- `?? scripts/legacy-import/test_ios_backup.py` |
 | `growdesk-ios` | `codex/local-storage-policy` | `96aa000` | `96aa000` | **Dirty (严格隔离保留原样)**：<br>- `M BabyPanel.xcodeproj/project.pbxproj`<br>- `?? docs/design-mockups/` |
 
 ---
@@ -27,7 +27,7 @@
 - **服务端契约权威**：`growdesk-server/packages/contracts/src`（模块化 TypeBox 契约，覆盖全部 86 路径、122 操作端点）
 - **OpenAPI 规范快照**：`growdesk-server/contracts/openapi.json`（OpenAPI 3.0.3，122 operationId 全局唯一，无 diff 校验通过，Swift 6 测试通过）
 - **iOS 客户端消费快照**：尚未复制引入（待进入原生端任务后同步并记录 `Contracts/source.json`）
-- **PostgreSQL Migration 版本**：`202609120001_identity` + `202609120002_foundation` + `202609120003_care_feeding` + `202609120004_care_diaper` + `202609120005_care_sleep`（通过真实 PG18 顺序升级与复合外键/约束测试）
+- **PostgreSQL Migration 版本**：`202609120001_identity` + `202609120002_foundation` + `202609120003_care_feeding` + `202609120004_care_diaper` + `202609120005_care_sleep` + `202609120006_care_food`（通过真实 PG18 顺序升级与复合外键/约束测试）
 - **SQLite 数据源状态**：`file:./prod.db`，维持只读参考与旧 Web 生产写权威，严格未触碰
 
 ---
@@ -78,6 +78,10 @@
     - 执行报告：`../growdesk-server/evidence/tasks/SH-04S/REPORT.md`
     - 交付提交：`growdesk-server: 4d74f31`
     - 状态：`IMPLEMENTED_VERIFIED_REVIEW_PENDING`（实现睡眠记录 CRUD 5 个端点；数据库级部分唯一索引严格保证单个宝宝同时仅存在一条进行中睡眠；支持跨午夜有效区间与 `endedAt < startedAt` 拦截；UoW 事务原子投影 TimelineEntry、并发 PATCH baseVersion 乐观锁互斥、Keyset 游标分页；84 项单元测试与 96 项 PG18 集成测试全量通过）
+12. **`SH-04FO (辅食记录链路与食材库)`**：
+    - 执行报告：`../growdesk-server/evidence/tasks/SH-04FO/REPORT.md`
+    - 交付提交：`growdesk-server: cd87d32`
+    - 状态：`IMPLEMENTED_VERIFIED_REVIEW_PENDING`（实现辅食记录 CRUD 5 个端点、食材库与自定义食材 2 个端点、临床辅食指南 1 个端点、宝宝辅食计划 2 个端点；多租户与 BabyMember 严格隔离；UoW 事务原子投影 TimelineEntry、Idempotency 重放、baseVersion 乐观锁；84 项单元测试与 109 项 PG18 集成测试全量通过）
 
 ---
 
@@ -89,24 +93,24 @@
 
 ## 5. 失败与修复、外部阻塞
 
-- **SH-04S 实施期间发现与解决的技术细节**：
-  1. 活跃睡眠互斥与部分唯一索引：在 PostgreSQL 建立了 `uq_sleep_records_active_baby` (`baby_id WHERE ended_at IS NULL AND deleted_at IS NULL`)，并在仓储层做事务前置检查，防止双设备同时开启睡眠；
-  2. 跨午夜区间合法性校验：开始于夜间 21:00 并在次日 06:30 结束的跨夜睡眠为合法有效记录；若 `endedAt < startedAt` 则严格返回 400 `INVALID_SLEEP_INTERVAL`；
-  3. 时间线软删除对齐：软删除记录在 UnitOfWork 中置位 `TimelineEntry.deletedAt`，主动排除在活跃时间线之外。
+- **SH-04FO 实施期间发现与解决的技术细节**：
+  1. Prisma 1-to-1 复合关系约束：`BabyFoodPlan` 属于宝宝一对一关系，Prisma 验证要求在定义端声明 `@@unique([familyId, babyId])` 属性以匹配复合外键约束；
+  2. 食材尝试聚合：`listFoodLibraryItems` 自动聚合系统标准食材与家庭自定义食材，并与 `family_food_statuses` 记录动态合并输出 `familyStatus: { tried, reaction }`；
+  3. Keyset 游标复合结构：采用 `recordDate|id` 进行 base64url 编解码，实现稳定按日期倒序分页。
 - **外部阻塞**：当前无阻塞。
 
 ---
 
 ## 6. 下一条准确操作
 
-- **目标任务**：**`SH-04FO: 辅食记录链路与食材库 (Food Record Pipeline & Ingredients Catalog)`**
+- **目标任务**：**`SH-04SU: 补剂记录链路 (Supplement Record Pipeline)`**
 - **工作目录 (workdir)**：`/Users/wangzhuo/Documents/GitHub/growdesk-server`
 - **操作内容**：
-  1. **数据模型与迁移**：创建 `ingredients` 表与 `food_records` 表（建立家庭复合外键、过敏/耐受标记、时间线索引）；
-  2. **食材库与辅食记录仓储**：实现 `ScopedIngredientRepository` 与 `ScopedFoodRepository`（基于 UnitOfWork 封装 CRUD、食材耐受性记录）；
+  1. **数据模型与迁移**：创建 `supplement_records` 表（`id, family_id, baby_id, supplement_name, occurred_at, amount, unit, notes, source, version, deleted_at`），建立复合外键与时间线索引；
+  2. **补剂仓储与领域服务**：实现 `ScopedSupplementRepository` 与 `SupplementService`（基于 UnitOfWork 封装 CRUD、Keyset 游标分页、多租户隔离）；
   3. **时间线投影与乐观锁**：原子同步更新 `TimelineEntry`，比对 `baseVersion` 乐观锁防冲突；
-  4. **HTTP 路由挂载**：挂载 `/api/v1/families/:familyId/nutrition/ingredients` 与 `/api/v1/babies/:babyId/records/food`，对齐 TypeBox 契约；
-  5. **真实 PG18 集成测试**：编写 `tests/integration/food.test.ts` 覆盖食材管理、辅食记录 CRUD、并发冲突、多租户隔离与软删除。
+  4. **HTTP 路由挂载**：挂载 `/api/v1/babies/:babyId/records/supplement` 5 个端点，对齐 TypeBox 契约；
+  5. **真实 PG18 集成测试**：编写 `tests/integration/supplement.test.ts` 覆盖补剂增改删、并发冲突、重放与软删除。
 
 ---
 
