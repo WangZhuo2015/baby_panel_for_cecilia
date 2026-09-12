@@ -6,9 +6,9 @@
 
 ## 当前状态概览
 
-- **当前批次 / 小任务**：`SH-02A` 已完成 -> 进入 `L1 (SH-02B: UnitOfWork 和统一事务基础)`
+- **当前批次 / 小任务**：`SH-02B` 已完成 -> 进入 `L2 (SH-03: 账号、会话与宝宝授权)`
 - **最后更新时间**：2026-09-12 (US/Pacific)
-- **总体状态**：`IN_PROGRESS` (SH-00 R0、SH-01、SH-02A 验证完成，自主推进中)
+- **总体状态**：`IN_PROGRESS` (SH-00 R0、SH-01、SH-02A、SH-02B 验证完成，自主推进中)
 
 ---
 
@@ -16,8 +16,8 @@
 
 | 仓库 | 分支 (Branch) | 起始基线 HEAD | 当前最新提交 HEAD | 工作区状态与未提交文件核对 |
 |---|---|---|---|---|
-| `baby_panel_for_cecilia` | `main` | `4901731` | `972afd7` | Clean（R0 修正与验证通过并已提交） |
-| `growdesk-server` | `codex/backend-storage-foundation` | `d9604d5` | `2cd4efb` | **Dirty (严格隔离保留原样)**：<br>- `M deploy/Migration.Dockerfile`<br>- `?? evidence/tasks/LEGACY_IMPORT/host-after.json`<br>- `?? evidence/tasks/LEGACY_IMPORT/remote-migration.txt`<br>- `?? evidence/tasks/LEGACY_IMPORT/target-verification.json`<br>- `?? scripts/legacy-import/ios_backup.py`<br>- `?? scripts/legacy-import/test_ios_backup.py` |
+| `baby_panel_for_cecilia` | `main` | `4901731` | `3603dc6` | Clean |
+| `growdesk-server` | `codex/backend-storage-foundation` | `d9604d5` | `ae97fcc` | **Dirty (严格隔离保留原样)**：<br>- `M deploy/Migration.Dockerfile`<br>- `?? evidence/tasks/LEGACY_IMPORT/host-after.json`<br>- `?? evidence/tasks/LEGACY_IMPORT/remote-migration.txt`<br>- `?? evidence/tasks/LEGACY_IMPORT/target-verification.json`<br>- `?? scripts/legacy-import/ios_backup.py`<br>- `?? scripts/legacy-import/test_ios_backup.py` |
 | `growdesk-ios` | `codex/local-storage-policy` | `96aa000` | `96aa000` | **Dirty (严格隔离保留原样)**：<br>- `M BabyPanel.xcodeproj/project.pbxproj`<br>- `?? docs/design-mockups/` |
 
 ---
@@ -46,6 +46,10 @@
    - 执行报告：`../growdesk-server/evidence/tasks/SH-02A/REPORT.md`
    - 交付提交：`growdesk-server: 2cd4efb`
    - 状态：`IMPLEMENTED_VERIFIED_REVIEW_PENDING`（补齐会话、凭据、增量 Feed、任务执行、时间线、首个照护模型 FeedingRecord，Prisma Client 生成与架构无 any 检查通过，PG18 复合外键/约束/级联删除保护/索引执行计划通过）
+4. **`SH-02B (UnitOfWork 与事务底座)`**：
+   - 执行报告：`../growdesk-server/evidence/tasks/SH-02B/REPORT.md`
+   - 交付提交：`growdesk-server: ae97fcc`
+   - 状态：`IMPLEMENTED_VERIFIED_REVIEW_PENDING`（实现标准 8 步 UnitOfWork、FamilySyncState 行锁与递增、带锁权限校验、baseVersion 乐观锁、时间线原子投影、幂等收据与重放，17 项真实 PG18 集成测试全量通过）
 
 ---
 
@@ -57,23 +61,24 @@
 
 ## 5. 失败与修复、外部阻塞
 
-- **SH-01 实施期间发现与解决的技术细节**：
-  1. Standalone `Value.Check` 在未显式配置格式校验器时会拒绝 `date-time`/`date`/`uuid`，通过在 `common.ts` 中引入 `FormatRegistry.Set` 成功解决；
-  2. Nullable 字段在 TypeBox 中采用 `Type.Union([schema, Type.Null()])`，配合 `contract-generator.mjs` 中的 `transformOpenApi` 自动转换为 OpenAPI 3.0.3 标准的 `{ ...schema, nullable: true }`，完全契合 Swift 6 `swift-openapi-generator` 1.13.1 的解码要求；
-  3. 路由中错误响应统一使用 `Type.Ref(ApiErrorEnvelopeSchema)`，确保 Swift 客户端生成统一的 `Components.Schemas.ApiErrorEnvelope` 命名结构。
+- **SH-02B 实施期间发现与解决的技术细节**：
+  1. PostgreSQL `CHAR(64)` 对不足 64 字节哈希补齐空格，代码中增加 `.trim()` 并规范测试 payload 为 64 字符十六进制串；
+  2. Prisma 命名复合键时使用声明的名称（如 `uq_babies_family_id_id`），查询时需使用精确键名；
+  3. `tests/integration/unit-of-work.test.ts` 中针对 baby-level viewer 拒绝写测试，需将测试账号在家庭内设为 member、宝宝设为 viewer，精确触发 `BABY_WRITE_DENIED` 403 异常。
 - **外部阻塞**：当前无阻塞。
 
 ---
 
 ## 6. 下一条准确操作
 
-- **目标任务**：**`SH-02A/B：正式数据模型与统一事务基础`**
+- **目标任务**：**`SH-03: 账号、会话与宝宝授权 (Auth, Session & BabyMember Authorization)`**
 - **工作目录 (workdir)**：`/Users/wangzhuo/Documents/GitHub/growdesk-server`
 - **操作内容**：
-  1. 审查既有已部署迁移 `202609120001_identity`（User/Family/FamilyMember/Baby/BabyMember/sync states 等约束）；
-  2. 编写新迁移补齐会话（DeviceSession, RefreshCredential, RecoveryCode）、幂等证明（IdempotencyReceipt）、变更日志（FamilyChange, UserChange）、任务出箱与执行（TaskOutbox, TaskExecution）、时间线统一投影（TimelineEntry）；
-  3. 实现 Principal-Scoped Repository 与 UnitOfWork，遵守统一全局锁顺序：`UserSyncState(userId排序) -> FamilySyncState(familyId排序) -> DeviceSession -> RefreshCredential/RecoveryCode -> TaskExecution -> 业务实体`；
-  4. 编写针对 PostgreSQL 18 的并发事务、死锁防御与游标原子递增测试。
+  1. **SH-03A 登录与设备会话**：实现 Fastify 认证插件、Bearer JWT (`aud: .../mcp`) 校验、密码 bcrypt 校验与透明升级、设备会话绑定；
+  2. **SH-03B 刷新令牌轮换与撤销**：实现原子单次使用 Refresh Token 轮换、重放检测及级联撤销；
+  3. **SH-03C 家庭与宝宝逐级授权**：实现 BabyMember 邀请接受、主动退出与“最后活跃管理员保护”防死锁校验；
+  4. **SH-03D 密码修改与恢复码**：实现 10 组 128-bit 恢复码批量安全生成与灾难恢复；
+  5. 编写针对真实 PG18 与 Redis 的集成测试套件。
 
 ---
 
