@@ -11,7 +11,7 @@
 
 | 仓库名称 | 分支 (Branch) | 起始基线 HEAD | 交付提交 HEAD | Working Tree 状态与未提交文件核验 |
 |---|---|---|---|---|
-| **`baby_panel_for_cecilia`**<br>(当前任务工作区) | `main` | `49017313513e57cbb9720b873ccbe81942e8d491` | *待本轮 commit 后更新* | 起始状态 Clean (`ahead 1` of origin)。本轮**仅新增 5 个 SH-00 明确交付物**，未触碰任何业务代码与配置。 |
+| **`baby_panel_for_cecilia`**<br>(当前任务工作区) | `main` | `49017313513e57cbb9720b873ccbe81942e8d491` | `942a59f2a243df8f5b0e531f244c9f5db02416d0` (本轮提交) | 起始状态 Clean (`ahead 1` of origin)。本轮**仅新增 5 个 SH-00 明确交付物**，未触碰任何业务代码与配置。 |
 | **`growdesk-server`**<br>(只读参考仓库) | `codex/backend-storage-foundation` | `d9604d5a773630e81c0bedcc70b7bcf013c64535` | *(只读未动)* | **Dirty**。包含 6 个已有未提交文件：<br>- `M deploy/Migration.Dockerfile`<br>- `?? evidence/tasks/LEGACY_IMPORT/host-after.json`<br>- `?? evidence/tasks/LEGACY_IMPORT/remote-migration.txt`<br>- `?? evidence/tasks/LEGACY_IMPORT/target-verification.json`<br>- `?? scripts/legacy-import/ios_backup.py`<br>- `?? scripts/legacy-import/test_ios_backup.py`<br>**严格保留，未混入，未提交**。 |
 | **`growdesk-ios`**<br>(只读参考仓库) | `codex/local-storage-policy` | `96aa0007bc44874419471a0dd5c7e07c8b317aa1` | *(只读未动)* | **Dirty**。包含已有未提交文件：<br>- `M BabyPanel.xcodeproj/project.pbxproj`<br>- `?? docs/design-mockups/`<br>**严格保留，未混入，未提交**。 |
 
