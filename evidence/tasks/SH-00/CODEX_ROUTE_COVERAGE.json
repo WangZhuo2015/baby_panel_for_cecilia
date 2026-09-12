@@ -1,0 +1,9 @@
+{
+  "routeFiles": 73,
+  "sourceEndpoints": 128,
+  "csvRows": 128,
+  "missing": [],
+  "extra": [],
+  "duplicateRows": 0,
+  "semanticColumnsValidated": false
+}

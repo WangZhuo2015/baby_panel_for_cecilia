@@ -1,3 +1,5 @@
+> 当前是待修正的SH-00初稿，不可直接生成业务代码或宣称已验收。已确认错误及修复门槛见 [Codex复核](../../evidence/tasks/SH-00/REVIEW_CODEX.md)，长程任务R0必须先修正。
+
 # 双端共用后端能力状态与就绪矩阵 (Capability Status Matrix)
 
 > 任务对应：`SH-00` / 现状事实审计  

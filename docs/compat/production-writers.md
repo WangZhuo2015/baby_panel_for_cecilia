@@ -1,3 +1,5 @@
+> 当前是待修正的SH-00初稿，不可直接生成业务代码或宣称已验收。已确认错误及修复门槛见 [Codex复核](../../evidence/tasks/SH-00/REVIEW_CODEX.md)，长程任务R0必须先修正。
+
 # 生产写入口全景清单与可达性审计 (Production Writers Inventory)
 
 > 任务对应：`SH-00` / 迁移安全基线  
@@ -157,17 +159,12 @@
 
 ---
 
-## 4. 切换停写栅栏 (Write-Freeze Fence) 实操要求 (SH-13 前置)
+## 4. 切换停写栅栏：修正后的要求
 
-在执行正式生产切换（SH-13）的维护窗口期内，必须按以下步骤彻底阻断旧系统所有写入：
+1. 按真实调用链列出所有写者，包括有副作用的GET、OAuth审计、HTTP/stdio MCP、AI确认、worker、scheduler、归档及维护脚本；静态可达与线上启用分别核对。
+2. 在已授权的正式切换窗口阻止新业务写和新任务；在途任务完成、可恢复地暂停或标记结果待对账，不无条件强杀。记录每个writer停写状态和freeze marker。
+3. 证明marker后源无新写，再用SQLite backup API拍最终一致快照并核对附件。WAL checkpoint不是冻结机制，也不是导入只读快照的前提。
+4. 比对源/目标ID集合、规范化内容hash、删除集合、全部归属/软引用、权限基线和附件hash；不能仅比行数/最大时间戳。
+5. 目标有基线后真实写入时先出冲突计划，禁止覆盖。新PG接受真实写后不能直接切回旧SQLite；按09执行同PG应用回滚或已演练的反向迁移。
 
-1. **第 1 步：宿主级计划任务与外部连接阻断**
-   - 检查并暂停宿主 crontab 中任何调用 `backup-db.sh`、`prune-ai-archive.sh` 的定时任务。
-   - 临时停用 nginx 中对外暴露的 `/mcp` 与 `/api/mcp`，使外部 Gemini Spark 或 Claude 无法继续通过旧 MCP 写入。
-2. **第 2 步：旧 Web 进入全局只读模式**
-   - 在 Next.js 兼容层启用全局写拦截：所有 `POST`、`PUT`、`PATCH`、`DELETE` 请求直接返回 `503 Service Unavailable`（带友好维护提示），不再将请求下发给旧 Prisma。
-   - 终止所有在途的 AI Chat / Voice Agent 运行中的 Job。
-3. **第 3 步：排空与确认零写入**
-   - 查询 SQLite `PRAGMA wal_checkpoint(TRUNCATE)`，确认所有 WAL 数据落盘；
-   - 记录快照时刻的各表总行数与最大自增/时间戳，与目标库执行最终增量对账（SH-11）；
-   - 确认无新增写入后，方可切换至 GrowDesk 共享后端。
+这些是未来切换门槛，本轮不执行生产操作。

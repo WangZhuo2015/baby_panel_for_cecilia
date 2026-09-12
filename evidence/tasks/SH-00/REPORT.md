@@ -1,3 +1,5 @@
+> 2026-09-12 Codex复核：本文件的原始完成/验收结论已被 [REVIEW_CODEX.md](REVIEW_CODEX.md) 替代，当前为 CHANGES_REQUESTED。以下内容保留作历史，不作为后续实现放行依据。
+
 # SH-00 任务执行报告：Web 与 iOS 共用后端基线和调用清单
 
 > 任务：SH-00 (Web 与 iOS 共用后端的基线和调用清单盘点)  
