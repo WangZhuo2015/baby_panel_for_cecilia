@@ -1,3 +1,5 @@
+> 2026-09-12 最新执行方式：用户允许长程推进，请从 [Gemini长程交接](../GEMINI_LONG_RUN_HANDOFF.md) 继续。它替代本文逐小任务等待人工确认的要求，技术验证和生产切换门槛不变。SH-00先按最新Codex复核完成R0修正。
+
 # 09 — 现有 Web 与 iOS 共用 GrowDesk 后端：Gemini 执行计划
 
 > 当前交接入口已按用户要求放到 `baby_panel_for_cecilia/docs/plan/`。SH-00 的清单和报告写入当前 Web 仓库；后续服务端与 iOS 实现仍分别在原仓库进行。本文涉及已有服务端代码、部署与迁移证据的相对路径，均以 `growdesk-server` 为根。其余背景计划为带版本的参考副本，来源见上级 README。

@@ -2,6 +2,8 @@
 
 按用户要求，执行计划和 Gemini 交接材料放在本 Web 仓库。
 
+**当前入口：[Gemini长程任务](GEMINI_LONG_RUN_HANDOFF.md)**。先修正SH-00语义问题，再连续完成实现与隔离验收，不再逐小任务等待人工确认。原始首轮提示词保留作历史。
+
 - [给 Gemini 的首轮提示词](GEMINI_SHARED_BACKEND_HANDOFF.md)
 - [详细执行计划与任务卡](implementation/09_WEB_IOS_SHARED_BACKEND.md)
 

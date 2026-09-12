@@ -1,3 +1,5 @@
+> 2026-09-12 最新执行方式：用户允许长程推进，请从 [Gemini长程交接](GEMINI_LONG_RUN_HANDOFF.md) 继续。它替代本文逐小任务等待人工确认的要求，技术验证和生产切换门槛不变。SH-00先按最新Codex复核完成R0修正。
+
 # 给 Gemini 的任务入口：Web 与 iOS 共用后端
 
 完整执行计划：[09_WEB_IOS_SHARED_BACKEND.md](implementation/09_WEB_IOS_SHARED_BACKEND.md)。这是本轮唯一的任务拆分入口；02/03/07/08仍是协议与数据规则权威。
