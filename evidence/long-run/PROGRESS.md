@@ -6,9 +6,9 @@
 
 ## 当前状态概览
 
-- **当前批次 / 小任务**：`SH-04F` 已完成 -> 进入 `L3 (SH-04D: 尿布记录链路)`
+- **当前批次 / 小任务**：`SH-04D` 已完成 -> 进入 `L3 (SH-04S: 睡眠记录链路)`
 - **最后更新时间**：2026-09-12 (US/Pacific)
-- **总体状态**：`IN_PROGRESS` (SH-00 R0、SH-01、SH-02A、SH-02B、SH-03A、SH-03B、SH-03C、SH-03D、SH-04F 验证完成，自主推进中)
+- **总体状态**：`IN_PROGRESS` (SH-00 R0、SH-01、SH-02A、SH-02B、SH-03A、SH-03B、SH-03C、SH-03D、SH-04F、SH-04D 验证完成，自主推进中)
 
 ---
 
@@ -16,8 +16,8 @@
 
 | 仓库 | 分支 (Branch) | 起始基线 HEAD | 当前最新提交 HEAD | 工作区状态与未提交文件核对 |
 |---|---|---|---|---|
-| `baby_panel_for_cecilia` | `main` | `4901731` | `2e2235a` | Clean |
-| `growdesk-server` | `codex/backend-storage-foundation` | `d9604d5` | `1d4d22e` | **Dirty (严格隔离保留原样)**：<br>- `M deploy/Migration.Dockerfile`<br>- `?? evidence/tasks/LEGACY_IMPORT/host-after.json`<br>- `?? evidence/tasks/LEGACY_IMPORT/remote-migration.txt`<br>- `?? evidence/tasks/LEGACY_IMPORT/target-verification.json`<br>- `?? scripts/legacy-import/ios_backup.py`<br>- `?? scripts/legacy-import/test_ios_backup.py` |
+| `baby_panel_for_cecilia` | `main` | `4901731` | `ec45fa9` | Clean |
+| `growdesk-server` | `codex/backend-storage-foundation` | `d9604d5` | `ffbbb2e` | **Dirty (严格隔离保留原样)**：<br>- `M deploy/Migration.Dockerfile`<br>- `?? evidence/tasks/LEGACY_IMPORT/host-after.json`<br>- `?? evidence/tasks/LEGACY_IMPORT/remote-migration.txt`<br>- `?? evidence/tasks/LEGACY_IMPORT/target-verification.json`<br>- `?? scripts/legacy-import/ios_backup.py`<br>- `?? scripts/legacy-import/test_ios_backup.py` |
 | `growdesk-ios` | `codex/local-storage-policy` | `96aa000` | `96aa000` | **Dirty (严格隔离保留原样)**：<br>- `M BabyPanel.xcodeproj/project.pbxproj`<br>- `?? docs/design-mockups/` |
 
 ---
@@ -27,7 +27,7 @@
 - **服务端契约权威**：`growdesk-server/packages/contracts/src`（模块化 TypeBox 契约，覆盖全部 86 路径、122 操作端点）
 - **OpenAPI 规范快照**：`growdesk-server/contracts/openapi.json`（OpenAPI 3.0.3，122 operationId 全局唯一，无 diff 校验通过，Swift 6 测试通过）
 - **iOS 客户端消费快照**：尚未复制引入（待进入原生端任务后同步并记录 `Contracts/source.json`）
-- **PostgreSQL Migration 版本**：`202609120001_identity` + `202609120002_foundation` + `202609120003_care_feeding`（通过真实 PG18 顺序升级与复合外键/约束测试）
+- **PostgreSQL Migration 版本**：`202609120001_identity` + `202609120002_foundation` + `202609120003_care_feeding` + `202609120004_care_diaper`（通过真实 PG18 顺序升级与复合外键/约束测试）
 - **SQLite 数据源状态**：`file:./prod.db`，维持只读参考与旧 Web 生产写权威，严格未触碰
 
 ---
@@ -70,6 +70,10 @@
    - 执行报告：`../growdesk-server/evidence/tasks/SH-04F/REPORT.md`
    - 交付提交：`growdesk-server: 1d4d22e`
    - 状态：`IMPLEMENTED_VERIFIED_REVIEW_PENDING`（实现配方奶产品多租户产品库 4 个端点、喂养记录 CRUD 5 个端点；严格 BabyMember 权限与跨家庭配方奶校验；UoW 事务原子投影 TimelineEntry、Idempotency 重放与冲突熔断、baseVersion 乐观锁、Keyset 游标分页；84 项单元测试与 72 项 PG18 集成测试全量通过）
+10. **`SH-04D (尿布记录链路)`**：
+   - 执行报告：`../growdesk-server/evidence/tasks/SH-04D/REPORT.md`
+   - 交付提交：`growdesk-server: ffbbb2e`
+   - 状态：`IMPLEMENTED_VERIFIED_REVIEW_PENDING`（实现尿布记录 CRUD 5 个端点；严格 BabyMember 逐宝宝权限与家庭边界校验；UoW 事务原子投影 TimelineEntry、Idempotency 重放与冲突熔断、baseVersion 乐观锁、Keyset 游标分页；84 项单元测试与 83 项 PG18 集成测试全量通过）
 
 ---
 
@@ -81,25 +85,25 @@
 
 ## 5. 失败与修复、外部阻塞
 
-- **SH-04F 实施期间发现与解决的技术细节**：
-  1. 配方奶跨家庭边界校验：宝宝归属家庭，喂养记录关联的配方奶产品必须严格属于同一 `familyId` 且未软删除，否则返回 400 `FORMULA_PRODUCT_NOT_FOUND`；
-  2. 幂等重放时日期反序列化鲁棒性：`existingReceipt.responseBody` 作为 JSON 反序列化后，`occurredAt/createdAt/updatedAt` 均为 ISO 字符串，实体映射适配了 Date 或 string 类型；
-  3. CHECK 约束与 Decimal 字符串序列化：扩展 CHECK 约束允许 `breast`, `bottle`, `formula`，并通过 Prisma `Decimal` 精确序列化，保证浮点数无精度丢失；
-  4. Keyset 游标复合结构：`occurredAt|id` 采用 base64url 编码，支持稳定翻页与无跳页。
+- **SH-04D 实施期间发现与解决的技术细节**：
+  1. `DeleteRecordResponseSchema` 契约对齐：删除接口响应体格式规范要求 `{ data: { id: UuidString, deleted: true } }`（严格禁止多余字段，`additionalProperties: false`），路由处理函数标准化了该映射，杜绝 Fastify 响应序列化 500 异常；
+  2. 尿布类型与性状存储：支持 `pee`, `poop`, `both` 及旧枚举兼容性 CHECK 约束，可选记录 `poopColor` 与 `poopConsistency`；
+  3. Keyset 游标复合结构与 TimelineEntry 状态管理：软删除时原子置位 `deletedAt = NOW()` 并向时间线同步。
 - **外部阻塞**：当前无阻塞。
 
 ---
 
 ## 6. 下一条准确操作
 
-- **目标任务**：**`SH-04D: 尿布记录链路 (Diaper Record Pipeline)`**
+- **目标任务**：**`SH-04S: 睡眠记录链路 (Sleep Record Pipeline)`**
 - **工作目录 (workdir)**：`/Users/wangzhuo/Documents/GitHub/growdesk-server`
 - **操作内容**：
-  1. **数据模型与迁移**：核对 `diaper_records` 表及 CHECK 约束 (`diaper_type IN ('wet', 'dirty', 'both', 'dry')`)；
-  2. **尿布仓储与领域服务**：实现 `ScopedDiaperRepository` 与 `DiaperService`（基于 UnitOfWork 封装 CRUD，严格校验 BabyMember 照护权限）；
-  3. **时间线投影与乐观锁**：原子同步更新 `timelines` 投影，比对 `baseVersion` 乐观锁防冲突；
-  4. **HTTP 路由挂载**：挂载 `GET/POST /api/v1/babies/:babyId/records/diaper` 及 `GET/PATCH/DELETE /api/v1/babies/:babyId/records/diaper/:id`，对齐 TypeBox 契约；
-  5. **真实 PG18 集成测试**：编写 `tests/integration/diaper.test.ts` 覆盖尿布 CRUD、幂等重放、乐观锁冲突、跨宝宝隔离与时间线原子软删除。
+  1. **数据模型与迁移**：创建 `sleep_records` 表（`id, family_id, baby_id, start_time, end_time, is_nap, quality, notes, source, version, deleted_at`），建立复合外键与时间线索引；
+  2. **活跃睡眠约束与跨午夜支持**：支持未结束记录 (`end_time IS NULL`)，一个宝宝同一时间最多只允许一条活跃睡眠记录（部分唯一索引或事务排他）；
+  3. **睡眠仓储与领域服务**：实现 `ScopedSleepRepository` 与 `SleepService`（基于 UnitOfWork 封装 CRUD、开始睡眠、结束睡眠）；
+  4. **时间线投影与乐观锁**：原子同步更新 `timelines` 投影，比对 `baseVersion` 乐观锁防冲突；
+  5. **HTTP 路由挂载**：挂载 `GET/POST /api/v1/babies/:babyId/records/sleep` 及 `GET/PATCH/DELETE /api/v1/babies/:babyId/records/sleep/:id`，对齐 TypeBox 契约；
+  6. **真实 PG18 集成测试**：编写 `tests/integration/sleep.test.ts` 覆盖开始/结束睡眠、并发结束竞态、活跃睡眠互斥、跨午夜时长计算、乐观锁与软删除。
 
 ---
 
