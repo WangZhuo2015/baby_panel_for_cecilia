@@ -96,7 +96,7 @@
     - 状态：`IMPLEMENTED_VERIFIED_REVIEW_PENDING`（实现统一时间线聚合仓储 ScopedTimelineRepository、Keyset 复合游标编解码、GET /api/v1/babies/:babyId/timeline 端点；UoW 跨 6 大护理领域原子投影、软删除联动、逐宝宝 BabyMember 权限隔离；84 项单元测试与 134 项 PG18 集成测试全量通过）
 16. **`SH-05 (Web BFF 和第一条联调链路)`**：
     - 执行报告：`../growdesk-server/evidence/tasks/SH-05/REPORT.md`
-    - 交付提交：`growdesk-server: a62f36c`, `baby_panel_for_cecilia: [待提交]`
+    - 交付提交：`growdesk-server: a62f36c`, `baby_panel_for_cecilia: 8cfafc1`
     - 状态：`IMPLEMENTED_VERIFIED_REVIEW_PENDING`（实现 GrowDesk BffSession 模型、migration 0009、FOR UPDATE 单飞刷新与凭据续期、安全 Cookie `__Host-growdesk_web` 下发与清洗、CSRF 严格校验、Feeding 路由双模切换与零降级、140 项真实 PG18 测试与 135 项 Web 单元测试全量通过）
 
 ---
