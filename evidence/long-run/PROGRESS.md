@@ -6,9 +6,9 @@
 
 ## 当前状态概览
 
-- **当前批次 / 小任务**：`SH-03C` 已完成 -> 进入 `L2 (SH-03D: 密码修改与恢复码)`
+- **当前批次 / 小任务**：`SH-03D` 已完成 -> 进入 `L3 (SH-04F: 喂养记录链路)`
 - **最后更新时间**：2026-09-12 (US/Pacific)
-- **总体状态**：`IN_PROGRESS` (SH-00 R0、SH-01、SH-02A、SH-02B、SH-03A、SH-03B、SH-03C 验证完成，自主推进中)
+- **总体状态**：`IN_PROGRESS` (SH-00 R0、SH-01、SH-02A、SH-02B、SH-03A、SH-03B、SH-03C、SH-03D 验证完成，自主推进中)
 
 ---
 
@@ -17,7 +17,7 @@
 | 仓库 | 分支 (Branch) | 起始基线 HEAD | 当前最新提交 HEAD | 工作区状态与未提交文件核对 |
 |---|---|---|---|---|
 | `baby_panel_for_cecilia` | `main` | `4901731` | `bd71f7b` | Clean |
-| `growdesk-server` | `codex/backend-storage-foundation` | `d9604d5` | `2a9791d` | **Dirty (严格隔离保留原样)**：<br>- `M deploy/Migration.Dockerfile`<br>- `?? evidence/tasks/LEGACY_IMPORT/host-after.json`<br>- `?? evidence/tasks/LEGACY_IMPORT/remote-migration.txt`<br>- `?? evidence/tasks/LEGACY_IMPORT/target-verification.json`<br>- `?? scripts/legacy-import/ios_backup.py`<br>- `?? scripts/legacy-import/test_ios_backup.py` |
+| `growdesk-server` | `codex/backend-storage-foundation` | `d9604d5` | `ba462a9` | **Dirty (严格隔离保留原样)**：<br>- `M deploy/Migration.Dockerfile`<br>- `?? evidence/tasks/LEGACY_IMPORT/host-after.json`<br>- `?? evidence/tasks/LEGACY_IMPORT/remote-migration.txt`<br>- `?? evidence/tasks/LEGACY_IMPORT/target-verification.json`<br>- `?? scripts/legacy-import/ios_backup.py`<br>- `?? scripts/legacy-import/test_ios_backup.py` |
 | `growdesk-ios` | `codex/local-storage-policy` | `96aa000` | `96aa000` | **Dirty (严格隔离保留原样)**：<br>- `M BabyPanel.xcodeproj/project.pbxproj`<br>- `?? docs/design-mockups/` |
 
 ---
@@ -62,6 +62,10 @@
    - 执行报告：`../growdesk-server/evidence/tasks/SH-03C/REPORT.md`
    - 交付提交：`growdesk-server: 2a9791d`
    - 状态：`IMPLEMENTED_VERIFIED_REVIEW_PENDING`（实现 12 个 Family 端点与 5 个 Baby 端点，双重最后管理员保护 `LAST_FAMILY_ADMIN_PROTECTION` 与 `LAST_BABY_ADMIN_PROTECTION`，严格跨租户隔离与无 BabyMember 默认 Fail Closed，84 项单元测试与 45 项 PG18 集成测试全量通过）
+8. **`SH-03D (密码修改与恢复码)`**：
+   - 执行报告：`../growdesk-server/evidence/tasks/SH-03D/REPORT.md`
+   - 交付提交：`growdesk-server: ba462a9`
+   - 状态：`IMPLEMENTED_VERIFIED_REVIEW_PENDING`（实现密码修改、单次恢复码生成与重置、使用恢复码重置密码并全量吊销历史会话；严格全局锁序 UserSyncState -> RecoveryCode；84 项单元测试与 59 项 PG18 集成测试全量通过）
 
 ---
 
@@ -73,23 +77,24 @@
 
 ## 5. 失败与修复、外部阻塞
 
-- **SH-03C 实施期间发现与解决的技术细节**：
-  1. PostgreSQL 18 性别 check constraint (`female`, `male`, `unknown`, `unspecified`) 与 OpenAPI 合约 (`boy`, `girl`, `other`) 双向映射；
-  2. 保护最后活跃宝宝管理员：解绑家庭成员或撤销宝宝成员时，递归检查是否为某个宝宝的唯一 active admin，是则返回 409 `LAST_BABY_ADMIN_PROTECTION`；
-  3. 逐级 Fail Closed：加入家庭并不自动继承该家庭宝宝的访问权限，只有在被显式添加为 BabyMember 后才可见并可操作。
+- **SH-03D 实施期间发现与解决的技术细节**：
+  1. 恢复码采用 128-bit 高熵随机数并格式化为 `xxxx-xxxx-xxxx-xxxx-xxxx-xxxx-xxxx-xxxx`，接口仅返回一次，SHA-256 存库，绝不进入日志或 UserChange；
+  2. 恢复码消费原子性：单次消费后立即标记 `used_at = NOW()` 并原子作废该用户同批次剩余恢复码，同时吊销全部历史会话；
+  3. 密码修改保留当前会话：调用 `changePassword` 时，当前调用者的 `DeviceSession` 保持有效，其余历史会话及 Refresh 凭证原子撤销。
 - **外部阻塞**：当前无阻塞。
 
 ---
 
 ## 6. 下一条准确操作
 
-- **目标任务**：**`SH-03D: 密码修改与恢复码 (Password Change & Recovery Codes)`**
+- **目标任务**：**`SH-04F: 喂养记录链路 (Feeding Record Pipeline)`**
 - **工作目录 (workdir)**：`/Users/wangzhuo/Documents/GitHub/growdesk-server`
 - **操作内容**：
-  1. **密码修改**：实现 `POST /api/v1/auth/password/change`，验证旧密码（支持旧系统明文/弱哈希向 bcrypt cost 12 透明迁移），更新密码并递增 user `version`，提供会话保持或全量撤销选项；
-  2. **恢复码重置与签发**：实现 `POST /api/v1/auth/recovery-codes/regenerate`，生成 8-12 组单次恢复码，以 SHA-256 存入 `recovery_codes` 表，原子作废旧批次，仅明文返回给用户一次；
-  3. **恢复码重置密码**：实现 `POST /api/v1/auth/password/recover`，凭用户名与未使用的恢复码重置密码，原子标记已使用 (`used_at = NOW()`)，吊销全部历史会话并签发新会话；
-  4. 编写真实 PG18 集成测试覆盖修改密码、恢复码单次使用、已用恢复码拒绝、批量恢复码作废与旧会话失效。
+  1. **奶粉产品最小模型 (FormulaProduct)**：落地家庭归属校验、产品启停用与喂养记录引用外键一致性；
+  2. **喂养领域服务与 Scoped Repository**：基于 UnitOfWork 封装 `FeedingService`（创建、列表、按 ID 查询、更新、软删除、恢复），严格校验 BabyMember 照护权限；
+  3. **时间线投影与乐观锁**：原子同步更新 `timelines` 投影，比对 `baseVersion` 乐观锁防冲突；
+  4. **HTTP 路由与兼容映射**：挂载 `POST/GET/PATCH/DELETE /api/v1/babies/:babyId/records/feeding`，严格对齐 `contracts` 与旧 Web `/api/records/feeding` 字段语义；
+  5. 编写真实 PG18 集成测试覆盖同 mutationId 幂等重放、乐观锁冲突、跨宝宝拒绝与事务回滚。
 
 ---
 
