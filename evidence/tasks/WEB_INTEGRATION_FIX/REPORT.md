@@ -23,7 +23,7 @@
 | `node scripts/check-production-writers.mjs` | 静态扫描 PASS；不将其输出的“zero leak”当全路径运行证明 |
 | `git diff --check` | PASS |
 
-构建最初被本机截断的 SWC 原生文件阻断；从 npm 恢复同版本 `@next/swc-darwin-arm64@16.3.2` 后成功，未修改 package.json/lockfile 或升级技术栈。运行烟测日志见 [runtime-smoke.log](runtime-smoke.log)。
+构建最初被本机截断的 SWC 原生文件阻断；从 npm 恢复同版本 `@next/swc-darwin-arm64@16.3.2` 后成功，未修改 package.json/lockfile 或升级技术栈。运行烟测日志见 [runtime-smoke.txt](runtime-smoke.txt)。
 
 ## 使用边界与下一步
 

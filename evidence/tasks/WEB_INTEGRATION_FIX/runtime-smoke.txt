@@ -1,0 +1,1 @@
+PASS: actual Next HTTP login/cookie/me/baby/feeding, method fence, CSRF, outage and logout wiring. Synthetic upstream; no PostgreSQL or browser assertions.
