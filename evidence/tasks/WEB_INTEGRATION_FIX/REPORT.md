@@ -16,7 +16,7 @@
 | 命令 | 结果与范围 |
 | --- | --- |
 | `npm run typecheck` | PASS |
-| `npm run test:unit` | 241/241 PASS，按 .env.test 隔离执行 |
+| `npm run test:unit` | 243/243 PASS，按 .env.test 隔离执行 |
 | `npm run lint` | 退出 0；项目仍有 warning，不代表零 warning |
 | `npm run build` | PASS；使用 GROWDESK_ENABLED=true、dev_test.db 路径和测试 JWT 配置；未启动生产服务 |
 | `node scripts/review/check-growdesk-runtime.mjs` | PASS：真实 Next HTTP 会话、宝宝与列表线路、CSRF、501、上游故障和注销；上游为合成 HTTP fixture，不是 PostgreSQL/浏览器 E2E |
@@ -33,4 +33,10 @@
 4. 线上开关保持现状；本次没有部署、导入真实资料、改 nginx、推送 Git 或修改仓库可见性。
 5. 浏览器 + 真实 PostgreSQL 的联合 E2E、旧数据/附件对账、完整功能迁移和正式切换不属于本报告已通过项。
 
-独立只读代码复核正在进行，后续补充结论及配套提交。
+## 独立复核后的处理
+
+- mixed 跨仓库依赖：复核在后端应用期间看到了旧类型；当前后端已增加 mixed 契约、验证与增量 migration，并通过真实 PG 回归。必须作为配套版本使用，不能只部署 Web。
+- 时间线摘要不能直接作为完整编辑数据：已新增按 babyId/id 读取喂养详情，详情加载后才挂载编辑表单，提交使用实际详情版本；缺少其他类型完整详情时不展示默认编辑表单。新增 SSR 回归证明摘要不能渲染可提交的默认表单，实际 Next HTTP smoke 证明喂养详情保留时间/类型/奶量/备注/version。
+- 旧 Web 的完整多家庭/多宝宝选择界面仍未完成：初次登录默认展示第一个授权宝宝；多家庭且无宝宝的创建需要明确 familyId，目前旧 onboarding 不提供完整选择交互。这是剩余功能缺口，不据本批修复宣称多宝宝体验已完成。已有选中状态的读/改已显式携带 babyId，缺 ID 的修改会拒绝。
+
+本次仅合并已验证的集成修复；全站迁移仍需按计划继续。

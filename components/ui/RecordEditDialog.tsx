@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import type { TimelineEntry } from "@/types";
 import { X, Baby, Moon, Droplets, UtensilsCrossed, Pill } from "lucide-react";
 import { AgentBadge } from "@/components/ui/AgentBadge";
@@ -37,6 +37,33 @@ export const RecordEditDialog: React.FC<RecordEditDialogProps> = ({ item, onClos
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [loaded, setLoaded] = useState<{ key: string; record: Record<string, unknown> } | null>(null);
+  const [loadError, setLoadError] = useState<{ key: string; message: string } | null>(null);
+  const itemKey = item ? `${item.type}:${item.babyId}:${item.id}:${item.version ?? ""}` : "";
+  const rawRecord = item?.rawRecord ?? (loaded?.key === itemKey ? loaded.record : null);
+
+  useEffect(() => {
+    setError(null);
+    if (!item || item.rawRecord || item.type !== "feeding") return;
+    const controller = new AbortController();
+    setLoaded(null);
+    setLoadError(null);
+    const query = new URLSearchParams({ babyId: String(item.babyId ?? ""), id: item.id });
+    fetch(`/api/records/feeding?${query}`, { signal: controller.signal })
+      .then(async response => {
+        const body = await response.json();
+        if (!response.ok) throw new Error(body.error || "无法加载记录详情");
+        if (body.id !== item.id || body.babyId !== item.babyId || !body.timestamp || !body.version) {
+          throw new Error("记录详情不完整，请关闭后重试");
+        }
+        if (!controller.signal.aborted) setLoaded({ key: itemKey, record: body });
+      })
+      .catch(cause => {
+        if (!controller.signal.aborted) setLoadError({ key: itemKey, message: cause instanceof Error ? cause.message : "无法加载记录详情" });
+      });
+    return () => controller.abort();
+  }, [item, itemKey]);
+
   if (!item) return null;
 
   const meta = typeMeta[item.type] || typeMeta.feeding;
@@ -46,7 +73,8 @@ export const RecordEditDialog: React.FC<RecordEditDialogProps> = ({ item, onClos
     setSaving(true);
     setError(null);
     try {
-      await onSubmit({ id: item.id, ...patch });
+      if (!rawRecord) throw new Error("完整记录尚未加载，暂时无法保存");
+      await onSubmit({ id: item.id, ...patch, ...(rawRecord.version ? { baseVersion: rawRecord.version } : {}) });
       onClose();
     } catch (e: any) {
       setError(e?.message || "保存失败，请重试");
@@ -100,47 +128,53 @@ export const RecordEditDialog: React.FC<RecordEditDialogProps> = ({ item, onClos
             </div>
           )}
 
-          {item.type === "feeding" && (
+          {!rawRecord && (
+            <p role="status" className="py-4 text-sm text-text-muted">
+              {loadError?.key === itemKey ? loadError.message : item.type === "feeding" ? "正在加载完整记录…" : "暂时无法加载完整记录，请从对应记录页面操作。"}
+            </p>
+          )}
+
+          {rawRecord && item.type === "feeding" && (
             <FeedingForm
               mode="edit"
-              initialData={item.rawRecord}
+              initialData={rawRecord}
               onSubmit={handlePatchSubmit}
               onCancel={onClose}
               saving={saving}
             />
           )}
 
-          {item.type === "sleep" && (
+          {rawRecord && item.type === "sleep" && (
             <SleepForm
               mode="edit"
-              initialData={item.rawRecord}
+              initialData={rawRecord}
               onSubmit={handlePatchSubmit}
               onCancel={onClose}
               saving={saving}
             />
           )}
 
-          {item.type === "diaper" && (
+          {rawRecord && item.type === "diaper" && (
             <DiaperForm
               mode="edit"
-              initialData={item.rawRecord}
+              initialData={rawRecord}
               onSubmit={handlePatchSubmit}
               onCancel={onClose}
               saving={saving}
             />
           )}
 
-          {item.type === "food" && (
+          {rawRecord && item.type === "food" && (
             <FoodLogForm
               mode="edit"
-              initialData={item.rawRecord}
+              initialData={rawRecord}
               onSubmit={handlePatchSubmit}
               onCancel={onClose}
               saving={saving}
             />
           )}
 
-          {item.type === "supplement" && (
+          {rawRecord && item.type === "supplement" && (
             <div className="space-y-4 py-2">
               <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-100 text-emerald-950 space-y-2">
                 <div className="flex items-center justify-between font-bold text-sm">

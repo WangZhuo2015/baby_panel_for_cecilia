@@ -39,6 +39,17 @@ export async function GET(request: Request) {
       if (!babyId) {
         return NextResponse.json({ error: "请提供 babyId" }, { status: 400 });
       }
+      const recordId = searchParams.get("id");
+      if (recordId) {
+        const detail = await growdeskFetch<GrowDeskFeedingRecord>(
+          `/api/v1/babies/${pathId(babyId)}/records/feeding/${pathId(recordId)}`,
+          { accessToken: bffSession.accessToken },
+        );
+        if (!detail.ok || !detail.data) {
+          throw new BridgeError(detail.ok ? 502 : detail.status, detail.error?.code || "RECORD_DETAIL_UNAVAILABLE", detail.error?.message || "无法加载记录详情");
+        }
+        return NextResponse.json(fromGrowDeskFeedingRecord(detail.data), { headers: { "cache-control": "no-store" } });
+      }
       const list = await fetchLegacyFeedingList<GrowDeskFeedingRecord>(
         growdeskFetch, bffSession.accessToken, babyId, searchParams,
       );

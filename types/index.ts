@@ -403,6 +403,9 @@ export interface HourlyForecast {
 // ===== Timeline Types =====
 export interface TimelineEntry {
   id: string;
+  babyId?: string;
+  version?: string;
+  baseVersion?: string;
   time: string;
   type: 'feeding' | 'sleep' | 'diaper' | 'food' | 'supplement';
   title: string;

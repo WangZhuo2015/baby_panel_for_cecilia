@@ -8,6 +8,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 const family = { id: 'test_family_runtime', name: 'test_family_runtime', timeZone: 'Asia/Shanghai' };
 const baby = { id: 'test_baby_runtime', familyId: family.id, name: 'test_baby_runtime', gender: 'girl', birthDate: '2026-01-01', avatarUrl: null, gestationalWeeks: 38, gestationalDays: 0 };
 const user = { id: 'test_user_runtime', username: 'test_user_runtime', displayName: 'test_user_runtime' };
+const feedingDetail = { id: 'test_feed_runtime', babyId: baby.id, familyId: family.id, feedingType: 'mixed', occurredAt: '2026-09-12T08:15:00.000Z', amountMl: '85', leftMinutes: 7, rightMinutes: 3, spitUp: false, formulaProductId: null, notes: 'test_original_note', source: 'ui_manual', sourceAgent: null, version: '4' };
 let outage = false;
 let secretHash;
 const upstream = http.createServer(async (req, res) => {
@@ -28,6 +29,7 @@ const upstream = http.createServer(async (req, res) => {
   if (url.pathname === `/api/v1/families/${family.id}/babies`) { send([baby]); return; }
   if (url.pathname === `/api/v1/families/${family.id}`) { send(family); return; }
   if (url.pathname === `/api/v1/babies/${baby.id}`) { send(baby); return; }
+  if (url.pathname.endsWith(`/records/feeding/${feedingDetail.id}`)) { send(feedingDetail); return; }
   if (url.pathname.endsWith('/records/feeding')) { res.end(JSON.stringify({ data: [], page: { nextCursor: null } })); return; }
   res.writeHead(404); res.end('{}');
 });
@@ -66,6 +68,14 @@ try {
   assert.equal(selected.status, 200); assert.equal((await selected.json()).id, baby.id);
   const feeding = await call(`/api/records/feeding?babyId=${baby.id}&date=2026-09-13`, { headers: { cookie } });
   assert.equal(feeding.status, 200); assert.deepEqual(await feeding.json(), []);
+  const detail = await call(`/api/records/feeding?babyId=${baby.id}&id=${feedingDetail.id}`, { headers: { cookie } });
+  assert.equal(detail.status, 200);
+  const editRecord = await detail.json();
+  assert.equal(editRecord.timestamp, feedingDetail.occurredAt);
+  assert.equal(editRecord.type, 'mixed');
+  assert.equal(editRecord.amountMl, 85);
+  assert.equal(editRecord.notes, feedingDetail.notes);
+  assert.equal(editRecord.version, '4');
   assert.equal((await call('/api/auth/register', { method: 'POST' })).status, 501);
   assert.equal((await call('/api/baby', { method: 'PUT', headers: { cookie, origin: 'https://test_attacker.invalid' }, body: '{}' })).status, 403);
   outage = true;
