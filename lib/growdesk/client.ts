@@ -24,6 +24,7 @@ export interface GrowDeskResponse<T> {
   ok: boolean;
   status: number;
   data?: T;
+  page?: { nextCursor: string | null };
   error?: GrowDeskErrorPayload;
 }
 
@@ -104,6 +105,7 @@ export async function growdeskFetch<T>(
         ok: true,
         status: res.status,
         data: json.data !== undefined ? json.data : json,
+        page: json.page,
       };
     }
 

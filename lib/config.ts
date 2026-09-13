@@ -198,10 +198,10 @@ export const GROWDESK_CONFIG = {
     return process.env.GROWDESK_ENABLED === "true" || process.env.GROWDESK_ENABLED === "1";
   },
   get apiUrl(): string {
-    return (process.env.GROWDESK_API_URL || "http://127.0.0.1:3089").replace(/\/+$/, "");
+    return (process.env.GROWDESK_API_URL || "http://127.0.0.1:3080").replace(/\/+$/, "");
   },
   get cookieName(): string {
-    return "__Host-growdesk_web";
+    return IS_PRODUCTION ? "__Host-growdesk_web" : "growdesk_web_dev";
   },
   timeoutMs: 10_000,
 } as const;

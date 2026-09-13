@@ -1,6 +1,7 @@
 import { PrismaClient } from "@/generated/prisma/client";
 import { PrismaLibSql } from "@prisma/adapter-libsql";
-import { DATABASE_URL, IS_PRODUCTION, IS_TEST, resolveDatabaseUrl } from "@/lib/config";
+import { DATABASE_URL, IS_PRODUCTION, IS_TEST, resolveDatabaseUrl, GROWDESK_CONFIG } from "@/lib/config";
+import { guardLegacyClient } from "@/lib/growdesk/guard-legacy-client";
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
@@ -40,6 +41,11 @@ function createPrismaClient(): PrismaClient {
   return client;
 }
 
-export const prisma = globalForPrisma.prisma ?? createPrismaClient();
-
-if (!IS_PRODUCTION) globalForPrisma.prisma = prisma;
+export const prisma = guardLegacyClient(
+  () => GROWDESK_CONFIG.enabled,
+  () => {
+    const client = globalForPrisma.prisma ?? createPrismaClient();
+    if (!IS_PRODUCTION) globalForPrisma.prisma = client;
+    return client;
+  },
+);

@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 import { getAuthSession } from "@/lib/auth";
+import { GROWDESK_CONFIG } from "@/lib/config";
+import { growdeskIdentityEndpoints } from "@/lib/growdesk/identity-endpoints";
 
 export async function GET(request: Request) {
+  if (GROWDESK_CONFIG.enabled) return growdeskIdentityEndpoints.me(request);
   try {
     const user = await getAuthSession(request);
     if (!user) {

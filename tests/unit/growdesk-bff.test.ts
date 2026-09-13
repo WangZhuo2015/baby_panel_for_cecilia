@@ -1,4 +1,4 @@
-import test from "node:test";
+import test, { beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import {
   toGrowDeskFeedingCreatePayload,
@@ -11,6 +11,16 @@ import {
 import { verifyBffCsrf } from "../../lib/growdesk/csrf";
 import { NextRequest } from "next/server";
 import { POST } from "../../app/api/records/feeding/route";
+
+let savedOrigin: string | undefined;
+beforeEach(() => {
+  savedOrigin = process.env.GROWDESK_WEB_ORIGIN;
+  process.env.GROWDESK_WEB_ORIGIN = "http://127.0.0.1:3000";
+});
+afterEach(() => {
+  if (savedOrigin === undefined) delete process.env.GROWDESK_WEB_ORIGIN;
+  else process.env.GROWDESK_WEB_ORIGIN = savedOrigin;
+});
 
 test("SH-05: Web BFF DTO Compat Layer", async (t) => {
   await t.test("toGrowDeskFeedingCreatePayload: formula feeding mapping", () => {
@@ -53,9 +63,9 @@ test("SH-05: Web BFF DTO Compat Layer", async (t) => {
       notes: "Small sip",
     });
 
-    assert.equal(payload.baseVersion, 3);
+    assert.equal(payload.baseVersion, "3");
     assert.equal(payload.feedingType, "formula");
-    assert.equal(payload.amountMl, "50.0");
+    assert.equal(payload.amountMl, "50");
     assert.equal(payload.occurredAt, "2026-09-12T11:00:00.000Z");
     assert.equal(payload.notes, "Small sip");
   });
@@ -82,11 +92,11 @@ test("SH-05: Web BFF DTO Compat Layer", async (t) => {
 
     assert.equal(mapped.id, "feed-uuid-1");
     assert.equal(mapped.babyId, "baby-uuid-1");
-    assert.equal(mapped.type, "bottle");
+    assert.equal(mapped.type, "bottle_breast");
     assert.equal(mapped.amountMl, 120);
     assert.equal(mapped.notes, "Thawed milk");
-    assert.equal(mapped.version, 2);
-    assert.equal(mapped.baseVersion, 2);
+    assert.equal(mapped.version, "2");
+    assert.equal(mapped.baseVersion, "2");
   });
 });
 
@@ -181,3 +191,12 @@ test("SH-05: Feeding Route Handler under BFF Mode", async (t) => {
     assert.match(body.error, /Unauthorized/);
   });
 });
+
+for (const origin of ["https://127.0.0.1:3000", "http://127.0.0.1:3001", "https://attacker.example"]) {
+  test(`CSRF rejects a noncanonical origin even with matching Host: ${origin}`, () => {
+    const request = new Request("http://127.0.0.1:3000/api/baby", {
+      method: "POST", headers: { origin, host: new URL(origin).host },
+    });
+    assert.equal(verifyBffCsrf(request, { enforceInTest: true })?.status, 403);
+  });
+}

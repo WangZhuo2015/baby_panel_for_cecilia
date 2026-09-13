@@ -14,6 +14,9 @@ export interface GrowDeskTimelineEntry {
 
 export interface LegacyTimelineItem {
   id: string;
+  babyId: string;
+  version: string;
+  baseVersion: string;
   time: string;
   sortMs: number;
   type: string;
@@ -51,6 +54,9 @@ export function fromGrowDeskTimelineEntry(entry: GrowDeskTimelineEntry): LegacyT
 
   return {
     id: entry.entityId || entry.id,
+    babyId: entry.babyId,
+    version: String(entry.version),
+    baseVersion: String(entry.version),
     time,
     sortMs: !isNaN(date.getTime()) ? date.getTime() : Date.now(),
     type: entry.entityType,

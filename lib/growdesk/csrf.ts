@@ -4,12 +4,6 @@ if (typeof window !== "undefined") {
 import { NextResponse } from "next/server";
 import { config } from "@/lib/config";
 
-const ALLOWED_HOSTS = new Set([
-  "baby.zwang.fun",
-  "localhost",
-  "127.0.0.1",
-]);
-
 /**
  * Validates request Origin/Referer against canonical allowed origins for state-changing operations.
  * Returns a 403 error response if origin verification fails, or null if valid.
@@ -43,19 +37,14 @@ export function verifyBffCsrf(
 
   try {
     const parsed = new URL(checkUrl);
-    const hostname = parsed.hostname;
-
-    if (ALLOWED_HOSTS.has(hostname)) {
-      return null;
+    const expected = process.env.GROWDESK_WEB_ORIGIN ||
+      (config.isProduction ? "https://baby.zwang.fun" : new URL(request.url).origin);
+    const canonical = new URL(expected);
+    if (!["http:", "https:"].includes(parsed.protocol) || canonical.username || canonical.password) {
+      return NextResponse.json({ error: "Forbidden: Invalid origin configuration" }, { status: 403 });
     }
-
-    const hostHeader = request.headers.get("host");
-    if (hostHeader) {
-      const hostWithoutPort = hostHeader.split(":")[0];
-      if (hostname === hostWithoutPort) {
-        return null;
-      }
-    }
+    // Compare the complete origin, including scheme and port. Never trust a supplied Host header.
+    if (parsed.origin === canonical.origin) return null;
 
     return NextResponse.json(
       {

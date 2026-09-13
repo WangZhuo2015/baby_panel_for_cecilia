@@ -1,10 +1,13 @@
 import { NextResponse } from "next/server";
+import { GROWDESK_CONFIG } from "@/lib/config";
+import { growdeskIdentityEndpoints } from "@/lib/growdesk/identity-endpoints";
 import { prisma } from "@/lib/prisma";
 import { requireAuth, getActiveBaby } from "@/lib/api-helpers";
 import { generateInviteCode } from "@/lib/auth";
 import { isValidDateStr, getLocalDateStr } from "@/lib/date";
 
 export async function GET(request: Request) {
+  if (GROWDESK_CONFIG.enabled) return growdeskIdentityEndpoints.baby(request);
   try {
     const auth = await requireAuth(request);
     if (auth.errorResponse) return auth.errorResponse;
@@ -50,6 +53,7 @@ function validateBody(body: any): { nickname: string; birthDate: string; gender:
 }
 
 export async function POST(request: Request) {
+  if (GROWDESK_CONFIG.enabled) return growdeskIdentityEndpoints.baby(request);
 
   try {
     const auth = await requireAuth(request);
@@ -116,6 +120,7 @@ export async function POST(request: Request) {
 }
 
 export async function PUT(request: Request) {
+  if (GROWDESK_CONFIG.enabled) return growdeskIdentityEndpoints.baby(request);
   try {
     const auth = await requireAuth(request);
     if (auth.errorResponse) return auth.errorResponse;

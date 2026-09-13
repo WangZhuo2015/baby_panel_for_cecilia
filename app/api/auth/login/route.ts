@@ -9,10 +9,11 @@ import { config, AUTH_CONFIG, GROWDESK_CONFIG } from "@/lib/config";
 import { validateCsrfOrigin } from "@/lib/api-helpers";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import { loginBffSession } from "@/lib/growdesk/session";
+import { verifyBffCsrf } from "@/lib/growdesk/csrf";
 
 export async function POST(request: Request) {
   try {
-    const csrfError = validateCsrfOrigin(request);
+    const csrfError = GROWDESK_CONFIG.enabled ? verifyBffCsrf(request) : validateCsrfOrigin(request);
     if (csrfError) return csrfError;
 
     const ip = getClientIp(request);
@@ -49,6 +50,7 @@ export async function POST(request: Request) {
         family: bffRes.family,
         baby: bffRes.baby,
       });
+      response.cookies.set({ name: AUTH_COOKIE_NAME, value: "", httpOnly: true, secure: config.isProduction, sameSite: "lax", path: "/", maxAge: 0 });
       response.cookies.set({
         name: GROWDESK_CONFIG.cookieName,
         value: bffRes.sessionSecret,

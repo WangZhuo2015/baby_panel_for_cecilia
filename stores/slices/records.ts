@@ -3,6 +3,7 @@ import { enqueueOutbox, isRetryableSubmitError } from "@/lib/outbox";
 import { _fetchedAt, isFresh, markFetched, invalidateCache, dedup, toQuery } from "./helpers";
 import { request, isAuthError } from "./helpers";
 import { getLocalDateStr } from "@/lib/date";
+import { recordWriteContext } from "@/lib/growdesk/record-write-context";
 import type { Baby, FeedingRecord, SleepRecord, DiaperRecord, FoodLogRecord, DailySummary, TimelineEntry, AiDailySummaryResult } from "@/types";
 
 export interface RecordsSlice {
@@ -53,7 +54,7 @@ export const createRecordsSlice = (set: any, get: any): RecordsSlice => ({
     if (force) invalidateCache('baby');
     return dedup('baby', async () => {
       try {
-        const data = await request<Baby>("/api/baby");
+        const data = await request<Baby>(`/api/baby${toQuery({ babyId: get().baby?.id })}`);
         if (data) set({ baby: data });
         markFetched('baby');
       } catch (e) {
@@ -68,7 +69,7 @@ export const createRecordsSlice = (set: any, get: any): RecordsSlice => ({
       const updated = await request<Baby>("/api/baby", {
         method: existing ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
+        body: JSON.stringify({ ...data, ...(existing ? { babyId: existing.id } : {}) }),
       });
       set({ baby: updated });
       invalidateCache('baby');
@@ -265,7 +266,7 @@ export const createRecordsSlice = (set: any, get: any): RecordsSlice => ({
 
   addFeedingRecord: async (record) => {
     const clientId = crypto.randomUUID();
-    const payload = { ...record, clientId };
+    const payload = { babyId: get().baby?.id, ...record, clientId };
     try {
       const newRecord = (await request<FeedingRecord>("/api/records/feeding", {
         method: "POST",
@@ -290,7 +291,7 @@ export const createRecordsSlice = (set: any, get: any): RecordsSlice => ({
 
   addSleepRecord: async (record) => {
     const clientId = crypto.randomUUID();
-    const payload = { ...record, clientId };
+    const payload = { babyId: get().baby?.id, ...record, clientId };
     try {
       const newRecord = (await request<SleepRecord>("/api/records/sleep", {
         method: "POST",
@@ -315,7 +316,7 @@ export const createRecordsSlice = (set: any, get: any): RecordsSlice => ({
 
   addDiaperRecord: async (record) => {
     const clientId = crypto.randomUUID();
-    const payload = { ...record, clientId };
+    const payload = { babyId: get().baby?.id, ...record, clientId };
     try {
       const newRecord = (await request<DiaperRecord>("/api/records/diaper", {
         method: "POST",
@@ -340,7 +341,7 @@ export const createRecordsSlice = (set: any, get: any): RecordsSlice => ({
 
   addFoodLogRecord: async (record) => {
     const clientId = crypto.randomUUID();
-    const payload = { ...record, clientId };
+    const payload = { babyId: get().baby?.id, ...record, clientId };
     try {
       const newRecord = (await request<FoodLogRecord>("/api/food/logs", {
         method: "POST",
@@ -370,7 +371,7 @@ export const createRecordsSlice = (set: any, get: any): RecordsSlice => ({
       const updated = await request<Record<string, unknown>>(endpoint, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, ...patch }),
+        body: JSON.stringify({ id, ...recordWriteContext(get(), type, id), ...patch }),
       });
       const listKey = type === "feeding" ? "feedingRecords" : type === "sleep" ? "sleepRecords" : type === "diaper" ? "diaperRecords" : "foodLogRecords";
       set((state: any) => ({
@@ -395,7 +396,7 @@ export const createRecordsSlice = (set: any, get: any): RecordsSlice => ({
       await request<{ success: boolean }>(endpoint, {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id }),
+        body: JSON.stringify({ id, ...recordWriteContext(get(), type, id) }),
       });
       const listKey = type === "feeding" ? "feedingRecords" : type === "sleep" ? "sleepRecords" : type === "diaper" ? "diaperRecords" : type === "food" ? "foodLogRecords" : null;
       if (listKey) {

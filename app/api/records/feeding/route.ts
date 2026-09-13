@@ -13,6 +13,8 @@ import {
   type GrowDeskFeedingRecord,
 } from "@/lib/growdesk/feeding-compat";
 import crypto from "node:crypto";
+import { BridgeError, bridgeErrorResponse, pathId, wireVersion } from "@/lib/growdesk/bridge-protocol";
+import { fetchLegacyFeedingList } from "@/lib/growdesk/feeding-list";
 
 function mapError(e: unknown) {
   if (e instanceof ValidationError) return NextResponse.json({ error: e.message }, { status: 400 });
@@ -37,22 +39,10 @@ export async function GET(request: Request) {
       if (!babyId) {
         return NextResponse.json({ error: "请提供 babyId" }, { status: 400 });
       }
-      const limit = searchParams.get("limit") || "50";
-      const res = await growdeskFetch<Array<GrowDeskFeedingRecord>>(
-        `/api/v1/babies/${babyId}/records/feeding?limit=${limit}`,
-        {
-          method: "GET",
-          accessToken: bffSession.accessToken,
-        },
+      const list = await fetchLegacyFeedingList<GrowDeskFeedingRecord>(
+        growdeskFetch, bffSession.accessToken, babyId, searchParams,
       );
-      if (!res.ok) {
-        return NextResponse.json(
-          { error: res.error?.message || "Failed to fetch feeding records" },
-          { status: res.status },
-        );
-      }
-      const rawList = Array.isArray(res.data) ? res.data : (res.data as any)?.data || [];
-      return NextResponse.json(rawList.map(fromGrowDeskFeedingRecord));
+      return NextResponse.json(list.map(fromGrowDeskFeedingRecord), { headers: { "cache-control": "no-store" } });
     }
 
     const auth = await requireAuth(request);
@@ -64,6 +54,7 @@ export async function GET(request: Request) {
     const data = await records.getFeedingRecords(ctx, { date: searchParams.get("date") || undefined, limit: searchParams.get("limit") || undefined });
     return NextResponse.json(data);
   } catch (e) {
+    if (e instanceof BridgeError) return bridgeErrorResponse(e);
     if (e instanceof ValidationError) return NextResponse.json({ error: e.message }, { status: 400 });
     console.error("GET /api/records/feeding error:", e);
     return NextResponse.json({ error: "Failed to fetch feeding records" }, { status: 500 });
@@ -92,7 +83,7 @@ export async function POST(request: Request) {
         body.clientId || request.headers.get("idempotency-key") || crypto.randomUUID();
 
       const res = await growdeskFetch<GrowDeskFeedingRecord>(
-        `/api/v1/babies/${babyId}/records/feeding`,
+        `/api/v1/babies/${pathId(babyId)}/records/feeding`,
         {
           method: "POST",
           accessToken: bffSession.accessToken,
@@ -139,6 +130,7 @@ export async function POST(request: Request) {
     });
     return NextResponse.json(rec, { status: 201 });
   } catch (e) {
+    if (e instanceof BridgeError) return bridgeErrorResponse(e);
     if (e instanceof ValidationError || e instanceof RangeError) return NextResponse.json({ error: (e as Error).message }, { status: 400 });
     console.error("POST /api/records/feeding error:", e);
     return NextResponse.json({ error: "Failed to create feeding record" }, { status: 500 });
@@ -159,12 +151,12 @@ export async function DELETE(request: Request) {
       const { searchParams } = new URL(request.url);
       let id = searchParams.get("id");
       let babyId = searchParams.get("babyId");
-      let baseVersion = searchParams.get("baseVersion") || "1";
+      let baseVersion: unknown = searchParams.get("baseVersion");
       if (!id) {
         const body = await request.json().catch(() => ({} as any));
         id = body?.id;
         babyId = babyId || body?.babyId;
-        baseVersion = String(body?.baseVersion || baseVersion);
+        baseVersion = body?.baseVersion ?? body?.version ?? baseVersion;
       }
       if (!id || typeof id !== "string") {
         return NextResponse.json({ error: "请提供要删除的记录 ID" }, { status: 400 });
@@ -174,17 +166,15 @@ export async function DELETE(request: Request) {
       }
 
       const res = await growdeskFetch(
-        `/api/v1/babies/${babyId}/records/feeding/${id}?baseVersion=${baseVersion}`,
+        `/api/v1/babies/${pathId(babyId)}/records/feeding/${pathId(id)}?baseVersion=${wireVersion(baseVersion)}`,
         {
           method: "DELETE",
+          idempotencyKey: request.headers.get("idempotency-key") || crypto.randomUUID(),
           accessToken: bffSession.accessToken,
         },
       );
 
       if (!res.ok) {
-        if (res.status === 404) {
-          return NextResponse.json({ success: true, id, alreadyDeleted: true });
-        }
         return NextResponse.json(
           { error: res.error?.message || "Failed to delete feeding record" },
           { status: res.status },
@@ -208,6 +198,7 @@ export async function DELETE(request: Request) {
     await records.deleteRecord({ userId: auth.user.id, babyId: rec.babyId }, "feeding", id);
     return NextResponse.json({ success: true, id });
   } catch (e) {
+    if (e instanceof BridgeError) return bridgeErrorResponse(e);
     const mapped = mapError(e);
     if ((mapped as any).status !== 500) return mapped;
     console.error("DELETE /api/records/feeding error:", e);
@@ -238,9 +229,10 @@ export async function PUT(request: Request) {
 
       const payload = toGrowDeskFeedingUpdatePayload(body);
       const res = await growdeskFetch<GrowDeskFeedingRecord>(
-        `/api/v1/babies/${babyId}/records/feeding/${id}`,
+        `/api/v1/babies/${pathId(babyId)}/records/feeding/${pathId(id)}`,
         {
           method: "PATCH",
+          idempotencyKey: body.clientId || request.headers.get("idempotency-key") || crypto.randomUUID(),
           accessToken: bffSession.accessToken,
           body: payload,
         },
@@ -270,6 +262,7 @@ export async function PUT(request: Request) {
     const updated = await records.updateFeeding(ctx, id, body);
     return NextResponse.json(updated);
   } catch (e) {
+    if (e instanceof BridgeError) return bridgeErrorResponse(e);
     if (e instanceof ValidationError || e instanceof RangeError) return NextResponse.json({ error: (e as Error).message }, { status: 400 });
     if (e instanceof NotFoundError) return NextResponse.json({ error: e.message }, { status: 404 });
     if (e instanceof ForbiddenError) return NextResponse.json({ error: "Forbidden" }, { status: 403 });

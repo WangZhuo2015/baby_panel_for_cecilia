@@ -3,15 +3,17 @@ import { AUTH_COOKIE_NAME } from "@/lib/auth";
 import { config, GROWDESK_CONFIG } from "@/lib/config";
 import { validateCsrfOrigin } from "@/lib/api-helpers";
 import { getBffSessionSecret, logoutBffSession } from "@/lib/growdesk/session";
+import { verifyBffCsrf } from "@/lib/growdesk/csrf";
+import { bridgeErrorResponse } from "@/lib/growdesk/bridge-protocol";
 
 export async function POST(request: Request) {
-  const csrfError = validateCsrfOrigin(request);
+  const csrfError = GROWDESK_CONFIG.enabled ? verifyBffCsrf(request) : validateCsrfOrigin(request);
   if (csrfError) return csrfError;
 
   if (GROWDESK_CONFIG.enabled) {
     const sessionSecret = await getBffSessionSecret(request);
     if (sessionSecret) {
-      await logoutBffSession(sessionSecret).catch(() => {});
+      try { await logoutBffSession(sessionSecret); } catch (error) { return bridgeErrorResponse(error); }
     }
   }
 

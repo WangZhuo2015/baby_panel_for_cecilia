@@ -31,6 +31,11 @@ export const createAuthSlice = (set: any, get: any): AuthSlice => ({
       try {
         const res = await fetch("/api/auth/me");
         if (!res.ok) {
+          if (res.status >= 500) {
+            // A backend outage is not evidence that the existing session expired.
+            set({ authLoading: false });
+            return;
+          }
           set({ user: null, family: null, baby: null, authLoading: false });
           markFetched("user");
           return;
@@ -39,7 +44,7 @@ export const createAuthSlice = (set: any, get: any): AuthSlice => ({
         set({
           user: data.user || null,
           family: data.family || null,
-          baby: data.baby || (data.user ? get().baby : null),
+          baby: data.baby ?? null,
           authLoading: false,
         });
         markFetched("user");
@@ -84,9 +89,9 @@ export const createAuthSlice = (set: any, get: any): AuthSlice => ({
   },
 
   logout: async () => {
-    try {
-      await fetch("/api/auth/logout", { method: "POST" });
-    } finally {
+    // Keep the UI session when revocation fails so the user can retry logout.
+    await request("/api/auth/logout", { method: "POST" });
+    {
       invalidateCache();
       set({
         user: null,

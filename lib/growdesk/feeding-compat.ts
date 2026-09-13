@@ -1,165 +1,75 @@
-if (typeof window !== "undefined") {
-  throw new Error("This module can only be loaded on the server.");
-}
+if (typeof window !== "undefined") throw new Error("This module can only be loaded on the server.");
+import { BridgeError, feedingKind, isoTimestamp, wireVersion, type FeedingKind } from "./bridge-protocol";
 
 export interface LegacyFeedingRecord {
-  id: string;
-  babyId: string;
-  type: "breast" | "bottle" | "formula";
-  timestamp: string;
-  amountMl: number | null;
-  leftMinutes: number | null;
-  rightMinutes: number | null;
-  spitUp: boolean;
-  formulaProductId?: string | null;
-  notes: string | null;
-  source?: string;
-  sourceAgent?: string | null;
-  version?: number;
-  baseVersion?: number;
-  createdAt: string;
-  updatedAt: string;
+  id: string; babyId: string; type: "breast" | "bottle_breast" | "formula" | "mixed";
+  timestamp: string; amountMl: number | null; leftMinutes: number | null; rightMinutes: number | null;
+  spitUp: boolean; formulaProductId?: string | null; notes: string | null;
+  source?: string; sourceAgent?: string | null; version: string; baseVersion: string;
+  createdAt: string; updatedAt: string;
 }
-
 export interface GrowDeskFeedingRecord {
-  id: string;
-  babyId: string;
-  familyId: string;
-  feedingType: "breast" | "bottle" | "formula";
-  occurredAt: string;
-  amountMl: string | null;
-  leftMinutes: number | null;
-  rightMinutes: number | null;
-  spitUp: boolean;
-  formulaProductId: string | null;
-  notes: string | null;
-  source: string;
-  sourceAgent: string | null;
-  version: string;
-  createdAt: string;
-  updatedAt: string;
+  id: string; babyId: string; familyId: string; feedingType: FeedingKind;
+  occurredAt: string; amountMl: string | null; leftMinutes: number | null; rightMinutes: number | null;
+  spitUp: boolean; formulaProductId: string | null; notes: string | null;
+  source: string; sourceAgent: string | null; version: string; createdAt: string; updatedAt: string;
 }
-
-/**
- * Convert legacy create payload to canonical GrowDesk CreateFeedingRequest
- */
+function nullableNumber(value: unknown, integer = false): number | null {
+  if (value === undefined || value === null || value === "") return null;
+  if ((typeof value !== "number" && typeof value !== "string") || (typeof value === "string" && !value.trim())) {
+    throw new BridgeError(400, "INVALID_NUMBER", "奶量和时长必须为非负数");
+  }
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < 0 || (integer && !Number.isSafeInteger(n))) {
+    throw new BridgeError(400, "INVALID_NUMBER", "奶量必须为非负数，时长必须为非负整数");
+  }
+  return n;
+}
+function milk(value: unknown): string | null {
+  const n = nullableNumber(value);
+  if (n === null) return null;
+  const text = String(n);
+  if (!/^\d+(\.\d+)?$/.test(text)) throw new BridgeError(400, "INVALID_AMOUNT", "奶量超出可表示范围");
+  return text;
+}
+function nullableText(value: unknown): string | null {
+  if (value === undefined || value === null || value === "") return null;
+  if (typeof value !== "string") throw new BridgeError(400, "INVALID_TEXT", "文本字段格式错误");
+  return value;
+}
 export function toGrowDeskFeedingCreatePayload(body: Record<string, unknown>) {
-  const type = String(body.type || "formula") as "breast" | "bottle" | "formula";
-
-  // Normalize timestamp to ISO string
-  let occurredAt = new Date().toISOString();
-  if (body.timestamp) {
-    const d = new Date(String(body.timestamp));
-    if (!isNaN(d.getTime())) {
-      occurredAt = d.toISOString();
-    }
-  }
-
-  let amountMl: string | null = null;
-  if (body.amountMl !== undefined && body.amountMl !== null && body.amountMl !== "") {
-    const num = Number(body.amountMl);
-    if (!isNaN(num)) {
-      amountMl = num.toFixed(1);
-    }
-  }
-
-  const leftMinutes =
-    body.leftMinutes !== undefined && body.leftMinutes !== null && body.leftMinutes !== ""
-      ? Number(body.leftMinutes)
-      : null;
-
-  const rightMinutes =
-    body.rightMinutes !== undefined && body.rightMinutes !== null && body.rightMinutes !== ""
-      ? Number(body.rightMinutes)
-      : null;
-
-  const spitUp = body.spitUp === true || body.spitUp === "true" || body.spitUp === 1;
-
   return {
-    feedingType: type,
-    occurredAt,
-    amountMl,
-    leftMinutes,
-    rightMinutes,
-    spitUp,
-    formulaProductId: body.formulaProductId ? String(body.formulaProductId) : null,
-    notes: body.notes ? String(body.notes) : null,
-    source: body.source ? String(body.source) : "ui_manual",
-    sourceAgent: body.sourceAgent ? String(body.sourceAgent) : null,
+    feedingType: feedingKind(body.type),
+    occurredAt: isoTimestamp(body.timestamp),
+    amountMl: milk(body.amountMl),
+    leftMinutes: nullableNumber(body.leftMinutes, true),
+    rightMinutes: nullableNumber(body.rightMinutes, true),
+    spitUp: body.spitUp === true || body.spitUp === "true" || body.spitUp === 1,
+    formulaProductId: nullableText(body.formulaProductId), notes: nullableText(body.notes),
+    source: typeof body.source === "string" ? body.source : "ui_manual",
+    sourceAgent: nullableText(body.sourceAgent),
   };
 }
-
-/**
- * Convert legacy update payload to canonical GrowDesk UpdateFeedingRequest
- */
 export function toGrowDeskFeedingUpdatePayload(body: Record<string, unknown>) {
-  const payload: Record<string, unknown> = {
-    baseVersion: Number(body.baseVersion ?? body.version ?? 1),
-  };
-
-  if (body.type) {
-    payload.feedingType = String(body.type);
-  }
-
-  if (body.timestamp) {
-    const d = new Date(String(body.timestamp));
-    if (!isNaN(d.getTime())) {
-      payload.occurredAt = d.toISOString();
-    }
-  }
-
-  if (body.amountMl !== undefined) {
-    if (body.amountMl === null || body.amountMl === "") {
-      payload.amountMl = null;
-    } else {
-      const num = Number(body.amountMl);
-      payload.amountMl = isNaN(num) ? null : num.toFixed(1);
-    }
-  }
-
-  if (body.leftMinutes !== undefined) {
-    payload.leftMinutes = body.leftMinutes === null ? null : Number(body.leftMinutes);
-  }
-
-  if (body.rightMinutes !== undefined) {
-    payload.rightMinutes = body.rightMinutes === null ? null : Number(body.rightMinutes);
-  }
-
-  if (body.spitUp !== undefined) {
-    payload.spitUp = body.spitUp === true || body.spitUp === "true" || body.spitUp === 1;
-  }
-
-  if (body.formulaProductId !== undefined) {
-    payload.formulaProductId = body.formulaProductId ? String(body.formulaProductId) : null;
-  }
-
-  if (body.notes !== undefined) {
-    payload.notes = body.notes ? String(body.notes) : null;
-  }
-
-  return payload;
+  const out: Record<string, unknown> = { baseVersion: wireVersion(body.baseVersion ?? body.version) };
+  if (body.type !== undefined) out.feedingType = feedingKind(body.type);
+  if (body.timestamp !== undefined) out.occurredAt = isoTimestamp(body.timestamp);
+  if (body.amountMl !== undefined) out.amountMl = milk(body.amountMl);
+  if (body.leftMinutes !== undefined) out.leftMinutes = nullableNumber(body.leftMinutes, true);
+  if (body.rightMinutes !== undefined) out.rightMinutes = nullableNumber(body.rightMinutes, true);
+  if (body.spitUp !== undefined) out.spitUp = body.spitUp === true || body.spitUp === "true" || body.spitUp === 1;
+  if (body.formulaProductId !== undefined) out.formulaProductId = nullableText(body.formulaProductId);
+  if (body.notes !== undefined) out.notes = nullableText(body.notes);
+  return out;
 }
-
-/**
- * Map canonical GrowDesk FeedingRecord to legacy Next.js feeding record DTO.
- */
 export function fromGrowDeskFeedingRecord(rec: GrowDeskFeedingRecord): LegacyFeedingRecord {
+  const version = wireVersion(rec.version);
   return {
-    id: rec.id,
-    babyId: rec.babyId,
-    type: rec.feedingType,
-    timestamp: rec.occurredAt,
-    amountMl: rec.amountMl !== null ? Number(rec.amountMl) : null,
-    leftMinutes: rec.leftMinutes,
-    rightMinutes: rec.rightMinutes,
-    spitUp: rec.spitUp,
-    formulaProductId: rec.formulaProductId,
-    notes: rec.notes,
-    source: rec.source,
-    sourceAgent: rec.sourceAgent,
-    version: Number(rec.version ?? 1),
-    baseVersion: Number(rec.version ?? 1),
-    createdAt: rec.createdAt,
-    updatedAt: rec.updatedAt,
+    id: rec.id, babyId: rec.babyId,
+    type: rec.feedingType === "bottle" ? "bottle_breast" : rec.feedingType,
+    timestamp: rec.occurredAt, amountMl: rec.amountMl === null ? null : Number(rec.amountMl),
+    leftMinutes: rec.leftMinutes, rightMinutes: rec.rightMinutes, spitUp: rec.spitUp,
+    formulaProductId: rec.formulaProductId, notes: rec.notes, source: rec.source, sourceAgent: rec.sourceAgent,
+    version, baseVersion: version, createdAt: rec.createdAt, updatedAt: rec.updatedAt,
   };
 }
