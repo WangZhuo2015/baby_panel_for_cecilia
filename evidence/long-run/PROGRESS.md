@@ -6,9 +6,9 @@
 
 ## 当前状态概览
 
-- **当前批次 / 小任务**：`SH-08` 已完成 -> 进入 `L3 (SH-09: 后端同步协议与本地状态机)`
+- **当前批次 / 小任务**：`SH-09` 已完成 -> 进入 `L3 (SH-10: 安全生产配置、结构化审计日志与可观测性)`
 - **最后更新时间**：2026-09-13 (US/Pacific)
-- **总体状态**：`IN_PROGRESS` (SH-00 R0、SH-01 ~ SH-08 验证完成，自主推进中)
+- **总体状态**：`IN_PROGRESS` (SH-00 R0、SH-01 ~ SH-09 验证完成，自主推进中)
 
 ---
 
@@ -16,8 +16,8 @@
 
 | 仓库 | 分支 (Branch) | 起始基线 HEAD | 当前最新提交 HEAD | 工作区状态与未提交文件核对 |
 |---|---|---|---|---|
-| `baby_panel_for_cecilia` | `main` | `4901731` | `965e88a` | Clean |
-| `growdesk-server` | `codex/backend-storage-foundation` | `d9604d5` | `c9f2ef2` | **Dirty (严格隔离保留原样)**：<br>- `M deploy/Migration.Dockerfile`<br>- `?? evidence/tasks/LEGACY_IMPORT/host-after.json`<br>- `?? evidence/tasks/LEGACY_IMPORT/remote-migration.txt`<br>- `?? evidence/tasks/LEGACY_IMPORT/target-verification.json`<br>- `?? scripts/legacy-import/ios_backup.py`<br>- `?? scripts/legacy-import/test_ios_backup.py` |
+| `baby_panel_for_cecilia` | `main` | `4901731` | `afae355` | Clean |
+| `growdesk-server` | `codex/backend-storage-foundation` | `d9604d5` | `7c549db` | **Dirty (严格隔离保留原样)**：<br>- `M deploy/Migration.Dockerfile`<br>- `?? evidence/tasks/LEGACY_IMPORT/host-after.json`<br>- `?? evidence/tasks/LEGACY_IMPORT/remote-migration.txt`<br>- `?? evidence/tasks/LEGACY_IMPORT/target-verification.json`<br>- `?? scripts/legacy-import/ios_backup.py`<br>- `?? scripts/legacy-import/test_ios_backup.py` |
 | `growdesk-ios` | `codex/local-storage-policy` | `96aa000` | `96aa000` | **Dirty (严格隔离保留原样)**：<br>- `M BabyPanel.xcodeproj/project.pbxproj`<br>- `?? docs/design-mockups/` |
 
 ---
@@ -110,6 +110,10 @@
     - 执行报告：`evidence/tasks/SH-08/REPORT.md`
     - 交付提交：`baby_panel_for_cecilia: 965e88a`
     - 状态：`IMPLEMENTED_VERIFIED_REVIEW_PENDING`（实现全量 14 个剩余照护与健康业务路由双模 BFF 网关适配、8 个领域 DTO 兼容层、远程 MCP 服务端端点收口至 GrowDesk API、生产写入口自动化防泄漏守护工具 `npm run check:writers` 通过、182 项 Web 单元测试通过、服务端 183 项集成测试全量通过）
+20. **`SH-09 (后端同步协议与本地状态机)`**：
+    - 执行报告：`../growdesk-server/evidence/tasks/SH-09/REPORT.md`
+    - 交付提交：`growdesk-server: 7c549db`
+    - 状态：`IMPLEMENTED_VERIFIED_REVIEW_PENDING`（实现离线突变指令批量摄入 POST /api/v1/sync/commands、独立事务与 422 批内依赖校验、幂等重放与游标缓存、乐观并发控制 baseVersion 分叉检测、增量变更流与 HMAC SHA-256 不透明游标、高水位线采样与 page/tail 模式平滑切换、410 同步分代重置守卫、BabyMember 逐宝宝权限过滤防元数据泄露、引导快照排队与 Worker 生成；86 路径/123 操作契约验证通过、195 项真实 PG18 集成测试全量通过、Web 端 185 项测试无回归）
 
 ---
 
@@ -121,26 +125,22 @@
 
 ## 5. 失败与修复、外部阻塞
 
-- **SH-08 实施期间发现与解决的技术细节**：
-  1. 睡眠记录 `endedAt: null` 字段清空语义：在 `sleep-compat.ts` 更新载荷转换中，修复了 `body.endedAt || body.endTime` 在 `null || undefined` 时被判断为 `undefined` 导致无法清空字段的缺陷，改用显式 `"endedAt" in body` 属性探测；
-  2. 医疗记录更新载荷判空保护：在 `medical-compat.ts` 中修正了 `??` 空值合并逻辑，确保显式清空科室、诊断及医生备注时不发生非预期回退；
-  3. 生产写入口自动化守卫：构建 `scripts/check-production-writers.mjs`，静态审计所有 Web 路由写方法与 Prisma 写入调用，确保在 BFF 模式开启时零直接 SQLite 写泄漏。
+- **SH-09 实施期间发现与解决的技术细节**：
+  1. `UnitOfWork` 幂等重放与游标维护：在 `executeFamilyUnitOfWork` 中，为 `IdempotencyReceipt.resultSummary` 扩充记录 `familyCursor` 与 `version`，保证离线指令在网络重试重放时返回与初次应用完全一致的高水位游标，杜绝游标归零；
+  2. `family_changes` 变更载荷注入 `babyId`：在工作单元底层统一将 `command.babyId` 注入到 `FamilyChange.payload` 中，确保无论哪个护理领域创建/更新/删除记录，增量变更流在执行 `BabyMember` 逐宝宝权限过滤时均能准确识别宝宝归属，杜绝未授权用户跨宝宝读取变更或元数据泄漏；
+  3. `baby_members_role_check` 数据库角色约束：修正测试数据准备中使用的角色字符串为 `'member'`（满足数据库约束 `role IN ('admin', 'member', 'viewer')`）。
 - **外部阻塞**：当前无阻塞。
 
 ---
 
 ## 6. 下一条准确操作
 
-- **目标任务**：**`SH-09: 后端同步协议与本地状态机 (Local-First Sync Protocol)`**
+- **目标任务**：**`SH-10: 安全生产配置、结构化审计日志与可观测性 (Production Readiness, Audit Logging & Observability)`**
 - **工作目录 (workdir)**：`/Users/wangzhuo/Documents/GitHub/growdesk-server`
 - **操作内容**：
-  1. **同步协议接口实现**：
-     - 参照 `02_BACKEND_CONTRACTS.md` 与 `07_LOCAL_FIRST_OPTIONAL_SYNC.md`，实现增量变更拉取 (`GET /api/v1/sync/changes`) 与批量离线变更推送 (`POST /api/v1/sync/commands`)；
-     - 严格维护 `SyncCursor` 游标单调递增与客户端 `localSequence` 幂等收据；
-  2. **并发控制与版本冲突处理**：
-     - 基于 FamilySyncState 行级锁序列化同步指令，按实体 baseVersion 实施精确乐观并发控制；
-  3. **单元与集成测试覆盖**：
-     - 编写多端并发同步、断网重试与游标追赶的测试用例并全量验证通过。
+  1. **生产环境变量与密钥分级**：依据 `02_BACKEND_CONTRACTS.md` 与安全原则，实现生产配置解析器与硬性校验；
+  2. **结构化审计日志与请求追踪**：建立全链路统一的 `requestId` 追踪、安全脱敏与审计日志模型；
+  3. **指标与健康检查增强**：增强健康探针与资源监控，确保满足生产上线标准。
 
 ---
 
