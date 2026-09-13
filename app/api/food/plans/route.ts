@@ -3,9 +3,37 @@ import { prisma } from "@/lib/prisma";
 import { requireAuth, requireBaby } from "@/lib/api-helpers";
 import { safeJsonParse } from "@/lib/json";
 import { getLocalDateStr, isValidDateStr } from "@/lib/date";
+import { GROWDESK_CONFIG } from "@/lib/config";
+import { resolveBffSession } from "@/lib/growdesk/session";
+import { verifyBffCsrf } from "@/lib/growdesk/csrf";
+import { growdeskFetch } from "@/lib/growdesk/client";
 
 export async function GET(request: Request) {
   try {
+    if (GROWDESK_CONFIG.enabled) {
+      const bffSession = await resolveBffSession(request);
+      if (!bffSession) {
+        return NextResponse.json({ error: "Unauthorized: 会话无效或已过期" }, { status: 401 });
+      }
+      const { searchParams } = new URL(request.url);
+      const babyId = searchParams.get("babyId");
+      if (!babyId) {
+        return NextResponse.json({ error: "请提供 babyId" }, { status: 400 });
+      }
+      const res = await growdeskFetch<any>(`/api/v1/babies/${babyId}/food-plan`, {
+        method: "GET",
+        accessToken: bffSession.accessToken,
+      });
+      if (!res.ok) {
+        return NextResponse.json(
+          { error: res.error?.message || "Failed to fetch food plan" },
+          { status: res.status },
+        );
+      }
+      const plan = res.data?.data || res.data;
+      return NextResponse.json(Array.isArray(plan) ? plan : (plan ? [plan] : []));
+    }
+
     const auth = await requireAuth(request);
     if (auth.errorResponse) return auth.errorResponse;
     const { user } = auth;
@@ -25,7 +53,6 @@ export async function GET(request: Request) {
       }
       where.date = date;
     }
-
 
     const limit = Math.min(100, Math.max(1, parseInt(searchParams.get("limit") || "50", 10) || 50));
 
@@ -54,6 +81,39 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
+    if (GROWDESK_CONFIG.enabled) {
+      const csrfErr = verifyBffCsrf(request);
+      if (csrfErr) return csrfErr;
+
+      const bffSession = await resolveBffSession(request);
+      if (!bffSession) {
+        return NextResponse.json({ error: "Unauthorized: 会话无效或已过期" }, { status: 401 });
+      }
+
+      const body = await request.json().catch(() => ({}));
+      const babyId = body.babyId;
+      if (!babyId) {
+        return NextResponse.json({ error: "请提供 babyId" }, { status: 400 });
+      }
+
+      const res = await growdeskFetch(`/api/v1/babies/${babyId}/food-plan`, {
+        method: "PUT",
+        accessToken: bffSession.accessToken,
+        body: {
+          planData: body,
+        },
+      });
+
+      if (!res.ok) {
+        return NextResponse.json(
+          { error: res.error?.message || "Failed to save food plan" },
+          { status: res.status },
+        );
+      }
+
+      return NextResponse.json(res.data, { status: 201 });
+    }
+
     const auth = await requireAuth(request);
     if (auth.errorResponse) return auth.errorResponse;
     const { user } = auth;

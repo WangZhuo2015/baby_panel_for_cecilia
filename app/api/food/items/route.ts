@@ -2,12 +2,38 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth, getActiveBaby } from "@/lib/api-helpers";
 import { safeJsonParse } from "@/lib/json";
+import { GROWDESK_CONFIG } from "@/lib/config";
+import { resolveBffSession } from "@/lib/growdesk/session";
+import { verifyBffCsrf } from "@/lib/growdesk/csrf";
+import { growdeskFetch } from "@/lib/growdesk/client";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const status = searchParams.get("status"); // tried, to_try, or all
 
   try {
+    if (GROWDESK_CONFIG.enabled) {
+      const bffSession = await resolveBffSession(request);
+      if (!bffSession) {
+        return NextResponse.json({ error: "Unauthorized: 会话无效或已过期" }, { status: 401 });
+      }
+      const res = await growdeskFetch<any[]>("/api/v1/food/items", {
+        method: "GET",
+        accessToken: bffSession.accessToken,
+      });
+      if (!res.ok) {
+        return NextResponse.json(
+          { error: res.error?.message || "Failed to fetch food items" },
+          { status: res.status },
+        );
+      }
+      const rawList = Array.isArray(res.data) ? res.data : (res.data as any)?.data || [];
+      const filtered = status && status !== "all"
+        ? rawList.filter((item: any) => item.status === status)
+        : rawList;
+      return NextResponse.json(filtered);
+    }
+
     const auth = await requireAuth(request);
     if (auth.errorResponse) return auth.errorResponse;
     const { user } = auth;
@@ -57,6 +83,37 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
+    if (GROWDESK_CONFIG.enabled) {
+      const csrfErr = verifyBffCsrf(request);
+      if (csrfErr) return csrfErr;
+
+      const bffSession = await resolveBffSession(request);
+      if (!bffSession) {
+        return NextResponse.json({ error: "Unauthorized: 会话无效或已过期" }, { status: 401 });
+      }
+
+      const body = await request.json().catch(() => ({}));
+      const res = await growdeskFetch("/api/v1/food/items", {
+        method: "POST",
+        accessToken: bffSession.accessToken,
+        body: {
+          name: body.name,
+          category: body.category || "other",
+          recommendedAgeMonths: Number(body.recommendedFromMonth ?? 6),
+          allergens: body.allergens || [],
+        },
+      });
+
+      if (!res.ok) {
+        return NextResponse.json(
+          { error: res.error?.message || "Failed to create food item" },
+          { status: res.status },
+        );
+      }
+
+      return NextResponse.json(res.data, { status: 201 });
+    }
+
     const auth = await requireAuth(request);
     if (auth.errorResponse) return auth.errorResponse;
     const { user } = auth;

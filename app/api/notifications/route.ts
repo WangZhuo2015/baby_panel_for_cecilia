@@ -48,8 +48,31 @@ function formatRelativeTime(date: Date): string {
   return `${days}天前`
 }
 
+import { GROWDESK_CONFIG } from "@/lib/config"
+import { resolveBffSession } from "@/lib/growdesk/session"
+import { growdeskFetch } from "@/lib/growdesk/client"
+
 export async function GET(request: Request) {
   try {
+    if (GROWDESK_CONFIG.enabled) {
+      const bffSession = await resolveBffSession(request)
+      if (!bffSession) {
+        return NextResponse.json({ error: "Unauthorized: 会话无效或已过期" }, { status: 401 })
+      }
+      const res = await growdeskFetch<any>("/api/v1/notifications", {
+        method: "GET",
+        accessToken: bffSession.accessToken,
+      })
+      if (!res.ok) {
+        return NextResponse.json(
+          { error: res.error?.message || "Failed to fetch notifications" },
+          { status: res.status }
+        )
+      }
+      const items = res.data?.data || res.data || []
+      return NextResponse.json(items)
+    }
+
     const auth = await requireAuth(request)
     if (auth.errorResponse) return auth.errorResponse
     const { user } = auth

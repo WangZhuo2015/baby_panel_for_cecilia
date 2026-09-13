@@ -107,7 +107,7 @@ async function handleMcpRequest(request: Request) {
   }
 
   // Create per-request scoped MCP Server connected to verified UserPrincipal
-  const server = createMcpServer(principal);
+  const server = createMcpServer(principal, { accessToken: token });
 
   const incomingAccept = request.headers.get("accept") || "";
   // If client only requested JSON (without text/event-stream), enable direct JSON response mode

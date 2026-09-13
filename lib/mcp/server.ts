@@ -22,6 +22,17 @@ import { performWebSearch } from "@/lib/agent/search";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { logOAuthAudit } from "@/lib/oauth/service";
 import type { UserPrincipal } from "@/lib/oauth/types";
+import { GROWDESK_CONFIG } from "@/lib/config";
+import { growdeskFetch } from "@/lib/growdesk/client";
+import { toGrowDeskFeedingCreatePayload } from "@/lib/growdesk/feeding-compat";
+import { toGrowDeskDiaperCreatePayload } from "@/lib/growdesk/diaper-compat";
+import { toGrowDeskSleepCreatePayload } from "@/lib/growdesk/sleep-compat";
+import { toGrowDeskFoodCreatePayload } from "@/lib/growdesk/food-compat";
+import { toGrowDeskSupplementCreatePayload } from "@/lib/growdesk/supplement-compat";
+import { toGrowDeskGrowthCreatePayload } from "@/lib/growdesk/growth-compat";
+import { toGrowDeskMedicalCreatePayload } from "@/lib/growdesk/medical-compat";
+import { toGrowDeskVaccineRecordPayload } from "@/lib/growdesk/vaccine-compat";
+import { fromGrowDeskTimelineResponse } from "@/lib/growdesk/timeline-compat";
 
 export function checkScope(principal: UserPrincipal, requiredScope: "read" | "write"): boolean {
   if (requiredScope === "read") {
@@ -38,7 +49,11 @@ export function checkScope(principal: UserPrincipal, requiredScope: "read" | "wr
   return false;
 }
 
-export function createMcpServer(principal: UserPrincipal): Server {
+export interface McpServerOptions {
+  accessToken?: string;
+}
+
+export function createMcpServer(principal: UserPrincipal, options?: McpServerOptions): Server {
   const babyId = principal.babyId;
   const baby = principal.baby!;
   const sourceAgent = principal.sourceAgent || "Gemini Spark";
@@ -327,6 +342,31 @@ export function createMcpServer(principal: UserPrincipal): Server {
         const ageDetail = baby.birthDate ? calculateAgeDetail(baby.birthDate) : null;
         const currentMonth = ageDetail?.months || 6;
 
+        if (GROWDESK_CONFIG.enabled) {
+          const token = options?.accessToken;
+          const overview: Record<string, any> = { date: targetDate };
+          if (sections.has("profile")) {
+            const bRes = await growdeskFetch<any>(`/api/v1/babies/${babyId}`, { accessToken: token });
+            overview.profile = bRes.ok && bRes.data ? bRes.data : {
+              nickname: baby.nickname,
+              gender: baby.gender,
+              birthDate: baby.birthDate,
+              gestationalAge: baby.gestationalAge,
+              age: ageDetail,
+            };
+          }
+          if (sections.has("timeline")) {
+            const tRes = await growdeskFetch<any>(`/api/v1/babies/${babyId}/timeline?limit=15`, { accessToken: token });
+            overview.recentTimeline = tRes.ok ? fromGrowDeskTimelineResponse(tRes.data as any) : [];
+          }
+          if (sections.has("vaccines")) {
+            const vRes = await growdeskFetch<any>("/api/v1/vaccines/schedule", { accessToken: token });
+            overview.upcomingVaccines = vRes.ok ? (vRes.data?.data || vRes.data || []) : [];
+          }
+          await logToolCall(name, "success", startTime);
+          return { content: [{ type: "text", text: JSON.stringify(overview, null, 2) }] };
+        }
+
         const overview: Record<string, any> = { date: targetDate };
 
         // Profile
@@ -408,6 +448,108 @@ export function createMcpServer(principal: UserPrincipal): Server {
       if (name === "record_baby_events") {
         if (!checkScope(principal, "write")) {
           throw new McpError(ErrorCode.InvalidRequest, "Forbidden: Missing baby:write scope");
+        }
+
+        if (GROWDESK_CONFIG.enabled) {
+          const token = options?.accessToken;
+          const savedItems: string[] = [];
+
+          if (args.feeding) {
+            const payload = toGrowDeskFeedingCreatePayload(args.feeding);
+            const res = await growdeskFetch<any>(`/api/v1/babies/${babyId}/records/feeding`, {
+              method: "POST",
+              accessToken: token,
+              body: payload,
+            });
+            if (res.ok && res.data) {
+              savedItems.push(`🍼 喂养记录 (ID: ${res.data.id})`);
+            } else {
+              throw new Error(res.error?.message || "Failed to create feeding record");
+            }
+          }
+
+          if (args.sleep) {
+            const payload = toGrowDeskSleepCreatePayload(args.sleep);
+            const res = await growdeskFetch<any>(`/api/v1/babies/${babyId}/records/sleep`, {
+              method: "POST",
+              accessToken: token,
+              body: payload,
+            });
+            if (res.ok && res.data) {
+              savedItems.push(`💤 睡眠记录 (ID: ${res.data.id})`);
+            } else {
+              throw new Error(res.error?.message || "Failed to create sleep record");
+            }
+          }
+
+          if (args.diaper) {
+            const payload = toGrowDeskDiaperCreatePayload(args.diaper);
+            const res = await growdeskFetch<any>(`/api/v1/babies/${babyId}/records/diaper`, {
+              method: "POST",
+              accessToken: token,
+              body: payload,
+            });
+            if (res.ok && res.data) {
+              savedItems.push(`🧷 换尿布/排便记录 (ID: ${res.data.id})`);
+            } else {
+              throw new Error(res.error?.message || "Failed to create diaper record");
+            }
+          }
+
+          if (args.food) {
+            const payload = toGrowDeskFoodCreatePayload(args.food);
+            const res = await growdeskFetch<any>(`/api/v1/babies/${babyId}/records/food`, {
+              method: "POST",
+              accessToken: token,
+              body: payload,
+            });
+            if (res.ok && res.data) {
+              savedItems.push(`🥣 辅食打卡 (ID: ${res.data.id})`);
+            } else {
+              throw new Error(res.error?.message || "Failed to create food log");
+            }
+          }
+
+          if (args.foodPlan) {
+            const res = await growdeskFetch<any>(`/api/v1/babies/${babyId}/food-plan`, {
+              method: "PUT",
+              accessToken: token,
+              body: { planData: args.foodPlan },
+            });
+            if (res.ok && res.data) {
+              savedItems.push(`📋 辅食食谱计划 (ID: ${res.data.id || babyId})`);
+            } else {
+              throw new Error(res.error?.message || "Failed to save food plan");
+            }
+          }
+
+          if (args.supplement) {
+            const payload = toGrowDeskSupplementCreatePayload(args.supplement);
+            const res = await growdeskFetch<any>(`/api/v1/babies/${babyId}/records/supplement`, {
+              method: "POST",
+              accessToken: token,
+              body: payload,
+            });
+            if (res.ok && res.data) {
+              savedItems.push(`💊 补剂打卡「${args.supplement.name || "补剂"}」`);
+            } else {
+              throw new Error(res.error?.message || "Failed to create supplement record");
+            }
+          }
+
+          if (savedItems.length === 0) {
+            throw new Error("未提供任何有效的事件数据 (feeding / sleep / diaper / food / supplement)");
+          }
+
+          await logToolCall(name, "success", startTime);
+          return {
+            content: [
+              {
+                type: "text",
+                text: `✅ 复合作息事件已成功保存：\n${savedItems.join("\n")}`,
+              },
+            ],
+          };
         }
 
         const savedItems: string[] = [];
@@ -517,6 +659,80 @@ export function createMcpServer(principal: UserPrincipal): Server {
       if (name === "record_health_measurement") {
         if (!checkScope(principal, "write")) {
           throw new McpError(ErrorCode.InvalidRequest, "Forbidden: Missing baby:write scope");
+        }
+
+        if (GROWDESK_CONFIG.enabled) {
+          const token = options?.accessToken;
+          const messages: string[] = [];
+
+          if (args.growth) {
+            const payload = toGrowDeskGrowthCreatePayload(args.growth);
+            const res = await growdeskFetch<any>(`/api/v1/babies/${babyId}/growth-measurements`, {
+              method: "POST",
+              accessToken: token,
+              body: payload,
+            });
+            if (res.ok && res.data) {
+              messages.push(`📏 生长测量记录已保存 (体重: ${res.data.weightKg || "-"}kg, 身长: ${res.data.heightCm || "-"}cm)`);
+            } else {
+              throw new Error(res.error?.message || "Failed to create growth measurement");
+            }
+          }
+
+          if (args.vaccine) {
+            const payload = toGrowDeskVaccineRecordPayload(args.vaccine);
+            const res = await growdeskFetch<any>(`/api/v1/babies/${babyId}/vaccines/records`, {
+              method: "POST",
+              accessToken: token,
+              body: payload,
+            });
+            if (res.ok && res.data) {
+              messages.push(`💉 疫苗接种已登记【${args.vaccine.name}】`);
+            } else {
+              throw new Error(res.error?.message || "Failed to save vaccine record");
+            }
+          }
+
+          if (args.medicalReport) {
+            const payload = toGrowDeskMedicalCreatePayload(args.medicalReport);
+            const res = await growdeskFetch<any>(`/api/v1/babies/${babyId}/medical/reports`, {
+              method: "POST",
+              accessToken: token,
+              body: payload,
+            });
+            if (res.ok && res.data) {
+              messages.push(`📑 化验单/体检档案「${args.medicalReport.title}」已归档 (ID: ${res.data.id})`);
+            } else {
+              throw new Error(res.error?.message || "Failed to create medical report");
+            }
+          }
+
+          if (args.deleteAction) {
+            const del = args.deleteAction;
+            const type = String(del.type);
+            const targetId = typeof del.id === "string" ? del.id.trim() : "";
+            if (targetId) {
+              let endpoint = `/api/v1/babies/${babyId}/records/${type}/${targetId}`;
+              if (type === "growth") endpoint = `/api/v1/babies/${babyId}/growth-measurements/${targetId}`;
+              if (type === "medical_report") endpoint = `/api/v1/babies/${babyId}/medical/reports/${targetId}`;
+              const res = await growdeskFetch(endpoint, {
+                method: "DELETE",
+                accessToken: token,
+              });
+              if (res.ok) {
+                messages.push(`🗑️ 记录已成功删除 (ID: ${targetId})`);
+              }
+            }
+          }
+
+          if (messages.length === 0) {
+            throw new Error("请提供 growth, vaccine, medicalReport 或 deleteAction 数据");
+          }
+
+          await logToolCall(name, "success", startTime);
+          return {
+            content: [{ type: "text", text: `✅ 健康档案更新成功：\n${messages.join("\n")}` }],
+          };
         }
 
         const messages: string[] = [];
@@ -664,6 +880,28 @@ export function createMcpServer(principal: UserPrincipal): Server {
       if (name === "query_parenting_knowledge") {
         if (!checkScope(principal, "read")) {
           throw new McpError(ErrorCode.InvalidRequest, "Forbidden: Missing baby:read scope");
+        }
+
+        if (GROWDESK_CONFIG.enabled) {
+          const token = options?.accessToken;
+          const category = args.category || "all";
+          const results: Record<string, any> = {};
+
+          if (category === "all" || category === "food") {
+            const fRes = await growdeskFetch<any>("/api/v1/food/items", { accessToken: token });
+            results.foods = fRes.ok ? (fRes.data?.data || fRes.data || []) : [];
+          }
+          if (category === "all" || category === "vaccine") {
+            const vRes = await growdeskFetch<any>("/api/v1/vaccines/schedule", { accessToken: token });
+            results.vaccines = vRes.ok ? (vRes.data?.data || vRes.data || []) : [];
+          }
+          if (category === "all" || category === "nutrition_product") {
+            const pRes = await growdeskFetch<any>(`/api/v1/families/${baby.familyId}/nutrition/products`, { accessToken: token });
+            results.nutritionProducts = pRes.ok ? (pRes.data?.data || pRes.data || []) : [];
+          }
+
+          await logToolCall(name, "success", startTime);
+          return { content: [{ type: "text", text: JSON.stringify(results, null, 2) }] };
         }
 
         const category = args.category || "all";

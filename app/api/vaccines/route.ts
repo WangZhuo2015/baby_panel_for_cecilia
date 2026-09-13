@@ -3,12 +3,43 @@ import { prisma } from '@/lib/prisma'
 import { safeJsonParse } from '@/lib/json'
 import { requireAuth, requireBaby } from '@/lib/api-helpers'
 import { getLocalDateStr, isValidDateStr } from '@/lib/date'
+import { GROWDESK_CONFIG } from "@/lib/config"
+import { resolveBffSession } from "@/lib/growdesk/session"
+import { verifyBffCsrf } from "@/lib/growdesk/csrf"
+import { growdeskFetch } from "@/lib/growdesk/client"
+import {
+  toGrowDeskVaccineRecordPayload,
+  fromGrowDeskVaccineRecord,
+  type GrowDeskVaccineRecord,
+} from "@/lib/growdesk/vaccine-compat"
+import crypto from "node:crypto"
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
   const regionCode = searchParams.get('regionCode') || 'CN-JS' // default to Jiangsu
 
   try {
+    if (GROWDESK_CONFIG.enabled) {
+      const bffSession = await resolveBffSession(request);
+      if (bffSession) {
+        const res = await growdeskFetch<any>("/api/v1/vaccines/schedule", {
+          method: "GET",
+          accessToken: bffSession.accessToken,
+        });
+        if (res.ok && res.data) {
+          const scheduleList = Array.isArray(res.data) ? res.data : (res.data as any)?.data || [];
+          return NextResponse.json({
+            national: scheduleList,
+            nonProgram: [],
+            provincial: [],
+            strategyGroups: [],
+            schedule: scheduleList,
+            engineRules: [],
+          });
+        }
+      }
+    }
+
     // Fetch all vaccines
     const vaccines = await prisma.vaccine.findMany({
       include: { doses: { orderBy: { doseNumber: 'asc' } } }
@@ -103,6 +134,46 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
+    if (GROWDESK_CONFIG.enabled) {
+      const csrfErr = verifyBffCsrf(request);
+      if (csrfErr) return csrfErr;
+
+      const bffSession = await resolveBffSession(request);
+      if (!bffSession) {
+        return NextResponse.json({ error: "Unauthorized: 会话无效或已过期" }, { status: 401 });
+      }
+
+      const body = await request.json().catch(() => ({}));
+      const babyId = body.babyId;
+      if (!babyId) {
+        return NextResponse.json({ error: "请提供 babyId" }, { status: 400 });
+      }
+
+      const payload = toGrowDeskVaccineRecordPayload(body);
+      const idempotencyKey =
+        body.clientId || request.headers.get("idempotency-key") || crypto.randomUUID();
+
+      const res = await growdeskFetch<GrowDeskVaccineRecord>(
+        `/api/v1/babies/${babyId}/vaccines/records`,
+        {
+          method: "POST",
+          accessToken: bffSession.accessToken,
+          idempotencyKey,
+          body: payload,
+        },
+      );
+
+      if (!res.ok || !res.data) {
+        return NextResponse.json(
+          { error: res.error?.message || "Failed to save vaccine record" },
+          { status: res.status },
+        );
+      }
+
+      const rec = fromGrowDeskVaccineRecord(res.data);
+      return NextResponse.json({ record: rec }, { status: 201 });
+    }
+
     const auth = await requireAuth(request);
     if (auth.errorResponse) return auth.errorResponse;
     const { user } = auth;

@@ -16,6 +16,7 @@ export interface LegacyFeedingRecord {
   source?: string;
   sourceAgent?: string | null;
   version?: number;
+  baseVersion?: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -156,8 +157,8 @@ export function fromGrowDeskFeedingRecord(rec: GrowDeskFeedingRecord): LegacyFee
     notes: rec.notes,
     source: rec.source,
     sourceAgent: rec.sourceAgent,
-    version: Number(rec.version ?? rec.baseVersion ?? 1),
-    baseVersion: Number(rec.baseVersion ?? rec.version ?? 1),
+    version: Number(rec.version ?? 1),
+    baseVersion: Number(rec.version ?? 1),
     createdAt: rec.createdAt,
     updatedAt: rec.updatedAt,
   };

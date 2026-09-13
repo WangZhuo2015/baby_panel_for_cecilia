@@ -66,6 +66,7 @@ test("SH-05: Web BFF DTO Compat Layer", async (t) => {
       babyId: "baby-uuid-1",
       familyId: "family-uuid-1",
       feedingType: "bottle",
+      occurredAt: "2026-09-12T08:00:00.000Z",
       amountMl: "120.00",
       leftMinutes: null,
       rightMinutes: null,
