@@ -6,9 +6,9 @@
 
 ## 当前状态概览
 
-- **当前批次 / 小任务**：`SH-05` 已完成 -> 进入 `L3 (SH-06: S3 附件与预签名直传链路)`
-- **最后更新时间**：2026-09-12 (US/Pacific)
-- **总体状态**：`IN_PROGRESS` (SH-00 R0、SH-01、SH-02A、SH-02B、SH-03A、SH-03B、SH-03C、SH-03D、SH-04F、SH-04D、SH-04S、SH-04FO、SH-04SU、SH-04G、SH-04TL、SH-05 验证完成，自主推进中)
+- **当前批次 / 小任务**：`SH-06` 已完成 -> 进入 `L3 (SH-07: 异步长任务与 AI/Worker/Scheduler 底座)`
+- **最后更新时间**：2026-09-13 (US/Pacific)
+- **总体状态**：`IN_PROGRESS` (SH-00 R0、SH-01、SH-02A、SH-02B、SH-03A、SH-03B、SH-03C、SH-03D、SH-04F、SH-04D、SH-04S、SH-04FO、SH-04SU、SH-04G、SH-04TL、SH-05、SH-06 验证完成，自主推进中)
 
 ---
 
@@ -16,18 +16,18 @@
 
 | 仓库 | 分支 (Branch) | 起始基线 HEAD | 当前最新提交 HEAD | 工作区状态与未提交文件核对 |
 |---|---|---|---|---|
-| `baby_panel_for_cecilia` | `main` | `4901731` | `dd2f125` | Clean |
-| `growdesk-server` | `codex/backend-storage-foundation` | `d9604d5` | `a62f36c` | **Dirty (严格隔离保留原样)**：<br>- `M deploy/Migration.Dockerfile`<br>- `?? evidence/tasks/LEGACY_IMPORT/host-after.json`<br>- `?? evidence/tasks/LEGACY_IMPORT/remote-migration.txt`<br>- `?? evidence/tasks/LEGACY_IMPORT/target-verification.json`<br>- `?? scripts/legacy-import/ios_backup.py`<br>- `?? scripts/legacy-import/test_ios_backup.py` |
+| `baby_panel_for_cecilia` | `main` | `4901731` | `a424ad4` | Clean |
+| `growdesk-server` | `codex/backend-storage-foundation` | `d9604d5` | `128b46d` | **Dirty (严格隔离保留原样)**：<br>- `M deploy/Migration.Dockerfile`<br>- `?? evidence/tasks/LEGACY_IMPORT/host-after.json`<br>- `?? evidence/tasks/LEGACY_IMPORT/remote-migration.txt`<br>- `?? evidence/tasks/LEGACY_IMPORT/target-verification.json`<br>- `?? scripts/legacy-import/ios_backup.py`<br>- `?? scripts/legacy-import/test_ios_backup.py` |
 | `growdesk-ios` | `codex/local-storage-policy` | `96aa000` | `96aa000` | **Dirty (严格隔离保留原样)**：<br>- `M BabyPanel.xcodeproj/project.pbxproj`<br>- `?? docs/design-mockups/` |
 
 ---
 
 ## 2. 契约、迁移与客户端快照版本
 
-- **服务端契约权威**：`growdesk-server/packages/contracts/src`（模块化 TypeBox 契约，覆盖全部 86 路径、122 操作端点）
-- **OpenAPI 规范快照**：`growdesk-server/contracts/openapi.json`（OpenAPI 3.0.3，122 operationId 全局唯一，无 diff 校验通过，Swift 6 测试通过）
+- **服务端契约权威**：`growdesk-server/packages/contracts/src`（模块化 TypeBox 契约，覆盖全部 86 路径、123 操作端点）
+- **OpenAPI 规范快照**：`growdesk-server/contracts/openapi.json`（OpenAPI 3.0.3，123 operationId 全局唯一，无 diff 校验通过，Swift 6 测试通过）
 - **iOS 客户端消费快照**：尚未复制引入（待进入原生端任务后同步并记录 `Contracts/source.json`）
-- **PostgreSQL Migration 版本**：`202609120001_identity` + `202609120002_foundation` + `202609120003_care_feeding` + `202609120004_care_diaper` + `202609120005_care_sleep` + `202609120006_care_food` + `202609120007_care_supplement` + `202609120008_care_growth`（通过真实 PG18 顺序升级与复合外键/约束测试）
+- **PostgreSQL Migration 版本**：`202609120001_identity` ~ `202609120010_attachments_medical_vaccines`（通过真实 PG18 顺序升级与复合外键/约束测试）
 - **SQLite 数据源状态**：`file:./prod.db`，维持只读参考与旧 Web 生产写权威，严格未触碰
 
 ---
@@ -98,6 +98,10 @@
     - 执行报告：`../growdesk-server/evidence/tasks/SH-05/REPORT.md`
     - 交付提交：`growdesk-server: a62f36c`, `baby_panel_for_cecilia: 8cfafc1`
     - 状态：`IMPLEMENTED_VERIFIED_REVIEW_PENDING`（实现 GrowDesk BffSession 模型、migration 0009、FOR UPDATE 单飞刷新与凭据续期、安全 Cookie `__Host-growdesk_web` 下发与清洗、CSRF 严格校验、Feeding 路由双模切换与零降级、140 项真实 PG18 测试与 135 项 Web 单元测试全量通过）
+17. **`SH-06 (S3 附件、医疗报告、疫苗与通知链路)`**：
+    - 执行报告：`../growdesk-server/evidence/tasks/SH-06/REPORT.md`
+    - 交付提交：`growdesk-server: 128b46d`
+    - 状态：`IMPLEMENTED_VERIFIED_REVIEW_PENDING`（实现私有 S3 存储驱动抽象与 MockStorageDriver、预签名上传/受保护下载/两阶段确认、医疗报告 CRUD 与 baseVersion 乐观锁、国家标准疫苗计划与接种记录、推送设备注册与通知生命周期、timeline_entries 原子投影；86 路径/123 操作契约校验通过、162 项真实 PG18 集成测试全量通过）
 
 ---
 
@@ -109,30 +113,28 @@
 
 ## 5. 失败与修复、外部阻塞
 
-- **SH-05 实施期间发现与解决的技术细节**：
-  1. 会话状态与行级排他锁：在 GrowDesk 端使用 `SELECT ... FOR UPDATE` 加锁 `bff_sessions`，杜绝多标签页或跨 BFF worker 实例并发发起 refresh 产生令牌竞争冲突；
-  2. 凭证防泄漏：浏览器端仅持有 256 位随机凭证，数据库端仅存 SHA-256 哈希摘要，绝不在 Cookie 或前端存储原始 Access/Refresh Token；
-  3. DTO 转换一致性：`amountMl` 严格使用 Decimal 字符串格式化与还原，`baseVersion` 保持为数字并发版本号，杜绝 NaN 或精度损失；
-  4. CSRF 与环境兼容：在非 GET 请求时严格校验 Origin/Referer，针对单测环境支持按需开启测试拦截。
+- **SH-06 实施期间发现与解决的技术细节**：
+  1. 契约信封格式：`SuccessStatusResponseSchema` 契约严格定义为 `{ data: { success: true } }`，必须严格对齐不能缺少 `{ data: ... }` 包装；
+  2. Fastify 路由参数冲突隔离：同一前缀下避免重复注册同名或别名参数路径；Fastify 会在路由注册时就地修改 route options 内部引用，路由选项对象不能跨 route 复用；
+  3. 并发 DDL 容错：并行执行的 integration test 文件在各自 setup 阶段的辅助 DDL 执行中使用防御性 try-catch，避免并发竞争 PG 系统目录唯一索引冲突。
 - **外部阻塞**：当前无阻塞。
 
 ---
 
 ## 6. 下一条准确操作
 
-- **目标任务**：**`SH-06 / SH-04A: S3 附件与预签名直传链路 (Attachments Pipeline)`**
+- **目标任务**：**`SH-07: 异步长任务与 AI/Worker/Scheduler 底座 (Durable Task Engine & AI Workers)`**
 - **工作目录 (workdir)**：`/Users/wangzhuo/Documents/GitHub/growdesk-server`
 - **操作内容**：
-  1. **S3 附件模型与契约 (`Attachment` 模型与路由)**：
-     - 数据模型：`attachments` 表（`id`, `family_id`, `baby_id`, `uploader_id`, `s3_key`, `content_type`, `file_size_bytes`, `sha256`, `status`, `deleted_at`, `created_at`）；
-     - 路由端点：`POST /api/v1/babies/:babyId/attachments/presigned-upload` 与 `GET /api/v1/babies/:babyId/attachments/:attachmentId/presigned-download`；
-  2. **直传与元数据校验**：
-     - 预签名 PUT URL 限制内容类型、文件大小与过期时间（15 分钟）；
-     - 确认上传回调端点 `POST /api/v1/babies/:babyId/attachments/:attachmentId/confirm`；
-  3. **权限与隔离**：
-     - 严格关联 BabyMember 鉴权，杜绝跨租户直传或凭证泄露；
+  1. **任务持久化与状态机 (`TaskRun`, `TaskEvent`, `TaskOutbox` 模型)**：
+     - 数据模型：`task_runs` 表（`id`, `family_id`, `baby_id`, `task_type`, `status`, `fencing_token`, `input_payload`, `output_payload`, `error_payload`, `worker_id`, `lease_expires_at`, `created_at`, `updated_at`）；
+     - 事件日志：`task_events` 表（`id`, `task_run_id`, `sequence`, `event_type`, `event_payload`, `created_at`）；
+  2. **Worker 队列、租约与防脑裂 (Lease & Fencing)**：
+     - Redis / BullMQ 异步队列调度，基于 Redis 租约与 Fencing Token 防并发抢占；
+  3. **AI 任务与流式 SSE 协议**：
+     - 支持长任务执行、事件流推送、Last-Event-ID 重连与幂等状态机；
   4. **集成测试**：
-     - 编写 `tests/integration/attachments.test.ts`，验证 S3 客户端 Mock/MinIO 交互与业务流。
+     - 编写 `tests/integration/tasks.test.ts`，验证任务调度、状态流转、租约超时与并发冲突熔断。
 
 ---
 
