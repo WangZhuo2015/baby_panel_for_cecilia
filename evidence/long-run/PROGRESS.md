@@ -16,7 +16,7 @@
 
 | 仓库 | 分支 (Branch) | 起始基线 HEAD | 当前最新提交 HEAD | 工作区状态与未提交文件核对 |
 |---|---|---|---|---|
-| `baby_panel_for_cecilia` | `main` | `4901731` | `afae355` | Clean |
+| `baby_panel_for_cecilia` | `main` | `4901731` | `80bbd83` | Clean |
 | `growdesk-server` | `codex/backend-storage-foundation` | `d9604d5` | `7c549db` | **Dirty (严格隔离保留原样)**：<br>- `M deploy/Migration.Dockerfile`<br>- `?? evidence/tasks/LEGACY_IMPORT/host-after.json`<br>- `?? evidence/tasks/LEGACY_IMPORT/remote-migration.txt`<br>- `?? evidence/tasks/LEGACY_IMPORT/target-verification.json`<br>- `?? scripts/legacy-import/ios_backup.py`<br>- `?? scripts/legacy-import/test_ios_backup.py` |
 | `growdesk-ios` | `codex/local-storage-policy` | `96aa000` | `96aa000` | **Dirty (严格隔离保留原样)**：<br>- `M BabyPanel.xcodeproj/project.pbxproj`<br>- `?? docs/design-mockups/` |
 
@@ -111,9 +111,10 @@
     - 交付提交：`baby_panel_for_cecilia: 965e88a`
     - 状态：`IMPLEMENTED_VERIFIED_REVIEW_PENDING`（实现全量 14 个剩余照护与健康业务路由双模 BFF 网关适配、8 个领域 DTO 兼容层、远程 MCP 服务端端点收口至 GrowDesk API、生产写入口自动化防泄漏守护工具 `npm run check:writers` 通过、182 项 Web 单元测试通过、服务端 183 项集成测试全量通过）
 20. **`SH-09 (后端同步协议与本地状态机)`**：
-    - 执行报告：`../growdesk-server/evidence/tasks/SH-09/REPORT.md`
+    - 执行报告：`evidence/tasks/SH-09/REPORT.md`（源文件：`../growdesk-server/evidence/tasks/SH-09/REPORT.md`）
+    - 独立审查：`evidence/tasks/SH-09/REVIEW.md`
     - 交付提交：`growdesk-server: 7c549db`
-    - 状态：`IMPLEMENTED_VERIFIED_REVIEW_PENDING`（实现离线突变指令批量摄入 POST /api/v1/sync/commands、独立事务与 422 批内依赖校验、幂等重放与游标缓存、乐观并发控制 baseVersion 分叉检测、增量变更流与 HMAC SHA-256 不透明游标、高水位线采样与 page/tail 模式平滑切换、410 同步分代重置守卫、BabyMember 逐宝宝权限过滤防元数据泄露、引导快照排队与 Worker 生成；86 路径/123 操作契约验证通过、195 项真实 PG18 集成测试全量通过、Web 端 185 项测试无回归）
+    - 状态：`ACCEPTED`（实现离线突变指令批量摄入 POST /api/v1/sync/commands、独立事务与 422 批内依赖校验、幂等重放与游标缓存、乐观并发控制 baseVersion 分叉检测、增量变更流与 HMAC SHA-256 不透明游标、高水位线采样与 page/tail 模式平滑切换、410 同步分代重置守卫、BabyMember 逐宝宝权限过滤防元数据泄露、引导快照排队与 Worker 生成；86 路径/123 操作契约验证通过、195 项真实 PG18 集成测试全量通过、Web 端 185 项测试无回归）
 
 ---
 
