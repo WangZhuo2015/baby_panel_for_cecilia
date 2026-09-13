@@ -6,9 +6,9 @@
 
 ## 当前状态概览
 
-- **当前批次 / 小任务**：`SH-07` 已完成 -> 进入 `L3 (SH-08: Web 剩余业务路由适配与 MCP 端点收口)`
+- **当前批次 / 小任务**：`SH-08` 已完成 -> 进入 `L3 (SH-09: 后端同步协议与本地状态机)`
 - **最后更新时间**：2026-09-13 (US/Pacific)
-- **总体状态**：`IN_PROGRESS` (SH-00 R0、SH-01、SH-02A、SH-02B、SH-03A、SH-03B、SH-03C、SH-03D、SH-04F、SH-04D、SH-04S、SH-04FO、SH-04SU、SH-04G、SH-04TL、SH-05、SH-06、SH-07 验证完成，自主推进中)
+- **总体状态**：`IN_PROGRESS` (SH-00 R0、SH-01 ~ SH-08 验证完成，自主推进中)
 
 ---
 
@@ -16,7 +16,7 @@
 
 | 仓库 | 分支 (Branch) | 起始基线 HEAD | 当前最新提交 HEAD | 工作区状态与未提交文件核对 |
 |---|---|---|---|---|
-| `baby_panel_for_cecilia` | `main` | `4901731` | `cd733a4` | Clean |
+| `baby_panel_for_cecilia` | `main` | `4901731` | `965e88a` | Clean |
 | `growdesk-server` | `codex/backend-storage-foundation` | `d9604d5` | `c9f2ef2` | **Dirty (严格隔离保留原样)**：<br>- `M deploy/Migration.Dockerfile`<br>- `?? evidence/tasks/LEGACY_IMPORT/host-after.json`<br>- `?? evidence/tasks/LEGACY_IMPORT/remote-migration.txt`<br>- `?? evidence/tasks/LEGACY_IMPORT/target-verification.json`<br>- `?? scripts/legacy-import/ios_backup.py`<br>- `?? scripts/legacy-import/test_ios_backup.py` |
 | `growdesk-ios` | `codex/local-storage-policy` | `96aa000` | `96aa000` | **Dirty (严格隔离保留原样)**：<br>- `M BabyPanel.xcodeproj/project.pbxproj`<br>- `?? docs/design-mockups/` |
 
@@ -106,6 +106,10 @@
     - 执行报告：`../growdesk-server/evidence/tasks/SH-07/REPORT.md`
     - 交付提交：`growdesk-server: c9f2ef2`
     - 状态：`IMPLEMENTED_VERIFIED_REVIEW_PENDING`（实现 Durable Task Engine、TaskExecution 与 TaskOutbox 状态机、租约防脑裂与递增 fencing_token、WorkerEngine 定时心跳与优雅取消信号传播、SchedulerEngine FOR UPDATE SKIP LOCKED 调度与停滞长任务自愈补偿、AI 会话与消息历史、AI Run 1:1 绑定长任务、提议操作人机回环 confirm/cancel/retry、语音转录任务与每日综述合成归档；11 个 REST 端点全量契约与 TypeBox 校验通过，183 项真实 PG18 集成测试全量通过）
+19. **`SH-08 (Web 剩余业务路由适配与 MCP 端点收口)`**：
+    - 执行报告：`evidence/tasks/SH-08/REPORT.md`
+    - 交付提交：`baby_panel_for_cecilia: 965e88a`
+    - 状态：`IMPLEMENTED_VERIFIED_REVIEW_PENDING`（实现全量 14 个剩余照护与健康业务路由双模 BFF 网关适配、8 个领域 DTO 兼容层、远程 MCP 服务端端点收口至 GrowDesk API、生产写入口自动化防泄漏守护工具 `npm run check:writers` 通过、182 项 Web 单元测试通过、服务端 183 项集成测试全量通过）
 
 ---
 
@@ -117,28 +121,26 @@
 
 ## 5. 失败与修复、外部阻塞
 
-- **SH-07 实施期间发现与解决的技术细节**：
-  1. `task_outbox` 调度状态约束：在迁移 `202609130011_tasks_and_ai` 中放宽 `task_outbox_dispatch_state_check` 增加 `'dispatching'` 允许值，完美支持原子拉取并标记分发中的中间态；
-  2. 跨时区时间戳对齐：发件箱生成时使用数据库级 `CURRENT_TIMESTAMP`（避免 Node 宿主系统本地时区差异导致入库时间被推后 7 小时），确保 `next_dispatch_at <= CURRENT_TIMESTAMP` 能在任何时区无漂移立即命中就绪分发；
-  3. Fastify 分页响应序列化契约：严格遵循 `PaginatedEnvelope` 结构，将响应属性统一为 `page: { nextCursor }` 并提供必需的 `attachmentIds` 字段，杜绝 500 序列化报错；
-  4. 调度器测试批次隔离：在集成测试中先关闭前序用例产生的陈旧活跃发件箱记录，确保独立断言特定任务实例的 claim 与 close 闭环。
+- **SH-08 实施期间发现与解决的技术细节**：
+  1. 睡眠记录 `endedAt: null` 字段清空语义：在 `sleep-compat.ts` 更新载荷转换中，修复了 `body.endedAt || body.endTime` 在 `null || undefined` 时被判断为 `undefined` 导致无法清空字段的缺陷，改用显式 `"endedAt" in body` 属性探测；
+  2. 医疗记录更新载荷判空保护：在 `medical-compat.ts` 中修正了 `??` 空值合并逻辑，确保显式清空科室、诊断及医生备注时不发生非预期回退；
+  3. 生产写入口自动化守卫：构建 `scripts/check-production-writers.mjs`，静态审计所有 Web 路由写方法与 Prisma 写入调用，确保在 BFF 模式开启时零直接 SQLite 写泄漏。
 - **外部阻塞**：当前无阻塞。
 
 ---
 
 ## 6. 下一条准确操作
 
-- **目标任务**：**`SH-08: Web 剩余业务路由适配与 MCP 端点收口`**
-- **工作目录 (workdir)**：`/Users/wangzhuo/Documents/GitHub/baby_panel_for_cecilia` 与 `/Users/wangzhuo/Documents/GitHub/growdesk-server`
+- **目标任务**：**`SH-09: 后端同步协议与本地状态机 (Local-First Sync Protocol)`**
+- **工作目录 (workdir)**：`/Users/wangzhuo/Documents/GitHub/growdesk-server`
 - **操作内容**：
-  1. **Web 业务路由收口 (Inventory 梳理与适配)**：
-     - 参照 `docs/compat/web-call-inventory.csv` 与 `docs/compat/web-api-mapping.md`，对齐 Web 端剩余业务路由（如体征图表、日历、统计、设置、提醒等）；
-     - 接入 `lib/server/api-proxy.ts` / BFF 统一鉴权代理；
-  2. **MCP 工具与端点统一收口**：
-     - 收口 `/api/mcp` 与 stdio MCP 代理（`scripts/mcp-server.mjs`），将其内部调用收敛到 GrowDesk 统一 REST / Service 层；
-     - 严格落实 UserPrincipal 鉴权与防串号隔离；
-  3. **质量与契约验证**：
-     - 运行 `npm test`（Web 端）与 `python3 scripts/test-integration.py`（服务端），确保全链路无缝衔接。
+  1. **同步协议接口实现**：
+     - 参照 `02_BACKEND_CONTRACTS.md` 与 `07_LOCAL_FIRST_OPTIONAL_SYNC.md`，实现增量变更拉取 (`GET /api/v1/sync/changes`) 与批量离线变更推送 (`POST /api/v1/sync/commands`)；
+     - 严格维护 `SyncCursor` 游标单调递增与客户端 `localSequence` 幂等收据；
+  2. **并发控制与版本冲突处理**：
+     - 基于 FamilySyncState 行级锁序列化同步指令，按实体 baseVersion 实施精确乐观并发控制；
+  3. **单元与集成测试覆盖**：
+     - 编写多端并发同步、断网重试与游标追赶的测试用例并全量验证通过。
 
 ---
 
