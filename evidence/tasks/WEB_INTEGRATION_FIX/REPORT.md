@@ -27,9 +27,9 @@
 
 ## 使用边界与下一步
 
-1. 配套服务端须应用新增 mixed migration、更新 API/契约后再做共同预览；具体后端验证与提交见服务端同名 evidence 目录。
+1. 配套服务端须应用新增 mixed migration、更新 API/契约后再做共同预览；配套服务端提交 `c80b6fb`；[后端验证报告](../../../../growdesk-server/evidence/tasks/WEB_INTEGRATION_FIX/REPORT.md)。
 2. 本包是集成修复批次，未覆盖的注册、家庭管理、AI/MCP、附件等入口在 GrowDesk 模式返回 501；不能声称全站已接通。
-3. 预览时显式配置 `GROWDESK_API_URL`、`GROWDESK_WEB_ORIGIN`，完整 origin 包括协议和端口。生产 Cookie 为 Secure/HttpOnly 的 `__Host-growdesk_web`，需要 HTTPS；开发 Cookie 为 growdesk_web。
+3. 预览时显式配置 `GROWDESK_API_URL`、`GROWDESK_WEB_ORIGIN`，完整 origin 包括协议和端口。生产 Cookie 为 Secure/HttpOnly 的 `__Host-growdesk_web`，需要 HTTPS；开发 Cookie 为 growdesk_web_dev。
 4. 线上开关保持现状；本次没有部署、导入真实资料、改 nginx、推送 Git 或修改仓库可见性。
 5. 浏览器 + 真实 PostgreSQL 的联合 E2E、旧数据/附件对账、完整功能迁移和正式切换不属于本报告已通过项。
 
@@ -40,3 +40,5 @@
 - 旧 Web 的完整多家庭/多宝宝选择界面仍未完成：初次登录默认展示第一个授权宝宝；多家庭且无宝宝的创建需要明确 familyId，目前旧 onboarding 不提供完整选择交互。这是剩余功能缺口，不据本批修复宣称多宝宝体验已完成。已有选中状态的读/改已显式携带 babyId，缺 ID 的修改会拒绝。
 
 本次仅合并已验证的集成修复；全站迁移仍需按计划继续。
+
+配套后端最终补跑 lifecycle 3/3 与 PG/Redis 199/199，通过；实例身份检查已独立前置到业务迁移之前。本报告的 Web 提交为 `8b780cc`、`66c1456`、`b1c3274`。
