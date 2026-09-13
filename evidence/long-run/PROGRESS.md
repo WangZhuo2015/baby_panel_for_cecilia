@@ -6,9 +6,9 @@
 
 ## 当前状态概览
 
-- **当前批次 / 小任务**：`SH-06` 已完成 -> 进入 `L3 (SH-07: 异步长任务与 AI/Worker/Scheduler 底座)`
+- **当前批次 / 小任务**：`SH-07` 已完成 -> 进入 `L3 (SH-08: Web 剩余业务路由适配与 MCP 端点收口)`
 - **最后更新时间**：2026-09-13 (US/Pacific)
-- **总体状态**：`IN_PROGRESS` (SH-00 R0、SH-01、SH-02A、SH-02B、SH-03A、SH-03B、SH-03C、SH-03D、SH-04F、SH-04D、SH-04S、SH-04FO、SH-04SU、SH-04G、SH-04TL、SH-05、SH-06 验证完成，自主推进中)
+- **总体状态**：`IN_PROGRESS` (SH-00 R0、SH-01、SH-02A、SH-02B、SH-03A、SH-03B、SH-03C、SH-03D、SH-04F、SH-04D、SH-04S、SH-04FO、SH-04SU、SH-04G、SH-04TL、SH-05、SH-06、SH-07 验证完成，自主推进中)
 
 ---
 
@@ -16,8 +16,8 @@
 
 | 仓库 | 分支 (Branch) | 起始基线 HEAD | 当前最新提交 HEAD | 工作区状态与未提交文件核对 |
 |---|---|---|---|---|
-| `baby_panel_for_cecilia` | `main` | `4901731` | `a424ad4` | Clean |
-| `growdesk-server` | `codex/backend-storage-foundation` | `d9604d5` | `128b46d` | **Dirty (严格隔离保留原样)**：<br>- `M deploy/Migration.Dockerfile`<br>- `?? evidence/tasks/LEGACY_IMPORT/host-after.json`<br>- `?? evidence/tasks/LEGACY_IMPORT/remote-migration.txt`<br>- `?? evidence/tasks/LEGACY_IMPORT/target-verification.json`<br>- `?? scripts/legacy-import/ios_backup.py`<br>- `?? scripts/legacy-import/test_ios_backup.py` |
+| `baby_panel_for_cecilia` | `main` | `4901731` | `cd733a4` | Clean |
+| `growdesk-server` | `codex/backend-storage-foundation` | `d9604d5` | `c9f2ef2` | **Dirty (严格隔离保留原样)**：<br>- `M deploy/Migration.Dockerfile`<br>- `?? evidence/tasks/LEGACY_IMPORT/host-after.json`<br>- `?? evidence/tasks/LEGACY_IMPORT/remote-migration.txt`<br>- `?? evidence/tasks/LEGACY_IMPORT/target-verification.json`<br>- `?? scripts/legacy-import/ios_backup.py`<br>- `?? scripts/legacy-import/test_ios_backup.py` |
 | `growdesk-ios` | `codex/local-storage-policy` | `96aa000` | `96aa000` | **Dirty (严格隔离保留原样)**：<br>- `M BabyPanel.xcodeproj/project.pbxproj`<br>- `?? docs/design-mockups/` |
 
 ---
@@ -27,7 +27,7 @@
 - **服务端契约权威**：`growdesk-server/packages/contracts/src`（模块化 TypeBox 契约，覆盖全部 86 路径、123 操作端点）
 - **OpenAPI 规范快照**：`growdesk-server/contracts/openapi.json`（OpenAPI 3.0.3，123 operationId 全局唯一，无 diff 校验通过，Swift 6 测试通过）
 - **iOS 客户端消费快照**：尚未复制引入（待进入原生端任务后同步并记录 `Contracts/source.json`）
-- **PostgreSQL Migration 版本**：`202609120001_identity` ~ `202609120010_attachments_medical_vaccines`（通过真实 PG18 顺序升级与复合外键/约束测试）
+- **PostgreSQL Migration 版本**：`202609120001_identity` ~ `202609130011_tasks_and_ai`（11 个迁移全部通过真实 PG18 顺序升级与完整性测试）
 - **SQLite 数据源状态**：`file:./prod.db`，维持只读参考与旧 Web 生产写权威，严格未触碰
 
 ---
@@ -102,6 +102,10 @@
     - 执行报告：`../growdesk-server/evidence/tasks/SH-06/REPORT.md`
     - 交付提交：`growdesk-server: 128b46d`
     - 状态：`IMPLEMENTED_VERIFIED_REVIEW_PENDING`（实现私有 S3 存储驱动抽象与 MockStorageDriver、预签名上传/受保护下载/两阶段确认、医疗报告 CRUD 与 baseVersion 乐观锁、国家标准疫苗计划与接种记录、推送设备注册与通知生命周期、timeline_entries 原子投影；86 路径/123 操作契约校验通过、162 项真实 PG18 集成测试全量通过）
+18. **`SH-07 (异步长任务与 AI/Worker/Scheduler 底座)`**：
+    - 执行报告：`../growdesk-server/evidence/tasks/SH-07/REPORT.md`
+    - 交付提交：`growdesk-server: c9f2ef2`
+    - 状态：`IMPLEMENTED_VERIFIED_REVIEW_PENDING`（实现 Durable Task Engine、TaskExecution 与 TaskOutbox 状态机、租约防脑裂与递增 fencing_token、WorkerEngine 定时心跳与优雅取消信号传播、SchedulerEngine FOR UPDATE SKIP LOCKED 调度与停滞长任务自愈补偿、AI 会话与消息历史、AI Run 1:1 绑定长任务、提议操作人机回环 confirm/cancel/retry、语音转录任务与每日综述合成归档；11 个 REST 端点全量契约与 TypeBox 校验通过，183 项真实 PG18 集成测试全量通过）
 
 ---
 
@@ -113,28 +117,28 @@
 
 ## 5. 失败与修复、外部阻塞
 
-- **SH-06 实施期间发现与解决的技术细节**：
-  1. 契约信封格式：`SuccessStatusResponseSchema` 契约严格定义为 `{ data: { success: true } }`，必须严格对齐不能缺少 `{ data: ... }` 包装；
-  2. Fastify 路由参数冲突隔离：同一前缀下避免重复注册同名或别名参数路径；Fastify 会在路由注册时就地修改 route options 内部引用，路由选项对象不能跨 route 复用；
-  3. 并发 DDL 容错：并行执行的 integration test 文件在各自 setup 阶段的辅助 DDL 执行中使用防御性 try-catch，避免并发竞争 PG 系统目录唯一索引冲突。
+- **SH-07 实施期间发现与解决的技术细节**：
+  1. `task_outbox` 调度状态约束：在迁移 `202609130011_tasks_and_ai` 中放宽 `task_outbox_dispatch_state_check` 增加 `'dispatching'` 允许值，完美支持原子拉取并标记分发中的中间态；
+  2. 跨时区时间戳对齐：发件箱生成时使用数据库级 `CURRENT_TIMESTAMP`（避免 Node 宿主系统本地时区差异导致入库时间被推后 7 小时），确保 `next_dispatch_at <= CURRENT_TIMESTAMP` 能在任何时区无漂移立即命中就绪分发；
+  3. Fastify 分页响应序列化契约：严格遵循 `PaginatedEnvelope` 结构，将响应属性统一为 `page: { nextCursor }` 并提供必需的 `attachmentIds` 字段，杜绝 500 序列化报错；
+  4. 调度器测试批次隔离：在集成测试中先关闭前序用例产生的陈旧活跃发件箱记录，确保独立断言特定任务实例的 claim 与 close 闭环。
 - **外部阻塞**：当前无阻塞。
 
 ---
 
 ## 6. 下一条准确操作
 
-- **目标任务**：**`SH-07: 异步长任务与 AI/Worker/Scheduler 底座 (Durable Task Engine & AI Workers)`**
-- **工作目录 (workdir)**：`/Users/wangzhuo/Documents/GitHub/growdesk-server`
+- **目标任务**：**`SH-08: Web 剩余业务路由适配与 MCP 端点收口`**
+- **工作目录 (workdir)**：`/Users/wangzhuo/Documents/GitHub/baby_panel_for_cecilia` 与 `/Users/wangzhuo/Documents/GitHub/growdesk-server`
 - **操作内容**：
-  1. **任务持久化与状态机 (`TaskRun`, `TaskEvent`, `TaskOutbox` 模型)**：
-     - 数据模型：`task_runs` 表（`id`, `family_id`, `baby_id`, `task_type`, `status`, `fencing_token`, `input_payload`, `output_payload`, `error_payload`, `worker_id`, `lease_expires_at`, `created_at`, `updated_at`）；
-     - 事件日志：`task_events` 表（`id`, `task_run_id`, `sequence`, `event_type`, `event_payload`, `created_at`）；
-  2. **Worker 队列、租约与防脑裂 (Lease & Fencing)**：
-     - Redis / BullMQ 异步队列调度，基于 Redis 租约与 Fencing Token 防并发抢占；
-  3. **AI 任务与流式 SSE 协议**：
-     - 支持长任务执行、事件流推送、Last-Event-ID 重连与幂等状态机；
-  4. **集成测试**：
-     - 编写 `tests/integration/tasks.test.ts`，验证任务调度、状态流转、租约超时与并发冲突熔断。
+  1. **Web 业务路由收口 (Inventory 梳理与适配)**：
+     - 参照 `docs/compat/web-call-inventory.csv` 与 `docs/compat/web-api-mapping.md`，对齐 Web 端剩余业务路由（如体征图表、日历、统计、设置、提醒等）；
+     - 接入 `lib/server/api-proxy.ts` / BFF 统一鉴权代理；
+  2. **MCP 工具与端点统一收口**：
+     - 收口 `/api/mcp` 与 stdio MCP 代理（`scripts/mcp-server.mjs`），将其内部调用收敛到 GrowDesk 统一 REST / Service 层；
+     - 严格落实 UserPrincipal 鉴权与防串号隔离；
+  3. **质量与契约验证**：
+     - 运行 `npm test`（Web 端）与 `python3 scripts/test-integration.py`（服务端），确保全链路无缝衔接。
 
 ---
 
