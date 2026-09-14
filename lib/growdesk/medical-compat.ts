@@ -39,8 +39,10 @@ export interface GrowDeskMedicalReport {
 }
 
 function attachmentId(value: unknown): string {
-  if (typeof value !== "string") throw new BridgeError(400, "INVALID_ATTACHMENT", "无效的附件");
-  const id = value.replace(/^\/api\/attachments\//, "");
+  if (typeof value !== "string" || !value.trim()) throw new BridgeError(400, "INVALID_ATTACHMENT", "无效的附件");
+  const trimmed = value.trim();
+  if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) return trimmed;
+  const id = trimmed.replace(/^\/api\/attachments\//, "");
   if (!/^[a-f0-9-]{36}$/i.test(id)) throw new BridgeError(400, "INVALID_ATTACHMENT", "请重新上传图片");
   return id;
 }
@@ -122,7 +124,11 @@ export function fromGrowDeskMedicalRecord(rec: GrowDeskMedicalReport): LegacyMed
     aiSummary: rec.notes,
     items: rec.items ?? [],
     itemsJson: JSON.stringify(rec.items ?? []),
-    imageUrl: rec.attachmentIds && rec.attachmentIds.length > 0 ? `/api/attachments/${rec.attachmentIds[0]}` : null,
+    imageUrl: rec.attachmentIds && rec.attachmentIds.length > 0
+      ? (rec.attachmentIds[0].startsWith("http://") || rec.attachmentIds[0].startsWith("https://") || rec.attachmentIds[0].startsWith("/")
+          ? rec.attachmentIds[0]
+          : `/api/attachments/${rec.attachmentIds[0]}`)
+      : null,
     version: wireVersion(rec.version),
     baseVersion: wireVersion(rec.version),
     createdAt: rec.createdAt,
