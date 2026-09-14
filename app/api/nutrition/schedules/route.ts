@@ -3,9 +3,117 @@ import { requireAuth, requireBaby } from "@/lib/api-helpers";
 import { prisma } from "@/lib/prisma";
 import { getLocalDateStr, isValidDateStr } from "@/lib/date";
 import type { SupplementSchedule, SupplementProduct, NutrientsMap } from "@/types/nutrition";
+import { GROWDESK_CONFIG } from "@/lib/config";
+import { resolveBffSession } from "@/lib/growdesk/session";
+import { verifyBffCsrf } from "@/lib/growdesk/csrf";
+import { growdeskFetch } from "@/lib/growdesk/client";
+import { loadWebBaby } from "@/lib/growdesk/bridge-identity";
+import {
+  extractSupplementStateFromFoodPlan,
+  mergeSupplementStateIntoFoodPlan,
+  fromGrowDeskSupplementRecordEnriched,
+  findMatchingSupplementProduct,
+  type GrowDeskSupplementRecord,
+} from "@/lib/growdesk/nutrition-compat";
+import { PRESET_SUPPLEMENT_PRODUCTS } from "@/lib/nutrition/presets";
+import crypto from "node:crypto";
 
 export async function GET(request: Request) {
   try {
+    if (GROWDESK_CONFIG.enabled) {
+      const bffSession = await resolveBffSession(request);
+      if (!bffSession) {
+        return NextResponse.json({ error: "Unauthorized: 会话无效或已过期" }, { status: 401 });
+      }
+
+      const { searchParams } = new URL(request.url);
+      const requestedBabyId = searchParams.get("babyId");
+      const baby = await loadWebBaby(growdeskFetch, bffSession.accessToken, requestedBabyId);
+      if (!baby) {
+        return NextResponse.json({ error: "未找到指定的宝宝档案" }, { status: 404 });
+      }
+
+      const babyId = baby.id;
+      const dateParam = searchParams.get("date");
+      const targetDate = dateParam && isValidDateStr(dateParam) ? dateParam : getLocalDateStr();
+
+      const [foodPlanRes, suppRecsRes] = await Promise.all([
+        growdeskFetch<any>(`/api/v1/babies/${babyId}/food-plan`, {
+          method: "GET",
+          accessToken: bffSession.accessToken,
+        }),
+        growdeskFetch<any>(`/api/v1/babies/${babyId}/records/supplement?limit=100`, {
+          method: "GET",
+          accessToken: bffSession.accessToken,
+        }),
+      ]);
+
+      const planData = (foodPlanRes.ok && (foodPlanRes.data?.data?.planData || foodPlanRes.data?.planData)) || {};
+      const suppState = extractSupplementStateFromFoodPlan(planData);
+
+      const allKnownProducts: SupplementProduct[] = [
+        ...suppState.supplementProducts,
+        ...PRESET_SUPPLEMENT_PRODUCTS.map((p, idx) => ({
+          ...p,
+          id: (p as any).id || `preset_${idx}`,
+          familyId: baby.familyId,
+        })),
+      ];
+
+      const rawRecords: GrowDeskSupplementRecord[] = suppRecsRes.ok && suppRecsRes.data
+        ? Array.isArray(suppRecsRes.data)
+          ? suppRecsRes.data
+          : suppRecsRes.data.data || []
+        : [];
+
+      const enrichedRecords = rawRecords.map((r) =>
+        fromGrowDeskSupplementRecordEnriched(r, allKnownProducts)
+      );
+
+      const dateRecords = enrichedRecords.filter((r) => r.date === targetDate);
+      const completedProductIds = new Set(dateRecords.map((r) => r.productId));
+
+      const schedules: SupplementSchedule[] = suppState.supplementSchedules
+        .filter((s) => s.isActive !== false)
+        .map((s) => {
+          const product =
+            findMatchingSupplementProduct(s.product?.name || "", s.productId, allKnownProducts) ||
+            s.product || {
+              id: s.productId,
+              familyId: baby.familyId,
+              name: "补剂",
+              brand: "补剂",
+              dosageForm: "drops",
+              unitName: "剂",
+              defaultDose: s.targetDose,
+              nutrients: {},
+              isActive: true,
+            };
+
+          return {
+            id: s.id,
+            babyId: s.babyId,
+            productId: s.productId,
+            product,
+            frequency: s.frequency || "daily",
+            customDays: s.customDays,
+            targetDose: s.targetDose,
+            reminderTime: s.reminderTime,
+            isActive: s.isActive,
+            startDate: s.startDate,
+            notes: s.notes,
+            createdAt: s.createdAt,
+            updatedAt: s.updatedAt,
+            isCompletedToday: completedProductIds.has(s.productId),
+          };
+        });
+
+      return NextResponse.json({
+        schedules,
+        completedProductIds: Array.from(completedProductIds),
+      });
+    }
+
     const auth = await requireAuth(request);
     if (auth.errorResponse) return auth.errorResponse;
 
@@ -78,6 +186,142 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
+    if (GROWDESK_CONFIG.enabled) {
+      const csrfErr = verifyBffCsrf(request);
+      if (csrfErr) return csrfErr;
+
+      const bffSession = await resolveBffSession(request);
+      if (!bffSession) {
+        return NextResponse.json({ error: "Unauthorized: 会话无效或已过期" }, { status: 401 });
+      }
+
+      const body = await request.json().catch(() => ({}));
+      const baby = await loadWebBaby(growdeskFetch, bffSession.accessToken, body.babyId);
+      if (!baby) {
+        return NextResponse.json({ error: "未找到指定的宝宝档案" }, { status: 404 });
+      }
+
+      const babyId = baby.id;
+      const {
+        id,
+        productId,
+        frequency = "daily",
+        customDays,
+        targetDose = 1.0,
+        reminderTime,
+        isActive = true,
+        startDate = getLocalDateStr(),
+        notes,
+      } = body;
+
+      if (!productId || typeof productId !== "string") {
+        return NextResponse.json({ error: "请选择补剂产品" }, { status: 400 });
+      }
+
+      const fpRes = await growdeskFetch<any>(`/api/v1/babies/${babyId}/food-plan`, {
+        method: "GET",
+        accessToken: bffSession.accessToken,
+      });
+      const existingPlanData = (fpRes.ok && (fpRes.data?.data?.planData || fpRes.data?.planData)) || {};
+      const suppState = extractSupplementStateFromFoodPlan(existingPlanData);
+
+      const allKnownProducts: SupplementProduct[] = [
+        ...suppState.supplementProducts,
+        ...PRESET_SUPPLEMENT_PRODUCTS.map((p, idx) => ({
+          ...p,
+          id: (p as any).id || `preset_${idx}`,
+          familyId: baby.familyId,
+        })),
+      ];
+
+      const product = findMatchingSupplementProduct(productId, productId, allKnownProducts);
+      if (!product) {
+        return NextResponse.json({ error: "未找到指定的补剂产品" }, { status: 404 });
+      }
+
+      const nowIso = new Date().toISOString();
+      let scheduleToSave: SupplementSchedule;
+      let isNew = false;
+
+      if (id) {
+        const targetIdx = suppState.supplementSchedules.findIndex((s) => s.id === id);
+        if (targetIdx === -1) {
+          return NextResponse.json({ error: "未找到指定的计划" }, { status: 404 });
+        }
+        scheduleToSave = {
+          ...suppState.supplementSchedules[targetIdx],
+          productId,
+          product,
+          frequency,
+          customDays,
+          targetDose: Number(targetDose) || 1.0,
+          reminderTime: reminderTime ? String(reminderTime).trim() : null,
+          isActive: Boolean(isActive),
+          startDate: startDate || suppState.supplementSchedules[targetIdx].startDate,
+          notes: notes !== undefined ? (notes ? String(notes).trim() : null) : suppState.supplementSchedules[targetIdx].notes,
+          updatedAt: nowIso,
+        };
+        const updatedList = [...suppState.supplementSchedules];
+        updatedList[targetIdx] = scheduleToSave;
+        const merged = mergeSupplementStateIntoFoodPlan(existingPlanData, { supplementSchedules: updatedList });
+        await growdeskFetch(`/api/v1/babies/${babyId}/food-plan`, {
+          method: "PUT",
+          accessToken: bffSession.accessToken,
+          body: { planData: merged },
+        });
+      } else {
+        const existingIdx = suppState.supplementSchedules.findIndex((s) => s.productId === productId);
+        if (existingIdx !== -1) {
+          scheduleToSave = {
+            ...suppState.supplementSchedules[existingIdx],
+            product,
+            frequency,
+            customDays,
+            targetDose: Number(targetDose) || 1.0,
+            reminderTime: reminderTime ? String(reminderTime).trim() : null,
+            isActive: Boolean(isActive),
+            startDate: startDate || suppState.supplementSchedules[existingIdx].startDate,
+            notes: notes !== undefined ? (notes ? String(notes).trim() : null) : suppState.supplementSchedules[existingIdx].notes,
+            updatedAt: nowIso,
+          };
+          const updatedList = [...suppState.supplementSchedules];
+          updatedList[existingIdx] = scheduleToSave;
+          const merged = mergeSupplementStateIntoFoodPlan(existingPlanData, { supplementSchedules: updatedList });
+          await growdeskFetch(`/api/v1/babies/${babyId}/food-plan`, {
+            method: "PUT",
+            accessToken: bffSession.accessToken,
+            body: { planData: merged },
+          });
+        } else {
+          isNew = true;
+          scheduleToSave = {
+            id: crypto.randomUUID(),
+            babyId,
+            productId,
+            product,
+            frequency,
+            customDays,
+            targetDose: Number(targetDose) || 1.0,
+            reminderTime: reminderTime ? String(reminderTime).trim() : null,
+            isActive: Boolean(isActive),
+            startDate: startDate || getLocalDateStr(),
+            notes: notes ? String(notes).trim() : null,
+            createdAt: nowIso,
+            updatedAt: nowIso,
+          };
+          const updatedList = [...suppState.supplementSchedules, scheduleToSave];
+          const merged = mergeSupplementStateIntoFoodPlan(existingPlanData, { supplementSchedules: updatedList });
+          await growdeskFetch(`/api/v1/babies/${babyId}/food-plan`, {
+            method: "PUT",
+            accessToken: bffSession.accessToken,
+            body: { planData: merged },
+          });
+        }
+      }
+
+      return NextResponse.json(scheduleToSave, { status: isNew ? 201 : 200 });
+    }
+
     const auth = await requireAuth(request);
     if (auth.errorResponse) return auth.errorResponse;
 
@@ -178,6 +422,48 @@ export async function POST(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
+    if (GROWDESK_CONFIG.enabled) {
+      const csrfErr = verifyBffCsrf(request);
+      if (csrfErr) return csrfErr;
+
+      const bffSession = await resolveBffSession(request);
+      if (!bffSession) {
+        return NextResponse.json({ error: "Unauthorized: 会话无效或已过期" }, { status: 401 });
+      }
+
+      const { searchParams } = new URL(request.url);
+      const id = searchParams.get("id");
+      const requestedBabyId = searchParams.get("babyId");
+
+      if (!id) {
+        return NextResponse.json({ error: "请提供计划 ID" }, { status: 400 });
+      }
+
+      const baby = await loadWebBaby(growdeskFetch, bffSession.accessToken, requestedBabyId);
+      if (!baby) {
+        return NextResponse.json({ error: "未找到指定的宝宝档案" }, { status: 404 });
+      }
+
+      const babyId = baby.id;
+      const fpRes = await growdeskFetch<any>(`/api/v1/babies/${babyId}/food-plan`, {
+        method: "GET",
+        accessToken: bffSession.accessToken,
+      });
+      const existingPlanData = (fpRes.ok && (fpRes.data?.data?.planData || fpRes.data?.planData)) || {};
+      const suppState = extractSupplementStateFromFoodPlan(existingPlanData);
+
+      const updatedSchedules = suppState.supplementSchedules.filter((s) => s.id !== id);
+      const merged = mergeSupplementStateIntoFoodPlan(existingPlanData, { supplementSchedules: updatedSchedules });
+
+      await growdeskFetch(`/api/v1/babies/${babyId}/food-plan`, {
+        method: "PUT",
+        accessToken: bffSession.accessToken,
+        body: { planData: merged },
+      });
+
+      return NextResponse.json({ success: true, id });
+    }
+
     const auth = await requireAuth(request);
     if (auth.errorResponse) return auth.errorResponse;
 
