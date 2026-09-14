@@ -49,6 +49,8 @@ import { POST as FoodLogsPOST, PUT as FoodLogsPUT, DELETE as FoodLogsDELETE } fr
 import { POST as FoodItemsPOST } from "../../app/api/food/items/route";
 import { POST as FoodPlansPOST } from "../../app/api/food/plans/route";
 import { POST as NutritionPOST, DELETE as NutritionDELETE } from "../../app/api/nutrition/records/route";
+import { POST as ProductsPOST, PUT as ProductsPUT, DELETE as ProductsDELETE } from "../../app/api/nutrition/products/route";
+import { POST as SchedulesPOST, DELETE as SchedulesDELETE } from "../../app/api/nutrition/schedules/route";
 import { POST as GrowthPOST, DELETE as GrowthDELETE } from "../../app/api/growth/route";
 import { POST as MedicalPOST } from "../../app/api/medical/reports/route";
 import { POST as VaccinePOST } from "../../app/api/vaccines/route";
@@ -427,6 +429,11 @@ test("SH-08: Dual-Mode Web Route Handlers Under BFF Mode (Security Rejections)",
     { name: "Food Plans POST", fn: () => FoodPlansPOST(makeReq("http://127.0.0.1:3000/api/food/plans", "POST")) },
     { name: "Nutrition Records POST", fn: () => NutritionPOST(makeReq("http://127.0.0.1:3000/api/nutrition/records", "POST")) },
     { name: "Nutrition Records DELETE", fn: () => NutritionDELETE(makeReq("http://127.0.0.1:3000/api/nutrition/records", "DELETE")) },
+    { name: "Nutrition Products POST", fn: () => ProductsPOST(makeReq("http://127.0.0.1:3000/api/nutrition/products", "POST")) },
+    { name: "Nutrition Products PUT", fn: () => ProductsPUT(makeReq("http://127.0.0.1:3000/api/nutrition/products", "PUT")) },
+    { name: "Nutrition Products DELETE", fn: () => ProductsDELETE(makeReq("http://127.0.0.1:3000/api/nutrition/products", "DELETE")) },
+    { name: "Nutrition Schedules POST", fn: () => SchedulesPOST(makeReq("http://127.0.0.1:3000/api/nutrition/schedules", "POST")) },
+    { name: "Nutrition Schedules DELETE", fn: () => SchedulesDELETE(makeReq("http://127.0.0.1:3000/api/nutrition/schedules", "DELETE")) },
     { name: "Growth POST", fn: () => GrowthPOST(makeReq("http://127.0.0.1:3000/api/growth", "POST")) },
     { name: "Growth DELETE", fn: () => GrowthDELETE(makeReq("http://127.0.0.1:3000/api/growth", "DELETE")) },
     { name: "Medical POST", fn: () => MedicalPOST(makeReq("http://127.0.0.1:3000/api/medical/reports", "POST")) },
