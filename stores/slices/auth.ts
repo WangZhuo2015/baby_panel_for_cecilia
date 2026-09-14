@@ -245,23 +245,26 @@ export const createAuthSlice = (set: any, get: any): AuthSlice => ({
         set({ authLoading: false });
         markFetched("user");
       } catch {
-        // A snapshot is safe only when it belongs to the user already in memory.
-        // On a cold start, avoid restoring another account's global legacy snapshot.
+        // A snapshot is safe only when it belongs to the user already in memory and is within TTL (7 days).
+        // On a cold start or when offline, never restore unverified or other accounts' data.
         const currentUser = get().user;
         let restored = false;
-        if (typeof navigator !== "undefined" && !navigator.onLine && currentUser) {
+        if (typeof navigator !== "undefined" && !navigator.onLine && currentUser?.id) {
           try {
-            const raw = localStorage.getItem("baby-panel-snapshot-v1");
-            const snap = raw ? JSON.parse(raw) : null;
-            if (snap?.user?.id === currentUser.id) {
-              applyIdentity(set, get, {
-                user: snap.user,
-                family: snap.family,
-                baby: snap.baby,
-                families: snap.family ? [snap.family] : [],
-                babies: snap.baby ? [snap.baby] : [],
-              });
-              restored = true;
+            const raw = localStorage.getItem(`baby-panel-snapshot-v2:${currentUser.id}`);
+            if (raw) {
+              const snap = JSON.parse(raw);
+              const isFresh = snap?.savedAt && (Date.now() - snap.savedAt < 7 * 24 * 60 * 60 * 1000);
+              if (isFresh && snap?.userId === currentUser.id) {
+                applyIdentity(set, get, {
+                  user: snap.user,
+                  family: snap.family,
+                  baby: snap.baby,
+                  families: snap.family ? [snap.family] : [],
+                  babies: snap.baby ? [snap.baby] : [],
+                });
+                restored = true;
+              }
             }
           } catch {}
         }
@@ -312,6 +315,9 @@ export const createAuthSlice = (set: any, get: any): AuthSlice => ({
       familyMembers: [],
       authLoading: false,
     });
+    if (userId) {
+      try { localStorage.removeItem(`baby-panel-snapshot-v2:${userId}`); } catch {}
+    }
     try { localStorage.removeItem("baby-panel-snapshot-v1"); } catch {}
   },
 

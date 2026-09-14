@@ -263,7 +263,15 @@ export const createGrowthSlice = (set: any, get: any): GrowthSlice => ({
       set((state: any) => ({ growthMeasurements: [...state.growthMeasurements, newMeasurement].sort((a: any,b:any)=> new Date(b.date).getTime()-new Date(a.date).getTime()) }));
     } catch (e) {
       if (isRetryableSubmitError(e)) {
-        await enqueueOutbox({ clientId, url: "/api/growth", body: payload as any, createdAt: Date.now() });
+        await enqueueOutbox({
+          clientId,
+          url: "/api/growth",
+          body: payload as any,
+          createdAt: Date.now(),
+          userId: get().user?.id,
+          familyId: get().family?.id,
+          babyId: get().baby?.id,
+        });
         throw new Error("当前离线，记录已保存，联网后自动同步 ⏳");
       }
       console.error("Failed to add growth measurement:", e); throw e;

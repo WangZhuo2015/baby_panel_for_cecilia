@@ -56,16 +56,18 @@ import { POST as PushPOST } from "../../app/api/push/subscribe/route";
 
 test("SH-08: Diaper Compat DTO Layer", async (t) => {
   await t.test("toGrowDeskDiaperCreatePayload: normalizes legacy wet/dirty to pee/poop", () => {
-    const p1 = toGrowDeskDiaperCreatePayload({ type: "wet", notes: "Heavy" });
+    const timestamp = "2026-09-12T10:00:00.000Z";
+    const p1 = toGrowDeskDiaperCreatePayload({ type: "wet", notes: "Heavy", timestamp });
     assert.equal(p1.diaperType, "pee");
     assert.equal(p1.notes, "Heavy");
+    assert.equal(p1.occurredAt, timestamp);
 
-    const p2 = toGrowDeskDiaperCreatePayload({ type: "dirty", poopColor: "yellow", poopConsistency: "soft" });
+    const p2 = toGrowDeskDiaperCreatePayload({ type: "dirty", poopColor: "yellow", poopConsistency: "soft", timestamp });
     assert.equal(p2.diaperType, "poop");
     assert.equal(p2.poopColor, "yellow");
     assert.equal(p2.poopConsistency, "soft");
 
-    const p3 = toGrowDeskDiaperCreatePayload({ type: "both" });
+    const p3 = toGrowDeskDiaperCreatePayload({ type: "both", timestamp });
     assert.equal(p3.diaperType, "both");
   });
 
@@ -75,7 +77,7 @@ test("SH-08: Diaper Compat DTO Layer", async (t) => {
       type: "dirty",
       notes: "Updated note",
     });
-    assert.equal(p.baseVersion, 2);
+    assert.equal(p.baseVersion, "2");
     assert.equal(p.diaperType, "poop");
     assert.equal(p.notes, "Updated note");
   });
@@ -102,8 +104,8 @@ test("SH-08: Diaper Compat DTO Layer", async (t) => {
     assert.equal(rec.type, "poop");
     assert.equal(rec.timestamp, "2026-09-12T10:00:00.000Z");
     assert.equal(rec.poopColor, "brown");
-    assert.equal(rec.version, 4);
-    assert.equal(rec.baseVersion, 4);
+    assert.equal(rec.version, "4");
+    assert.equal(rec.baseVersion, "4");
   });
 });
 
@@ -129,7 +131,7 @@ test("SH-08: Sleep Compat DTO Layer", async (t) => {
       endedAt: null,
       nightWakingCount: 2,
     });
-    assert.equal(p.baseVersion, 5);
+    assert.equal(p.baseVersion, "5");
     assert.equal(p.sleepType, "night");
     assert.equal(p.endedAt, null);
     assert.equal(p.nightWakingCount, 2);
@@ -159,7 +161,7 @@ test("SH-08: Sleep Compat DTO Layer", async (t) => {
     assert.equal(rec.startedAt, "2026-09-12T20:00:00.000Z");
     assert.equal(rec.endTime, "2026-09-13T06:00:00.000Z");
     assert.equal(rec.endedAt, "2026-09-13T06:00:00.000Z");
-    assert.equal(rec.version, 3);
+    assert.equal(rec.version, "3");
   });
 });
 
