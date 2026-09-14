@@ -130,14 +130,21 @@ export function babyPayload(body: Record<string, unknown>, patch = false): Recor
   }
   if (body.gestationalAge !== undefined) {
     const weeks = body.gestationalAge;
-    if (weeks !== null && (typeof weeks !== "number" || !Number.isInteger(weeks) || weeks < 20 || weeks > 44)) {
-      throw new BridgeError(400, "INVALID_GESTATIONAL_AGE", "孕周必须为 20–44 之间的整数");
+    if (weeks !== null && (typeof weeks !== "number" || !Number.isInteger(weeks) || weeks < 20 || weeks > 45)) {
+      throw new BridgeError(400, "INVALID_GESTATIONAL_AGE", "孕周必须为 20–45 之间的整数");
     }
     result.gestationalWeeks = weeks;
   }
+  if (body.gestationalDays !== undefined) {
+    const days = body.gestationalDays;
+    if (days !== null && (typeof days !== "number" || !Number.isInteger(days) || days < 0 || days > 6)) {
+      throw new BridgeError(400, "INVALID_GESTATIONAL_DAYS", "孕天数必须为 0–6 之间的整数");
+    }
+    result.gestationalDays = days;
+  }
   if (body.avatarUrl !== undefined) {
     // Only private attachment references; the API verifies ownership before binding.
-    if (body.avatarUrl && (typeof body.avatarUrl !== "string" || !/^\/api\/attachments\/[a-f0-9-]{36}$/i.test(body.avatarUrl))) throw new BridgeError(422, "INVALID_AVATAR", "请使用新附件上传头像");
+    if (body.avatarUrl !== null && body.avatarUrl !== "" && (typeof body.avatarUrl !== "string" || !/^\/api\/attachments\/[a-f0-9-]{36}$/i.test(body.avatarUrl))) throw new BridgeError(422, "INVALID_AVATAR", "请使用新附件上传头像");
     result.avatarUrl = body.avatarUrl || null;
   }
   return result;

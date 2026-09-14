@@ -3,6 +3,7 @@ import {
   type BridgeFetch,
   BridgeError,
   calendarDate,
+  isoTimestamp,
   pathId,
   requireData,
 } from "./bridge-protocol";
@@ -21,29 +22,47 @@ const MAX_SCAN_ITEMS = 20_000;
 const UPSTREAM_PAGE_SIZE = 200;
 const MAX_PAGES = Math.ceil(MAX_SCAN_ITEMS / UPSTREAM_PAGE_SIZE);
 
-function timeZoneOffsetMs(instant: Date, timeZone: string): number {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone,
-    hourCycle: "h23",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  }).formatToParts(instant);
-  const value = (type: string) => Number(parts.find((part) => part.type === type)?.value);
-  const asUtc = Date.UTC(value("year"), value("month") - 1, value("day"), value("hour"), value("minute"), value("second"));
-  return asUtc - instant.getTime();
-}
-
-/** Convert a local midnight to UTC without relying on the Node host timezone. */
-function localMidnight(date: string, timeZone: string): Date {
-  const localUtcGuess = Date.parse(`${date}T00:00:00.000Z`);
-  if (!Number.isFinite(localUtcGuess)) throw new BridgeError(502, "UPSTREAM_INVALID_DATE", "无法计算家庭时区日期边界");
-  let utc = localUtcGuess;
-  for (let i = 0; i < 3; i += 1) utc = localUtcGuess - timeZoneOffsetMs(new Date(utc), timeZone);
-  return new Date(utc);
+/**
+ * First instant of an IANA calendar day, not "midnight minus today's offset".
+ * Searching calendar boundaries handles 23/25-hour days and midnight DST gaps
+ * without depending on the host timezone or assuming every day is 24 hours.
+ */
+export function dayBoundsInTimeZone(date: string, timeZone: string): { start: Date; end: Date; timeZone: string } {
+  calendarDate(date);
+  let formatter: Intl.DateTimeFormat;
+  try {
+    if (!timeZone.trim()) throw new Error("Missing timezone");
+    formatter = new Intl.DateTimeFormat("en-CA", {
+      timeZone, calendar: "iso8601", numberingSystem: "latn",
+      year: "numeric", month: "2-digit", day: "2-digit",
+    });
+  } catch {
+    throw new BridgeError(502, "UPSTREAM_INVALID_TIMEZONE", "家庭时区配置无效");
+  }
+  const localDate = (instant: number): string => {
+    const parts = formatter.formatToParts(new Date(instant));
+    const value = (type: string) => parts.find(part => part.type === type)!.value;
+    return `${value("year").padStart(4, "0")}-${value("month")}-${value("day")}`;
+  };
+  const boundary = (day: string): number => {
+    const guess = Date.parse(`${day}T00:00:00.000Z`);
+    const margin = 36 * 60 * 60 * 1000;
+    let low = guess - margin;
+    let high = guess + margin;
+    while (high - low > 1) {
+      const mid = Math.floor((low + high) / 2);
+      if (localDate(mid) < day) low = mid;
+      else high = mid;
+    }
+    return high;
+  };
+  const start = boundary(date);
+  if (localDate(start) !== date) {
+    throw new BridgeError(400, "NONEXISTENT_LOCAL_DATE", "该日期在家庭时区中不存在");
+  }
+  // The next calendar date can itself be skipped (e.g. a date-line change).
+  const end = boundary(nextCalendarDate(date));
+  return { start: new Date(start), end: new Date(end), timeZone };
 }
 
 export async function familyTimeZone(fetchApi: BridgeFetch, token: string, babyId: string): Promise<string> {
@@ -60,7 +79,7 @@ export async function familyTimeZone(fetchApi: BridgeFetch, token: string, babyI
 
 export async function familyDayBounds(fetchApi: BridgeFetch, token: string, babyId: string, date: string): Promise<{ start: Date; end: Date; timeZone: string }> {
   const timeZone = await familyTimeZone(fetchApi, token, babyId);
-  return { start: localMidnight(date, timeZone), end: localMidnight(nextCalendarDate(date), timeZone), timeZone };
+  return dayBoundsInTimeZone(date, timeZone);
 }
 
 function nextCalendarDate(date: string): string {
@@ -70,10 +89,11 @@ function nextCalendarDate(date: string): string {
 }
 
 function parseInstant(value: unknown): Date {
-  if (typeof value !== "string" || !Number.isFinite(new Date(value).getTime())) {
+  try {
+    return new Date(isoTimestamp(value));
+  } catch {
     throw new BridgeError(502, "UPSTREAM_INVALID_TIMESTAMP", "GrowDesk 返回了无效的记录时间");
   }
-  return new Date(value);
 }
 
 function endpointFor(kind: LegacyRecordKind, babyId: string): string {
@@ -86,7 +106,7 @@ function endpointFor(kind: LegacyRecordKind, babyId: string): string {
 function validateLimit(query: URLSearchParams): { limit: number; explicit: boolean } {
   const raw = query.get("limit");
   const limit = raw === null ? MAX_SCAN_ITEMS : Number(raw);
-  if (!Number.isInteger(limit) || limit < 1 || limit > MAX_SCAN_ITEMS) {
+  if ((raw !== null && !/^[1-9]\d*$/.test(raw)) || !Number.isInteger(limit) || limit < 1 || limit > MAX_SCAN_ITEMS) {
     throw new BridgeError(400, "INVALID_LIMIT", "limit 必须为 1–20000 的整数");
   }
   return { limit, explicit: raw !== null };
@@ -121,19 +141,27 @@ export async function fetchLegacyRecordList<T extends DatedRecord>(
   const out: T[] = [];
   const visited = new Set<string>();
   let cursor: string | null = null;
+  let scanned = 0;
   for (let pageNumber = 0; pageNumber < MAX_PAGES; pageNumber += 1) {
     const params = new URLSearchParams({ limit: String(UPSTREAM_PAGE_SIZE) });
     if (cursor !== null) params.set("cursor", cursor);
     const response = await fetchApi<T[]>(`${endpointFor(kind, babyId)}?${params.toString()}`, { accessToken: token });
     const items = requireData(response);
-    if (!Array.isArray(items) || !response.page || !(response.page.nextCursor === null || typeof response.page.nextCursor === "string")) {
+    if (!Array.isArray(items) || items.length > UPSTREAM_PAGE_SIZE || !response.page || !(response.page.nextCursor === null || typeof response.page.nextCursor === "string")) {
       throw new BridgeError(502, "UPSTREAM_INVALID_PAGE", "GrowDesk 未返回完整的分页信息");
     }
 
+    scanned += items.length;
+    if (scanned > MAX_SCAN_ITEMS) throw new BridgeError(503, "HISTORY_SCAN_LIMIT", "记录量超出兼容接口上限，未返回截断数据");
     for (const item of items) {
+      if (!item || typeof item !== "object" || Array.isArray(item)) {
+        throw new BridgeError(502, "UPSTREAM_INVALID_RECORD", "GrowDesk 返回了无效的记录");
+      }
       let include = true;
       if (kind === "food") {
-        if (item.recordDate !== null && item.recordDate !== undefined) calendarDate(item.recordDate);
+        try { calendarDate(item.recordDate); } catch {
+          throw new BridgeError(502, "UPSTREAM_INVALID_DATE", "GrowDesk 返回了无效的辅食日期");
+        }
         include = !date || item.recordDate === date;
       } else if (kind === "sleep") {
         const startedAt = parseInstant(item.startedAt);

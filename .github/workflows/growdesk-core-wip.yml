@@ -1,0 +1,30 @@
+name: GrowDesk core WIP checks
+on:
+  push:
+    branches: [codex/growdesk-feature-parity-20260914]
+  pull_request:
+    branches: [codex/wip-growdesk-web-integration-20260914]
+permissions:
+  contents: read
+concurrency:
+  group: growdesk-core-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: file:./dev_test.db
+      IS_TEST: 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npx prisma generate
+      - name: Core boundary regression
+        run: node --import tsx --test tests/unit/growdesk-records-preview.test.ts tests/unit/growdesk-record-boundaries.test.ts
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run build
