@@ -6,11 +6,9 @@ import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import { archiveText } from "@/lib/archive";
 import {
   buildAgentSystemPrompt,
-  createBabyPanelTools,
   createLlmBackend,
-  parseDataImage,
-  resolveImageContent,
-  runBabyAgent,
+  activeChatRunManager,
+  type ChatStreamSubscriber,
 } from "@/lib/agent";
 
 export const dynamic = "force-dynamic";
@@ -37,7 +35,14 @@ function toHistory(messages: { role?: string; content?: unknown }[]): AgentMessa
           api: "openai-completions" as const,
           provider: "openrouter",
           model: "openrouter",
-          usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
+          usage: {
+            input: 0,
+            output: 0,
+            cacheRead: 0,
+            cacheWrite: 0,
+            totalTokens: 0,
+            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+          },
           stopReason: "stop" as const,
           timestamp: Date.now(),
         };
@@ -48,6 +53,112 @@ function toHistory(messages: { role?: string; content?: unknown }[]): AgentMessa
         timestamp: Date.now(),
       };
     });
+}
+
+export async function GET(request: Request) {
+  try {
+    const auth = await requireAuth(request);
+    if (auth.errorResponse) return auth.errorResponse;
+    const { user } = auth;
+
+    const url = new URL(request.url);
+    const sessionId = url.searchParams.get("sessionId");
+    if (!sessionId) {
+      return NextResponse.json({ error: "sessionId is required" }, { status: 400 });
+    }
+
+    const session = await prisma.aiChatSession.findFirst({
+      where: { id: sessionId, userId: user.id },
+    });
+    if (!session) {
+      return NextResponse.json({ error: "对话会话不存在或已删除" }, { status: 404 });
+    }
+
+    const activeRun = activeChatRunManager.get(sessionId);
+    const isOwnerRun = Boolean(activeRun && activeRun.userId === user.id);
+    const acceptHeader = request.headers.get("accept") || "";
+    const wantsStream =
+      acceptHeader.includes("text/event-stream") || url.searchParams.get("stream") === "true";
+
+    if (wantsStream) {
+      const encoder = new TextEncoder();
+      const stream = new ReadableStream({
+        start(controller) {
+          let isClosed = false;
+          const subscriber: ChatStreamSubscriber = (event) => {
+            if (isClosed) return;
+            try {
+              if (event.type === "session") {
+                controller.enqueue(
+                  encoder.encode(`data: ${JSON.stringify({ session: event.session })}\n\n`)
+                );
+              } else if (event.type === "text") {
+                controller.enqueue(
+                  encoder.encode(
+                    `data: ${JSON.stringify({ text: event.text, replay: event.replay })}\n\n`
+                  )
+                );
+              } else if (event.type === "tool") {
+                controller.enqueue(
+                  encoder.encode(
+                    `data: ${JSON.stringify({ tool: event.tool, replay: event.replay })}\n\n`
+                  )
+                );
+              } else if (event.type === "done") {
+                controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+                isClosed = true;
+                try {
+                  controller.close();
+                } catch {}
+              } else if (event.type === "error") {
+                controller.enqueue(
+                  encoder.encode(`data: ${JSON.stringify({ error: event.error })}\n\n`)
+                );
+                controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+                isClosed = true;
+                try {
+                  controller.close();
+                } catch {}
+              }
+            } catch {
+              isClosed = true;
+            }
+          };
+
+          if (isOwnerRun && activeRun!.status === "running") {
+            request.signal.addEventListener(
+              "abort",
+              () => {
+                isClosed = true;
+                activeChatRunManager.detachSubscriber(sessionId, subscriber);
+                try {
+                  controller.close();
+                } catch {}
+              },
+              { once: true }
+            );
+            activeChatRunManager.attachSubscriber(sessionId, subscriber, true);
+          } else {
+            controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+            try {
+              controller.close();
+            } catch {}
+          }
+        },
+      });
+      return new Response(stream, { headers: sseHeaders() });
+    }
+
+    return NextResponse.json({
+      active: Boolean(isOwnerRun && activeRun!.status === "running"),
+      status: isOwnerRun ? activeRun!.status : "idle",
+      text: isOwnerRun ? activeRun!.fullText : "",
+      tools: isOwnerRun ? activeRun!.toolTraces : [],
+    });
+  } catch (err) {
+    console.error("GET /api/ai/chat exception:", err);
+    return NextResponse.json({ error: "获取会话状态失败" }, { status: 500 });
+  }
 }
 
 export async function POST(request: Request) {
@@ -73,7 +184,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json().catch(() => ({}));
-    const { messages, contextDetail, babyId, image, sessionId } = body;
+    const { messages, contextDetail, babyId, sessionId } = body;
     const contextType =
       typeof body.contextType === "string" && body.contextType.trim()
         ? body.contextType.trim()
@@ -138,7 +249,7 @@ export async function POST(request: Request) {
       if (existing.babyId !== targetBaby.id || existing.contextType !== contextType) {
         return NextResponse.json(
           { error: "会话所属宝宝或领域与当前请求不匹配，请切换会话后重试" },
-          { status: 409 },
+          { status: 409 }
         );
       }
       activeSession = existing;
@@ -155,160 +266,122 @@ export async function POST(request: Request) {
       });
     }
 
+    const sid = activeSession.id;
+    const imagePersistStr =
+      imageList.length === 1
+        ? imageList[0]
+        : imageList.length > 1
+          ? JSON.stringify(imageList)
+          : null;
+
+    // Check if an active agent is already running for this session
+    const existingRun = activeChatRunManager.get(sid);
+    if (existingRun && existingRun.status === "running") {
+      return NextResponse.json(
+        {
+          error: "当前会话正在思考生成中，请等待完成或点击停止生成后再发送新问题",
+          active: true,
+          sessionId: sid,
+        },
+        { status: 409 }
+      );
+    }
+
+    // 2. Prompt-First Persistence: Save user prompt to DB BEFORE agent starts
+    await prisma.aiChatMessage.create({
+      data: {
+        sessionId: sid,
+        role: "user",
+        content: promptText,
+        image: imagePersistStr,
+      },
+    });
+
     const systemPrompt = buildAgentSystemPrompt({
       contextType,
       contextDetail,
       baby: targetBaby,
     });
 
+    const prior = messages.filter(
+      (m: { role?: string }, idx: number) =>
+        idx < messages.length - 1 && (m.role === "user" || m.role === "assistant")
+    );
+
+    // 3. Start background runner decoupled from client request.signal
+    activeChatRunManager.startRun({
+      sessionId: sid,
+      userId: user.id,
+      baby: targetBaby,
+      promptText,
+      imageList,
+      systemPrompt,
+      history: toHistory(prior.slice(-8)),
+      sessionMeta: {
+        id: activeSession.id,
+        title: activeSession.title,
+        contextType: activeSession.contextType,
+      },
+    });
+
+    // 4. Stream response to this client, detaching cleanly on client disconnect without aborting the background run
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
-      async start(controller) {
-        const send = (payload: unknown) => {
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify(payload)}\n\n`));
-        };
-        // Emit session info as first SSE event
-        send({ session: activeSession });
-
-        let assistantFull = "";
-        const toolTraces: any[] = [];
-
-        try {
-          const prior = messages.filter(
-            (m: { role?: string }, idx: number) =>
-              idx < messages.length - 1 && (m.role === "user" || m.role === "assistant")
-          );
-          
-          // Resolve multiple images (up to 6)
-          const resolvedImages = [];
-          for (const imgStr of imageList.slice(0, 6)) {
-            const resolved = await resolveImageContent(imgStr);
-            if (resolved) resolvedImages.push(resolved);
-          }
-
-          await runBabyAgent({
-            systemPrompt,
-            history: toHistory(prior.slice(-8)),
-            prompt: promptText,
-            images: resolvedImages.length > 0 ? resolvedImages : undefined,
-            tools: createBabyPanelTools({ userId: user.id, baby: targetBaby }),
-            abortSignal: request.signal,
-            onEvent: (event) => {
-              if (event.type === "text") {
-                assistantFull += event.text;
-                send({ text: event.text });
-              } else {
-                if (event.status === "end") {
-                  toolTraces.push(event);
-                }
-                send({ tool: event });
-              }
-            },
-          });
-
-          if (assistantFull) {
-            void archiveText("output_json", assistantFull).catch(() => {});
-          }
-
-          // Persist user and assistant messages into DB
+      start(controller) {
+        let isClosed = false;
+        const subscriber: ChatStreamSubscriber = (event) => {
+          if (isClosed) return;
           try {
-            if (activeSession) {
-              const sid = activeSession.id;
-              const imagePersistStr =
-                imageList.length === 1
-                  ? imageList[0]
-                  : imageList.length > 1
-                    ? JSON.stringify(imageList)
-                    : null;
-
-              await prisma.aiChatMessage.create({
-                data: {
-                  sessionId: sid,
-                  role: "user",
-                  content: promptText,
-                  image: imagePersistStr,
-                },
-              });
-              await prisma.aiChatMessage.create({
-                data: {
-                  sessionId: sid,
-                  role: "assistant",
-                  content: assistantFull || "未能获取有效回复，请重试。",
-                  toolsJson: toolTraces.length > 0 ? JSON.stringify(toolTraces) : null,
-                },
-              });
-              await prisma.aiChatSession.update({
-                where: { id: sid },
-                data: { updatedAt: new Date() },
-              });
+            if (event.type === "session") {
+              controller.enqueue(
+                encoder.encode(`data: ${JSON.stringify({ session: event.session })}\n\n`)
+              );
+            } else if (event.type === "text") {
+              controller.enqueue(
+                encoder.encode(
+                  `data: ${JSON.stringify({ text: event.text, replay: event.replay })}\n\n`
+                )
+              );
+            } else if (event.type === "tool") {
+              controller.enqueue(
+                encoder.encode(
+                  `data: ${JSON.stringify({ tool: event.tool, replay: event.replay })}\n\n`
+                )
+              );
+            } else if (event.type === "done") {
+              controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+              isClosed = true;
+              try {
+                controller.close();
+              } catch {}
+            } else if (event.type === "error") {
+              controller.enqueue(
+                encoder.encode(`data: ${JSON.stringify({ error: event.error })}\n\n`)
+              );
+              controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+              isClosed = true;
+              try {
+                controller.close();
+              } catch {}
             }
-          } catch (dbErr) {
-            console.error("Failed to save chat message history:", dbErr);
+          } catch {
+            isClosed = true;
           }
+        };
 
-          controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-        } catch (err: any) {
-          const isAborted = request.signal.aborted || err?.name === "AbortError";
-          if (!isAborted) {
-            console.error("AI chat run error:", err);
-            const fallback =
-              assistantFull ||
-              "网络连接暂时超时，请稍后重新提问。若宝宝身体有明显不适，请以专业医生诊断为准。";
-            if (!assistantFull) send({ text: fallback });
-
-            // Persist on error as well
+        request.signal.addEventListener(
+          "abort",
+          () => {
+            isClosed = true;
+            activeChatRunManager.detachSubscriber(sid, subscriber);
             try {
-              if (activeSession) {
-                const sid = activeSession.id;
-                await prisma.aiChatMessage.create({
-                  data: {
-                    sessionId: sid,
-                    role: "user",
-                    content: promptText,
-                    image: typeof image === "string" ? image : null,
-                  },
-                });
-                await prisma.aiChatMessage.create({
-                  data: {
-                    sessionId: sid,
-                    role: "assistant",
-                    content: fallback,
-                    toolsJson: toolTraces.length > 0 ? JSON.stringify(toolTraces) : null,
-                  },
-                });
-              }
+              controller.close();
             } catch {}
-          } else if (assistantFull && activeSession) {
-            // Save whatever partial assistant message was generated before user cancelled
-            try {
-              const sid = activeSession.id;
-              await prisma.aiChatMessage.create({
-                data: {
-                  sessionId: sid,
-                  role: "user",
-                  content: promptText,
-                  image: typeof image === "string" ? image : null,
-                },
-              });
-              await prisma.aiChatMessage.create({
-                data: {
-                  sessionId: sid,
-                  role: "assistant",
-                  content: assistantFull,
-                  toolsJson: toolTraces.length > 0 ? JSON.stringify(toolTraces) : null,
-                },
-              });
-            } catch {}
-          }
+          },
+          { once: true }
+        );
 
-          try {
-            controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-          } catch {}
-        } finally {
-          try {
-            controller.close();
-          } catch {}
-        }
+        activeChatRunManager.attachSubscriber(sid, subscriber, true);
       },
     });
 

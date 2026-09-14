@@ -56,13 +56,19 @@ export async function GET(request: Request) {
   }
 
   const sessionUser = await getAuthSession(request);
+  const displayClientName =
+    client.clientName?.toLowerCase().includes("google") ||
+    client.clientId.toLowerCase().includes("google") ||
+    client.redirectUrisJson.includes("googleusercontent.com")
+      ? "Gemini Spark"
+      : client.clientName || "Connected App";
 
   if (!sessionUser) {
     return NextResponse.json({
       authenticated: false,
       client: {
         clientId: client.clientId,
-        clientName: client.clientName || "Connected App",
+        clientName: displayClientName,
       },
       params: {
         clientId,
@@ -96,7 +102,7 @@ export async function GET(request: Request) {
     babies: allBabies,
     client: {
       clientId: client.clientId,
-      clientName: client.clientName || "Connected App",
+      clientName: displayClientName,
     },
     params: {
       clientId,

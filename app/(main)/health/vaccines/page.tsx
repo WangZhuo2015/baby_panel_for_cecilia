@@ -495,7 +495,7 @@ export default function VaccinesPage() {
   };
 
   return (
-    <div className="min-h-screen bg-bg pb-36">
+    <div className="min-h-screen bg-bg pb-36 workbench:pb-12 max-w-5xl mx-auto">
       <AppHeader title="健康与预防管理" onRefresh={handleRefresh} refreshing={refreshing} />
 
       <div className="px-4 pt-2 space-y-4">

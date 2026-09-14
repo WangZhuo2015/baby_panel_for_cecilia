@@ -7,6 +7,8 @@ import {
   CheckCircle2,
   Minus,
   Plus,
+  Clock,
+  Edit3,
 } from "lucide-react";
 import { CuteButton } from "@/components/ui/CuteButton";
 import { CuteInput } from "@/components/ui/CuteInput";
@@ -15,7 +17,13 @@ import { FormSection } from "@/components/ui/FormSection";
 import { SegmentControl } from "@/components/ui/SegmentControl";
 import { QuickAiButton } from "@/components/ui/QuickAiButton";
 import { VoiceConfirmEntry } from "@/components/ui/VoiceConfirmEntry";
-import { getLocalDateStr, formatIsoToLocalTime } from "@/lib/date";
+import { getLocalDateStr, formatIsoToLocalTime, getLocalTimeStr } from "@/lib/date";
+import {
+  getPastIsoTime,
+  resolvePastStartTime,
+  adjustLiveStartTime,
+  formatElapsedDuration,
+} from "@/lib/sleep-timer";
 import type { SleepType, SleepRecord } from "@/types";
 
 const ASLEEP_METHODS = [
@@ -33,21 +41,14 @@ const WAKE_MOODS = [
 ];
 
 function LiveSleepDuration({ startIso }: { startIso: string }) {
-  const [sec, setSec] = useState(() =>
-    Math.max(0, Math.floor((Date.now() - new Date(startIso).getTime()) / 1000))
-  );
+  const [text, setText] = useState(() => formatElapsedDuration(startIso).text);
   useEffect(() => {
-    const tick = () =>
-      setSec(Math.max(0, Math.floor((Date.now() - new Date(startIso).getTime()) / 1000)));
+    const tick = () => setText(formatElapsedDuration(startIso).text);
     tick();
     const t = setInterval(tick, 1000);
     return () => clearInterval(t);
   }, [startIso]);
 
-  const h = Math.floor(sec / 3600);
-  const m = Math.floor((sec % 3600) / 60);
-  const ss = sec % 60;
-  const text = h > 0 ? `${h}小时${String(m).padStart(2, "0")}分` : `${m}分${String(ss).padStart(2, "0")}秒`;
   return <>{text}</>;
 }
 
@@ -78,6 +79,10 @@ export function SleepForm({
   // Live Timer State (persisted in localStorage, only for create mode)
   const [isLiveSleeping, setIsLiveSleeping] = useState(false);
   const [liveStartTime, setLiveStartTime] = useState<string | null>(null);
+  const [isCustomTimeOpen, setIsCustomTimeOpen] = useState(false);
+  const [customStartTime, setCustomStartTime] = useState<string>(() => getLocalTimeStr());
+  const [isEditingLiveStart, setIsEditingLiveStart] = useState(false);
+  const [liveEditTime, setLiveEditTime] = useState<string>("");
 
   // Manual Form State
   const [date, setDate] = useState<string>(() => {
@@ -133,29 +138,91 @@ export function SleepForm({
     return clean.replace(/^[ ·|]+|[ ·|]+$/g, "").trim();
   });
 
-  // Load live sleep session from localStorage on mount (create mode only)
+  const dispatchSleepTimerUpdate = () => {
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("baby:sleep-timer-updated"));
+    }
+  };
+
+  // Load and continuously sync live sleep session from localStorage (and on events)
   useEffect(() => {
     if (isEdit) return;
-    try {
-      const storedStart = localStorage.getItem("baby_active_sleep_start");
-      const storedType = localStorage.getItem("baby_active_sleep_type");
-      if (storedStart) {
-        setIsLiveSleeping(true);
-        setLiveStartTime(storedStart);
-        if (storedType) setSleepType(storedType as SleepType);
+    const syncFromStorage = () => {
+      try {
+        const storedStart = localStorage.getItem("baby_active_sleep_start");
+        const storedType = localStorage.getItem("baby_active_sleep_type");
+        if (storedStart && !Number.isNaN(new Date(storedStart).getTime())) {
+          setIsLiveSleeping(true);
+          setLiveStartTime(storedStart);
+          if (storedType) setSleepType(storedType as SleepType);
+        } else {
+          setIsLiveSleeping(false);
+          setLiveStartTime(null);
+        }
+      } catch {
+        // Ignore
       }
+    };
+    syncFromStorage();
+    window.addEventListener("baby:sleep-timer-updated", syncFromStorage);
+    window.addEventListener("storage", syncFromStorage);
+    return () => {
+      window.removeEventListener("baby:sleep-timer-updated", syncFromStorage);
+      window.removeEventListener("storage", syncFromStorage);
+    };
+  }, [isEdit]);
+
+  const handleStartLiveSleep = (customIso?: string) => {
+    const isoStart = customIso || new Date().toISOString();
+    setIsLiveSleeping(true);
+    setLiveStartTime(isoStart);
+    setIsCustomTimeOpen(false);
+    setIsEditingLiveStart(false);
+    try {
+      localStorage.setItem("baby_active_sleep_start", isoStart);
+      localStorage.setItem("baby_active_sleep_type", sleepType);
+      dispatchSleepTimerUpdate();
     } catch {
       // Ignore
     }
-  }, [isEdit]);
+  };
 
-  const handleStartLiveSleep = () => {
-    const isoNow = new Date().toISOString();
-    setIsLiveSleeping(true);
-    setLiveStartTime(isoNow);
+  const handleStartWithCustomTime = () => {
+    const resolvedIso = resolvePastStartTime(customStartTime);
+    handleStartLiveSleep(resolvedIso);
+  };
+
+  const handleToggleLiveSleepType = (newType: SleepType) => {
+    setSleepType(newType);
     try {
-      localStorage.setItem("baby_active_sleep_start", isoNow);
-      localStorage.setItem("baby_active_sleep_type", sleepType);
+      localStorage.setItem("baby_active_sleep_type", newType);
+      dispatchSleepTimerUpdate();
+    } catch {
+      // Ignore
+    }
+  };
+
+  const handleAdjustLiveStartByDelta = (deltaMinutes: number) => {
+    if (!liveStartTime) return;
+    const newIso = adjustLiveStartTime(liveStartTime, deltaMinutes);
+    setLiveStartTime(newIso);
+    setLiveEditTime(formatIsoToLocalTime(newIso));
+    try {
+      localStorage.setItem("baby_active_sleep_start", newIso);
+      dispatchSleepTimerUpdate();
+    } catch {
+      // Ignore
+    }
+  };
+
+  const handleSaveLiveEditTime = () => {
+    if (!liveEditTime) return;
+    const resolvedIso = resolvePastStartTime(liveEditTime);
+    setLiveStartTime(resolvedIso);
+    setIsEditingLiveStart(false);
+    try {
+      localStorage.setItem("baby_active_sleep_start", resolvedIso);
+      dispatchSleepTimerUpdate();
     } catch {
       // Ignore
     }
@@ -176,9 +243,11 @@ export function SleepForm({
 
     setIsLiveSleeping(false);
     setLiveStartTime(null);
+    setIsEditingLiveStart(false);
     try {
       localStorage.removeItem("baby_active_sleep_start");
       localStorage.removeItem("baby_active_sleep_type");
+      dispatchSleepTimerUpdate();
     } catch {
       // Ignore
     }
@@ -188,9 +257,11 @@ export function SleepForm({
     if (!confirm("确定要放弃本次实时睡眠计时吗？")) return;
     setIsLiveSleeping(false);
     setLiveStartTime(null);
+    setIsEditingLiveStart(false);
     try {
       localStorage.removeItem("baby_active_sleep_start");
       localStorage.removeItem("baby_active_sleep_type");
+      dispatchSleepTimerUpdate();
     } catch {
       // Ignore
     }
@@ -261,26 +332,131 @@ export function SleepForm({
 
       {/* 🌙 实时入睡快捷卡片 (Create Mode Only) */}
       {!isEdit && (
-        <CuteCard className="p-4 bg-gradient-to-br from-indigo-900 to-purple-900 text-white shadow-xl relative overflow-hidden border-0">
-          <div className="absolute -top-10 -right-10 w-36 h-36 rounded-full bg-purple-500/20 blur-2xl" />
-          <div className="absolute -bottom-10 -left-10 w-36 h-36 rounded-full bg-indigo-500/20 blur-2xl" />
+        <CuteCard className="p-4 bg-gradient-to-br from-indigo-900 via-purple-900 to-indigo-950 text-white shadow-xl relative overflow-hidden border-0">
+          <div className="absolute -top-10 -right-10 w-36 h-36 rounded-full bg-purple-500/20 blur-2xl pointer-events-none" />
+          <div className="absolute -bottom-10 -left-10 w-36 h-36 rounded-full bg-indigo-500/20 blur-2xl pointer-events-none" />
 
           {isLiveSleeping ? (
-            <div className="relative text-center py-2 space-y-2">
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/20 text-purple-200 text-xs font-medium backdrop-blur-md animate-pulse">
-                <Moon size={13} className="text-yellow-300" />
-                宝宝正在香甜睡眠中...
+            <div className="relative text-center py-1 space-y-3">
+              {/* Header: Status badge & Sleep type switch */}
+              <div className="flex items-center justify-between gap-2">
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/15 text-purple-200 text-xs font-medium backdrop-blur-md animate-pulse">
+                  <Moon size={13} className="text-yellow-300" />
+                  宝宝正在香甜睡眠中...
+                </div>
+                <div className="flex items-center bg-black/30 p-0.5 rounded-xl text-[11px] border border-white/10">
+                  <button
+                    type="button"
+                    onClick={() => handleToggleLiveSleepType("night")}
+                    className={`px-2.5 py-1 rounded-lg transition-all ${
+                      sleepType === "night"
+                        ? "bg-purple-600 text-white font-bold shadow-xs"
+                        : "text-purple-200/80 hover:text-white"
+                    }`}
+                  >
+                    🌙 夜觉
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleToggleLiveSleepType("day")}
+                    className={`px-2.5 py-1 rounded-lg transition-all ${
+                      sleepType === "day"
+                        ? "bg-purple-600 text-white font-bold shadow-xs"
+                        : "text-purple-200/80 hover:text-white"
+                    }`}
+                  >
+                    💤 小睡
+                  </button>
+                </div>
               </div>
 
-              <div className="py-2">
+              {/* Timer Duration */}
+              <div className="py-1">
                 <div className="text-3xl font-mono font-bold text-white tracking-wider">
                   {liveStartTime ? <LiveSleepDuration startIso={liveStartTime} /> : null}
                 </div>
-                <p className="text-[11px] text-purple-200/80 mt-1">
-                  入睡时间：{liveStartTime ? formatIsoToLocalTime(liveStartTime) : ""}
-                </p>
+                <div className="flex items-center justify-center gap-1.5 mt-1.5">
+                  <span className="text-xs text-purple-200/90">
+                    入睡时间：{liveStartTime ? formatIsoToLocalTime(liveStartTime) : ""}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!isEditingLiveStart && liveStartTime) {
+                        setLiveEditTime(formatIsoToLocalTime(liveStartTime));
+                      }
+                      setIsEditingLiveStart(!isEditingLiveStart);
+                    }}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white/15 hover:bg-white/25 text-[11px] text-yellow-300 font-medium transition-colors"
+                  >
+                    <Edit3 size={11} />
+                    {isEditingLiveStart ? "收起" : "修改"}
+                  </button>
+                </div>
               </div>
 
+              {/* In-flight Start Time Editor */}
+              {isEditingLiveStart && (
+                <div className="p-3 bg-black/40 backdrop-blur-md rounded-2xl border border-white/15 text-left space-y-2.5">
+                  <div className="flex items-center justify-between text-xs text-purple-200">
+                    <span className="font-semibold flex items-center gap-1 text-white">
+                      <Clock size={12} className="text-yellow-300" />
+                      调整入睡开始时间
+                    </span>
+                    <span className="text-[10px] text-purple-300/80">
+                      （时长将自动更新）
+                    </span>
+                  </div>
+
+                  {/* Quick delta buttons */}
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[11px] text-purple-300 shrink-0">微调:</span>
+                    <div className="grid grid-cols-4 gap-1.5 flex-1">
+                      {[
+                        { label: "提前30分", val: -30 },
+                        { label: "提前15分", val: -15 },
+                        { label: "提前5分", val: -5 },
+                        { label: "延后15分", val: 15 },
+                      ].map((item) => (
+                        <button
+                          key={item.label}
+                          type="button"
+                          onClick={() => handleAdjustLiveStartByDelta(item.val)}
+                          className="py-1 rounded-lg bg-white/10 hover:bg-white/20 text-xs text-white font-medium text-center transition-colors btn-press border border-white/5 whitespace-nowrap"
+                        >
+                          {item.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Exact Time Input & Confirm */}
+                  <div className="flex items-center gap-2 pt-1 border-t border-white/10">
+                    <input
+                      type="time"
+                      value={liveEditTime}
+                      onChange={(e) => setLiveEditTime(e.target.value)}
+                      className="bg-white/10 text-white border border-white/20 rounded-xl px-2.5 py-1.5 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-yellow-300"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleSaveLiveEditTime}
+                      className="px-3 py-1.5 rounded-xl bg-yellow-400 text-purple-950 font-bold text-xs hover:bg-yellow-300 transition-colors btn-press"
+                    >
+                      确定保存
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsEditingLiveStart(false)}
+                      className="px-2.5 py-1.5 rounded-xl bg-white/10 text-purple-200 text-xs hover:bg-white/20 transition-colors"
+                    >
+                      取消
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Settle / Cancel Actions */}
               <div className="flex gap-2 pt-1">
                 <button
                   type="button"
@@ -293,30 +469,94 @@ export function SleepForm({
                 <button
                   type="button"
                   onClick={handleCancelLiveSleep}
-                  className="px-3 py-3 rounded-2xl bg-white/10 text-white/70 text-xs hover:bg-white/20"
+                  className="px-3 py-3 rounded-2xl bg-white/10 text-white/70 text-xs hover:bg-white/20 transition-colors"
                 >
-                  取消
+                  放弃本次
                 </button>
               </div>
             </div>
           ) : (
-            <div className="relative flex items-center justify-between py-1">
-              <div>
-                <h3 className="text-sm font-bold text-white flex items-center gap-1.5">
-                  <Moon size={16} className="text-yellow-300" />
-                  宝宝现在准备入睡了吗？
-                </h3>
-                <p className="text-xs text-purple-200/80 mt-0.5">
-                  一键开启实时计时，醒来点击自动结算
-                </p>
+            // NOT live sleeping
+            <div className="relative py-1 space-y-3">
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <h3 className="text-sm font-bold text-white flex items-center gap-1.5">
+                    <Moon size={16} className="text-yellow-300" />
+                    宝宝准备入睡了吗？
+                  </h3>
+                  <p className="text-xs text-purple-200/80 mt-0.5">
+                    一键实时计时，或从之前入睡时刻开始
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleStartLiveSleep()}
+                  className="px-3.5 py-2 rounded-2xl bg-yellow-400 text-purple-950 font-bold text-xs shadow-md hover:bg-yellow-300 btn-press whitespace-nowrap shrink-0 flex items-center gap-1"
+                >
+                  <Moon size={13} />
+                  <span>现在开始计时</span>
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={handleStartLiveSleep}
-                className="px-4 py-2.5 rounded-2xl bg-white text-indigo-950 font-bold text-xs shadow-md hover:bg-purple-50 btn-press whitespace-nowrap shrink-0"
-              >
-                🌙 入睡开始计时
-              </button>
+
+              {/* Past Presets & Custom Time Trigger */}
+              <div className="pt-2 border-t border-white/10">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-[11px] text-purple-200 font-medium flex items-center gap-1">
+                    <Clock size={12} className="text-yellow-300" />
+                    已提前入睡？直接倒推开始：
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!isCustomTimeOpen) {
+                        setCustomStartTime(getLocalTimeStr());
+                      }
+                      setIsCustomTimeOpen(!isCustomTimeOpen);
+                    }}
+                    className="text-[11px] text-yellow-300 hover:text-yellow-200 font-medium underline underline-offset-2 transition-colors"
+                  >
+                    {isCustomTimeOpen ? "收起" : "指定时刻..."}
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-4 gap-1.5">
+                  {[
+                    { label: "5分前", mins: 5 },
+                    { label: "10分前", mins: 10 },
+                    { label: "15分前", mins: 15 },
+                    { label: "30分前", mins: 30 },
+                  ].map((p) => (
+                    <button
+                      key={p.mins}
+                      type="button"
+                      onClick={() => handleStartLiveSleep(getPastIsoTime(p.mins))}
+                      className="py-1.5 px-2 rounded-xl bg-white/10 hover:bg-white/20 text-xs text-purple-100 font-medium text-center transition-all btn-press border border-white/10"
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Custom Time Picker Expandable */}
+                {isCustomTimeOpen && (
+                  <div className="mt-2.5 p-3 bg-black/40 backdrop-blur-md rounded-2xl border border-white/15 flex items-center gap-2">
+                    <span className="text-xs text-purple-200 shrink-0">入睡时间:</span>
+                    <input
+                      type="time"
+                      value={customStartTime}
+                      onChange={(e) => setCustomStartTime(e.target.value)}
+                      className="bg-white/10 text-white border border-white/20 rounded-xl px-2.5 py-1.5 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-yellow-300"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleStartWithCustomTime}
+                      className="flex-1 py-1.5 rounded-xl bg-yellow-400 text-purple-950 font-bold text-xs hover:bg-yellow-300 transition-colors whitespace-nowrap btn-press"
+                    >
+                      从该时刻开始计时
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </CuteCard>

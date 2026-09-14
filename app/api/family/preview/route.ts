@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
+import { GROWDESK_CONFIG } from "@/lib/config";
+import { growdeskIdentityEndpoints } from "@/lib/growdesk/identity-endpoints";
 
 export async function GET(request: Request) {
   try {
@@ -22,6 +24,8 @@ export async function GET(request: Request) {
         { status: 400 }
       );
     }
+
+    if (GROWDESK_CONFIG.enabled) return growdeskIdentityEndpoints.familyPreview(request);
 
     const family = await prisma.family.findUnique({
       where: { inviteCode: code },

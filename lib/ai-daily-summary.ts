@@ -7,6 +7,7 @@ import {
 } from "@/lib/date";
 import { calculateAgeDetail, calculateCorrectedAge } from "@/lib/age";
 import { AI_CONFIG } from "@/lib/config";
+import { getLlmProfiles, type LlmProfile } from "@/lib/llm-profiles";
 import { archiveText } from "@/lib/archive";
 import { safeJsonParse } from "@/lib/json";
 import { getFeedingEffectiveMl } from "@/lib/nutrition/breastmilk";
@@ -508,7 +509,121 @@ export function generateCuratedDailySummary(
 }
 
 /**
- * Generate AI Daily Summary via LLM (OpenRouter / Opencode) with robust error handling and fallback.
+ * Helper to check if a cached AI daily summary is still strictly fresh and accurate.
+ */
+function isDailySummaryCacheFresh(
+  cachedSummary: AiDailySummaryResult,
+  currentMetrics: DailyComprehensiveMetrics,
+  isToday: boolean
+): boolean {
+  if (!cachedSummary.isAiGenerated) {
+    return false;
+  }
+
+  const prev = cachedSummary.metrics;
+  if (!prev) return false;
+
+  const dataUnchanged =
+    prev.feedingCount === currentMetrics.feedingCount &&
+    prev.totalFeedingMl === currentMetrics.totalFeedingMl &&
+    prev.totalBreastMinutes === currentMetrics.totalBreastMinutes &&
+    prev.sleepCount === currentMetrics.sleepCount &&
+    prev.totalSleepMinutes === currentMetrics.totalSleepMinutes &&
+    prev.diaperCount === currentMetrics.diaperCount &&
+    prev.peeCount === currentMetrics.peeCount &&
+    prev.poopCount === currentMetrics.poopCount &&
+    prev.foodCount === currentMetrics.foodCount &&
+    prev.supplementsCount === currentMetrics.supplementsCount;
+
+  // Past dates: fresh as long as records were not retroactively edited
+  if (!isToday) {
+    return dataUnchanged;
+  }
+
+  // Today: if record count or totals changed, cache is stale immediately
+  if (!dataUnchanged) {
+    return false;
+  }
+
+  // Today: if generated more than 3 hours ago during active daytime, refresh to stay current
+  const genMs = new Date(cachedSummary.generatedAt).getTime();
+  if (Number.isFinite(genMs) && Date.now() - genMs > 3 * 3600 * 1000) {
+    return false;
+  }
+
+  return true;
+}
+
+interface CandidateProfile {
+  name: string;
+  baseUrl: string;
+  apiKey: string;
+  model: string;
+  headers: Record<string, string>;
+  completionExtras?: Record<string, unknown>;
+}
+
+function resolveCandidateProfiles(): CandidateProfile[] {
+  const list: CandidateProfile[] = [];
+  try {
+    const { activeProfile, profiles } = getLlmProfiles();
+    const active = profiles[activeProfile];
+    if (active?.baseUrl && active?.apiKey) {
+      list.push(formatCandidate(activeProfile, active));
+    }
+    for (const [key, p] of Object.entries(profiles)) {
+      if (key !== activeProfile && p.baseUrl && p.apiKey) {
+        list.push(formatCandidate(key, p));
+      }
+    }
+  } catch (err) {
+    console.warn("[AI Daily Summary] Failed to load LLM profiles:", err);
+  }
+
+  if (list.length === 0 && AI_CONFIG.baseUrl && AI_CONFIG.apiKey) {
+    list.push({
+      name: "default",
+      baseUrl: AI_CONFIG.baseUrl.replace(/\/+$/, ""),
+      apiKey: AI_CONFIG.apiKey,
+      model: AI_CONFIG.model,
+      headers: AI_CONFIG.headers,
+      completionExtras: AI_CONFIG.completionExtras,
+    });
+  }
+
+  return list;
+}
+
+function formatCandidate(key: string, p: LlmProfile): CandidateProfile {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...(p.headers || {}),
+  };
+  if (p.apiKey) {
+    headers.Authorization = `Bearer ${p.apiKey}`;
+  }
+  if (p.baseUrl.includes("openrouter.ai") && !headers["HTTP-Referer"]) {
+    headers["HTTP-Referer"] = "https://baby.zwang.fun";
+    headers["X-Title"] = "Baby Panel";
+  }
+
+  let model = p.model;
+  if (model === "hermes-agent" || (p.baseUrl.includes("opencode.ai") && model.includes("muse-spark"))) {
+    model = "deepseek-v4-flash-vision-exp";
+  }
+
+  return {
+    name: key,
+    baseUrl: p.baseUrl.replace(/\/+$/, ""),
+    apiKey: p.apiKey,
+    model,
+    headers,
+    completionExtras: p.completionExtras,
+  };
+}
+
+/**
+ * Generate AI Daily Summary via LLM (OpenRouter / Opencode / AMD) with robust error handling and fallback.
  */
 export async function generateAiDailySummary(
   ctx: RecordContext,
@@ -541,6 +656,9 @@ export async function generateAiDailySummary(
   const nickname = baby.nickname || "宝宝";
   const genderWord = baby.gender === "male" ? "男宝" : "女宝";
 
+  const todayStr = getLocalDateStr();
+  const isToday = date === todayStr;
+
   // Check cache unless forceRefresh is true
   const cacheKey = `ai_daily_summary_${baby.id}_${date}`;
   if (!options?.forceRefresh) {
@@ -551,11 +669,11 @@ export async function generateAiDailySummary(
       });
       if (cached?.content) {
         const parsed = JSON.parse(cached.content);
-        if (parsed?.summary) {
+        const cachedSummary = parsed?.summary as AiDailySummaryResult | undefined;
+        if (cachedSummary && isDailySummaryCacheFresh(cachedSummary, metrics, isToday)) {
           return {
-            ...parsed.summary,
+            ...cachedSummary,
             metrics, // keep fresh raw metrics
-            isAiGenerated: true,
           };
         }
       }
@@ -634,82 +752,117 @@ export async function generateAiDailySummary(
   ]
 }`;
 
-  try {
-    const res = await fetch(`${AI_CONFIG.baseUrl.replace(/\/+$/, "")}/chat/completions`, {
-      method: "POST",
-      headers: AI_CONFIG.headers,
-      body: JSON.stringify({
-        model: AI_CONFIG.model,
-        messages: [
-          { role: "system", content: systemPrompt },
-          {
-            role: "user",
-            content: `请为${ageDetail.label}的${genderWord}宝宝「${nickname}」生成 ${date} 的每日成长总结与健康日报。数据如下：\n${JSON.stringify(promptData, null, 2)}`,
-          },
-        ],
-        temperature: 0.6,
-        max_tokens: 1600,
-        ...AI_CONFIG.completionExtras,
-      }),
-      cache: "no-store",
-      signal: AbortSignal.timeout(20000),
-    });
-
-    if (!res.ok) {
-      console.warn(`LLM daily summary request returned ${res.status}, using curated fallback.`);
-      return curatedFallback;
-    }
-
-    const jsonRes = await res.json();
-    const choice = jsonRes.choices?.[0]?.message;
-    const content = (choice?.content || choice?.reasoning_content || "");
-
-    // Extract JSON block
-    const match = content.match(/\{[\s\S]*\}/);
-    if (!match) {
-      return curatedFallback;
-    }
-
-    const parsed = JSON.parse(match[0]);
-    if (!parsed.sections || !parsed.headline) {
-      return curatedFallback;
-    }
-
-    const aiResult: AiDailySummaryResult = {
-      date,
-      babyId: baby.id,
-      babyName: nickname,
-      babyAvatarUrl: baby.avatarUrl || null,
-      babyAgeLabel: correctedAge.isPreterm ? correctedAge.label : ageDetail.label,
-      isPreterm: correctedAge.isPreterm,
-      correctedAgeLabel: correctedAge.isPreterm ? `矫正月龄 ${correctedAge.correctedMonths}个月${correctedAge.correctedDays}天` : undefined,
-      overallScore: String(parsed.overallScore || curatedFallback.overallScore),
-      overallRating: typeof parsed.overallRating === "number" ? Math.min(5, Math.max(1, parsed.overallRating)) : curatedFallback.overallRating,
-      statusLevel: ["excellent", "good", "attention"].includes(parsed.statusLevel) ? parsed.statusLevel : curatedFallback.statusLevel,
-      headline: String(parsed.headline || curatedFallback.headline),
-      highlights: Array.isArray(parsed.highlights) && parsed.highlights.length > 0 ? parsed.highlights.slice(0, 5) : curatedFallback.highlights,
-      sections: {
-        feeding: String(parsed.sections.feeding || curatedFallback.sections.feeding),
-        sleep: String(parsed.sections.sleep || curatedFallback.sections.sleep),
-        diaper: String(parsed.sections.diaper || curatedFallback.sections.diaper),
-        growthAndCare: String(parsed.sections.growthAndCare || curatedFallback.sections.growthAndCare),
-        tomorrowTips: String(parsed.sections.tomorrowTips || curatedFallback.sections.tomorrowTips),
-      },
-      suggestedQuestions: Array.isArray(parsed.suggestedQuestions) && parsed.suggestedQuestions.length > 0
-        ? parsed.suggestedQuestions.slice(0, 4)
-        : curatedFallback.suggestedQuestions,
-      metrics,
-      disclaimer: "本总结由 AI 结合儿科指南与当日记录智能生成，仅供日常照护参考，不可作为医学临床诊断依据。",
-      isAiGenerated: true,
-      generatedAt: new Date().toISOString(),
-    };
-
-    // Save into AiArchive for fast cache & audit
-    void archiveText("output_json", JSON.stringify({ _cacheKey: cacheKey, summary: aiResult })).catch(() => {});
-
-    return aiResult;
-  } catch (error) {
-    console.warn("AI daily summary generation failed, falling back to curated:", error);
+  const candidates = resolveCandidateProfiles();
+  if (candidates.length === 0) {
+    console.warn("[AI Daily Summary] No valid AI credentials configured, returning curated fallback.");
     return curatedFallback;
   }
+
+  let parsed: any = null;
+
+  for (const candidate of candidates) {
+    const timeoutMs = 70000;
+    try {
+      console.log(`[AI Daily Summary] Generating via profile "${candidate.name}" (${candidate.model})...`);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+      try {
+        const res = await fetch(`${candidate.baseUrl}/chat/completions`, {
+          method: "POST",
+          headers: candidate.headers,
+          body: JSON.stringify({
+            model: candidate.model,
+            messages: [
+              { role: "system", content: systemPrompt },
+              {
+                role: "user",
+                content: `请为${ageDetail.label}的${genderWord}宝宝「${nickname}」生成 ${date} 的每日成长总结与健康日报。数据如下：\n${JSON.stringify(promptData, null, 2)}`,
+              },
+            ],
+            temperature: 0.6,
+            max_tokens: 1800,
+            ...candidate.completionExtras,
+          }),
+          cache: "no-store",
+          signal: controller.signal,
+        });
+
+        if (!res.ok) {
+          const errorText = await res.text().catch(() => "");
+          console.warn(`[AI Daily Summary] Profile "${candidate.name}" returned HTTP ${res.status}: ${errorText.slice(0, 150)}`);
+          continue;
+        }
+
+        const jsonRes = await res.json();
+        const choice = jsonRes.choices?.[0]?.message;
+        const content = (choice?.content || choice?.reasoning_content || "");
+
+        // Match JSON block: code block or raw JSON object
+        const match = content.match(/```(?:json)?\s*([\s\S]*?)\s*```/) || content.match(/\{[\s\S]*\}/);
+        const jsonStr = match ? (match[1] || match[0]) : "";
+        if (!jsonStr) {
+          console.warn(`[AI Daily Summary] Profile "${candidate.name}" response missing JSON block`);
+          continue;
+        }
+
+        const candidateParsed = JSON.parse(jsonStr);
+        if (candidateParsed?.sections && candidateParsed?.headline) {
+          parsed = candidateParsed;
+          console.log(`[AI Daily Summary] Successfully generated summary via profile "${candidate.name}" (${candidate.model}) for ${nickname} on ${date}`);
+          break;
+        }
+      } finally {
+        clearTimeout(timeoutId);
+      }
+    } catch (err: any) {
+      const isTimeout = err?.name === "AbortError" || err?.name === "TimeoutError";
+      console.warn(`[AI Daily Summary] Profile "${candidate.name}" failed: ${isTimeout ? `Timeout after ${timeoutMs}ms` : err?.message || err}`);
+    }
+  }
+
+  if (!parsed) {
+    console.warn("[AI Daily Summary] All LLM candidate profiles failed. Falling back to curated rule-based summary.");
+    return curatedFallback;
+  }
+
+  const aiResult: AiDailySummaryResult = {
+    date,
+    babyId: baby.id,
+    babyName: nickname,
+    babyAvatarUrl: baby.avatarUrl || null,
+    babyAgeLabel: correctedAge.isPreterm ? correctedAge.label : ageDetail.label,
+    isPreterm: correctedAge.isPreterm,
+    correctedAgeLabel: correctedAge.isPreterm ? `矫正月龄 ${correctedAge.correctedMonths}个月${correctedAge.correctedDays}天` : undefined,
+    overallScore: String(parsed.overallScore || curatedFallback.overallScore),
+    overallRating: typeof parsed.overallRating === "number" ? Math.min(5, Math.max(1, parsed.overallRating)) : curatedFallback.overallRating,
+    statusLevel: ["excellent", "good", "attention"].includes(parsed.statusLevel) ? parsed.statusLevel : curatedFallback.statusLevel,
+    headline: String(parsed.headline || curatedFallback.headline),
+    highlights: Array.isArray(parsed.highlights) && parsed.highlights.length > 0 ? parsed.highlights.slice(0, 5) : curatedFallback.highlights,
+    sections: {
+      feeding: String(parsed.sections.feeding || curatedFallback.sections.feeding),
+      sleep: String(parsed.sections.sleep || curatedFallback.sections.sleep),
+      diaper: String(parsed.sections.diaper || curatedFallback.sections.diaper),
+      growthAndCare: String(parsed.sections.growthAndCare || curatedFallback.sections.growthAndCare),
+      tomorrowTips: String(parsed.sections.tomorrowTips || curatedFallback.sections.tomorrowTips),
+    },
+    suggestedQuestions: Array.isArray(parsed.suggestedQuestions) && parsed.suggestedQuestions.length > 0
+      ? parsed.suggestedQuestions.slice(0, 4)
+      : curatedFallback.suggestedQuestions,
+    metrics,
+    disclaimer: "本总结由 AI 结合儿科指南与当日记录智能生成，仅供日常照护参考，不可作为医学临床诊断依据。",
+    isAiGenerated: true,
+    generatedAt: new Date().toISOString(),
+  };
+
+  // Save into AiArchive for fast cache & audit
+  void archiveText("output_json", JSON.stringify({
+    _cacheKey: cacheKey,
+    summary: aiResult,
+    generatedAt: aiResult.generatedAt,
+    babyId: baby.id,
+    date,
+  })).catch((err) => console.warn("Failed to archive AI daily summary:", err));
+
+  return aiResult;
 }

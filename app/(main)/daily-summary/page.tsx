@@ -237,7 +237,7 @@ ${summary.sections.tomorrowTips}
   };
 
   return (
-    <div className="px-4 pt-safe-6 pb-36 max-w-md md:max-w-xl lg:max-w-4xl mx-auto space-y-4">
+    <div className="px-4 pt-safe-6 pb-36 workbench:pb-12 max-w-md md:max-w-xl workbench:max-w-none lg:max-w-5xl mx-auto space-y-4">
       {/* 1. Header & Date Switcher Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white/80 dark:bg-card/80 backdrop-blur-md p-3.5 rounded-3xl border border-primary-soft/30 shadow-soft">
         {/* Date Selector Navigation */}

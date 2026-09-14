@@ -42,6 +42,9 @@ interface BabyStore {
   user: User | null;
   family: Family | null;
   familyMembers: FamilyMember[];
+  families: Family[];
+  babies: Baby[];
+  selectedBabyId: string | null;
   authLoading: boolean;
   baby: Baby | null;
   medicalReports: MedicalReport[];
@@ -81,8 +84,10 @@ interface BabyStore {
   logout: () => Promise<void>;
   joinFamily: (inviteCode: string, relation?: string) => Promise<void>;
   fetchFamilyMembers: () => Promise<void>;
+  selectBaby: (babyId: string) => Promise<void>;
+  createFamilyInvite: (expiresInDays?: number) => Promise<{ inviteCode: string; expiresAt: string }>;
   fetchBaby: (force?: boolean) => Promise<void>;
-  saveBaby: (data: { nickname: string; birthDate: string; gender: string; gestationalAge?: number; avatarUrl?: string }) => Promise<void>;
+  saveBaby: (data: { nickname: string; birthDate: string; gender: string; familyId?: string; gestationalAge?: number; gestationalDays?: number; avatarUrl?: string | null }) => Promise<void>;
   fetchFeedingRecords: (date?: string, force?: boolean) => Promise<void>;
   fetchSleepRecords: (force?: boolean) => Promise<void>;
   fetchDiaperRecords: (force?: boolean) => Promise<void>;
@@ -166,6 +171,6 @@ if (typeof window !== "undefined") {
 setHelperOnUnauthorized(() => {
   const state = useBabyStore.getState();
   if (state.user) {
-    useBabyStore.setState({ user: null, family: null, baby: null, authLoading: false } as any);
+    useBabyStore.setState({ user: null, family: null, families: [], babies: [], selectedBabyId: null, familyMembers: [], baby: null, authLoading: false } as any);
   }
 });

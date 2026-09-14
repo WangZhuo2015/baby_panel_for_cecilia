@@ -1,3 +1,4 @@
+import { BridgeError, wireVersion } from "./bridge-protocol";
 if (typeof window !== "undefined") {
   throw new Error("This module can only be loaded on the server.");
 }
@@ -14,8 +15,8 @@ export interface LegacyMedicalReport {
   items?: unknown[];
   itemsJson?: string;
   imageUrl: string | null;
-  version?: number;
-  baseVersion?: number;
+  version?: string;
+  baseVersion?: string;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -30,10 +31,18 @@ export interface GrowDeskMedicalReport {
   department: string | null;
   diagnosis: string | null;
   attachmentIds: string[];
+  items?: unknown[];
   notes: string | null;
   version: string;
   createdAt: string;
   updatedAt: string;
+}
+
+function attachmentId(value: unknown): string {
+  if (typeof value !== "string") throw new BridgeError(400, "INVALID_ATTACHMENT", "无效的附件");
+  const id = value.replace(/^\/api\/attachments\//, "");
+  if (!/^[a-f0-9-]{36}$/i.test(id)) throw new BridgeError(400, "INVALID_ATTACHMENT", "请重新上传图片");
+  return id;
 }
 
 export function toGrowDeskMedicalCreatePayload(body: Record<string, unknown>) {
@@ -47,13 +56,15 @@ export function toGrowDeskMedicalCreatePayload(body: Record<string, unknown>) {
 
   let attachmentIds: string[] = [];
   if (Array.isArray(body.attachmentIds)) {
-    attachmentIds = body.attachmentIds.map(String);
+    attachmentIds = body.attachmentIds.map(attachmentId);
   } else if (body.imageUrl && typeof body.imageUrl === "string") {
-    attachmentIds = [body.imageUrl];
+    attachmentIds = [attachmentId(body.imageUrl)];
   }
 
   return {
     reportDate,
+    items: body.items ?? [],
+    ...(body.growthData && typeof body.growthData === "object" ? { growthData: Object.fromEntries(Object.entries(body.growthData).filter(([, value]) => value !== undefined && value !== null).map(([key, value]) => [key, String(value)])) } : {}),
     title,
     hospital,
     department,
@@ -65,9 +76,10 @@ export function toGrowDeskMedicalCreatePayload(body: Record<string, unknown>) {
 
 export function toGrowDeskMedicalUpdatePayload(body: Record<string, unknown>) {
   const payload: Record<string, unknown> = {
-    baseVersion: Number(body.baseVersion ?? body.version ?? 1),
+    baseVersion: wireVersion(body.baseVersion ?? body.version),
   };
 
+  if (body.items !== undefined) payload.items = body.items;
   if (body.title) {
     payload.title = String(body.title).trim().slice(0, 100);
   }
@@ -90,9 +102,9 @@ export function toGrowDeskMedicalUpdatePayload(body: Record<string, unknown>) {
     payload.notes = n ? String(n).trim().slice(0, 2000) : null;
   }
   if (body.attachmentIds !== undefined) {
-    payload.attachmentIds = Array.isArray(body.attachmentIds) ? body.attachmentIds.map(String) : [];
+    payload.attachmentIds = Array.isArray(body.attachmentIds) ? body.attachmentIds.map(attachmentId) : [];
   } else if (body.imageUrl !== undefined) {
-    payload.attachmentIds = body.imageUrl ? [String(body.imageUrl)] : [];
+    payload.attachmentIds = body.imageUrl ? [attachmentId(body.imageUrl)] : [];
   }
 
   return payload;
@@ -108,11 +120,11 @@ export function fromGrowDeskMedicalRecord(rec: GrowDeskMedicalReport): LegacyMed
     hospital: rec.hospital,
     doctorNotes: rec.diagnosis,
     aiSummary: rec.notes,
-    items: [],
-    itemsJson: "[]",
-    imageUrl: rec.attachmentIds && rec.attachmentIds.length > 0 ? rec.attachmentIds[0] : null,
-    version: Number(rec.version ?? 1),
-    baseVersion: Number(rec.version ?? 1),
+    items: rec.items ?? [],
+    itemsJson: JSON.stringify(rec.items ?? []),
+    imageUrl: rec.attachmentIds && rec.attachmentIds.length > 0 ? `/api/attachments/${rec.attachmentIds[0]}` : null,
+    version: wireVersion(rec.version),
+    baseVersion: wireVersion(rec.version),
     createdAt: rec.createdAt,
     updatedAt: rec.updatedAt,
   };

@@ -136,9 +136,9 @@ export function babyPayload(body: Record<string, unknown>, patch = false): Recor
     result.gestationalWeeks = weeks;
   }
   if (body.avatarUrl !== undefined) {
-    // Legacy /uploads paths are not attachment IDs and are not migrated by this bridge.
-    if (body.avatarUrl !== null && body.avatarUrl !== "") throw new BridgeError(422, "AVATAR_MIGRATION_REQUIRED", "头像上传尚未迁移到新附件服务");
-    result.avatarUrl = null;
+    // Only private attachment references; the API verifies ownership before binding.
+    if (body.avatarUrl && (typeof body.avatarUrl !== "string" || !/^\/api\/attachments\/[a-f0-9-]{36}$/i.test(body.avatarUrl))) throw new BridgeError(422, "INVALID_AVATAR", "请使用新附件上传头像");
+    result.avatarUrl = body.avatarUrl || null;
   }
   return result;
 }

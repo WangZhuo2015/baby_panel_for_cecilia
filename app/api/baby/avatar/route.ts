@@ -1,3 +1,5 @@
+import { GROWDESK_CONFIG } from "@/lib/config";
+import { uploadAttachment } from "@/lib/growdesk/attachment-bridge";
 import { NextResponse } from "next/server";
 import { writeFile, mkdir } from "fs/promises";
 import path from "path";
@@ -8,6 +10,7 @@ import { validateUploadedImage } from "@/lib/upload";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 
 export async function POST(request: Request) {
+  if (GROWDESK_CONFIG.enabled) return uploadAttachment(request, "avatar");
   try {
     const auth = await requireAuth(request);
     if (auth.errorResponse) return auth.errorResponse;

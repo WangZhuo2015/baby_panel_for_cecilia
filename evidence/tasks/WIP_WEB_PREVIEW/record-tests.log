@@ -1,0 +1,89 @@
+TAP version 13
+# Subtest: record list helper consumes every canonical page for all timeline record kinds
+not ok 1 - record list helper consumes every canonical page for all timeline record kinds
+  ---
+  duration_ms: 32.062006
+  type: 'test'
+  location: '/home/ubuntu/Github/baby-panel-growdesk-review/tests/unit/growdesk-records-preview.test.ts:1:1202'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly deep-equal:
+    + actual - expected
+
+      [
+    +   'test_feed_1',
+        'test_feed_2'
+      ]
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+    0: 'test_feed_2'
+  actual:
+    0: 'test_feed_1'
+    1: 'test_feed_2'
+  operator: 'deepStrictEqual'
+  stack: |-
+    TestContext.<anonymous> (/home/ubuntu/Github/baby-panel-growdesk-review/tests/unit/growdesk-records-preview.test.ts:48:10)
+    async Test.run (node:internal/test_runner/test:1054:7)
+    async startSubtestAfterBootstrap (node:internal/test_runner/harness:296:3)
+  ...
+# Subtest: sleep date filter uses overlap boundaries and keeps active intervals
+not ok 2 - sleep date filter uses overlap boundaries and keeps active intervals
+  ---
+  duration_ms: 1.98241
+  type: 'test'
+  location: '/home/ubuntu/Github/baby-panel-growdesk-review/tests/unit/growdesk-records-preview.test.ts:1:3243'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly deep-equal:
+    + actual - expected
+
+      [
+        'test_sleep_overlap',
+    +   'test_sleep_boundary',
+        'test_sleep_active'
+      ]
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+    0: 'test_sleep_overlap'
+    1: 'test_sleep_active'
+  actual:
+    0: 'test_sleep_overlap'
+    1: 'test_sleep_boundary'
+    2: 'test_sleep_active'
+  operator: 'deepStrictEqual'
+  stack: |-
+    TestContext.<anonymous> (/home/ubuntu/Github/baby-panel-growdesk-review/tests/unit/growdesk-records-preview.test.ts:66:10)
+    async Test.run (node:internal/test_runner/test:1054:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: record list helper refuses partial upstream pages and cursor loops
+ok 3 - record list helper refuses partial upstream pages and cursor loops
+  ---
+  duration_ms: 0.895165
+  type: 'test'
+  ...
+# Subtest: record routes preserve scoped paths, observed versions, and idempotency keys
+ok 4 - record routes preserve scoped paths, observed versions, and idempotency keys
+  ---
+  duration_ms: 21.362831
+  type: 'test'
+  ...
+# Subtest: record write adapters reject fabricated times and missing versions
+ok 5 - record write adapters reject fabricated times and missing versions
+  ---
+  duration_ms: 1.388447
+  type: 'test'
+  ...
+1..5
+# tests 5
+# suites 0
+# pass 3
+# fail 2
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 246.310758

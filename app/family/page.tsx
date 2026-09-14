@@ -8,10 +8,11 @@ import { CuteButton } from "@/components/ui/CuteButton";
 import { CuteInput } from "@/components/ui/CuteInput";
 import { useToast } from "@/components/ui/Toast";
 import { useBabyStore } from "@/stores/useBabyStore";
-import { Users, Copy, Check, UserPlus, LogOut, ShieldCheck, Smartphone, Sparkles, ChevronRight, Baby, Camera, Link as LinkIcon, Share2, BookOpen, Key } from "lucide-react";
+import { Users, Copy, Check, UserPlus, LogOut, ShieldCheck, Smartphone, Sparkles, ChevronRight, Baby, Camera, Link as LinkIcon, Share2, BookOpen, Key, Bot } from "lucide-react";
 import { InstallGuideModal } from "@/components/ui/InstallGuideModal";
 import { FeatureTourModal } from "@/components/ui/FeatureTourModal";
 import { PersonalTokenModal } from "@/components/user/PersonalTokenModal";
+import { AiUsageModal } from "@/components/mcp/AiUsageModal";
 import { APP_VERSION } from "@/lib/version";
 import { BabyAvatar } from "@/components/ui/BabyAvatar";
 
@@ -22,11 +23,16 @@ export default function FamilyPage() {
     user,
     family,
     familyMembers,
+    families,
+    babies,
+    selectedBabyId,
     baby,
     fetchUser,
     fetchFamilyMembers,
     fetchBaby,
     joinFamily,
+    selectBaby,
+    createFamilyInvite,
     logout,
   } = useBabyStore();
 
@@ -38,6 +44,9 @@ export default function FamilyPage() {
   const [isInstallModalOpen, setIsInstallModalOpen] = useState(false);
   const [isTourModalOpen, setIsTourModalOpen] = useState(false);
   const [isTokenModalOpen, setIsTokenModalOpen] = useState(false);
+  const [isAiUsageModalOpen, setIsAiUsageModalOpen] = useState(false);
+  const [creatingInvite, setCreatingInvite] = useState(false);
+  const [switchingBaby, setSwitchingBaby] = useState<string | null>(null);
 
   useEffect(() => {
     fetchBaby();
@@ -54,6 +63,32 @@ export default function FamilyPage() {
   const getInviteUrl = () => {
     if (typeof window === "undefined" || !family?.inviteCode) return "";
     return `${window.location.origin}/register?invite=${family.inviteCode}`;
+  };
+
+  const handleCreateInvite = async () => {
+    if (!family?.id || creatingInvite) return;
+    setCreatingInvite(true);
+    try {
+      const result = await createFamilyInvite(7);
+      showToast("一次性邀请码 " + result.inviteCode + " 已生成", "success");
+    } catch (err: any) {
+      showToast(err?.message || "生成邀请码失败，请稍后重试", "error");
+    } finally {
+      setCreatingInvite(false);
+    }
+  };
+
+  const handleSelectBaby = async (babyId: string) => {
+    if (babyId === selectedBabyId || switchingBaby) return;
+    setSwitchingBaby(babyId);
+    try {
+      await selectBaby(babyId);
+      showToast("已切换宝宝，正在加载独立记录", "success");
+    } catch (err: any) {
+      showToast(err?.message || "切换宝宝失败，请稍后重试", "error");
+    } finally {
+      setSwitchingBaby(null);
+    }
   };
 
   const handleCopyCode = () => {
@@ -134,7 +169,7 @@ export default function FamilyPage() {
   };
 
   return (
-    <div className="min-h-screen bg-bg-canvas px-4 pt-4 pb-28">
+    <div className="min-h-screen bg-bg-canvas px-4 pt-4 pb-28 max-w-4xl mx-auto">
       <AppHeader title="家庭成员与共享" showBack onRefresh={handleRefresh} refreshing={refreshing} />
 
       {/* Family Info & Invite Card */}
@@ -157,45 +192,107 @@ export default function FamilyPage() {
 
         {/* 邀请码与快捷操作栏 */}
         <div className="bg-white dark:bg-card rounded-2xl p-3.5 border border-primary/25 shadow-xs space-y-3">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-3">
             <div>
-              <span className="text-[11px] text-text-secondary dark:text-gray-400 block font-medium">家庭专属邀请码</span>
+              <span className="text-[11px] text-text-secondary dark:text-gray-400 block font-medium">家庭一次性邀请码</span>
               <span className="text-xl font-mono font-bold tracking-widest text-primary">
-                {family?.inviteCode || "------"}
+                {family?.inviteCode || "尚未生成"}
               </span>
+              {family?.inviteExpiresAt && (
+                <span className="text-[10px] text-text-muted block mt-0.5">
+                  有效期至 {new Date(family.inviteExpiresAt).toLocaleString("zh-CN")}
+                </span>
+              )}
             </div>
-            <CuteButton size="sm" variant="secondary" onClick={handleCopyCode}>
-              {copied ? <Check size={14} className="mr-1" /> : <Copy size={14} className="mr-1" />}
-              {copied ? "已复制码" : "复制 6 位码"}
-            </CuteButton>
+            {family?.inviteCode ? (
+              <CuteButton size="sm" variant="secondary" onClick={handleCopyCode}>
+                {copied ? <Check size={14} className="mr-1" /> : <Copy size={14} className="mr-1" />}
+                {copied ? "已复制码" : "复制邀请码"}
+              </CuteButton>
+            ) : (
+              <CuteButton size="sm" variant="primary" onClick={handleCreateInvite} disabled={creatingInvite}>
+                <Key size={14} className="mr-1" />
+                {creatingInvite ? "生成中..." : "生成邀请码"}
+              </CuteButton>
+            )}
           </div>
 
           {/* 快捷专属链接与文案 */}
-          <div className="pt-2.5 border-t border-divider/60 flex flex-col sm:flex-row gap-2">
-            <CuteButton
-              size="sm"
-              variant="primary"
-              onClick={handleCopyLink}
-              className="flex-1 justify-center"
-            >
-              {copiedLink ? <Check size={14} className="mr-1.5" /> : <LinkIcon size={14} className="mr-1.5" />}
-              {copiedLink ? "链接已复制" : "复制专属加入链接"}
-            </CuteButton>
+          {family?.inviteCode && (
+            <div className="pt-2.5 border-t border-divider/60 flex flex-col sm:flex-row gap-2">
+              <CuteButton
+                size="sm"
+                variant="primary"
+                onClick={handleCopyLink}
+                className="flex-1 justify-center"
+              >
+                {copiedLink ? <Check size={14} className="mr-1.5" /> : <LinkIcon size={14} className="mr-1.5" />}
+                {copiedLink ? "链接已复制" : "复制专属加入链接"}
+              </CuteButton>
 
-            <CuteButton
-              size="sm"
-              variant="secondary"
-              onClick={handleCopyInviteText}
-              className="flex-1 justify-center"
-            >
-              {copiedText ? <Check size={14} className="mr-1.5" /> : <Share2 size={14} className="mr-1.5" />}
-              {copiedText ? "文案已复制" : "复制微信邀请文案"}
-            </CuteButton>
-
-          </div>
+              <CuteButton
+                size="sm"
+                variant="secondary"
+                onClick={handleCopyInviteText}
+                className="flex-1 justify-center"
+              >
+                {copiedText ? <Check size={14} className="mr-1.5" /> : <Share2 size={14} className="mr-1.5" />}
+                {copiedText ? "文案已复制" : "复制微信邀请文案"}
+              </CuteButton>
+            </div>
+          )}
         </div>
       </CuteCard>
 
+
+      {families.length > 1 && (
+        <CuteCard className="p-3.5 mb-5">
+          <p className="text-xs font-semibold text-text-secondary mb-2">已加入的家庭</p>
+          <div className="flex flex-wrap gap-2">
+            {families.map((item) => (
+              <span
+                key={item.id}
+                className={item.id === family?.id
+                  ? "px-2.5 py-1 rounded-full bg-primary text-white text-xs font-medium"
+                  : "px-2.5 py-1 rounded-full bg-primary-soft/50 text-text-secondary text-xs"}
+              >
+                {item.name}
+              </span>
+            ))}
+          </div>
+        </CuteCard>
+      )}
+
+      {babies.length > 1 && (
+        <CuteCard className="p-3.5 mb-5">
+          <p className="text-xs font-semibold text-text-secondary mb-2">选择当前宝宝</p>
+          <div className="grid grid-cols-2 gap-2">
+            {babies.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => handleSelectBaby(item.id)}
+                disabled={Boolean(switchingBaby)}
+                className={item.id === selectedBabyId
+                  ? "flex items-center gap-2 rounded-xl border border-primary bg-primary-soft/60 px-2.5 py-2 text-left"
+                  : "flex items-center gap-2 rounded-xl border border-divider px-2.5 py-2 text-left hover:border-primary/50"}
+              >
+                {item.avatarUrl ? (
+                  <BabyAvatar src={item.avatarUrl} alt={item.nickname} size={30} />
+                ) : (
+                  <span className="w-[30px] h-[30px] rounded-full bg-primary-soft flex items-center justify-center"><Baby size={16} className="text-primary" /></span>
+                )}
+                <span className="min-w-0">
+                  <span className="block text-xs font-semibold truncate">{item.nickname}</span>
+                  <span className="block text-[10px] text-text-muted truncate">
+                    {families.find((familyItem) => familyItem.id === item.familyId)?.name || "家庭"}
+                  </span>
+                </span>
+              </button>
+            ))}
+          </div>
+        </CuteCard>
+      )}
 
       {/* Baby Info & Avatar Card */}
       <h3 className="text-sm font-semibold text-text-secondary mb-2 px-1">宝宝档案</h3>
@@ -259,7 +356,7 @@ export default function FamilyPage() {
                   )}
                 </div>
                 <span className="text-xs text-text-muted">
-                  @{member.username} · {relationLabels[member.relation] || member.relation}
+                  {member.username ? "@" + member.username + " · " : ""}{member.relation ? (relationLabels[member.relation] || member.relation) : "已授权成员"}
                 </span>
               </div>
             </div>
@@ -334,6 +431,31 @@ export default function FamilyPage() {
         </div>
       </CuteCard>
 
+      {/* 🤖 已连接 AI 与访问统计 (MCP) */}
+      <h3 className="text-sm font-semibold text-text-secondary mb-3 px-1">外部 AI 连接与访问统计</h3>
+      <CuteCard
+        className="p-4 mb-6 bg-gradient-to-r from-purple-50/70 via-indigo-50/40 to-sky-50/50 dark:from-purple-950/20 dark:to-indigo-950/20 border border-purple-200/60 dark:border-purple-800/40 cursor-pointer hover:shadow-md transition-all"
+        onClick={() => setIsAiUsageModalOpen(true)}
+      >
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-purple-600 to-indigo-600 text-white flex items-center justify-center shadow-button shrink-0">
+              <Bot size={20} />
+            </div>
+            <div>
+              <p className="text-xs font-bold text-text-primary flex items-center gap-1.5">
+                已连接 AI 与 MCP 访问统计
+                <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-300 font-bold">MCP 协议</span>
+              </p>
+              <p className="text-[11px] text-text-secondary mt-0.5">
+                查看连接过的 Gemini Spark、ChatGPT、Claude 等 AI 及访问次数统计
+              </p>
+            </div>
+          </div>
+          <ChevronRight size={16} className="text-text-muted" />
+        </div>
+      </CuteCard>
+
       {/* 📱 PWA / Add to Home Screen Setting Card */}
       <h3 className="text-sm font-semibold text-text-secondary mb-3 px-1">应用安装与体验</h3>
       <CuteCard
@@ -395,6 +517,12 @@ export default function FamilyPage() {
       <PersonalTokenModal
         isOpen={isTokenModalOpen}
         onClose={() => setIsTokenModalOpen(false)}
+      />
+
+      <AiUsageModal
+        isOpen={isAiUsageModalOpen}
+        onClose={() => setIsAiUsageModalOpen(false)}
+        babyId={baby?.id}
       />
     </div>
   );

@@ -30,6 +30,7 @@ import { openRecordDrawer } from "@/lib/drawer-bus";
 import { WhoPercentileChips } from "@/components/growth/WhoPercentileCard";
 import { getWhoMetricsForBaby } from "@/lib/who-growth-standards";
 import { BabyAvatar } from "@/components/ui/BabyAvatar";
+import { isWorkbenchViewport } from "@/lib/responsive";
 
 const GrowthLineChart = dynamic(() => import("@/components/growth/GrowthLineChart"), {
   ssr: false,
@@ -263,7 +264,7 @@ export default function GrowthPage() {
   };
 
   const handleOpenAddGrowth = () => {
-    if (typeof window !== "undefined" && window.innerWidth >= 1024) {
+    if (isWorkbenchViewport()) {
       openRecordDrawer("growth");
     } else {
       router.push("/growth/add");
@@ -271,12 +272,12 @@ export default function GrowthPage() {
   };
 
   return (
-    <div className="px-4 pt-safe-6 pb-36 max-w-md md:max-w-xl lg:max-w-6xl mx-auto space-y-5">
+    <div className="px-4 pt-safe-6 pb-36 workbench:pb-12 max-w-md md:max-w-xl workbench:max-w-none lg:max-w-7xl mx-auto space-y-5">
       {/* Baby Header / Desktop Title */}
       <div className="flex items-center justify-between">
-        {/* 移动端宝宝头像与信息卡片，PC端由左侧边栏统一承载 */}
+        {/* 移动端宝宝头像与信息卡片，PC与平板横屏工作台由左侧边栏统一承载 */}
         <div
-          className="flex items-center gap-3 cursor-pointer group lg:hidden"
+          className="flex items-center gap-3 cursor-pointer group workbench:hidden"
           onClick={() => router.push("/onboarding")}
           title="点击修改宝宝资料与头像"
         >
@@ -295,8 +296,8 @@ export default function GrowthPage() {
           </div>
         </div>
 
-        {/* PC 端主标题 */}
-        <div className="hidden lg:block">
+        {/* PC / 平板横屏端主标题 */}
+        <div className="hidden workbench:block">
           <h1 className="text-xl font-bold text-text-primary">WHO 生长曲线</h1>
         </div>
 
@@ -326,10 +327,10 @@ export default function GrowthPage() {
         </div>
       </div>
 
-      {/* 🌟 iPad / PC 左图右表双栏响应式工作台网格 */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+      {/* 🌟 iPad / PC / 小型平板横屏 左图右表双栏响应式工作台网格 */}
+      <div className="grid grid-cols-1 workbench:grid-cols-12 gap-5 items-start">
         {/* ===== 左栏：生长曲线图与标准对照 (Col 7) ===== */}
-        <div className="lg:col-span-7 space-y-4">
+        <div className="workbench:col-span-7 space-y-4">
           {/* Tabs */}
           <SegmentControl options={tabs} value={activeTab} onChange={(v) => setActiveTab(v as GrowthTab)} />
 
@@ -361,7 +362,7 @@ export default function GrowthPage() {
         </div>
 
         {/* ===== 右栏：最新评估与测量历史记录 (Col 5) ===== */}
-        <div className="lg:col-span-5 space-y-4">
+        <div className="workbench:col-span-5 space-y-4">
           {/* Current Stats */}
           <CuteCard className="bg-gradient-to-br from-primary-light to-lavender/10 border border-primary/15 p-4.5">
             <div className="text-center">

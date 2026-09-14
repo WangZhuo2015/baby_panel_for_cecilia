@@ -12,9 +12,9 @@ import {
   fromGrowDeskFeedingRecord,
   type GrowDeskFeedingRecord,
 } from "@/lib/growdesk/feeding-compat";
-import crypto from "node:crypto";
-import { BridgeError, bridgeErrorResponse, pathId, wireVersion } from "@/lib/growdesk/bridge-protocol";
+import { BridgeError, bridgeErrorResponse, wireVersion } from "@/lib/growdesk/bridge-protocol";
 import { fetchLegacyFeedingList } from "@/lib/growdesk/feeding-list";
+import { fetchRecordDetail, idempotencyKey, readJsonObject, recordPath, requireWriteData } from "@/lib/growdesk/record-route-helpers";
 
 function mapError(e: unknown) {
   if (e instanceof ValidationError) return NextResponse.json({ error: e.message }, { status: 400 });
@@ -41,14 +41,8 @@ export async function GET(request: Request) {
       }
       const recordId = searchParams.get("id");
       if (recordId) {
-        const detail = await growdeskFetch<GrowDeskFeedingRecord>(
-          `/api/v1/babies/${pathId(babyId)}/records/feeding/${pathId(recordId)}`,
-          { accessToken: bffSession.accessToken },
-        );
-        if (!detail.ok || !detail.data) {
-          throw new BridgeError(detail.ok ? 502 : detail.status, detail.error?.code || "RECORD_DETAIL_UNAVAILABLE", detail.error?.message || "无法加载记录详情");
-        }
-        return NextResponse.json(fromGrowDeskFeedingRecord(detail.data), { headers: { "cache-control": "no-store" } });
+        const detail = await fetchRecordDetail<GrowDeskFeedingRecord>(growdeskFetch, bffSession.accessToken, babyId, recordId, "feeding");
+        return NextResponse.json(fromGrowDeskFeedingRecord(detail), { headers: { "cache-control": "no-store" } });
       }
       const list = await fetchLegacyFeedingList<GrowDeskFeedingRecord>(
         growdeskFetch, bffSession.accessToken, babyId, searchParams,
@@ -83,34 +77,19 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "Unauthorized: 会话无效或已过期" }, { status: 401 });
       }
 
-      const body = await request.json().catch(() => ({} as any));
+      const body = await readJsonObject(request);
       const babyId = body.babyId;
-      if (!babyId) {
+      if (typeof babyId !== "string" || !babyId) {
         return NextResponse.json({ error: "请提供 babyId" }, { status: 400 });
       }
-
-      const payload = toGrowDeskFeedingCreatePayload(body);
-      const idempotencyKey =
-        body.clientId || request.headers.get("idempotency-key") || crypto.randomUUID();
-
-      const res = await growdeskFetch<GrowDeskFeedingRecord>(
-        `/api/v1/babies/${pathId(babyId)}/records/feeding`,
-        {
-          method: "POST",
-          accessToken: bffSession.accessToken,
-          idempotencyKey,
-          body: payload,
-        },
-      );
-
-      if (!res.ok || !res.data) {
-        return NextResponse.json(
-          { error: res.error?.message || "Failed to create feeding record" },
-          { status: res.status },
-        );
-      }
-
-      return NextResponse.json(fromGrowDeskFeedingRecord(res.data), { status: 201 });
+      const res = await growdeskFetch<GrowDeskFeedingRecord>(recordPath("feeding", babyId), {
+        method: "POST",
+        accessToken: bffSession.accessToken,
+        idempotencyKey: idempotencyKey(body, request),
+        body: toGrowDeskFeedingCreatePayload(body),
+      });
+      const data = requireWriteData(res, "Failed to create feeding record");
+      return NextResponse.json(fromGrowDeskFeedingRecord(data), { status: 201 });
     }
 
     const auth = await requireAuth(request);
@@ -158,43 +137,27 @@ export async function DELETE(request: Request) {
       if (!bffSession) {
         return NextResponse.json({ error: "Unauthorized: 会话无效或已过期" }, { status: 401 });
       }
-
       const { searchParams } = new URL(request.url);
+      let body: Record<string, unknown> = {};
       let id = searchParams.get("id");
       let babyId = searchParams.get("babyId");
       let baseVersion: unknown = searchParams.get("baseVersion");
-      if (!id) {
-        const body = await request.json().catch(() => ({} as any));
-        id = body?.id;
-        babyId = babyId || body?.babyId;
-        baseVersion = body?.baseVersion ?? body?.version ?? baseVersion;
+      if (!id || !babyId || baseVersion === null) {
+        body = await readJsonObject(request);
+        id = id || (typeof body.id === "string" ? body.id : null);
+        babyId = babyId || (typeof body.babyId === "string" ? body.babyId : null);
+        baseVersion = body.baseVersion ?? body.version ?? baseVersion;
       }
-      if (!id || typeof id !== "string") {
-        return NextResponse.json({ error: "请提供要删除的记录 ID" }, { status: 400 });
-      }
-      if (!babyId) {
-        return NextResponse.json({ error: "请提供 babyId" }, { status: 400 });
-      }
-
-      const res = await growdeskFetch(
-        `/api/v1/babies/${pathId(babyId)}/records/feeding/${pathId(id)}?baseVersion=${wireVersion(baseVersion)}`,
-        {
-          method: "DELETE",
-          idempotencyKey: request.headers.get("idempotency-key") || crypto.randomUUID(),
-          accessToken: bffSession.accessToken,
-        },
-      );
-
-      if (!res.ok) {
-        return NextResponse.json(
-          { error: res.error?.message || "Failed to delete feeding record" },
-          { status: res.status },
-        );
-      }
-
+      if (!id) return NextResponse.json({ error: "请提供要删除的记录 ID" }, { status: 400 });
+      if (!babyId) return NextResponse.json({ error: "请提供 babyId" }, { status: 400 });
+      const res = await growdeskFetch(recordPath("feeding", babyId, id) + `?baseVersion=${encodeURIComponent(wireVersion(baseVersion))}`, {
+        method: "DELETE",
+        idempotencyKey: idempotencyKey(body, request),
+        accessToken: bffSession.accessToken,
+      });
+      if (!res.ok) return NextResponse.json({ error: res.error?.message || "Failed to delete feeding record" }, { status: res.status });
       return NextResponse.json({ success: true, id });
     }
-
     const auth = await requireAuth(request);
     if (auth.errorResponse) return auth.errorResponse;
     const { searchParams } = new URL(request.url);
@@ -227,38 +190,20 @@ export async function PUT(request: Request) {
       if (!bffSession) {
         return NextResponse.json({ error: "Unauthorized: 会话无效或已过期" }, { status: 401 });
       }
-
-      const body = await request.json().catch(() => ({} as any));
-      const id = body?.id;
-      const babyId = body?.babyId;
-      if (!id || typeof id !== "string") {
-        return NextResponse.json({ error: "请提供要修改的记录 ID" }, { status: 400 });
-      }
-      if (!babyId) {
-        return NextResponse.json({ error: "请提供 babyId" }, { status: 400 });
-      }
-
-      const payload = toGrowDeskFeedingUpdatePayload(body);
-      const res = await growdeskFetch<GrowDeskFeedingRecord>(
-        `/api/v1/babies/${pathId(babyId)}/records/feeding/${pathId(id)}`,
-        {
-          method: "PATCH",
-          idempotencyKey: body.clientId || request.headers.get("idempotency-key") || crypto.randomUUID(),
-          accessToken: bffSession.accessToken,
-          body: payload,
-        },
-      );
-
-      if (!res.ok || !res.data) {
-        return NextResponse.json(
-          { error: res.error?.message || "Failed to update feeding record" },
-          { status: res.status },
-        );
-      }
-
-      return NextResponse.json(fromGrowDeskFeedingRecord(res.data));
+      const body = await readJsonObject(request);
+      const id = body.id;
+      const babyId = body.babyId;
+      if (typeof id !== "string" || !id) return NextResponse.json({ error: "请提供要修改的记录 ID" }, { status: 400 });
+      if (typeof babyId !== "string" || !babyId) return NextResponse.json({ error: "请提供 babyId" }, { status: 400 });
+      const res = await growdeskFetch<GrowDeskFeedingRecord>(recordPath("feeding", babyId, id), {
+        method: "PATCH",
+        idempotencyKey: idempotencyKey(body, request),
+        accessToken: bffSession.accessToken,
+        body: toGrowDeskFeedingUpdatePayload(body),
+      });
+      const data = requireWriteData(res, "Failed to update feeding record");
+      return NextResponse.json(fromGrowDeskFeedingRecord(data));
     }
-
     const auth = await requireAuth(request);
     if (auth.errorResponse) return auth.errorResponse;
     const body = await request.json().catch(() => ({} as any));

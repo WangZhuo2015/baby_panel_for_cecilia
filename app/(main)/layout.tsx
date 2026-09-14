@@ -39,16 +39,16 @@ export default function MainLayout({
       <DesktopSidebar />
 
       {/* 主舞台区域 */}
-      <div className="flex-1 flex flex-col min-w-0 lg:pl-64 transition-all">
+      <div className="flex-1 flex flex-col min-w-0 tablet-landscape:pl-56 lg:pl-64 transition-all">
         <OfflineBanner />
         <main
-          className={`flex-1 ${hideNav ? "pb-4" : "pb-24 lg:pb-8"}`}
+          className={`flex-1 ${hideNav ? "pb-4" : "pb-24 workbench:pb-8"}`}
         >
           {children}
         </main>
       </div>
 
-      {/* 移动端底部导航（已在组件内实现 lg:hidden） */}
+      {/* 移动端底部导航（组件内已实现 workbench:hidden） */}
       {!hideNav && <BottomNav />}
 
       {/* 全局 AI 弹窗宿主 */}

@@ -13,7 +13,7 @@ export const AgentIcon: React.FC<AgentIconProps> = ({ name, size = 13, className
   const norm = (name || "").toLowerCase();
 
   // 1. Google Gemini / Gemini Spark
-  if (norm.includes("gemini")) {
+  if (norm.includes("gemini") || norm.includes("google")) {
     return (
       <svg
         width={size}
@@ -171,10 +171,16 @@ export interface AgentBadgeProps {
 export const AgentBadge: React.FC<AgentBadgeProps> = ({ name, className = "", size = "xs" }) => {
   if (!name) return null;
 
-  const norm = name.toLowerCase();
+  // Normalization: If "Google" was passed or stored in legacy records, normalize to "Gemini Spark"
+  const displayName =
+    name.trim().toLowerCase() === "google" || name.trim().toLowerCase() === "google mcp"
+      ? "Gemini Spark"
+      : name;
+
+  const norm = displayName.toLowerCase();
 
   let theme = "bg-purple-50 text-purple-700 border-purple-200/80 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800/40";
-  if (norm.includes("gemini")) {
+  if (norm.includes("gemini") || norm.includes("google")) {
     theme = "bg-sky-50 text-sky-800 border-sky-200/80 dark:bg-sky-950/40 dark:text-sky-300 dark:border-sky-800/40";
   } else if (norm.includes("chatgpt") || norm.includes("openai")) {
     theme = "bg-emerald-50 text-emerald-800 border-emerald-200/80 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800/40";
@@ -193,8 +199,8 @@ export const AgentBadge: React.FC<AgentBadgeProps> = ({ name, className = "", si
     <span
       className={`inline-flex items-center rounded-md font-semibold border shadow-2xs whitespace-nowrap leading-none transition-colors ${theme} ${paddingClass} ${className}`}
     >
-      <AgentIcon name={name} size={iconSize} />
-      <span>{name}</span>
+      <AgentIcon name={displayName} size={iconSize} />
+      <span>{displayName}</span>
     </span>
   );
 };

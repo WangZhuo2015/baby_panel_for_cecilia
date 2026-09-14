@@ -2,6 +2,9 @@ if (typeof window !== "undefined") {
   throw new Error("This module can only be loaded on the server.");
 }
 
+import { BridgeError, wireVersion } from "./bridge-protocol";
+import { legacyVersion, optionalText, requiredEnum, requiredTimestamp } from "./record-compat-helpers";
+
 export interface LegacyDiaperRecord {
   id: string;
   babyId: string;
@@ -12,8 +15,8 @@ export interface LegacyDiaperRecord {
   notes: string | null;
   source?: string;
   sourceAgent?: string | null;
-  version?: number;
-  baseVersion?: number;
+  version?: string;
+  baseVersion?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -34,77 +37,49 @@ export interface GrowDeskDiaperRecord {
   updatedAt: string;
 }
 
+const DIAPER_TYPES = ["pee", "poop", "both"] as const;
+function diaperType(value: unknown): "pee" | "poop" | "both" {
+  const normalized = value === "wet" ? "pee" : value === "dirty" ? "poop" : value;
+  return requiredEnum(normalized, DIAPER_TYPES, "diaperType");
+}
+
 export function toGrowDeskDiaperCreatePayload(body: Record<string, unknown>) {
-  let type = String(body.type || "pee") as "pee" | "poop" | "both";
-  if (type === "wet" as any) type = "pee";
-  if (type === "dirty" as any) type = "poop";
-
-  let occurredAt = new Date().toISOString();
-  if (body.timestamp) {
-    const d = new Date(String(body.timestamp));
-    if (!isNaN(d.getTime())) {
-      occurredAt = d.toISOString();
-    }
-  }
-
+  const source = body.source === undefined ? "ui_manual" : optionalText(body.source, "source") || "ui_manual";
   return {
-    diaperType: type,
-    occurredAt,
-    poopColor: body.poopColor ? String(body.poopColor).trim() : null,
-    poopConsistency: body.poopConsistency ? String(body.poopConsistency).trim() : null,
-    notes: body.notes ? String(body.notes).trim() : null,
-    source: body.source ? String(body.source) : "ui_manual",
-    sourceAgent: body.sourceAgent ? String(body.sourceAgent) : null,
+    diaperType: diaperType(body.diaperType ?? body.type),
+    occurredAt: requiredTimestamp(body.occurredAt ?? body.timestamp, "occurredAt"),
+    poopColor: optionalText(body.poopColor, "poopColor", 100),
+    poopConsistency: optionalText(body.poopConsistency, "poopConsistency", 100),
+    notes: optionalText(body.notes, "notes"),
+    source,
+    sourceAgent: optionalText(body.sourceAgent, "sourceAgent"),
   };
 }
 
 export function toGrowDeskDiaperUpdatePayload(body: Record<string, unknown>) {
-  const payload: Record<string, unknown> = {
-    baseVersion: Number(body.baseVersion ?? body.version ?? 1),
-  };
-
-  if (body.type) {
-    let t = String(body.type);
-    if (t === "wet") t = "pee";
-    if (t === "dirty") t = "poop";
-    payload.diaperType = t;
-  }
-
-  if (body.timestamp) {
-    const d = new Date(String(body.timestamp));
-    if (!isNaN(d.getTime())) {
-      payload.occurredAt = d.toISOString();
-    }
-  }
-
-  if (body.poopColor !== undefined) {
-    payload.poopColor = body.poopColor ? String(body.poopColor).trim() : null;
-  }
-
-  if (body.poopConsistency !== undefined) {
-    payload.poopConsistency = body.poopConsistency ? String(body.poopConsistency).trim() : null;
-  }
-
-  if (body.notes !== undefined) {
-    payload.notes = body.notes ? String(body.notes).trim() : null;
-  }
-
+  const payload: Record<string, unknown> = { baseVersion: legacyVersion(body.baseVersion ?? body.version) };
+  if (body.diaperType !== undefined || body.type !== undefined) payload.diaperType = diaperType(body.diaperType ?? body.type);
+  if (body.occurredAt !== undefined || body.timestamp !== undefined) payload.occurredAt = requiredTimestamp(body.occurredAt ?? body.timestamp, "occurredAt");
+  if (body.poopColor !== undefined) payload.poopColor = optionalText(body.poopColor, "poopColor", 100);
+  if (body.poopConsistency !== undefined) payload.poopConsistency = optionalText(body.poopConsistency, "poopConsistency", 100);
+  if (body.notes !== undefined) payload.notes = optionalText(body.notes, "notes");
   return payload;
 }
 
 export function fromGrowDeskDiaperRecord(rec: GrowDeskDiaperRecord): LegacyDiaperRecord {
+  const version = wireVersion(rec.version);
   return {
     id: rec.id,
     babyId: rec.babyId,
-    type: rec.diaperType,
+    type: diaperType(rec.diaperType),
     timestamp: rec.occurredAt,
     poopColor: rec.poopColor,
     poopConsistency: rec.poopConsistency,
     notes: rec.notes,
     source: rec.source,
     sourceAgent: rec.sourceAgent,
-    version: Number(rec.version ?? 1),
-    baseVersion: Number(rec.version ?? 1),
+    version,
+    baseVersion: version,
     createdAt: rec.createdAt,
     updatedAt: rec.updatedAt,
   };

@@ -2,6 +2,8 @@ if (typeof window !== "undefined") {
   throw new Error("This module can only be loaded on the server.");
 }
 
+import { BridgeError, isoTimestamp, wireVersion } from "./bridge-protocol";
+
 export interface GrowDeskTimelineEntry {
   id: string;
   babyId: string;
@@ -47,18 +49,19 @@ const TYPE_ICONS: Record<string, string> = {
 };
 
 export function fromGrowDeskTimelineEntry(entry: GrowDeskTimelineEntry): LegacyTimelineItem {
-  const date = new Date(entry.occurredAt);
-  const time = !isNaN(date.getTime())
-    ? date.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", hour12: false })
-    : "";
-
+  const occurredAt = isoTimestamp(entry.occurredAt);
+  const date = new Date(occurredAt);
+  const version = wireVersion(entry.version);
+  if (!entry.babyId || !entry.entityType || (!entry.entityId && !entry.id)) {
+    throw new BridgeError(502, "UPSTREAM_INVALID_RECORD", "GrowDesk 返回了不完整的时间轴记录");
+  }
   return {
     id: entry.entityId || entry.id,
     babyId: entry.babyId,
-    version: String(entry.version),
-    baseVersion: String(entry.version),
-    time,
-    sortMs: !isNaN(date.getTime()) ? date.getTime() : Date.now(),
+    version,
+    baseVersion: version,
+    time: date.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", hour12: false }),
+    sortMs: date.getTime(),
     type: entry.entityType,
     title: TYPE_LABELS[entry.entityType] || entry.entityType,
     detail: entry.summary,
@@ -67,8 +70,9 @@ export function fromGrowDeskTimelineEntry(entry: GrowDeskTimelineEntry): LegacyT
 }
 
 export function fromGrowDeskTimelineResponse(
-  raw: GrowDeskTimelineEntry[] | { data: GrowDeskTimelineEntry[] },
+  raw: GrowDeskTimelineEntry[] | { data: GrowDeskTimelineEntry[]; page?: { nextCursor: string | null } },
 ): LegacyTimelineItem[] {
-  const list = Array.isArray(raw) ? raw : (raw?.data || []);
+  const list = Array.isArray(raw) ? raw : raw?.data;
+  if (!Array.isArray(list)) throw new BridgeError(502, "UPSTREAM_INVALID_PAGE", "GrowDesk 未返回有效的时间轴数据");
   return list.map(fromGrowDeskTimelineEntry);
 }

@@ -140,12 +140,12 @@ export const createGrowthSlice = (set: any, get: any): GrowthSlice => ({
   },
 
   fetchBooks: async (tab?: string, force?: boolean) => {
-    const key = `books:${tab || ''}`;
+    const key = `books:${get().family?.id || ''}:${tab || ''}`;
     if (!force && get().books.length > 0 && isFresh(key)) return;
     if (force) invalidateCache(key);
     return dedup(key, async () => {
       try {
-        const params = tab ? `?tab=${tab}` : "";
+        const params = toQuery({ tab, familyId: get().family?.id });
         const data = await request<Book[]>(`/api/books${params}`);
         set({ books: data || [] });
         markFetched(key);
@@ -288,7 +288,7 @@ export const createGrowthSlice = (set: any, get: any): GrowthSlice => ({
       const newReport = await request<MedicalReport>("/api/medical/reports", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(report),
+        body: JSON.stringify({ ...report, babyId: report.babyId ?? get().baby?.id, clientId: crypto.randomUUID() }),
       });
       invalidateCache("medicalReports");
       if ((report as any).growthData) invalidateCache("growthMeasurements");
@@ -300,7 +300,8 @@ export const createGrowthSlice = (set: any, get: any): GrowthSlice => ({
 
   deleteMedicalReport: async (id: string) => {
     try {
-      await request<{ success: boolean }>(`/api/medical/reports/${id}`, { method: "DELETE" });
+      const record = get().medicalReports.find((r: MedicalReport) => r.id === id);
+      await request<{ success: boolean }>(`/api/medical/reports/${id}`, { method: "DELETE", headers: { "content-type": "application/json" }, body: JSON.stringify({ babyId: get().baby?.id, baseVersion: record?.version }) });
       invalidateCache("medicalReports");
       invalidateCache("growthMeasurements");
       set((state: any) => ({ medicalReports: state.medicalReports.filter((r: any) => r.id !== id) }));
@@ -309,7 +310,7 @@ export const createGrowthSlice = (set: any, get: any): GrowthSlice => ({
 
   updateBook: async (id, data) => {
     try {
-      const updated = await request<Book>(`/api/books/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
+      const updated = await request<Book>(`/api/books/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...data, familyId: get().family?.id, baseVersion: get().books.find((b: Book) => b.id === id)?.version }) });
       set((state: any) => ({ books: state.books.map((b: any) => (b.id === id || (b as any).bookId === id ? { ...b, ...updated } : b)) }));
     } catch (e) { console.error("Failed to update book:", e); throw e; }
   },

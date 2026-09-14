@@ -6,14 +6,16 @@ import {
   generateInviteCode,
   AUTH_COOKIE_NAME,
 } from "@/lib/auth";
-import { config, AUTH_CONFIG } from "@/lib/config";
+import { config, AUTH_CONFIG, GROWDESK_CONFIG } from "@/lib/config";
 import { validateCsrfOrigin } from "@/lib/api-helpers";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import { normalizeRelation } from "@/lib/constants";
+import { verifyBffCsrf } from "@/lib/growdesk/csrf";
+import { growdeskIdentityEndpoints } from "@/lib/growdesk/identity-endpoints";
 
 export async function POST(request: Request) {
   try {
-    const csrfError = validateCsrfOrigin(request);
+    const csrfError = GROWDESK_CONFIG.enabled ? verifyBffCsrf(request) : validateCsrfOrigin(request);
     if (csrfError) return csrfError;
 
     const ip = getClientIp(request);
@@ -24,6 +26,8 @@ export async function POST(request: Request) {
         { status: 429 }
       );
     }
+
+    if (GROWDESK_CONFIG.enabled) return growdeskIdentityEndpoints.register(request);
 
     const body = await request.json().catch(() => ({}));
     const { username, password, displayName, inviteCode, relation } = body;

@@ -1,9 +1,12 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth, getActiveBaby } from "@/lib/api-helpers";
+import { GROWDESK_CONFIG } from "@/lib/config";
+import { growdeskIdentityEndpoints } from "@/lib/growdesk/identity-endpoints";
 
 export async function GET(request: Request) {
   try {
+    if (GROWDESK_CONFIG.enabled) return growdeskIdentityEndpoints.familyMembers(request);
     const auth = await requireAuth(request);
     if (auth.errorResponse) return auth.errorResponse;
     const { user } = auth;

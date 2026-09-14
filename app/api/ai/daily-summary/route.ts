@@ -4,6 +4,8 @@ import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import { generateAiDailySummary } from "@/lib/ai-daily-summary";
 import { isValidDateStr, getLocalDateStr } from "@/lib/date";
 
+export const maxDuration = 120;
+
 export async function GET(request: Request) {
   try {
     const auth = await requireAuth(request);
