@@ -3,7 +3,12 @@ import { BridgeError, pathId, requireData, type BridgeFetch, type BridgeResult }
 import type { LegacyRecordKind } from "./record-list";
 
 export async function readJsonObject(request: Request): Promise<Record<string, unknown>> {
-  const body: unknown = await request.json().catch(() => ({}));
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    throw new BridgeError(400, "INVALID_JSON_BODY", "请求体必须为有效的 JSON 对象");
+  }
   if (!body || typeof body !== "object" || Array.isArray(body)) {
     throw new BridgeError(400, "INVALID_JSON_BODY", "请求体必须为 JSON 对象");
   }
@@ -35,7 +40,7 @@ export async function fetchRecordDetail<T extends { id?: unknown; babyId?: unkno
 ): Promise<T> {
   const response = await fetchApi<T>(recordPath(kind, babyId, id), { accessToken: token });
   const data = requireData(response);
-  if (data.id !== id || data.babyId !== babyId) {
+  if (!data || typeof data !== "object" || Array.isArray(data) || data.id !== id || data.babyId !== babyId) {
     throw new BridgeError(502, "UPSTREAM_SCOPE_MISMATCH", "GrowDesk 返回的记录不属于当前宝宝");
   }
   return data;

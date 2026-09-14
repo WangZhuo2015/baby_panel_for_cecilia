@@ -1,11 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { BridgeError, type BridgeFetch, type BridgeResult } from "../../lib/growdesk/bridge-protocol";
-import { fetchLegacyRecordList } from "../../lib/growdesk/record-list";
+import { fetchLegacyRecordList, type DatedRecord } from "../../lib/growdesk/record-list";
 import { fetchRecordDetail, idempotencyKey, recordPath } from "../../lib/growdesk/record-route-helpers";
 import { toGrowDeskSleepCreatePayload, toGrowDeskSleepUpdatePayload } from "../../lib/growdesk/sleep-compat";
 import { toGrowDeskDiaperCreatePayload, toGrowDeskDiaperUpdatePayload } from "../../lib/growdesk/diaper-compat";
 import { toGrowDeskFoodCreatePayload, toGrowDeskFoodUpdatePayload } from "../../lib/growdesk/food-compat";
+
+type TestRecord = DatedRecord & { id: string };
 
 const babyId = "test_baby_records";
 const familyId = "test_family_records";
@@ -40,12 +42,13 @@ test("record list helper consumes every canonical page for all timeline record k
       : ok([{ id: "test_timeline_today", entityId: "test_timeline_today", occurredAt: "2026-09-12T15:00:00Z", babyId, entityType: "diaper", summary: "today", version: "2" }])) as BridgeResult<T>;
   }) as BridgeFetch;
 
-  const feeding = await fetchLegacyRecordList(fetchApi, "test_token", babyId, new URLSearchParams({ date: "2026-09-13" }), "feeding");
-  const diaper = await fetchLegacyRecordList(fetchApi, "test_token", babyId, new URLSearchParams({ date: "2026-09-13" }), "diaper");
-  const food = await fetchLegacyRecordList(fetchApi, "test_token", babyId, new URLSearchParams({ date: "2026-09-13" }), "food");
-  const timeline = await fetchLegacyRecordList(fetchApi, "test_token", babyId, new URLSearchParams({ date: "2026-09-13" }), "timeline");
+  const feeding = await fetchLegacyRecordList<TestRecord>(fetchApi, "test_token", babyId, new URLSearchParams({ date: "2026-09-13" }), "feeding");
+  const diaper = await fetchLegacyRecordList<TestRecord>(fetchApi, "test_token", babyId, new URLSearchParams({ date: "2026-09-13" }), "diaper");
+  const food = await fetchLegacyRecordList<TestRecord>(fetchApi, "test_token", babyId, new URLSearchParams({ date: "2026-09-13" }), "food");
+  const timeline = await fetchLegacyRecordList<TestRecord>(fetchApi, "test_token", babyId, new URLSearchParams({ date: "2026-09-13" }), "timeline");
 
-  assert.deepEqual(feeding.map((item) => item.id), ["test_feed_2"]);
+  // Tokyo 2026-09-13 starts at 2026-09-12T15:00Z: equality belongs to this day.
+  assert.deepEqual(feeding.map((item) => item.id), ["test_feed_1", "test_feed_2"]);
   assert.deepEqual(diaper.map((item) => item.id), ["test_diaper_2"]);
   assert.deepEqual(food.map((item) => item.id), ["test_food_today"]);
   assert.deepEqual(timeline.map((item) => item.id), ["test_timeline_today"]);
@@ -62,8 +65,9 @@ test("sleep date filter uses overlap boundaries and keeps active intervals", asy
       { id: "test_sleep_active", startedAt: "2026-09-13T14:59:00Z", endedAt: null },
     ]) as BridgeResult<T>;
   }) as BridgeFetch;
-  const result = await fetchLegacyRecordList(fetchApi, "test_token", babyId, new URLSearchParams({ date: "2026-09-13" }), "sleep");
-  assert.deepEqual(result.map((item) => item.id), ["test_sleep_overlap", "test_sleep_active"]);
+  const result = await fetchLegacyRecordList<TestRecord>(fetchApi, "test_token", babyId, new URLSearchParams({ date: "2026-09-13" }), "sleep");
+  assert.deepEqual(result.map((item) => item.id), // An interval ending at next midnight still overlaps the selected day.
+    ["test_sleep_overlap", "test_sleep_boundary", "test_sleep_active"]);
 });
 
 test("record list helper refuses partial upstream pages and cursor loops", async () => {
@@ -72,7 +76,7 @@ test("record list helper refuses partial upstream pages and cursor loops", async
     (error: unknown) => error instanceof BridgeError && error.code === "UPSTREAM_INVALID_PAGE",
   );
   await assert.rejects(
-    fetchLegacyRecordList((async <T>(path: string) => ok<T>([], "test_same")) as BridgeFetch, "test_token", babyId, new URLSearchParams(), "feeding"),
+    fetchLegacyRecordList((async <T>() => ok([], "test_same") as BridgeResult<T>) as BridgeFetch, "test_token", babyId, new URLSearchParams(), "feeding"),
     (error: unknown) => error instanceof BridgeError && error.code === "UPSTREAM_CURSOR_LOOP",
   );
 });
@@ -84,12 +88,12 @@ test("record routes preserve scoped paths, observed versions, and idempotency ke
   assert.equal(idempotencyKey({}, new Request("https://test.invalid", { headers: { "idempotency-key": "test_header_1" } })), "test_header_1");
 
   const detail = await fetchRecordDetail(
-    (async <T>() => ok<T>({ id: "test_sleep_1", babyId })) as BridgeFetch,
+    (async <T>() => ok({ id: "test_sleep_1", babyId }) as BridgeResult<T>) as BridgeFetch,
     "test_token", babyId, "test_sleep_1", "sleep",
   );
   assert.equal(detail.id, "test_sleep_1");
   await assert.rejects(
-    fetchRecordDetail((async <T>() => ok<T>({ id: "test_sleep_1", babyId: "test_other_baby" })) as BridgeFetch, "test_token", babyId, "test_sleep_1", "sleep"),
+    fetchRecordDetail((async <T>() => ok({ id: "test_sleep_1", babyId: "test_other_baby" }) as BridgeResult<T>) as BridgeFetch, "test_token", babyId, "test_sleep_1", "sleep"),
     (error: unknown) => error instanceof BridgeError && error.code === "UPSTREAM_SCOPE_MISMATCH",
   );
 });
