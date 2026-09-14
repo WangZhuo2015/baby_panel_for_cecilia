@@ -18,7 +18,7 @@ export interface RecordsSlice {
   aiDailySummaryLoading: boolean;
   aiDailySummaryError: string | null;
   fetchBaby: (force?: boolean) => Promise<void>;
-  saveBaby: (data: { nickname: string; birthDate: string; gender: string; gestationalAge?: number; avatarUrl?: string }) => Promise<void>;
+  saveBaby: (data: { nickname: string; birthDate: string; gender: string; familyId?: string; gestationalAge?: number; gestationalDays?: number; avatarUrl?: string | null }) => Promise<void>;
   fetchFeedingRecords: (date?: string, force?: boolean) => Promise<void>;
   fetchSleepRecords: (force?: boolean) => Promise<void>;
   fetchDiaperRecords: (force?: boolean) => Promise<void>;
