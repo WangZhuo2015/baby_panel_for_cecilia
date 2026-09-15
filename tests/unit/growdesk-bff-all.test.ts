@@ -51,9 +51,12 @@ import { POST as FoodPlansPOST } from "../../app/api/food/plans/route";
 import { POST as NutritionPOST, DELETE as NutritionDELETE } from "../../app/api/nutrition/records/route";
 import { POST as ProductsPOST, PUT as ProductsPUT, DELETE as ProductsDELETE } from "../../app/api/nutrition/products/route";
 import { POST as SchedulesPOST, DELETE as SchedulesDELETE } from "../../app/api/nutrition/schedules/route";
-import { POST as GrowthPOST, DELETE as GrowthDELETE } from "../../app/api/growth/route";
+import { POST as GrowthPOST, PUT as GrowthPUT, PATCH as GrowthPATCH, DELETE as GrowthDELETE } from "../../app/api/growth/route";
+import { POST as GrowthOcrPOST } from "../../app/api/growth/ocr/route";
 import { POST as MedicalPOST } from "../../app/api/medical/reports/route";
-import { POST as VaccinePOST } from "../../app/api/vaccines/route";
+import { POST as MedicalOcrPOST } from "../../app/api/medical/ocr/route";
+import { POST as VaccinePOST, DELETE as VaccineDELETE } from "../../app/api/vaccines/route";
+import { GET as VaccineSelectionsGET, PUT as VaccineSelectionsPUT } from "../../app/api/vaccines/selections/route";
 import { POST as PushPOST } from "../../app/api/push/subscribe/route";
 
 test("SH-08: Diaper Compat DTO Layer", async (t) => {
@@ -435,9 +438,16 @@ test("SH-08: Dual-Mode Web Route Handlers Under BFF Mode (Security Rejections)",
     { name: "Nutrition Schedules POST", fn: () => SchedulesPOST(makeReq("http://127.0.0.1:3000/api/nutrition/schedules", "POST")) },
     { name: "Nutrition Schedules DELETE", fn: () => SchedulesDELETE(makeReq("http://127.0.0.1:3000/api/nutrition/schedules", "DELETE")) },
     { name: "Growth POST", fn: () => GrowthPOST(makeReq("http://127.0.0.1:3000/api/growth", "POST")) },
+    { name: "Growth PUT", fn: () => GrowthPUT(makeReq("http://127.0.0.1:3000/api/growth", "PUT")) },
+    { name: "Growth PATCH", fn: () => GrowthPATCH(makeReq("http://127.0.0.1:3000/api/growth", "PATCH")) },
     { name: "Growth DELETE", fn: () => GrowthDELETE(makeReq("http://127.0.0.1:3000/api/growth", "DELETE")) },
+    { name: "Growth OCR POST", fn: () => GrowthOcrPOST(makeReq("http://127.0.0.1:3000/api/growth/ocr", "POST")) },
     { name: "Medical POST", fn: () => MedicalPOST(makeReq("http://127.0.0.1:3000/api/medical/reports", "POST")) },
+    { name: "Medical OCR POST", fn: () => MedicalOcrPOST(makeReq("http://127.0.0.1:3000/api/medical/ocr", "POST")) },
     { name: "Vaccine POST", fn: () => VaccinePOST(makeReq("http://127.0.0.1:3000/api/vaccines", "POST")) },
+    { name: "Vaccine DELETE", fn: () => VaccineDELETE(makeReq("http://127.0.0.1:3000/api/vaccines", "DELETE")) },
+    { name: "Vaccine Selections GET", fn: () => VaccineSelectionsGET(makeReq("http://127.0.0.1:3000/api/vaccines/selections", "GET")) },
+    { name: "Vaccine Selections PUT", fn: () => VaccineSelectionsPUT(makeReq("http://127.0.0.1:3000/api/vaccines/selections", "PUT")) },
     { name: "Push POST", fn: () => PushPOST(makeReq("http://127.0.0.1:3000/api/push/subscribe", "POST")) },
   ];
 
@@ -450,13 +460,14 @@ test("SH-08: Dual-Mode Web Route Handlers Under BFF Mode (Security Rejections)",
 });
 
 function makeReq(url: string, method: string) {
+  const isBodyAllowed = method !== "GET" && method !== "HEAD";
   return new NextRequest(url, {
     method,
     headers: {
       "content-type": "application/json",
       origin: "https://untrusted-attacker.com",
     },
-    body: JSON.stringify({ babyId: "baby-test-1", id: "item-1" }),
+    ...(isBodyAllowed ? { body: JSON.stringify({ babyId: "baby-test-1", id: "item-1" }) } : {}),
   });
 }
 

@@ -14,6 +14,7 @@ import {
   fromGrowDeskMedicalRecord,
   type GrowDeskMedicalReport,
 } from "@/lib/growdesk/medical-compat";
+import { loadWebBaby } from "@/lib/growdesk/bridge-identity";
 import crypto from "node:crypto";
 
 export async function GET(request: Request) {
@@ -24,10 +25,15 @@ export async function GET(request: Request) {
         return NextResponse.json({ error: "Unauthorized: 会话无效或已过期" }, { status: 401 });
       }
       const { searchParams } = new URL(request.url);
-      const requestedBabyId = searchParams.get("babyId");
+      let requestedBabyId = searchParams.get("babyId");
+      if (!requestedBabyId) {
+        const baby = await loadWebBaby(growdeskFetch, bffSession.accessToken);
+        requestedBabyId = baby?.id || null;
+      }
       if (!requestedBabyId) {
         return NextResponse.json({ error: "请提供 babyId" }, { status: 400 });
       }
+      const category = searchParams.get("category");
       const limit = searchParams.get("limit") || "50";
       const res = await growdeskFetch<Array<GrowDeskMedicalReport>>(
         `/api/v1/babies/${requestedBabyId}/medical/reports?limit=${limit}`,
@@ -43,7 +49,11 @@ export async function GET(request: Request) {
         );
       }
       const rawList = Array.isArray(res.data) ? res.data : (res.data as any)?.data || [];
-      return NextResponse.json(rawList.map(fromGrowDeskMedicalRecord));
+      const legacyList = rawList.map(fromGrowDeskMedicalRecord);
+      const filtered = category && category !== "all"
+        ? legacyList.filter((item: any) => item.category === category)
+        : legacyList;
+      return NextResponse.json(filtered);
     }
 
     const auth = await requireAuth(request);
@@ -95,7 +105,11 @@ export async function POST(request: Request) {
       }
 
       const body = await request.json().catch(() => ({}));
-      const babyId = body.babyId;
+      let babyId = body.babyId;
+      if (!babyId) {
+        const baby = await loadWebBaby(growdeskFetch, bffSession.accessToken);
+        babyId = baby?.id || null;
+      }
       if (!babyId) {
         return NextResponse.json({ error: "请提供 babyId" }, { status: 400 });
       }

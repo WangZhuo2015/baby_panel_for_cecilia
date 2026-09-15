@@ -8,9 +8,12 @@ import { verifyBffCsrf } from "@/lib/growdesk/csrf";
 import { growdeskFetch } from "@/lib/growdesk/client";
 import {
   toGrowDeskGrowthCreatePayload,
+  toGrowDeskGrowthUpdatePayload,
   fromGrowDeskGrowthRecord,
   type GrowDeskGrowthRecord,
 } from "@/lib/growdesk/growth-compat";
+import { loadWebBaby } from "@/lib/growdesk/bridge-identity";
+import { wireVersion } from "@/lib/growdesk/bridge-protocol";
 import crypto from "node:crypto";
 
 export async function GET(request: Request) {
@@ -21,7 +24,11 @@ export async function GET(request: Request) {
         return NextResponse.json({ error: "Unauthorized: 会话无效或已过期" }, { status: 401 });
       }
       const { searchParams } = new URL(request.url);
-      const babyId = searchParams.get("babyId");
+      let babyId = searchParams.get("babyId");
+      if (!babyId) {
+        const baby = await loadWebBaby(growdeskFetch, bffSession.accessToken);
+        babyId = baby?.id || null;
+      }
       if (!babyId) {
         return NextResponse.json({ error: "请提供 babyId" }, { status: 400 });
       }
@@ -137,19 +144,25 @@ export async function DELETE(request: Request) {
       const { searchParams } = new URL(request.url);
       let id = searchParams.get("id");
       let babyId = searchParams.get("babyId");
-      let baseVersion = searchParams.get("baseVersion") || "1";
+      let rawVersion = searchParams.get("baseVersion");
       if (!id) {
         const body = await request.json().catch(() => ({} as any));
         id = body?.id;
         babyId = babyId || body?.babyId;
-        baseVersion = String(body?.baseVersion || baseVersion);
+        rawVersion = rawVersion || body?.baseVersion || body?.version;
       }
       if (!id || typeof id !== "string") {
         return NextResponse.json({ error: "请提供要删除的记录 ID" }, { status: 400 });
       }
       if (!babyId) {
+        const baby = await loadWebBaby(growdeskFetch, bffSession.accessToken);
+        babyId = baby?.id || null;
+      }
+      if (!babyId) {
         return NextResponse.json({ error: "请提供 babyId" }, { status: 400 });
       }
+
+      const baseVersion = wireVersion(rawVersion || "1");
 
       const res = await growdeskFetch(
         `/api/v1/babies/${babyId}/growth-measurements/${id}?baseVersion=${baseVersion}`,
@@ -192,4 +205,65 @@ export async function DELETE(request: Request) {
     console.error("DELETE /api/growth error:", e);
     return NextResponse.json({ error: "Failed to delete growth measurement" }, { status: 500 });
   }
+}
+
+async function handleUpdate(request: Request) {
+  try {
+    if (GROWDESK_CONFIG.enabled) {
+      const csrfErr = verifyBffCsrf(request);
+      if (csrfErr) return csrfErr;
+
+      const bffSession = await resolveBffSession(request);
+      if (!bffSession) {
+        return NextResponse.json({ error: "Unauthorized: 会话无效或已过期" }, { status: 401 });
+      }
+
+      const body = await request.json().catch(() => ({} as any));
+      const { searchParams } = new URL(request.url);
+      const id = body.id || searchParams.get("id");
+      let babyId = body.babyId || searchParams.get("babyId");
+      if (!id || typeof id !== "string") {
+        return NextResponse.json({ error: "请提供生长记录 ID" }, { status: 400 });
+      }
+      if (!babyId) {
+        const baby = await loadWebBaby(growdeskFetch, bffSession.accessToken);
+        babyId = baby?.id || null;
+      }
+      if (!babyId) {
+        return NextResponse.json({ error: "请提供 babyId" }, { status: 400 });
+      }
+
+      const payload = toGrowDeskGrowthUpdatePayload(body);
+      const res = await growdeskFetch<GrowDeskGrowthRecord>(
+        `/api/v1/babies/${babyId}/growth-measurements/${id}`,
+        {
+          method: "PATCH",
+          accessToken: bffSession.accessToken,
+          body: payload,
+        }
+      );
+
+      if (!res.ok || !res.data) {
+        return NextResponse.json(
+          { error: res.error?.message || "Failed to update growth measurement" },
+          { status: res.status }
+        );
+      }
+
+      return NextResponse.json(fromGrowDeskGrowthRecord(res.data));
+    }
+
+    return NextResponse.json({ error: "Not implemented in local mode" }, { status: 501 });
+  } catch (e: any) {
+    console.error("UPDATE /api/growth error:", e);
+    return NextResponse.json({ error: e?.message || "Failed to update growth measurement" }, { status: 500 });
+  }
+}
+
+export async function PATCH(request: Request) {
+  return handleUpdate(request);
+}
+
+export async function PUT(request: Request) {
+  return handleUpdate(request);
 }

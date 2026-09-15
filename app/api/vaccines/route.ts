@@ -10,8 +10,10 @@ import { growdeskFetch } from "@/lib/growdesk/client"
 import {
   toGrowDeskVaccineRecordPayload,
   fromGrowDeskVaccineRecord,
+  loadFullVaccineKnowledge,
   type GrowDeskVaccineRecord,
 } from "@/lib/growdesk/vaccine-compat"
+import { loadWebBaby } from "@/lib/growdesk/bridge-identity"
 import crypto from "node:crypto"
 
 export async function GET(request: Request) {
@@ -21,23 +23,11 @@ export async function GET(request: Request) {
   try {
     if (GROWDESK_CONFIG.enabled) {
       const bffSession = await resolveBffSession(request);
-      if (bffSession) {
-        const res = await growdeskFetch<any>("/api/v1/vaccines/schedule", {
-          method: "GET",
-          accessToken: bffSession.accessToken,
-        });
-        if (res.ok && res.data) {
-          const scheduleList = Array.isArray(res.data) ? res.data : (res.data as any)?.data || [];
-          return NextResponse.json({
-            national: scheduleList,
-            nonProgram: [],
-            provincial: [],
-            strategyGroups: [],
-            schedule: scheduleList,
-            engineRules: [],
-          });
-        }
+      if (!bffSession) {
+        return NextResponse.json({ error: "Unauthorized: 会话无效或已过期" }, { status: 401 });
       }
+      const fullKb = loadFullVaccineKnowledge(regionCode);
+      return NextResponse.json(fullKb);
     }
 
     // Fetch all vaccines
@@ -144,7 +134,11 @@ export async function POST(request: Request) {
       }
 
       const body = await request.json().catch(() => ({}));
-      const babyId = body.babyId;
+      let babyId = body.babyId;
+      if (!babyId) {
+        const baby = await loadWebBaby(growdeskFetch, bffSession.accessToken);
+        babyId = baby?.id || null;
+      }
       if (!babyId) {
         return NextResponse.json({ error: "请提供 babyId" }, { status: 400 });
       }
@@ -294,5 +288,75 @@ export async function POST(request: Request) {
       { error: "Failed to save vaccine record" },
       { status: 500 }
     );
+  }
+}
+
+export async function DELETE(request: Request) {
+  try {
+    if (GROWDESK_CONFIG.enabled) {
+      const csrfErr = verifyBffCsrf(request);
+      if (csrfErr) return csrfErr;
+
+      const bffSession = await resolveBffSession(request);
+      if (!bffSession) {
+        return NextResponse.json({ error: "Unauthorized: 会话无效或已过期" }, { status: 401 });
+      }
+
+      const { searchParams } = new URL(request.url);
+      let id = searchParams.get("id");
+      let babyId = searchParams.get("babyId");
+      if (!id) {
+        const body = await request.json().catch(() => ({} as any));
+        id = body?.id;
+        babyId = babyId || body?.babyId;
+      }
+      if (!id || typeof id !== "string") {
+        return NextResponse.json({ error: "请提供要删除的接种记录 ID" }, { status: 400 });
+      }
+      if (!babyId) {
+        const baby = await loadWebBaby(growdeskFetch, bffSession.accessToken);
+        babyId = baby?.id || null;
+      }
+      if (!babyId) {
+        return NextResponse.json({ error: "请提供 babyId" }, { status: 400 });
+      }
+
+      const res = await growdeskFetch(
+        `/api/v1/babies/${babyId}/vaccines/records/${id}`,
+        {
+          method: "DELETE",
+          accessToken: bffSession.accessToken,
+        },
+      );
+
+      if (!res.ok) {
+        if (res.status === 404) {
+          return NextResponse.json({ success: true, id, alreadyDeleted: true });
+        }
+        return NextResponse.json(
+          { error: res.error?.message || "Failed to delete vaccine record" },
+          { status: res.status },
+        );
+      }
+
+      return NextResponse.json({ success: true, id });
+    }
+
+    const auth = await requireAuth(request);
+    if (auth.errorResponse) return auth.errorResponse;
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get("id");
+    if (!id) return NextResponse.json({ error: "请提供要删除的记录 ID" }, { status: 400 });
+
+    const rec = await prisma.vaccineRecord.findUnique({ where: { id } });
+    if (!rec) return NextResponse.json({ error: "记录不存在" }, { status: 404 });
+    const babyCheck = await requireBaby(auth.user.id, rec.babyId);
+    if (babyCheck.errorResponse) return babyCheck.errorResponse;
+
+    await prisma.vaccineRecord.delete({ where: { id } });
+    return NextResponse.json({ success: true, id });
+  } catch (error: any) {
+    console.error("DELETE /api/vaccines error:", error);
+    return NextResponse.json({ error: error?.message || "Failed to delete vaccine record" }, { status: 500 });
   }
 }

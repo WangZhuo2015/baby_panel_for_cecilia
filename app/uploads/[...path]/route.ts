@@ -16,14 +16,26 @@ const MIME_TYPES: Record<string, string> = {
   ".heif": "image/heif",
 };
 
+import { GROWDESK_CONFIG } from "@/lib/config";
+import { resolveBffSession } from "@/lib/growdesk/session";
+
 export async function GET(
   request: NextRequest,
   context: { params: Promise<{ path: string[] }> }
 ) {
   try {
     // 儿童头像/医学影像属最高敏数据：拒绝匿名访问（能力 URL 模式不可吊销，必须加会话门槛）
-    const session = await getAuthSession(request);
-    if (!session) {
+    let hasSession = false;
+    if (GROWDESK_CONFIG.enabled) {
+      const bffSession = await resolveBffSession(request);
+      if (bffSession) hasSession = true;
+    }
+    if (!hasSession) {
+      const session = await getAuthSession(request);
+      if (session) hasSession = true;
+    }
+
+    if (!hasSession) {
       return new NextResponse("Unauthorized", {
         status: 401,
         headers: { "Cache-Control": "no-store" },
