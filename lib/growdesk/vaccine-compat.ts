@@ -302,7 +302,10 @@ export function buildVaccineSelections(
     const doses = Array.isArray(v.doses) && v.doses.length > 0 ? v.doses : [{ doseNumber: 1 }];
     for (const d of doses) {
       const key = `${v.vaccineId}-${d.doseNumber}`;
-      const rec = recordMap.get(key) || recordMap.get(`${v.name}-${d.doseNumber}`);
+      const rec =
+        recordMap.get(key) ||
+        recordMap.get(`${v.name}-${d.doseNumber}`) ||
+        (v.shortName ? recordMap.get(`${v.shortName.split("/")[0]}-${d.doseNumber}`) : undefined);
       const saved = savedSelections ? savedSelections[key] : undefined;
 
       const isCompleted = Boolean(rec || saved?.completed);

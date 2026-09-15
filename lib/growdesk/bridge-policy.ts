@@ -13,9 +13,14 @@ export const BRIDGED_METHODS: Readonly<Record<string, readonly string[]>> = {
   "/api/auth/logout": ["POST"],
   "/api/auth/me": ["GET"],
   "/api/baby": ["GET", "POST", "PUT"],
+  "/api/family/members": ["GET"],
+  "/api/family/invite": ["POST"],
+  "/api/family/join": ["POST"],
+  "/api/family/preview": ["GET"],
   "/api/records/feeding": ["GET", "POST", "PUT", "DELETE"],
   "/api/records/sleep": ["GET", "POST", "PUT", "PATCH", "DELETE"],
   "/api/records/diaper": ["GET", "POST", "PUT", "DELETE"],
+  "/api/records/daily-summary": ["GET"],
   "/api/food/logs": ["GET", "POST", "PUT", "DELETE"],
   "/api/food/items": ["GET", "POST"],
   "/api/food/plans": ["GET", "POST"],
@@ -33,6 +38,12 @@ export const BRIDGED_METHODS: Readonly<Record<string, readonly string[]>> = {
   "/api/records/timeline": ["GET"],
   "/api/notifications": ["GET"],
   "/api/push/subscribe": ["POST"],
+  "/api/agent/voice": ["POST"],
+  "/api/agent/voice/logs": ["GET"],
+  "/api/ai/sessions": ["GET", "POST"],
+  "/api/ai/chat": ["POST"],
+  "/api/ai/jobs": ["GET", "POST"],
+  "/api/user/tokens": ["GET", "POST"],
 };
 export function isBridgedMethod(pathname: string, method: string): boolean {
   if (/^\/api\/books\/[^/]+$/.test(pathname)) return method.toUpperCase() === "PATCH";
