@@ -7,6 +7,7 @@ import {
 } from "@/lib/tokens";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import { prisma } from "@/lib/prisma";
+import { GROWDESK_CONFIG } from "@/lib/config";
 
 export const dynamic = "force-dynamic";
 
@@ -40,7 +41,9 @@ export async function POST(request: Request) {
       );
     }
 
-    const existing = await prisma.personalAccessToken.count({ where: { userId: auth.user.id } });
+    const existing = GROWDESK_CONFIG.enabled
+      ? (await listPersonalAccessTokens(auth.user.id)).length
+      : await prisma.personalAccessToken.count({ where: { userId: auth.user.id } });
     if (existing >= MAX_TOKENS_PER_USER) {
       return NextResponse.json(
         { success: false, error: `令牌数量已达上限（${MAX_TOKENS_PER_USER} 个），请先删除旧令牌` },
