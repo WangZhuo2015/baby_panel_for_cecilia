@@ -260,6 +260,7 @@ export default function MedicalAddPage() {
       if (!finalImageUrl && imageFile) {
         const uploadFormData = new FormData();
         uploadFormData.append("file", imageFile);
+        if (baby?.id) uploadFormData.append("babyId", baby.id);
         const uploadRes = await fetch("/api/medical/upload", {
           method: "POST",
           body: uploadFormData,

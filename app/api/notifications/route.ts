@@ -51,6 +51,7 @@ function formatRelativeTime(date: Date): string {
 import { GROWDESK_CONFIG } from "@/lib/config"
 import { resolveBffSession } from "@/lib/growdesk/session"
 import { growdeskFetch } from "@/lib/growdesk/client"
+import { fromGrowDeskNotification, bffNotificationStore } from "@/lib/growdesk/notifications"
 
 export async function GET(request: Request) {
   try {
@@ -59,18 +60,43 @@ export async function GET(request: Request) {
       if (!bffSession) {
         return NextResponse.json({ error: "Unauthorized: 会话无效或已过期" }, { status: 401 })
       }
-      const res = await growdeskFetch<any>("/api/v1/notifications", {
-        method: "GET",
-        accessToken: bffSession.accessToken,
-      })
-      if (!res.ok) {
-        return NextResponse.json(
-          { error: res.error?.message || "Failed to fetch notifications" },
-          { status: res.status }
+
+      let remoteItems: any[] = []
+      try {
+        const res = await growdeskFetch<{ data: any[]; page?: { nextCursor: string | null } }>(
+          "/api/v1/notifications",
+          {
+            method: "GET",
+            accessToken: bffSession.accessToken,
+          }
         )
+        if (res.ok && res.data) {
+          const list = Array.isArray(res.data) ? res.data : (res.data as any).data
+          if (Array.isArray(list)) {
+            remoteItems = list
+          }
+        }
+      } catch {}
+
+      // Fallback & merge with local BFF store notifications
+      const localStore = bffNotificationStore.listNotifications(bffSession.user.id)
+      const combined = [...remoteItems, ...localStore.data]
+
+      // Deduplicate by id / eventKey
+      const seen = new Set<string>()
+      const deduped: any[] = []
+      for (const item of combined) {
+        const key = item.id || item.eventKey
+        if (key && !seen.has(key)) {
+          seen.add(key)
+          deduped.push(item)
+        } else if (!key) {
+          deduped.push(item)
+        }
       }
-      const items = res.data?.data || res.data || []
-      return NextResponse.json(items)
+
+      const formatted: NotificationItem[] = deduped.map(fromGrowDeskNotification)
+      return NextResponse.json(formatted)
     }
 
     const auth = await requireAuth(request)

@@ -65,6 +65,13 @@ test("MCP Source Attribution (Gemini Spark, ChatGPT, Claude, Custom Agents)", as
 
   await t.test("resolveSourceAgent correctly identifies agent names from clientId, clientName, and userAgent", () => {
     assert.equal(resolveSourceAgent("gemini-spark-client", "Gemini Spark Connected App"), "Gemini Spark");
+    assert.equal(resolveSourceAgent(undefined, "Google"), "Gemini Spark");
+    assert.equal(resolveSourceAgent("google-mcp-client", undefined), "Gemini Spark");
+    assert.equal(resolveSourceAgent(undefined, undefined, "Google-HTTP-Java-Client/1.32.1"), "Gemini Spark");
+    assert.equal(
+      resolveSourceAgent("dcr-random-client", undefined, undefined, "https://oauth-redirect.googleusercontent.com/r/xyz"),
+      "Gemini Spark"
+    );
     assert.equal(resolveSourceAgent("chatgpt-dcr-client-123", "ChatGPT Baby Assistant"), "ChatGPT");
     assert.equal(resolveSourceAgent(undefined, "OpenAI ChatGPT Custom GPT"), "ChatGPT");
     assert.equal(resolveSourceAgent("claude-desktop-client", "Claude Desktop"), "Claude");

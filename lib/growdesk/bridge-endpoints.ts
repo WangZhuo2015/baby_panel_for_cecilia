@@ -1,14 +1,122 @@
-import { type ApiBaby, type BridgeFetch, BridgeError, bridgeErrorResponse, requireData, pathId, babyPayload, legacyBaby } from "./bridge-protocol";
-import { loadWebIdentity, loadWebBaby, creationFamilyId } from "./bridge-identity";
+import {
+  type ApiBaby,
+  type BridgeFetch,
+  BridgeError,
+  bridgeErrorResponse,
+  requireData,
+  pathId,
+  babyPayload,
+  legacyBaby,
+} from "./bridge-protocol";
+import {
+  type ApiFamily,
+  type ApiFamilyMember,
+  type LegacyBaby,
+  accessibleFamily,
+  loadFamilyBabies,
+  loadWebIdentity,
+  loadWebBaby,
+  creationFamilyId,
+} from "./bridge-identity";
 
-export interface WebSession { accessToken: string; user: { id: string; username: string; displayName: string } }
+export interface WebSession {
+  accessToken: string;
+  user: { id: string; username: string; displayName: string };
+}
+
+export interface LegacyFamily {
+  id: string;
+  name: string;
+  inviteCode?: string;
+  inviteExpiresAt?: string;
+  role?: string;
+  timeZone?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+  babies: LegacyBaby[];
+}
+
+export interface RegisterSessionInput {
+  username: string;
+  password: string;
+  displayName: string;
+  inviteCode?: string;
+  relation?: string;
+}
+
+export interface RegisterSessionResult {
+  success: boolean;
+  sessionSecret?: string;
+  user?: WebSession["user"];
+  family?: LegacyFamily | null;
+  baby?: LegacyBaby | null;
+  families?: LegacyFamily[];
+  babies?: LegacyBaby[];
+  error?: string;
+  status?: number;
+}
+
 export interface EndpointDependencies {
   fetchApi: BridgeFetch;
   resolveSession: (request: Request) => Promise<WebSession | null>;
   verifyCsrf: (request: Request) => Response | null;
+  registerSession?: (input: RegisterSessionInput) => Promise<RegisterSessionResult>;
+  setSessionCookie?: (response: Response, sessionSecret: string) => void;
 }
+
 function json(data: unknown, status = 200) {
   return Response.json(data, { status, headers: { "cache-control": "no-store" } });
+}
+
+async function jsonObject(request: Request): Promise<Record<string, unknown>> {
+  const raw: unknown = await request.json().catch(() => null);
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    throw new BridgeError(400, "INVALID_JSON", "请求正文必须是 JSON 对象");
+  }
+  return raw as Record<string, unknown>;
+}
+
+function legacyFamily(
+  family: ApiFamily,
+  babies: LegacyBaby[] = [],
+  extra: Partial<LegacyFamily> = {},
+): LegacyFamily {
+  return {
+    id: family.id,
+    name: family.name,
+    timeZone: family.timeZone,
+    createdAt: family.createdAt,
+    updatedAt: family.updatedAt,
+    babies,
+    ...extra,
+  };
+}
+
+function identityResponse(identity: Awaited<ReturnType<typeof loadWebIdentity>>) {
+  const families = identity.families.map(item => legacyFamily(item.family, item.babies));
+  const selectedFamily = families.find(item => item.id === identity.family?.id) ?? families[0] ?? null;
+  return {
+    family: selectedFamily,
+    baby: identity.baby,
+    families,
+    babies: identity.babies,
+  };
+}
+
+function mapMember(member: ApiFamilyMember, familyId: string): Record<string, unknown> {
+  if (!member || typeof member !== "object" || typeof member.userId !== "string" || typeof member.displayName !== "string") {
+    throw new BridgeError(502, "UPSTREAM_INVALID_RESPONSE", "GrowDesk 成员响应无效");
+  }
+  return {
+    id: `${familyId}:${member.userId}`,
+    userId: member.userId,
+    familyId,
+    username: member.username,
+    displayName: member.displayName,
+    role: member.role,
+    relation: member.relation,
+    joinedAt: member.joinedAt,
+  };
 }
 
 export function createIdentityEndpoints(deps: EndpointDependencies) {
@@ -16,11 +124,188 @@ export function createIdentityEndpoints(deps: EndpointDependencies) {
     async me(request: Request): Promise<Response> {
       try {
         const session = await deps.resolveSession(request);
-        if (!session) return json({ user: null, family: null, baby: null, membership: null });
+        if (!session) {
+          return json({ user: null, family: null, baby: null, families: [], babies: [], membership: null });
+        }
         const identity = await loadWebIdentity(deps.fetchApi, session.accessToken);
-        return json({ user: session.user, ...identity, membership: null });
-      } catch (error) { return bridgeErrorResponse(error); }
+        return json({ user: session.user, ...identityResponse(identity), membership: null });
+      } catch (error) {
+        return bridgeErrorResponse(error);
+      }
     },
+
+    async register(request: Request): Promise<Response> {
+      try {
+        if (request.method !== "POST") return json({ error: "Method not allowed" }, 405);
+        const csrf = deps.verifyCsrf(request);
+        if (csrf) return csrf;
+        if (!deps.registerSession) throw new BridgeError(501, "REGISTER_NOT_CONFIGURED", "预览注册桥接尚未配置");
+        const body = await jsonObject(request);
+        if (typeof body.username !== "string" || !body.username.trim()) {
+          throw new BridgeError(400, "INVALID_USERNAME", "请输入用户名");
+        }
+        if (typeof body.password !== "string" || body.password.length < 8) {
+          throw new BridgeError(400, "INVALID_PASSWORD", "密码至少需要 8 个字符");
+        }
+        if (typeof body.displayName !== "undefined" && typeof body.displayName !== "string") {
+          throw new BridgeError(400, "INVALID_DISPLAY_NAME", "显示名称格式错误");
+        }
+        const inviteCode = typeof body.inviteCode === "string" && body.inviteCode.trim()
+          ? body.inviteCode.trim().toUpperCase()
+          : undefined;
+        const result = await deps.registerSession({
+          username: body.username.trim(),
+          password: body.password,
+          displayName: typeof body.displayName === "string" && body.displayName.trim()
+            ? body.displayName.trim()
+            : body.username.trim(),
+          inviteCode,
+          relation: typeof body.relation === "string" ? body.relation : undefined,
+        });
+        if (!result.success || !result.sessionSecret || !result.user) {
+          throw new BridgeError(result.status ?? 502, "REGISTER_FAILED", result.error ?? "注册失败");
+        }
+        const response = json({
+          user: result.user,
+          family: result.family ?? null,
+          baby: result.baby ?? null,
+          families: result.families ?? [],
+          babies: result.babies ?? [],
+        }, 201);
+        deps.setSessionCookie?.(response, result.sessionSecret);
+        return response;
+      } catch (error) {
+        return bridgeErrorResponse(error);
+      }
+    },
+
+    async familyPreview(request: Request): Promise<Response> {
+      try {
+        if (request.method !== "GET") return json({ error: "Method not allowed" }, 405);
+        const code = new URL(request.url).searchParams.get("code")?.trim().toUpperCase();
+        if (!code || code.length < 4 || code.length > 64) {
+          throw new BridgeError(400, "INVALID_INVITE_CODE", "请输入有效的邀请码");
+        }
+        const preview = requireData(await deps.fetchApi<{
+          familyName: string;
+          inviterName: string;
+          expiresAt: string;
+        }>(`/api/v1/families/invites/preview?code=${encodeURIComponent(code)}`));
+        if (!preview || typeof preview.familyName !== "string" || typeof preview.expiresAt !== "string") {
+          throw new BridgeError(502, "UPSTREAM_INVALID_RESPONSE", "GrowDesk 邀请预览响应无效");
+        }
+        return json({
+          found: true,
+          family: {
+            name: preview.familyName,
+            inviteCode: code,
+            adminName: preview.inviterName || "家庭管理员",
+          },
+          baby: null,
+          expiresAt: preview.expiresAt,
+          inviterName: preview.inviterName,
+        });
+      } catch (error) {
+        return bridgeErrorResponse(error);
+      }
+    },
+
+    async familyJoin(request: Request): Promise<Response> {
+      try {
+        if (request.method !== "POST") return json({ error: "Method not allowed" }, 405);
+        const csrf = deps.verifyCsrf(request);
+        if (csrf) return csrf;
+        const session = await deps.resolveSession(request);
+        if (!session) throw new BridgeError(401, "UNAUTHORIZED", "会话无效或已过期");
+        const body = await jsonObject(request);
+        if (typeof body.inviteCode !== "string" || !body.inviteCode.trim()) {
+          throw new BridgeError(400, "INVALID_INVITE_CODE", "请输入家庭邀请码");
+        }
+        // The preview backend accepts only inviteCode. Relation is retained by the
+        // legacy UI type for compatibility, but is not sent as an invented field.
+        const inviteCode = body.inviteCode.trim().toUpperCase();
+        const joined = requireData(await deps.fetchApi<{
+          family: ApiFamily;
+          role: string;
+        }>("/api/v1/families/join", {
+          method: "POST",
+          accessToken: session.accessToken,
+          body: { inviteCode },
+        }));
+        if (!joined.family?.id || typeof joined.family.name !== "string") {
+          throw new BridgeError(502, "UPSTREAM_INVALID_RESPONSE", "GrowDesk 加入家庭响应无效");
+        }
+        const identity = await loadWebIdentity(deps.fetchApi, session.accessToken);
+        const target = identity.families.find(item => item.family.id === joined.family.id);
+        const targetFamily = target
+          ? legacyFamily(target.family, target.babies, { role: joined.role })
+          : legacyFamily(joined.family, [], { role: joined.role });
+        const families = identity.families.map(item => legacyFamily(item.family, item.babies));
+        const baby = target?.babies[0] ?? null;
+        return json({
+          message: "已加入家庭。现有宝宝需要家庭成员进一步授权后才可访问。",
+          family: targetFamily,
+          baby,
+          families,
+          babies: identity.babies,
+          role: joined.role,
+        });
+      } catch (error) {
+        return bridgeErrorResponse(error);
+      }
+    },
+
+    async familyMembers(request: Request): Promise<Response> {
+      try {
+        if (request.method !== "GET") return json({ error: "Method not allowed" }, 405);
+        const session = await deps.resolveSession(request);
+        if (!session) throw new BridgeError(401, "UNAUTHORIZED", "会话无效或已过期");
+        const requestedId = new URL(request.url).searchParams.get("familyId") ?? undefined;
+        const family = await accessibleFamily(deps.fetchApi, session.accessToken, requestedId);
+        const members = requireData(await deps.fetchApi<ApiFamilyMember[]>(
+          `/api/v1/families/${pathId(family.id)}/members`,
+          { accessToken: session.accessToken },
+        ));
+        if (!Array.isArray(members)) throw new BridgeError(502, "UPSTREAM_INVALID_RESPONSE", "GrowDesk 成员列表格式错误");
+        return json({
+          family: legacyFamily(family),
+          members: members.map(member => mapMember(member, family.id)),
+        });
+      } catch (error) {
+        return bridgeErrorResponse(error);
+      }
+    },
+
+    async familyInvite(request: Request): Promise<Response> {
+      try {
+        if (request.method !== "POST") return json({ error: "Method not allowed" }, 405);
+        const csrf = deps.verifyCsrf(request);
+        if (csrf) return csrf;
+        const session = await deps.resolveSession(request);
+        if (!session) throw new BridgeError(401, "UNAUTHORIZED", "会话无效或已过期");
+        const body = await jsonObject(request);
+        const family = await accessibleFamily(deps.fetchApi, session.accessToken, body.familyId);
+        const expiresInDays = body.expiresInDays;
+        if (expiresInDays !== undefined && (!Number.isInteger(expiresInDays) || Number(expiresInDays) < 1 || Number(expiresInDays) > 30)) {
+          throw new BridgeError(400, "INVALID_INVITE_EXPIRY", "邀请码有效期必须为 1–30 天");
+        }
+        const invite = requireData(await deps.fetchApi<{ inviteCode: string; expiresAt: string }>(
+          `/api/v1/families/${pathId(family.id)}/invites`,
+          {
+            method: "POST",
+            accessToken: session.accessToken,
+            body: expiresInDays === undefined ? {} : { expiresInDays },
+          },
+        ));
+        if (!invite?.inviteCode || !invite.expiresAt) {
+          throw new BridgeError(502, "UPSTREAM_INVALID_RESPONSE", "GrowDesk 邀请响应无效");
+        }
+        return json({ familyId: family.id, inviteCode: invite.inviteCode, expiresAt: invite.expiresAt });
+      } catch (error) {
+        return bridgeErrorResponse(error);
+      }
+    },
+
     async baby(request: Request): Promise<Response> {
       try {
         if (!["GET", "POST", "PUT"].includes(request.method)) return json({ error: "Method not allowed" }, 405);
@@ -32,9 +317,7 @@ export function createIdentityEndpoints(deps: EndpointDependencies) {
         if (request.method === "GET") {
           return json(await loadWebBaby(deps.fetchApi, accessToken, new URL(request.url).searchParams.get("babyId")));
         }
-        const raw: unknown = await request.json().catch(() => null);
-        if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new BridgeError(400, "INVALID_JSON", "请求正文必须是 JSON 对象");
-        const body = raw as Record<string, unknown>;
+        const body = await jsonObject(request);
         if (request.method === "POST") {
           const familyId = await creationFamilyId(deps.fetchApi, accessToken, body.familyId);
           const created = requireData(await deps.fetchApi<ApiBaby>(`/api/v1/families/${pathId(familyId)}/babies`, {
@@ -53,7 +336,9 @@ export function createIdentityEndpoints(deps: EndpointDependencies) {
           method: "PATCH", accessToken, body: babyPayload(patch, true),
         }));
         return json(legacyBaby(updated));
-      } catch (error) { return bridgeErrorResponse(error); }
+      } catch (error) {
+        return bridgeErrorResponse(error);
+      }
     },
   };
 }

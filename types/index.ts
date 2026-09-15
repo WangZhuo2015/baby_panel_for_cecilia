@@ -8,16 +8,23 @@ export interface User {
 export interface Family {
   id: string;
   name: string;
-  inviteCode: string;
+  inviteCode?: string;
+  inviteExpiresAt?: string;
+  role?: string;
+  timeZone?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  babies?: Baby[];
 }
 
 export interface FamilyMember {
   id: string;
   userId: string;
-  username: string;
+  familyId?: string;
+  username?: string;
   displayName: string;
   role: string;
-  relation: string;
+  relation?: string;
   joinedAt: string;
 }
 
@@ -26,10 +33,13 @@ export interface Baby {
   id: string;
   familyId?: string;
   nickname: string;
-  gender: 'female' | 'male';
+  gender: 'female' | 'male' | 'unknown';
   birthDate: string; // ISO date
-  avatarUrl?: string;
-  gestationalAge?: number; // weeks at birth, for preterm correction
+  avatarUrl?: string | null;
+  gestationalAge?: number | null; // weeks at birth, for preterm correction
+  gestationalDays?: number | null;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 // ===== Record Types =====
@@ -220,6 +230,7 @@ export interface ActivityRecommendation {
 
 // ===== Book Types =====
 export interface Book {
+  version?: string;
   id: string;
   bookId: string;
   title: string;
@@ -417,6 +428,9 @@ export interface TimelineEntry {
   source?: string | null;
   /** 外部 Agent 来源: "Gemini Spark" | "ChatGPT" | "Claude" | "Cursor" 等 */
   sourceAgent?: string | null;
+  /** 关联配方奶粉信息 */
+  formulaProductId?: string | null;
+  formulaProductName?: string | null;
   /** 原始记录详情数据（用于精准回填与编辑） */
   rawRecord?: any;
 }
@@ -443,6 +457,8 @@ export interface MedicalReportItem {
 }
 
 export interface MedicalReport {
+  version?: string;
+  baseVersion?: string;
   id: string;
   babyId: string;
   recordedById?: string | null;

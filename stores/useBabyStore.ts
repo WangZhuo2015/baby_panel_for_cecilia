@@ -42,6 +42,9 @@ interface BabyStore {
   user: User | null;
   family: Family | null;
   familyMembers: FamilyMember[];
+  families: Family[];
+  babies: Baby[];
+  selectedBabyId: string | null;
   authLoading: boolean;
   baby: Baby | null;
   medicalReports: MedicalReport[];
@@ -81,8 +84,10 @@ interface BabyStore {
   logout: () => Promise<void>;
   joinFamily: (inviteCode: string, relation?: string) => Promise<void>;
   fetchFamilyMembers: () => Promise<void>;
+  selectBaby: (babyId: string) => Promise<void>;
+  createFamilyInvite: (expiresInDays?: number) => Promise<{ inviteCode: string; expiresAt: string }>;
   fetchBaby: (force?: boolean) => Promise<void>;
-  saveBaby: (data: { nickname: string; birthDate: string; gender: string; gestationalAge?: number; avatarUrl?: string }) => Promise<void>;
+  saveBaby: (data: { nickname: string; birthDate: string; gender: string; familyId?: string; gestationalAge?: number; gestationalDays?: number; avatarUrl?: string | null }) => Promise<void>;
   fetchFeedingRecords: (date?: string, force?: boolean) => Promise<void>;
   fetchSleepRecords: (force?: boolean) => Promise<void>;
   fetchDiaperRecords: (force?: boolean) => Promise<void>;
@@ -131,33 +136,52 @@ export const useBabyStore = create<BabyStore>((set, get) => ({
   // refreshAll is already from records slice; growth slice doesn't override.
 }));
 
-// ===== 离线快照：登录态与当日核心数据落 localStorage，冷启动断网可恢复 =====
-const SNAPSHOT_KEY = "baby-panel-snapshot-v1";
-interface StoreSnapshot {
-  user?: unknown;
-  family?: unknown;
-  baby?: unknown;
-  dailySummary?: unknown;
-  timeline?: unknown;
-  savedAt?: number;
+// ===== 离线快照：按账号命名空间与过期策略隔离，避免跨用户恢复 =====
+export const SNAPSHOT_KEY_PREFIX = "baby-panel-snapshot-v2:";
+export const SNAPSHOT_MAX_AGE = 7 * 24 * 60 * 60 * 1000; // 7 天过期
+
+export interface StoreSnapshot {
+  userId: string;
+  user: unknown;
+  family: unknown;
+  baby: unknown;
+  dailySummary: unknown;
+  timeline: unknown;
+  savedAt: number;
+  version: 2;
 }
-function saveSnapshot(state: { user: unknown; family: unknown; baby: unknown; dailySummary: unknown; timeline: unknown }): void {
+
+export function saveSnapshot(userId: string, state: { user: unknown; family: unknown; baby: unknown; dailySummary: unknown; timeline: unknown }): void {
   try {
     const payload: StoreSnapshot = {
-      user: state.user, family: state.family, baby: state.baby,
-      dailySummary: state.dailySummary, timeline: state.timeline,
+      userId,
+      user: state.user,
+      family: state.family,
+      baby: state.baby,
+      dailySummary: state.dailySummary,
+      timeline: state.timeline,
       savedAt: Date.now(),
+      version: 2,
     };
-    localStorage.setItem(SNAPSHOT_KEY, JSON.stringify(payload));
+    localStorage.setItem(`${SNAPSHOT_KEY_PREFIX}${userId}`, JSON.stringify(payload));
+    try { localStorage.removeItem("baby-panel-snapshot-v1"); } catch {}
   } catch {}
 }
+
 if (typeof window !== "undefined") {
   let snapshotTimer: ReturnType<typeof setTimeout> | undefined;
   useBabyStore.subscribe((state) => {
     if (snapshotTimer) clearTimeout(snapshotTimer);
     snapshotTimer = setTimeout(() => {
-      if (state.user) {
-        saveSnapshot({ user: state.user, family: state.family, baby: state.baby, dailySummary: state.dailySummary, timeline: state.timeline });
+      const u = state.user as { id?: string } | null;
+      if (u?.id) {
+        saveSnapshot(u.id, {
+          user: state.user,
+          family: state.family,
+          baby: state.baby,
+          dailySummary: state.dailySummary,
+          timeline: state.timeline,
+        });
       }
     }, 500);
   });
@@ -166,6 +190,6 @@ if (typeof window !== "undefined") {
 setHelperOnUnauthorized(() => {
   const state = useBabyStore.getState();
   if (state.user) {
-    useBabyStore.setState({ user: null, family: null, baby: null, authLoading: false } as any);
+    useBabyStore.setState({ user: null, family: null, families: [], babies: [], selectedBabyId: null, familyMembers: [], baby: null, authLoading: false } as any);
   }
 });

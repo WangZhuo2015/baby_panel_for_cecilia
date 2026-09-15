@@ -1,9 +1,12 @@
+import { GROWDESK_CONFIG } from "@/lib/config";
+import { bookBridge } from "@/lib/growdesk/book-bridge";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth, getActiveBaby } from "@/lib/api-helpers";
 import { safeJsonParse } from "@/lib/json";
 
 export async function GET(request: Request) {
+  if (GROWDESK_CONFIG.enabled) return bookBridge(request);
   const { searchParams } = new URL(request.url);
   const tab = searchParams.get("tab"); // all, read or favorites
 

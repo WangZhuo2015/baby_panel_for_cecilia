@@ -1,8 +1,11 @@
+import { GROWDESK_CONFIG } from "@/lib/config";
+import { knowledgeBridge } from "@/lib/growdesk/knowledge-bridge";
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { safeJsonParse } from '@/lib/json'
 
 export async function GET(request: Request) {
+  if (GROWDESK_CONFIG.enabled) return knowledgeBridge(request, "milestones");
   const { searchParams } = new URL(request.url)
   const category = searchParams.get('category')
   const month = searchParams.get('month')

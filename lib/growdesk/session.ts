@@ -1,23 +1,49 @@
-if (typeof window !== "undefined") throw new Error("This module can only be loaded on the server.");
 import { cookies } from "next/headers";
 import crypto from "node:crypto";
 import { GROWDESK_CONFIG } from "@/lib/config";
 import { growdeskFetch } from "./client";
-import { loadWebIdentity } from "./bridge-identity";
+import {
+  type ApiFamily,
+  type LegacyBaby,
+  loadWebIdentity,
+} from "./bridge-identity";
 import { BridgeError, requireData } from "./bridge-protocol";
 
 export interface BffSessionUser {
-  id: string; username: string; displayName: string; createdAt: string; updatedAt: string;
+  id: string;
+  username: string;
+  displayName: string;
+  createdAt: string;
+  updatedAt: string;
 }
-export interface ActiveBffSession { accessToken: string; user: BffSessionUser; sessionSecret: string }
+export interface ActiveBffSession {
+  accessToken: string;
+  user: BffSessionUser;
+  sessionSecret: string;
+}
 export interface BffFamily {
-  id: string; name: string; inviteCode?: string; timeZone?: string;
-  babies: Array<{ id: string; familyId?: string; name?: string; nickname?: string; gender?: string; birthDate?: string; gestationalAge?: number | null; avatarUrl?: string | null }>;
+  id: string;
+  name: string;
+  inviteCode?: string;
+  inviteExpiresAt?: string;
+  role?: string;
+  timeZone?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+  babies: LegacyBaby[];
 }
 export interface BffLoginResult {
-  success: boolean; sessionSecret?: string; user?: BffSessionUser;
-  family?: BffFamily | null; baby?: BffFamily["babies"][0] | null; error?: string; status?: number;
+  success: boolean;
+  sessionSecret?: string;
+  user?: BffSessionUser;
+  family?: BffFamily | null;
+  baby?: LegacyBaby | null;
+  families?: BffFamily[];
+  babies?: LegacyBaby[];
+  error?: string;
+  status?: number;
 }
+
 export function hashSessionSecret(secret: string): string {
   return crypto.createHash("sha256").update(secret).digest("hex");
 }
@@ -55,6 +81,130 @@ async function exchangeSession(request?: Request): Promise<ActiveBffSession | nu
   if (!data.accessToken || !data.user?.id) throw new BridgeError(502, "UPSTREAM_INVALID_SESSION", "GrowDesk 会话响应无效");
   return { accessToken: data.accessToken, user: data.user, sessionSecret };
 }
+
+function toBffFamily(family: ApiFamily, babies: LegacyBaby[], extra: Partial<BffFamily> = {}): BffFamily {
+  return {
+    id: family.id,
+    name: family.name,
+    timeZone: family.timeZone,
+    createdAt: family.createdAt,
+    updatedAt: family.updatedAt,
+    babies,
+    ...extra,
+  };
+}
+
+function identityFamilies(identity: Awaited<ReturnType<typeof loadWebIdentity>>): BffFamily[] {
+  return identity.families.map(item => toBffFamily(item.family, item.babies));
+}
+
+async function revokeDirectRegistrationSession(accessToken: string): Promise<void> {
+  try {
+    await growdeskFetch("/api/v1/auth/logout", { method: "POST", accessToken });
+  } catch {
+    // The BFF session is the only credential returned to the browser. A failure
+    // here must not turn a completed registration into a false error.
+  }
+}
+
+/**
+ * Create a GrowDesk account, bind a browser-only BFF session, and optionally
+ * consume a family invite. The upstream register endpoint always creates a
+ * private default family first; joining the invite is therefore a second,
+ * explicit contract call.
+ */
+export async function registerBffSession(input: {
+  username: string;
+  password: string;
+  displayName: string;
+  inviteCode?: string;
+  relation?: string;
+}): Promise<BffLoginResult> {
+  const sessionSecret = crypto.randomBytes(32).toString("hex");
+  let registrationToken: string | undefined;
+  let bffCreated = false;
+  try {
+    const registered = requireData(await growdeskFetch<{
+      accessToken: string;
+      user: BffSessionUser;
+    }>("/api/v1/auth/register", {
+      method: "POST",
+      body: {
+        username: input.username,
+        password: input.password,
+        displayName: input.displayName,
+        deviceLabel: "GrowDesk Web",
+      },
+    }));
+    registrationToken = registered.accessToken;
+    if (!registrationToken || !registered.user?.id) {
+      throw new BridgeError(502, "UPSTREAM_INVALID_RESPONSE", "GrowDesk 注册响应无效");
+    }
+
+    const bound = requireData(await growdeskFetch<{
+      accessToken: string;
+      user: BffSessionUser;
+    }>("/api/v1/auth/bff/session", {
+      method: "POST",
+      body: {
+        sessionSecretHash: hashSessionSecret(sessionSecret),
+        username: input.username,
+        password: input.password,
+        deviceLabel: "GrowDesk Web",
+      },
+    }));
+    if (!bound.accessToken || !bound.user?.id) {
+      throw new BridgeError(502, "UPSTREAM_INVALID_SESSION", "GrowDesk 注册会话响应无效");
+    }
+    bffCreated = true;
+
+    let joined: { family: ApiFamily; role: string } | undefined;
+    if (input.inviteCode) {
+      joined = requireData(await growdeskFetch<{ family: ApiFamily; role: string }>("/api/v1/families/join", {
+        method: "POST",
+        accessToken: bound.accessToken,
+        body: { inviteCode: input.inviteCode },
+      }));
+      if (!joined.family?.id || typeof joined.family.name !== "string") {
+        throw new BridgeError(502, "UPSTREAM_INVALID_RESPONSE", "GrowDesk 加入家庭响应无效");
+      }
+    }
+
+    const identity = await loadWebIdentity(growdeskFetch, bound.accessToken);
+    const families = identityFamilies(identity);
+    const target = joined
+      ? identity.families.find(item => item.family.id === joined!.family.id)
+      : identity.families.find(item => item.family.id === identity.family?.id);
+    const family = joined
+      ? (target
+        ? toBffFamily(target.family, target.babies, { role: joined.role })
+        : toBffFamily(joined.family, [], { role: joined.role }))
+      : (target ? toBffFamily(target.family, target.babies) : null);
+    const baby = target?.babies[0] ?? null;
+
+    return {
+      success: true,
+      sessionSecret,
+      user: bound.user,
+      family,
+      baby,
+      families,
+      babies: identity.babies,
+    };
+  } catch (error) {
+    if (bffCreated) {
+      try { await logoutBffSession(sessionSecret); } catch { /* preserve the original error */ }
+    }
+    return {
+      success: false,
+      status: error instanceof BridgeError ? error.status : 500,
+      error: error instanceof BridgeError ? error.message : "注册失败",
+    };
+  } finally {
+    if (registrationToken) await revokeDirectRegistrationSession(registrationToken);
+  }
+}
+
 export async function loginBffSession(username: string, password: string, deviceLabel = "Web Browser"): Promise<BffLoginResult> {
   const sessionSecret = crypto.randomBytes(32).toString("hex");
   let created = false;
@@ -64,22 +214,34 @@ export async function loginBffSession(username: string, password: string, device
     }));
     created = true;
     const identity = await loadWebIdentity(growdeskFetch, data.accessToken);
+    const families = identityFamilies(identity);
+    const family = families.find(item => item.id === identity.family?.id) ?? families[0] ?? null;
     return {
-      success: true, sessionSecret, user: data.user, baby: identity.baby,
-      family: identity.family ? { ...identity.family, babies: identity.baby ? [identity.baby] : [] } : null,
+      success: true,
+      sessionSecret,
+      user: data.user,
+      baby: identity.baby,
+      family,
+      families,
+      babies: identity.babies,
     };
   } catch (error) {
     if (created) {
       // Best-effort compensation; never pretend the incomplete login succeeded.
       try { await logoutBffSession(sessionSecret); } catch { /* upstream remains unavailable */ }
     }
-    return { success: false, status: error instanceof BridgeError ? error.status : 500,
-      error: error instanceof BridgeError ? error.message : "登录失败" };
+    return {
+      success: false,
+      status: error instanceof BridgeError ? error.status : 500,
+      error: error instanceof BridgeError ? error.message : "登录失败",
+    };
   }
 }
+
 export async function logoutBffSession(sessionSecret: string): Promise<void> {
   const result = await growdeskFetch("/api/v1/auth/bff/session", {
-    method: "DELETE", body: { sessionSecretHash: hashSessionSecret(sessionSecret) },
+    method: "DELETE",
+    body: { sessionSecretHash: hashSessionSecret(sessionSecret) },
   });
   if (!result.ok && result.status !== 401 && result.status !== 404) {
     throw new BridgeError(result.status, result.error?.code || "SESSION_REVOKE_FAILED", result.error?.message || "注销会话失败");

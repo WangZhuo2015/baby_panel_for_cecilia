@@ -2,6 +2,9 @@ if (typeof window !== "undefined") {
   throw new Error("This module can only be loaded on the server.");
 }
 
+import { BridgeError, wireVersion } from "./bridge-protocol";
+import { legacyVersion, nonNegativeInteger, optionalText, optionalTimestamp, requiredEnum, requiredTimestamp } from "./record-compat-helpers";
+
 export interface LegacySleepRecord {
   id: string;
   babyId: string;
@@ -11,12 +14,13 @@ export interface LegacySleepRecord {
   endTime?: string | null;
   startedAt?: string;
   endedAt?: string | null;
+  nightWakingCount?: number;
   quality?: string | null;
   notes?: string | null;
   source?: string;
   sourceAgent?: string | null;
-  version?: number;
-  baseVersion?: number;
+  version?: string;
+  baseVersion?: string;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -37,78 +41,54 @@ export interface GrowDeskSleepRecord {
   updatedAt: string;
 }
 
+const SLEEP_TYPES = ["nap", "night"] as const;
+
+function sleepType(body: Record<string, unknown>): "nap" | "night" {
+  return requiredEnum(body.sleepType ?? body.type, SLEEP_TYPES, "sleepType");
+}
+
+function startValue(body: Record<string, unknown>): unknown {
+  return body.startedAt !== undefined ? body.startedAt : body.startTime;
+}
+
+function endValue(body: Record<string, unknown>): unknown {
+  return body.endedAt !== undefined ? body.endedAt : body.endTime;
+}
+
 export function toGrowDeskSleepCreatePayload(body: Record<string, unknown>) {
-  const type = String(body.sleepType || body.type || "nap") as "nap" | "night";
-
-  let startedAt = new Date().toISOString();
-  const startRaw = body.startedAt || body.startTime;
-  if (startRaw) {
-    const d = new Date(String(startRaw));
-    if (!isNaN(d.getTime())) {
-      startedAt = d.toISOString();
-    }
-  }
-
-  let endedAt: string | null = null;
-  const endRaw = body.endedAt || body.endTime;
-  if (endRaw) {
-    const d = new Date(String(endRaw));
-    if (!isNaN(d.getTime())) {
-      endedAt = d.toISOString();
-    }
-  }
-
+  const startedAt = requiredTimestamp(startValue(body), "startedAt");
+  const rawEndedAt = endValue(body);
+  const endedAt = rawEndedAt === undefined || rawEndedAt === null || rawEndedAt === ""
+    ? null
+    : requiredTimestamp(rawEndedAt, "endedAt");
+  const nightWakingCount = nonNegativeInteger(body.nightWakingCount, "nightWakingCount", 0);
+  const notes = optionalText(body.notes, "notes");
+  const source = body.source === undefined ? "ui_manual" : optionalText(body.source, "source") || "ui_manual";
+  const sourceAgent = optionalText(body.sourceAgent, "sourceAgent");
   return {
-    sleepType: type,
+    sleepType: sleepType(body),
     startedAt,
     endedAt,
-    nightWakingCount: Number(body.nightWakingCount ?? 0),
-    notes: body.notes ? String(body.notes).trim() : null,
-    source: body.source ? String(body.source) : "ui_manual",
-    sourceAgent: body.sourceAgent ? String(body.sourceAgent) : null,
+    nightWakingCount,
+    notes,
+    source,
+    sourceAgent,
   };
 }
 
 export function toGrowDeskSleepUpdatePayload(body: Record<string, unknown>) {
-  const payload: Record<string, unknown> = {
-    baseVersion: Number(body.baseVersion ?? body.version ?? 1),
-  };
-
-  if (body.sleepType || body.type) {
-    payload.sleepType = String(body.sleepType || body.type);
-  }
-
-  const startRaw = body.startedAt || body.startTime;
-  if (startRaw) {
-    const d = new Date(String(startRaw));
-    if (!isNaN(d.getTime())) {
-      payload.startedAt = d.toISOString();
-    }
-  }
-
-  const hasEndedAt = "endedAt" in body || "endTime" in body;
-  if (hasEndedAt) {
-    const endRaw = body.endedAt !== undefined ? body.endedAt : body.endTime;
-    if (endRaw === null || endRaw === "") {
-      payload.endedAt = null;
-    } else {
-      const d = new Date(String(endRaw));
-      payload.endedAt = isNaN(d.getTime()) ? null : d.toISOString();
-    }
-  }
-
-  if (body.nightWakingCount !== undefined) {
-    payload.nightWakingCount = Number(body.nightWakingCount);
-  }
-
-  if (body.notes !== undefined) {
-    payload.notes = body.notes ? String(body.notes).trim() : null;
-  }
-
+  const payload: Record<string, unknown> = { baseVersion: legacyVersion(body.baseVersion ?? body.version) };
+  if (body.sleepType !== undefined || body.type !== undefined) payload.sleepType = sleepType(body);
+  if (body.startedAt !== undefined || body.startTime !== undefined) payload.startedAt = requiredTimestamp(startValue(body), "startedAt");
+  if (body.endedAt !== undefined || body.endTime !== undefined) payload.endedAt = optionalTimestamp(endValue(body), "endedAt");
+  if (body.nightWakingCount !== undefined) payload.nightWakingCount = nonNegativeInteger(body.nightWakingCount, "nightWakingCount");
+  if (body.notes !== undefined) payload.notes = optionalText(body.notes, "notes");
   return payload;
 }
 
 export function fromGrowDeskSleepRecord(rec: GrowDeskSleepRecord): LegacySleepRecord {
+  const version = wireVersion(rec.version);
+  if (typeof rec.startedAt !== "string" || !rec.startedAt) throw new BridgeError(502, "UPSTREAM_INVALID_RECORD", "GrowDesk 返回了不完整的睡眠记录");
   return {
     id: rec.id,
     babyId: rec.babyId,
@@ -118,11 +98,12 @@ export function fromGrowDeskSleepRecord(rec: GrowDeskSleepRecord): LegacySleepRe
     startedAt: rec.startedAt,
     endTime: rec.endedAt,
     endedAt: rec.endedAt,
+    nightWakingCount: rec.nightWakingCount,
     notes: rec.notes,
     source: rec.source,
     sourceAgent: rec.sourceAgent,
-    version: Number(rec.version ?? 1),
-    baseVersion: Number(rec.version ?? 1),
+    version,
+    baseVersion: version,
     createdAt: rec.createdAt,
     updatedAt: rec.updatedAt,
   };

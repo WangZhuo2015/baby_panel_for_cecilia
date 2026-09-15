@@ -1,12 +1,14 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import {
   CheckCircle2,
   Clock,
   Plus,
   Minus,
+  Settings2,
 } from "lucide-react";
+import { QuickFormulaManageModal } from "@/components/nutrition/QuickFormulaManageModal";
 import { NursingDualTimer } from "./NursingDualTimer";
 import { CuteButton } from "@/components/ui/CuteButton";
 import { CuteInput } from "@/components/ui/CuteInput";
@@ -114,24 +116,71 @@ export function FeedingForm({
 
   const [isNow, setIsNow] = useState<boolean>(() => !isEdit && !initialData?.timestamp);
 
+  const [isFormulaModalOpen, setIsFormulaModalOpen] = useState<boolean>(false);
   const [formulaProducts, setFormulaProducts] = useState<any[]>([]);
   const [selectedFormulaId, setSelectedFormulaId] = useState<string | null>(() => {
-    return initialData?.formulaProductId || (typeof window !== "undefined" ? localStorage.getItem("last_selected_formula_id") : null);
+    return initialData?.formulaProductId || null;
   });
 
-  useEffect(() => {
-    fetch("/api/nutrition/products?type=formula")
-      .then((res) => res.json())
-      .then((data) => {
-        const list = (data.formulas || []).filter((f: any) => f.isActive !== false);
+  const fetchFormulas = useCallback(
+    async (autoSelectId?: string) => {
+      try {
+        const res = await fetch("/api/nutrition/products?type=formula&includeInactive=true");
+        if (!res.ok) return;
+        const data = await res.json();
+        const list = data.formulas || [];
         setFormulaProducts(list);
-        if (!selectedFormulaId && list.length > 0) {
-          const defaultOne = list.find((f: any) => f.isDefault) || list[0];
-          setSelectedFormulaId(defaultOne.id);
+
+        if (autoSelectId) {
+          setSelectedFormulaId(autoSelectId);
+        } else {
+          setSelectedFormulaId((curr) => {
+            if (curr) {
+              const found = list.find((f: any) => f.id === curr);
+              if (found && (isEdit || found.isActive !== false)) return curr;
+            }
+            if (isEdit) {
+              return initialData?.formulaProductId || null;
+            }
+            // Check localStorage on client for last selected active formula
+            const lastSavedId =
+              typeof window !== "undefined" ? localStorage.getItem("last_selected_formula_id") : null;
+            if (lastSavedId) {
+              const lastActive = list.find((f: any) => f.id === lastSavedId && f.isActive !== false);
+              if (lastActive) return lastActive.id;
+            }
+            const activeList = list.filter((f: any) => f.isActive !== false);
+            if (activeList.length > 0) {
+              const defaultOne = activeList.find((f: any) => f.isDefault) || activeList[0];
+              return defaultOne.id;
+            }
+            return null;
+          });
         }
-      })
-      .catch(() => {});
-  }, [selectedFormulaId]);
+      } catch {}
+    },
+    [isEdit, initialData?.formulaProductId]
+  );
+
+  useEffect(() => {
+    fetchFormulas();
+  }, [fetchFormulas]);
+
+  const activeFormulaProducts = useMemo(() => {
+    return formulaProducts.filter((f) => f.isActive !== false);
+  }, [formulaProducts]);
+
+  const displayFormulaProducts = useMemo(() => {
+    const selectedItem = formulaProducts.find((f) => f.id === selectedFormulaId);
+    if (selectedItem && selectedItem.isActive === false) {
+      return [selectedItem, ...activeFormulaProducts];
+    }
+    return activeFormulaProducts;
+  }, [formulaProducts, selectedFormulaId, activeFormulaProducts]);
+
+  const selectedFormula = useMemo(() => {
+    return formulaProducts.find((f) => f.id === selectedFormulaId) || null;
+  }, [formulaProducts, selectedFormulaId]);
 
   const totalNursingMin = leftMin + rightMin;
   const estimatedBreastMl = estimateNursingVolumeMl(leftMin, rightMin);
@@ -325,33 +374,88 @@ export function FeedingForm({
             <span className="text-xs text-text-muted">点击或微调奶量</span>
           </div>
 
-          {/* 配方奶档案选择 (仅在配方奶或混合喂养时展示) */}
-          {(feedingType === "formula" || feedingType === "mixed") && formulaProducts.length > 0 && (
-            <div className="p-2 bg-primary-light/40 rounded-2xl space-y-1.5 border border-primary/20">
-              <div className="flex items-center justify-between px-1">
-                <span className="text-[11px] font-bold text-text-secondary">使用奶粉档案</span>
-                {formulaProducts.find((f) => f.id === selectedFormulaId) && (
-                  <span className="text-[10px] text-primary font-bold">
-                    冲调浓度: {((formulaProducts.find((f) => f.id === selectedFormulaId)?.reconstitutionRatio || 0.135) * 100).toFixed(1)}%
-                  </span>
-                )}
+          {/* 🍼 奶粉选择与快捷管理 (在配方奶或混合喂养时始终展示) */}
+          {(feedingType === "formula" || feedingType === "mixed") && (
+            <div className="p-3 bg-primary-light/35 dark:bg-card/70 rounded-2xl space-y-2 border border-primary/20 shadow-2xs">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-xs font-bold text-text-primary">🍼 正在喝的奶粉</span>
+                  {selectedFormula && (
+                    <span className="text-[10px] text-text-muted">
+                      ({((selectedFormula.reconstitutionRatio || 0.135) * 100).toFixed(1)}% 冲调浓度
+                      {selectedFormula.waterPerScoopMl ? ` · ${selectedFormula.waterPerScoopMl}ml/勺` : ""})
+                    </span>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsFormulaModalOpen(true)}
+                  className="text-[11px] text-primary font-bold hover:underline flex items-center gap-1 cursor-pointer transition-colors"
+                >
+                  <Settings2 size={12} />
+                  <span>{activeFormulaProducts.length > 0 ? "管理/换奶" : "+ 添加奶粉"}</span>
+                </button>
               </div>
-              <div className="flex flex-wrap gap-1.5">
-                {formulaProducts.map((f) => (
+
+              {activeFormulaProducts.length > 0 ? (
+                <div className="flex flex-wrap gap-1.5 pt-0.5">
+                  {displayFormulaProducts.map((f) => {
+                    const isSelected = selectedFormulaId === f.id;
+                    const isArchived = f.isActive === false;
+                    return (
+                      <button
+                        key={f.id}
+                        type="button"
+                        onClick={() => setSelectedFormulaId(f.id)}
+                        className={`relative px-3 py-1.5 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 btn-press cursor-pointer ${
+                          isSelected
+                            ? "bg-primary text-white shadow-button ring-2 ring-primary/40"
+                            : "bg-white dark:bg-card text-text-secondary hover:bg-gray-50 border border-divider"
+                        }`}
+                      >
+                        <span className="truncate max-w-[150px]">{f.name}</span>
+                        {f.isDefault && (
+                          <span
+                            className={`text-[9px] px-1.5 py-0.2 rounded-full font-bold leading-tight ${
+                              isSelected ? "bg-white/30 text-white" : "bg-primary-soft text-primary"
+                            }`}
+                          >
+                            主力
+                          </span>
+                        )}
+                        {isArchived && (
+                          <span className="text-[9px] px-1 py-0.2 rounded-full bg-gray-200 text-gray-700 dark:bg-gray-800 dark:text-gray-300">
+                            已归档
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
                   <button
-                    key={f.id}
                     type="button"
-                    onClick={() => setSelectedFormulaId(f.id)}
-                    className={`px-2.5 py-1 rounded-xl text-xs font-bold transition-all truncate max-w-[180px] btn-press ${
-                      selectedFormulaId === f.id
-                        ? "bg-primary text-white shadow-button"
-                        : "bg-white text-text-secondary hover:bg-gray-50 border border-divider"
-                    }`}
+                    onClick={() => setIsFormulaModalOpen(true)}
+                    className="px-2.5 py-1.5 rounded-xl text-xs font-medium text-text-muted hover:text-primary border border-dashed border-divider hover:border-primary/40 bg-white/50 dark:bg-white/5 flex items-center gap-1 btn-press cursor-pointer"
+                    title="添加或管理正在喝的奶粉"
                   >
-                    {f.name}
+                    <Plus size={12} />
+                    <span>管理/添加</span>
                   </button>
-                ))}
-              </div>
+                </div>
+              ) : (
+                <div className="py-2.5 px-3 bg-white/80 dark:bg-card rounded-xl border border-divider/60 flex items-center justify-between gap-2">
+                  <div className="text-[11px] text-text-muted">
+                    尚未添加宝宝正在喝的奶粉
+                  </div>
+                  <CuteButton
+                    type="button"
+                    size="sm"
+                    variant="primary"
+                    onClick={() => setIsFormulaModalOpen(true)}
+                  >
+                    + 快速添加正在喝的奶粉
+                  </CuteButton>
+                </div>
+              )}
             </div>
           )}
 
@@ -512,6 +616,18 @@ export function FeedingForm({
           {saving ? "保存中..." : isEdit ? "保存修改" : "保存喂养记录"}
         </CuteButton>
       </div>
+      <QuickFormulaManageModal
+        isOpen={isFormulaModalOpen}
+        onClose={() => setIsFormulaModalOpen(false)}
+        selectedFormulaId={selectedFormulaId}
+        onSelectFormula={(id) => {
+          setSelectedFormulaId(id);
+          setIsFormulaModalOpen(false);
+        }}
+        onFormulasChanged={(newSelectedId) => {
+          fetchFormulas(newSelectedId);
+        }}
+      />
     </div>
   );
 }

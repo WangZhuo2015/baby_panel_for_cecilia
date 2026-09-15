@@ -128,12 +128,12 @@ export default function NutritionPage() {
   const age = calculateAge(baby.birthDate);
 
   return (
-    <div className="px-4 pt-safe-6 pb-36 max-w-md md:max-w-xl lg:max-w-6xl mx-auto space-y-5">
+    <div className="px-4 pt-safe-6 pb-36 workbench:pb-12 max-w-md md:max-w-xl workbench:max-w-none lg:max-w-7xl mx-auto space-y-5">
       {/* 头部导航与宝宝信息 / Desktop Title */}
       <div className="flex items-center justify-between">
-        {/* 移动端宝宝头像与信息卡片，PC端由左侧边栏统一承载 */}
+        {/* 移动端宝宝头像与信息卡片，PC与平板横屏工作台由左侧边栏统一承载 */}
         <div
-          className="flex items-center gap-3 cursor-pointer group lg:hidden"
+          className="flex items-center gap-3 cursor-pointer group workbench:hidden"
           onClick={() => router.push("/onboarding")}
           title="修改宝宝资料"
         >
@@ -157,8 +157,8 @@ export default function NutritionPage() {
           </div>
         </div>
 
-        {/* PC 端主标题 */}
-        <div className="hidden lg:block">
+        {/* PC / 平板横屏端主标题 */}
+        <div className="hidden workbench:block">
           <h1 className="text-xl font-bold text-text-primary">DRIs 全量营养分析</h1>
         </div>
 
@@ -289,10 +289,10 @@ export default function NutritionPage() {
         </CuteCard>
       )}
 
-      {/* 🌟 iPad / PC 宽屏多列响应式网格 */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+      {/* 🌟 iPad / PC / 小型平板横屏 宽屏多列响应式网格 */}
+      <div className="grid grid-cols-1 workbench:grid-cols-12 gap-5 items-start">
         {/* ===== 左栏：补剂打卡、核心指标与趋势 (Col 7) ===== */}
-        <div className="lg:col-span-7 space-y-5">
+        <div className="workbench:col-span-7 space-y-5">
           {/* 💊 补剂快速打卡与安全守护 */}
           <SupplementQuickCheckIn babyId={baby.id} date={selectedDate} onRecordSuccess={loadData} />
 
@@ -329,7 +329,7 @@ export default function NutritionPage() {
         </div>
 
         {/* ===== 右栏：产品库快捷、多源穿透与明细表 (Col 5) ===== */}
-        <div className="lg:col-span-5 space-y-5">
+        <div className="workbench:col-span-5 space-y-5">
           {/* 快捷产品库与 OCR 管理按钮 */}
           <CuteCard
             className="p-3.5 bg-gradient-to-r from-sky-50 to-blue-50/40 border border-sky-200/80 flex items-center justify-between cursor-pointer hover:shadow-md transition-all"

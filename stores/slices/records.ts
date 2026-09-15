@@ -18,7 +18,7 @@ export interface RecordsSlice {
   aiDailySummaryLoading: boolean;
   aiDailySummaryError: string | null;
   fetchBaby: (force?: boolean) => Promise<void>;
-  saveBaby: (data: { nickname: string; birthDate: string; gender: string; gestationalAge?: number; avatarUrl?: string }) => Promise<void>;
+  saveBaby: (data: { nickname: string; birthDate: string; gender: string; familyId?: string; gestationalAge?: number; gestationalDays?: number; avatarUrl?: string | null }) => Promise<void>;
   fetchFeedingRecords: (date?: string, force?: boolean) => Promise<void>;
   fetchSleepRecords: (force?: boolean) => Promise<void>;
   fetchDiaperRecords: (force?: boolean) => Promise<void>;
@@ -281,7 +281,15 @@ export const createRecordsSlice = (set: any, get: any): RecordsSlice => ({
       get().fetchTimeline(undefined, true);
     } catch (e) {
       if (isRetryableSubmitError(e)) {
-        await enqueueOutbox({ clientId, url: "/api/records/feeding", body: payload as any, createdAt: Date.now() });
+        await enqueueOutbox({
+          clientId,
+          url: "/api/records/feeding",
+          body: payload as any,
+          createdAt: Date.now(),
+          userId: get().user?.id,
+          familyId: get().family?.id,
+          babyId: get().baby?.id,
+        });
         throw new Error("当前离线，记录已保存，联网后自动同步 ⏳");
       }
       console.error("Failed to add feeding record:", e);
@@ -306,7 +314,15 @@ export const createRecordsSlice = (set: any, get: any): RecordsSlice => ({
       get().fetchTimeline(undefined, true);
     } catch (e) {
       if (isRetryableSubmitError(e)) {
-        await enqueueOutbox({ clientId, url: "/api/records/sleep", body: payload as any, createdAt: Date.now() });
+        await enqueueOutbox({
+          clientId,
+          url: "/api/records/sleep",
+          body: payload as any,
+          createdAt: Date.now(),
+          userId: get().user?.id,
+          familyId: get().family?.id,
+          babyId: get().baby?.id,
+        });
         throw new Error("当前离线，记录已保存，联网后自动同步 ⏳");
       }
       console.error("Failed to add sleep record:", e);
@@ -331,7 +347,15 @@ export const createRecordsSlice = (set: any, get: any): RecordsSlice => ({
       get().fetchTimeline(undefined, true);
     } catch (e) {
       if (isRetryableSubmitError(e)) {
-        await enqueueOutbox({ clientId, url: "/api/records/diaper", body: payload as any, createdAt: Date.now() });
+        await enqueueOutbox({
+          clientId,
+          url: "/api/records/diaper",
+          body: payload as any,
+          createdAt: Date.now(),
+          userId: get().user?.id,
+          familyId: get().family?.id,
+          babyId: get().baby?.id,
+        });
         throw new Error("当前离线，记录已保存，联网后自动同步 ⏳");
       }
       console.error("Failed to add diaper record:", e);
@@ -357,7 +381,15 @@ export const createRecordsSlice = (set: any, get: any): RecordsSlice => ({
       get().fetchTimeline(undefined, true);
     } catch (e) {
       if (isRetryableSubmitError(e)) {
-        await enqueueOutbox({ clientId, url: "/api/food/logs", body: payload as any, createdAt: Date.now() });
+        await enqueueOutbox({
+          clientId,
+          url: "/api/food/logs",
+          body: payload as any,
+          createdAt: Date.now(),
+          userId: get().user?.id,
+          familyId: get().family?.id,
+          babyId: get().baby?.id,
+        });
         throw new Error("当前离线，记录已保存，联网后自动同步 ⏳");
       }
       console.error("Failed to add food log record:", e);

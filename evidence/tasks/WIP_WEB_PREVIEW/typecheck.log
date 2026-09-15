@@ -1,0 +1,23 @@
+
+> baby-app@2.0.0 typecheck
+> tsc --noEmit
+
+stores/useBabyStore.ts(131,61): error TS2322: Type '{ invalidateCache: (prefix?: string) => void; growthMeasurements: GrowthMeasurement[]; medicalReports: MedicalReport[]; vaccineData: { national: Vaccine[]; nonProgram: Vaccine[]; provincial: Vaccine[]; strategyGroups: VaccineStrategyGroup[]; schedule: VaccineScheduleEntry[]; engineRules: ScheduleEngineRule[]; dataRe...' is not assignable to type 'BabyStore'.
+  Types of property 'saveBaby' are incompatible.
+    Type '(data: { nickname: string; birthDate: string; gender: string; gestationalAge?: number | undefined; avatarUrl?: string | undefined; }) => Promise<void>' is not assignable to type '(data: { nickname: string; birthDate: string; gender: string; familyId?: string | undefined; gestationalAge?: number | undefined; gestationalDays?: number | undefined; avatarUrl?: string | null | undefined; }) => Promise<...>'.
+      Types of parameters 'data' and 'data' are incompatible.
+        Type '{ nickname: string; birthDate: string; gender: string; familyId?: string | undefined; gestationalAge?: number | undefined; gestationalDays?: number | undefined; avatarUrl?: string | null | undefined; }' is not assignable to type '{ nickname: string; birthDate: string; gender: string; gestationalAge?: number | undefined; avatarUrl?: string | undefined; }'.
+          Types of property 'avatarUrl' are incompatible.
+            Type 'string | null | undefined' is not assignable to type 'string | undefined'.
+              Type 'null' is not assignable to type 'string | undefined'.
+tests/unit/growdesk-records-preview.test.ts(48,47): error TS2339: Property 'id' does not exist on type 'DatedRecord'.
+tests/unit/growdesk-records-preview.test.ts(49,46): error TS2339: Property 'id' does not exist on type 'DatedRecord'.
+tests/unit/growdesk-records-preview.test.ts(50,44): error TS2339: Property 'id' does not exist on type 'DatedRecord'.
+tests/unit/growdesk-records-preview.test.ts(51,48): error TS2339: Property 'id' does not exist on type 'DatedRecord'.
+tests/unit/growdesk-records-preview.test.ts(66,46): error TS2339: Property 'id' does not exist on type 'DatedRecord'.
+tests/unit/growdesk-records-preview.test.ts(75,61): error TS2345: Argument of type 'never[]' is not assignable to parameter of type 'T'.
+  'T' could be instantiated with an arbitrary type which could be unrelated to 'never[]'.
+tests/unit/growdesk-records-preview.test.ts(87,27): error TS2345: Argument of type '{ id: string; babyId: string; }' is not assignable to parameter of type 'T'.
+  'T' could be instantiated with an arbitrary type which could be unrelated to '{ id: string; babyId: string; }'.
+tests/unit/growdesk-records-preview.test.ts(92,45): error TS2345: Argument of type '{ id: string; babyId: string; }' is not assignable to parameter of type 'T'.
+  'T' could be instantiated with an arbitrary type which could be unrelated to '{ id: string; babyId: string; }'.

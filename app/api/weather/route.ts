@@ -1,3 +1,6 @@
+import { GROWDESK_CONFIG } from "@/lib/config";
+import { growdeskFetch } from "@/lib/growdesk/client";
+import { requireData, bridgeErrorResponse } from "@/lib/growdesk/bridge-protocol";
 import { NextResponse } from "next/server";
 
 // Default coordinates (Suzhou)
@@ -50,6 +53,10 @@ function getAirQualityLevel(aqi: number): string {
 }
 
 export async function GET(request: Request) {
+  if (GROWDESK_CONFIG.enabled) {
+    try { return Response.json(requireData(await growdeskFetch(`/api/v1/weather${new URL(request.url).search}`, { timeoutMs: 15000 }))); }
+    catch (error) { return bridgeErrorResponse(error); }
+  }
   try {
     const { searchParams } = new URL(request.url);
     const latParam = parseFloat(searchParams.get("lat") ?? "");

@@ -206,6 +206,10 @@ export const GROWDESK_CONFIG = {
   timeoutMs: 10_000,
 } as const;
 
+export function isGrowDeskEnabled(): boolean {
+  return GROWDESK_CONFIG.enabled;
+}
+
 export const config = {
   nodeEnv: NODE_ENV,
   isProduction: IS_PRODUCTION,

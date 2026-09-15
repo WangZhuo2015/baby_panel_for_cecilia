@@ -7,6 +7,13 @@ import {
   addDays,
 } from "@/lib/date";
 import { getFeedingEffectiveMl, estimateNursingVolumeMl } from "@/lib/nutrition/breastmilk";
+import { isGrowDeskEnabled } from "@/lib/growdesk/config";
+import { growdeskFetch } from "@/lib/growdesk/client";
+import { fetchLegacyRecordList } from "@/lib/growdesk/record-list";
+import { fromGrowDeskFeedingRecord, type GrowDeskFeedingRecord } from "@/lib/growdesk/feeding-compat";
+import { fromGrowDeskSleepRecord, type GrowDeskSleepRecord } from "@/lib/growdesk/sleep-compat";
+import { fromGrowDeskDiaperRecord, type GrowDeskDiaperRecord } from "@/lib/growdesk/diaper-compat";
+import { fromGrowDeskFoodRecord, type GrowDeskFoodRecord } from "@/lib/growdesk/food-compat";
 
 export type VoiceQueryDomain =
   | "feeding"
@@ -25,8 +32,9 @@ export interface FastPathIntent {
 
 export interface VoiceFastPathOptions {
   text: string;
-  baby: Baby;
+  baby: Baby | any;
   userId?: string;
+  accessToken?: string;
 }
 
 /**
@@ -212,15 +220,27 @@ export async function tryVoiceFastPath(options: VoiceFastPathOptions): Promise<s
   const babyId = baby.id;
   const babyName = baby.nickname || "宝宝";
   const { domain, targetDate, dateLabel, isLatestOnly } = intent;
+  const useGrowDesk = isGrowDeskEnabled() || Boolean(options.accessToken);
+  const token = options.accessToken || "";
 
   try {
     switch (domain) {
       case "feeding": {
         if (isLatestOnly) {
-          const latest = await prisma.feedingRecord.findFirst({
-            where: { babyId },
-            orderBy: { timestamp: "desc" },
-          });
+          const latest = useGrowDesk
+            ? await fetchLegacyRecordList<GrowDeskFeedingRecord>(
+                growdeskFetch,
+                token,
+                babyId,
+                new URLSearchParams({ limit: "1" }),
+                "feeding"
+              )
+                .then((l) => (l.length > 0 ? fromGrowDeskFeedingRecord(l[0]) : null))
+                .catch(() => null)
+            : await prisma.feedingRecord.findFirst({
+                where: { babyId },
+                orderBy: { timestamp: "desc" },
+              });
           if (!latest) return `${babyName}目前还没有记录喂养数据哦。`;
           const timeText = formatSpokenTime(latest.timestamp);
           if (latest.type === "breast") {
@@ -240,11 +260,23 @@ export async function tryVoiceFastPath(options: VoiceFastPathOptions): Promise<s
           return `${babyName}最近一次喂奶是${timeText}。`;
         }
 
-        const { start, end } = getLocalDayUtcRange(targetDate);
-        const records = await prisma.feedingRecord.findMany({
-          where: { babyId, timestamp: { gte: start, lt: end } },
-          orderBy: { timestamp: "asc" },
-        });
+        const records = useGrowDesk
+          ? await fetchLegacyRecordList<GrowDeskFeedingRecord>(
+              growdeskFetch,
+              token,
+              babyId,
+              new URLSearchParams({ date: targetDate }),
+              "feeding"
+            )
+              .then((l) => l.map(fromGrowDeskFeedingRecord))
+              .catch(() => [])
+          : await (async () => {
+              const { start, end } = getLocalDayUtcRange(targetDate);
+              return prisma.feedingRecord.findMany({
+                where: { babyId, timestamp: { gte: start, lt: end } },
+                orderBy: { timestamp: "asc" },
+              });
+            })();
 
         if (records.length === 0) {
           return `${babyName}${dateLabel}还没有记录喝奶数据哦。`;
@@ -296,27 +328,53 @@ export async function tryVoiceFastPath(options: VoiceFastPathOptions): Promise<s
 
       case "sleep": {
         if (isLatestOnly) {
-          const latest = await prisma.sleepRecord.findFirst({
-            where: { babyId },
-            orderBy: { startTime: "desc" },
-          });
+          const latest = useGrowDesk
+            ? await fetchLegacyRecordList<GrowDeskSleepRecord>(
+                growdeskFetch,
+                token,
+                babyId,
+                new URLSearchParams({ limit: "1" }),
+                "sleep"
+              )
+                .then((l) => (l.length > 0 ? fromGrowDeskSleepRecord(l[0]) : null))
+                .catch(() => null)
+            : await prisma.sleepRecord.findFirst({
+                where: { babyId },
+                orderBy: { startTime: "desc" },
+              });
           if (!latest) return `${babyName}目前还没有记录睡眠数据哦。`;
-          const startStr = formatSpokenTime(latest.startTime);
-          const endStr = formatSpokenTime(latest.endTime);
+          const startTime = latest.startTime || (latest as any).startedAt;
+          const endTime = latest.endTime ?? (latest as any).endedAt;
+          if (!startTime) return `${babyName}目前还没有记录睡眠数据哦。`;
+          const startStr = formatSpokenTime(startTime);
+          if (!endTime) {
+            return `${babyName}目前正在睡觉，是从${startStr}开始睡的。`;
+          }
+          const endStr = formatSpokenTime(endTime);
           const durMinutes = Math.max(
             1,
             Math.round(
-              (new Date(latest.endTime).getTime() - new Date(latest.startTime).getTime()) / 60000
+              (new Date(endTime).getTime() - new Date(startTime).getTime()) / 60000
             )
           );
           return `${babyName}最近一次睡觉是在${startStr}到${endStr}，睡了${formatSpokenDuration(durMinutes)}。`;
         }
 
         const { start, end } = getLocalDayUtcRange(targetDate);
-        const sleepRecords = await prisma.sleepRecord.findMany({
-          where: { babyId, startTime: { lt: end }, endTime: { gt: start } },
-          orderBy: { startTime: "asc" },
-        });
+        const sleepRecords = useGrowDesk
+          ? await fetchLegacyRecordList<GrowDeskSleepRecord>(
+              growdeskFetch,
+              token,
+              babyId,
+              new URLSearchParams({ date: targetDate }),
+              "sleep"
+            )
+              .then((l) => l.map(fromGrowDeskSleepRecord))
+              .catch(() => [])
+          : await prisma.sleepRecord.findMany({
+              where: { babyId, startTime: { lt: end }, endTime: { gt: start } },
+              orderBy: { startTime: "asc" },
+            });
 
         if (sleepRecords.length === 0) {
           return `${babyName}${dateLabel}还没有记录睡眠数据哦。`;
@@ -325,10 +383,14 @@ export async function tryVoiceFastPath(options: VoiceFastPathOptions): Promise<s
         const dayStartMs = new Date(start).getTime();
         const dayEndMs = new Date(end).getTime();
         const sleepIntervals = sleepRecords
-          .map((r) => ({
-            startMs: new Date(r.startTime).getTime(),
-            endMs: new Date(r.endTime).getTime(),
-          }))
+          .map((r) => {
+            const sTime = r.startTime || (r as any).startedAt;
+            const eTime = r.endTime ?? (r as any).endedAt;
+            return {
+              startMs: sTime ? new Date(sTime).getTime() : NaN,
+              endMs: eTime ? new Date(eTime).getTime() : NaN,
+            };
+          })
           .filter((iv) => !Number.isNaN(iv.startMs) && !Number.isNaN(iv.endMs) && iv.endMs > iv.startMs)
           .map((iv) => ({
             startMs: Math.max(iv.startMs, dayStartMs),
@@ -356,26 +418,53 @@ export async function tryVoiceFastPath(options: VoiceFastPathOptions): Promise<s
         }
 
         const lastSleep = sleepRecords[sleepRecords.length - 1];
-        const lastWakeTime = formatSpokenTime(lastSleep.endTime);
-        return `${babyName}${dateLabel}累计睡眠${formatSpokenDuration(totalSleepMinutes)}，一共小睡了${sleepRecords.length}次。最近一次是${lastWakeTime}醒来的。`;
+        const lastSleepEnd = lastSleep.endTime ?? (lastSleep as any).endedAt;
+        const lastWakeTime = lastSleepEnd ? `${formatSpokenTime(lastSleepEnd)}醒来的` : "目前还在睡";
+        return `${babyName}${dateLabel}累计睡眠${formatSpokenDuration(totalSleepMinutes)}，一共小睡了${sleepRecords.length}次。最近一次是${lastWakeTime}。`;
       }
 
       case "diaper_poop": {
         if (isLatestOnly) {
-          const latest = await prisma.diaperRecord.findFirst({
-            where: { babyId, type: { in: ["poop", "both"] } },
-            orderBy: { timestamp: "desc" },
-          });
+          const latest = useGrowDesk
+            ? await fetchLegacyRecordList<GrowDeskDiaperRecord>(
+                growdeskFetch,
+                token,
+                babyId,
+                new URLSearchParams({ limit: "20" }),
+                "diaper"
+              )
+                .then((l) =>
+                  l
+                    .map(fromGrowDeskDiaperRecord)
+                    .find((r: any) => r.type === "poop" || r.type === "both") || null
+                )
+                .catch(() => null)
+            : await prisma.diaperRecord.findFirst({
+                where: { babyId, type: { in: ["poop", "both"] } },
+                orderBy: { timestamp: "desc" },
+              });
           if (!latest) return `${babyName}目前还没有记录便便数据哦。`;
           const time = formatSpokenTime(latest.timestamp);
           return `${babyName}最近一次拉便便是在${time}。`;
         }
 
-        const { start, end } = getLocalDayUtcRange(targetDate);
-        const records = await prisma.diaperRecord.findMany({
-          where: { babyId, timestamp: { gte: start, lt: end } },
-          orderBy: { timestamp: "asc" },
-        });
+        const records = useGrowDesk
+          ? await fetchLegacyRecordList<GrowDeskDiaperRecord>(
+              growdeskFetch,
+              token,
+              babyId,
+              new URLSearchParams({ date: targetDate }),
+              "diaper"
+            )
+              .then((l) => l.map(fromGrowDeskDiaperRecord))
+              .catch(() => [])
+          : await (async () => {
+              const { start, end } = getLocalDayUtcRange(targetDate);
+              return prisma.diaperRecord.findMany({
+                where: { babyId, timestamp: { gte: start, lt: end } },
+                orderBy: { timestamp: "asc" },
+              });
+            })();
 
         const poopRecords = records.filter((r) => r.type === "poop" || r.type === "both");
         const peeRecords = records.filter((r) => r.type === "pee" || r.type === "both");
@@ -394,10 +483,20 @@ export async function tryVoiceFastPath(options: VoiceFastPathOptions): Promise<s
 
       case "diaper": {
         if (isLatestOnly) {
-          const latest = await prisma.diaperRecord.findFirst({
-            where: { babyId },
-            orderBy: { timestamp: "desc" },
-          });
+          const latest = useGrowDesk
+            ? await fetchLegacyRecordList<GrowDeskDiaperRecord>(
+                growdeskFetch,
+                token,
+                babyId,
+                new URLSearchParams({ limit: "1" }),
+                "diaper"
+              )
+                .then((l) => (l.length > 0 ? fromGrowDeskDiaperRecord(l[0]) : null))
+                .catch(() => null)
+            : await prisma.diaperRecord.findFirst({
+                where: { babyId },
+                orderBy: { timestamp: "desc" },
+              });
           if (!latest) return `${babyName}目前还没有换尿布记录哦。`;
           const time = formatSpokenTime(latest.timestamp);
           const typeText =
@@ -409,15 +508,23 @@ export async function tryVoiceFastPath(options: VoiceFastPathOptions): Promise<s
           return `${babyName}最近一次换尿布是在${time}，是${typeText}。`;
         }
 
-        const { start, end } = getLocalDayUtcRange(targetDate);
-        const records = await prisma.diaperRecord.findMany({
-          where: { babyId, timestamp: { gte: start, lt: end } },
-          orderBy: { timestamp: "asc" },
-        });
-
-        if (records.length === 0) {
-          return `${babyName}${dateLabel}还没有换尿布记录哦。`;
-        }
+        const records = useGrowDesk
+          ? await fetchLegacyRecordList<GrowDeskDiaperRecord>(
+              growdeskFetch,
+              token,
+              babyId,
+              new URLSearchParams({ date: targetDate }),
+              "diaper"
+            )
+              .then((l) => l.map(fromGrowDeskDiaperRecord))
+              .catch(() => [])
+          : await (async () => {
+              const { start, end } = getLocalDayUtcRange(targetDate);
+              return prisma.diaperRecord.findMany({
+                where: { babyId, timestamp: { gte: start, lt: end } },
+                orderBy: { timestamp: "asc" },
+              });
+            })();
 
         const poopCount = records.filter((r) => r.type === "poop" || r.type === "both").length;
         const peeCount = records.filter((r) => r.type === "pee" || r.type === "both").length;
@@ -426,10 +533,20 @@ export async function tryVoiceFastPath(options: VoiceFastPathOptions): Promise<s
       }
 
       case "food": {
-        const foodLogs = await prisma.foodLogRecord.findMany({
-          where: { babyId, date: targetDate },
-          orderBy: { time: "asc" },
-        });
+        const foodLogs = useGrowDesk
+          ? await fetchLegacyRecordList<GrowDeskFoodRecord>(
+              growdeskFetch,
+              token,
+              babyId,
+              new URLSearchParams({ date: targetDate }),
+              "food"
+            )
+              .then((l) => l.map(fromGrowDeskFoodRecord))
+              .catch(() => [])
+          : await prisma.foodLogRecord.findMany({
+              where: { babyId, date: targetDate },
+              orderBy: { time: "asc" },
+            });
 
         if (foodLogs.length === 0) {
           return `${babyName}${dateLabel}还没有添加辅食记录哦。`;
@@ -437,12 +554,29 @@ export async function tryVoiceFastPath(options: VoiceFastPathOptions): Promise<s
 
         const allFoods: string[] = [];
         for (const log of foodLogs) {
-          try {
-            const items = JSON.parse(log.foods);
-            if (Array.isArray(items)) {
-              allFoods.push(...items.filter((x): x is string => typeof x === "string"));
+          const rawFoods = (log as any).foods;
+          if (Array.isArray(rawFoods)) {
+            for (const item of rawFoods) {
+              if (typeof item === "string") {
+                allFoods.push(item);
+              } else if (item && typeof item === "object" && "name" in item && typeof item.name === "string") {
+                allFoods.push(item.name);
+              }
             }
-          } catch {}
+          } else if (typeof rawFoods === "string") {
+            try {
+              const items = JSON.parse(rawFoods);
+              if (Array.isArray(items)) {
+                for (const item of items) {
+                  if (typeof item === "string") {
+                    allFoods.push(item);
+                  } else if (item && typeof item === "object" && "name" in item && typeof item.name === "string") {
+                    allFoods.push(item.name);
+                  }
+                }
+              }
+            } catch {}
+          }
         }
         const uniqueFoods = Array.from(new Set(allFoods));
         const foodText = uniqueFoods.length > 0 ? `吃了${uniqueFoods.join("、")}` : "";
@@ -453,12 +587,53 @@ export async function tryVoiceFastPath(options: VoiceFastPathOptions): Promise<s
 
       case "summary": {
         const { start, end } = getLocalDayUtcRange(targetDate);
-        const [feedings, sleeps, diapers, foods] = await Promise.all([
-          prisma.feedingRecord.findMany({ where: { babyId, timestamp: { gte: start, lt: end } } }),
-          prisma.sleepRecord.findMany({ where: { babyId, startTime: { lt: end }, endTime: { gt: start } } }),
-          prisma.diaperRecord.findMany({ where: { babyId, timestamp: { gte: start, lt: end } } }),
-          prisma.foodLogRecord.findMany({ where: { babyId, date: targetDate } }),
-        ]);
+        const [feedings, sleeps, diapers, foods] = useGrowDesk
+          ? await Promise.all([
+              fetchLegacyRecordList<GrowDeskFeedingRecord>(
+                growdeskFetch,
+                token,
+                babyId,
+                new URLSearchParams({ date: targetDate }),
+                "feeding"
+              )
+                .then((l) => l.map(fromGrowDeskFeedingRecord))
+                .catch(() => []),
+              fetchLegacyRecordList<GrowDeskSleepRecord>(
+                growdeskFetch,
+                token,
+                babyId,
+                new URLSearchParams({ date: targetDate }),
+                "sleep"
+              )
+                .then((l) => l.map(fromGrowDeskSleepRecord))
+                .catch(() => []),
+              fetchLegacyRecordList<GrowDeskDiaperRecord>(
+                growdeskFetch,
+                token,
+                babyId,
+                new URLSearchParams({ date: targetDate }),
+                "diaper"
+              )
+                .then((l) => l.map(fromGrowDeskDiaperRecord))
+                .catch(() => []),
+              fetchLegacyRecordList<GrowDeskFoodRecord>(
+                growdeskFetch,
+                token,
+                babyId,
+                new URLSearchParams({ date: targetDate }),
+                "food"
+              )
+                .then((l) => l.map(fromGrowDeskFoodRecord))
+                .catch(() => []),
+            ])
+          : await Promise.all([
+              prisma.feedingRecord.findMany({ where: { babyId, timestamp: { gte: start, lt: end } } }),
+              prisma.sleepRecord.findMany({
+                where: { babyId, startTime: { lt: end }, endTime: { gt: start } },
+              }),
+              prisma.diaperRecord.findMany({ where: { babyId, timestamp: { gte: start, lt: end } } }),
+              prisma.foodLogRecord.findMany({ where: { babyId, date: targetDate } }),
+            ]);
 
         const totalFeedingMl = feedings.reduce((sum, r) => sum + getFeedingEffectiveMl(r), 0);
         const poopCount = diapers.filter((d) => d.type === "poop" || d.type === "both").length;
@@ -466,7 +641,14 @@ export async function tryVoiceFastPath(options: VoiceFastPathOptions): Promise<s
         const dayStartMs = new Date(start).getTime();
         const dayEndMs = new Date(end).getTime();
         const sleepIntervals = sleeps
-          .map((r) => ({ startMs: new Date(r.startTime).getTime(), endMs: new Date(r.endTime).getTime() }))
+          .map((r) => {
+            const sTime = r.startTime || (r as any).startedAt;
+            const eTime = r.endTime ?? (r as any).endedAt;
+            return {
+              startMs: sTime ? new Date(sTime).getTime() : NaN,
+              endMs: eTime ? new Date(eTime).getTime() : NaN,
+            };
+          })
           .filter((iv) => !Number.isNaN(iv.startMs) && !Number.isNaN(iv.endMs) && iv.endMs > iv.startMs)
           .map((iv) => ({ startMs: Math.max(iv.startMs, dayStartMs), endMs: Math.min(iv.endMs, dayEndMs) }))
           .filter((iv) => iv.endMs > iv.startMs)

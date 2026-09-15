@@ -3,9 +3,116 @@ import { requireAuth, requireBaby, getActiveBaby } from "@/lib/api-helpers";
 import { prisma } from "@/lib/prisma";
 import { PRESET_FORMULA_PRODUCTS, PRESET_SUPPLEMENT_PRODUCTS } from "@/lib/nutrition/presets";
 import type { FormulaProduct, SupplementProduct, NutrientsMap } from "@/types/nutrition";
+import { GROWDESK_CONFIG } from "@/lib/config";
+import { resolveBffSession } from "@/lib/growdesk/session";
+import { verifyBffCsrf } from "@/lib/growdesk/csrf";
+import { growdeskFetch } from "@/lib/growdesk/client";
+import { loadWebIdentity } from "@/lib/growdesk/bridge-identity";
+import {
+  fromGrowDeskFormulaProduct,
+  toGrowDeskFormulaCreatePayload,
+  toGrowDeskFormulaUpdatePayload,
+  extractSupplementStateFromFoodPlan,
+  mergeSupplementStateIntoFoodPlan,
+  type GrowDeskFormulaProduct,
+} from "@/lib/growdesk/nutrition-compat";
+import crypto from "node:crypto";
 
 export async function GET(request: Request) {
   try {
+    if (GROWDESK_CONFIG.enabled) {
+      const bffSession = await resolveBffSession(request);
+      if (!bffSession) {
+        return NextResponse.json({ error: "Unauthorized: 会话无效或已过期" }, { status: 401 });
+      }
+
+      const identity = await loadWebIdentity(growdeskFetch, bffSession.accessToken);
+      const familyId = identity.family?.id;
+      const babyId = identity.baby?.id;
+
+      if (!familyId) {
+        return NextResponse.json({
+          formulas: [],
+          supplements: [],
+          presets: {
+            formulas: PRESET_FORMULA_PRODUCTS,
+            supplements: PRESET_SUPPLEMENT_PRODUCTS,
+          },
+        });
+      }
+
+      const { searchParams } = new URL(request.url);
+      const type = searchParams.get("type"); // 'formula' | 'supplement'
+      const includeInactive = searchParams.get("includeInactive") === "true";
+
+      let formulas: FormulaProduct[] = [];
+      let supplements: SupplementProduct[] = [];
+
+      // Fetch food plan for defaultFormula and supplementProducts
+      let foodPlanData: Record<string, unknown> = {};
+      if (babyId) {
+        const fpRes = await growdeskFetch<any>(`/api/v1/babies/${babyId}/food-plan`, {
+          method: "GET",
+          accessToken: bffSession.accessToken,
+        });
+        if (fpRes.ok && fpRes.data) {
+          foodPlanData = fpRes.data.data?.planData || fpRes.data.planData || {};
+        }
+      }
+      const suppState = extractSupplementStateFromFoodPlan(foodPlanData);
+
+      if (!type || type === "formula") {
+        const res = await growdeskFetch<any>(`/api/v1/families/${familyId}/nutrition/products?limit=50`, {
+          method: "GET",
+          accessToken: bffSession.accessToken,
+        });
+
+        if (res.ok && res.data) {
+          const rawList: GrowDeskFormulaProduct[] = Array.isArray(res.data)
+            ? res.data
+            : res.data.data || [];
+
+          let firstActiveSeen = false;
+          formulas = rawList.map((raw) => {
+            const isFirst = !firstActiveSeen && !raw.isArchived;
+            if (isFirst) firstActiveSeen = true;
+
+            return fromGrowDeskFormulaProduct(raw, {
+              defaultFormulaId: suppState.defaultFormulaId,
+              customNutrients: suppState.customFormulaNutrients?.[raw.id],
+              isFirstActive: isFirst,
+            });
+          });
+
+          if (!includeInactive) {
+            formulas = formulas.filter((f) => f.isActive);
+          }
+
+          formulas.sort((a, b) => {
+            if (a.isDefault && !b.isDefault) return -1;
+            if (!a.isDefault && b.isDefault) return 1;
+            return 0;
+          });
+        }
+      }
+
+      if (!type || type === "supplement") {
+        supplements = suppState.supplementProducts;
+        if (!includeInactive) {
+          supplements = supplements.filter((s) => s.isActive !== false);
+        }
+      }
+
+      return NextResponse.json({
+        formulas,
+        supplements,
+        presets: {
+          formulas: PRESET_FORMULA_PRODUCTS,
+          supplements: PRESET_SUPPLEMENT_PRODUCTS,
+        },
+      });
+    }
+
     const auth = await requireAuth(request);
     if (auth.errorResponse) return auth.errorResponse;
 
@@ -92,6 +199,141 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
+    if (GROWDESK_CONFIG.enabled) {
+      const csrfErr = verifyBffCsrf(request);
+      if (csrfErr) return csrfErr;
+
+      const bffSession = await resolveBffSession(request);
+      if (!bffSession) {
+        return NextResponse.json({ error: "Unauthorized: 会话无效或已过期" }, { status: 401 });
+      }
+
+      const identity = await loadWebIdentity(growdeskFetch, bffSession.accessToken);
+      const familyId = identity.family?.id;
+      const babyId = identity.baby?.id;
+
+      if (!familyId) {
+        return NextResponse.json({ error: "请先加入家庭" }, { status: 400 });
+      }
+
+      const body = await request.json().catch(() => ({}));
+      const { type = "formula" } = body;
+
+      if (type === "formula") {
+        let payload: Record<string, unknown>;
+        try {
+          payload = toGrowDeskFormulaCreatePayload(body);
+        } catch (e: any) {
+          return NextResponse.json({ error: e.message }, { status: 400 });
+        }
+
+        const res = await growdeskFetch<any>(`/api/v1/families/${familyId}/nutrition/products`, {
+          method: "POST",
+          accessToken: bffSession.accessToken,
+          body: payload,
+        });
+
+        if (!res.ok || !res.data) {
+          return NextResponse.json(
+            { error: res.error?.message || "添加奶粉失败" },
+            { status: res.status }
+          );
+        }
+
+        const createdRaw: GrowDeskFormulaProduct = res.data.data || res.data;
+
+        // If isDefault or custom nutrients provided, update food-plan
+        if (babyId) {
+          const fpRes = await growdeskFetch<any>(`/api/v1/babies/${babyId}/food-plan`, {
+            method: "GET",
+            accessToken: bffSession.accessToken,
+          });
+          const existingPlanData = (fpRes.ok && (fpRes.data.data?.planData || fpRes.data.planData)) || {};
+          const suppState = extractSupplementStateFromFoodPlan(existingPlanData);
+
+          const shouldBeDefault = Boolean(body.isDefault) || !suppState.defaultFormulaId;
+          const patch: Partial<typeof suppState> = {};
+          if (shouldBeDefault) {
+            patch.defaultFormulaId = createdRaw.id;
+          }
+          if (body.nutrients && typeof body.nutrients === "object") {
+            patch.customFormulaNutrients = {
+              ...suppState.customFormulaNutrients,
+              [createdRaw.id]: body.nutrients,
+            };
+          }
+          if (Object.keys(patch).length > 0) {
+            const merged = mergeSupplementStateIntoFoodPlan(existingPlanData, patch);
+            await growdeskFetch(`/api/v1/babies/${babyId}/food-plan`, {
+              method: "PUT",
+              accessToken: bffSession.accessToken,
+              body: { planData: merged },
+            });
+          }
+        }
+
+        const formula = fromGrowDeskFormulaProduct(createdRaw, {
+          defaultFormulaId: body.isDefault ? createdRaw.id : undefined,
+          customNutrients: body.nutrients,
+        });
+
+        return NextResponse.json(formula, { status: 201 });
+      } else if (type === "supplement") {
+        const {
+          name,
+          brand,
+          dosageForm = "drops",
+          unitName = "滴",
+          defaultDose = 1.0,
+          nutrients = {},
+          notes,
+        } = body;
+
+        if (!name || typeof name !== "string" || !name.trim()) {
+          return NextResponse.json({ error: "补剂名称必填" }, { status: 400 });
+        }
+
+        const newSupp: SupplementProduct = {
+          id: crypto.randomUUID(),
+          familyId,
+          name: name.trim(),
+          brand: (brand || name).trim(),
+          dosageForm: dosageForm || "drops",
+          unitName: unitName || "滴",
+          defaultDose: Number(defaultDose) || 1.0,
+          nutrients: (nutrients || {}) as NutrientsMap,
+          notes: notes ? String(notes).trim() : null,
+          isActive: true,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+
+        if (babyId) {
+          const fpRes = await growdeskFetch<any>(`/api/v1/babies/${babyId}/food-plan`, {
+            method: "GET",
+            accessToken: bffSession.accessToken,
+          });
+          const existingPlanData = (fpRes.ok && (fpRes.data.data?.planData || fpRes.data.planData)) || {};
+          const suppState = extractSupplementStateFromFoodPlan(existingPlanData);
+
+          const updatedProducts = [...suppState.supplementProducts, newSupp];
+          const merged = mergeSupplementStateIntoFoodPlan(existingPlanData, {
+            supplementProducts: updatedProducts,
+          });
+
+          await growdeskFetch(`/api/v1/babies/${babyId}/food-plan`, {
+            method: "PUT",
+            accessToken: bffSession.accessToken,
+            body: { planData: merged },
+          });
+        }
+
+        return NextResponse.json(newSupp, { status: 201 });
+      } else {
+        return NextResponse.json({ error: "type 必须为 formula 或 supplement" }, { status: 400 });
+      }
+    }
+
     const auth = await requireAuth(request);
     if (auth.errorResponse) return auth.errorResponse;
 
@@ -122,6 +364,15 @@ export async function POST(request: Request) {
 
       if (!name || typeof name !== "string" || !name.trim()) {
         return NextResponse.json({ error: "奶粉名称必填" }, { status: 400 });
+      }
+
+      const parsedScoopWeight = Number(scoopWeightG);
+      const parsedWaterPerScoop = Number(waterPerScoopMl);
+      if (Number.isNaN(parsedScoopWeight) || parsedScoopWeight <= 0) {
+        return NextResponse.json({ error: "单勺克重必须为大于 0 的有效数值" }, { status: 400 });
+      }
+      if (Number.isNaN(parsedWaterPerScoop) || parsedWaterPerScoop <= 0) {
+        return NextResponse.json({ error: "每勺加水量必须为大于 0 的有效数值" }, { status: 400 });
       }
 
       // 检查当前家庭是否已有活跃奶粉。若没有，则将此款自动设为默认主力奶粉
@@ -208,6 +459,134 @@ export async function POST(request: Request) {
 
 export async function PUT(request: Request) {
   try {
+    if (GROWDESK_CONFIG.enabled) {
+      const csrfErr = verifyBffCsrf(request);
+      if (csrfErr) return csrfErr;
+
+      const bffSession = await resolveBffSession(request);
+      if (!bffSession) {
+        return NextResponse.json({ error: "Unauthorized: 会话无效或已过期" }, { status: 401 });
+      }
+
+      const identity = await loadWebIdentity(growdeskFetch, bffSession.accessToken);
+      const familyId = identity.family?.id;
+      const babyId = identity.baby?.id;
+
+      const body = await request.json().catch(() => ({}));
+      const { id, type = "formula" } = body;
+
+      if (!id || typeof id !== "string") {
+        return NextResponse.json({ error: "请提供要修改的产品 ID" }, { status: 400 });
+      }
+
+      if (type === "formula") {
+        let updatePayload: Record<string, unknown>;
+        try {
+          updatePayload = toGrowDeskFormulaUpdatePayload(body);
+        } catch (e: any) {
+          return NextResponse.json({ error: e.message }, { status: 400 });
+        }
+
+        const res = await growdeskFetch<any>(`/api/v1/families/${familyId}/nutrition/products/${id}`, {
+          method: "PATCH",
+          accessToken: bffSession.accessToken,
+          body: updatePayload,
+        });
+
+        if (!res.ok || !res.data) {
+          return NextResponse.json(
+            { error: res.error?.message || "更新奶粉失败" },
+            { status: res.status }
+          );
+        }
+
+        const updatedRaw: GrowDeskFormulaProduct = res.data.data || res.data;
+
+        // Update defaultFormulaId or custom nutrients if provided
+        if (babyId) {
+          const fpRes = await growdeskFetch<any>(`/api/v1/babies/${babyId}/food-plan`, {
+            method: "GET",
+            accessToken: bffSession.accessToken,
+          });
+          const existingPlanData = (fpRes.ok && (fpRes.data.data?.planData || fpRes.data.planData)) || {};
+          const suppState = extractSupplementStateFromFoodPlan(existingPlanData);
+
+          const patch: Partial<typeof suppState> = {};
+          if (body.isDefault !== undefined) {
+            patch.defaultFormulaId = body.isDefault ? id : null;
+          }
+          if (body.nutrients && typeof body.nutrients === "object") {
+            patch.customFormulaNutrients = {
+              ...suppState.customFormulaNutrients,
+              [id]: body.nutrients,
+            };
+          }
+          if (Object.keys(patch).length > 0) {
+            const merged = mergeSupplementStateIntoFoodPlan(existingPlanData, patch);
+            await growdeskFetch(`/api/v1/babies/${babyId}/food-plan`, {
+              method: "PUT",
+              accessToken: bffSession.accessToken,
+              body: { planData: merged },
+            });
+          }
+        }
+
+        const formula = fromGrowDeskFormulaProduct(updatedRaw, {
+          defaultFormulaId: body.isDefault ? id : undefined,
+          customNutrients: body.nutrients,
+        });
+
+        return NextResponse.json(formula);
+      } else if (type === "supplement") {
+        if (!babyId) {
+          return NextResponse.json({ error: "未找到指定的补剂档案" }, { status: 404 });
+        }
+
+        const fpRes = await growdeskFetch<any>(`/api/v1/babies/${babyId}/food-plan`, {
+          method: "GET",
+          accessToken: bffSession.accessToken,
+        });
+        const existingPlanData = (fpRes.ok && (fpRes.data.data?.planData || fpRes.data.planData)) || {};
+        const suppState = extractSupplementStateFromFoodPlan(existingPlanData);
+
+        const targetIdx = suppState.supplementProducts.findIndex((s) => s.id === id);
+        if (targetIdx === -1) {
+          return NextResponse.json({ error: "未找到指定的补剂档案" }, { status: 404 });
+        }
+
+        const current = suppState.supplementProducts[targetIdx];
+        const updatedSupp: SupplementProduct = {
+          ...current,
+          name: body.name !== undefined ? String(body.name).trim() : current.name,
+          brand: body.brand !== undefined ? String(body.brand).trim() : current.brand,
+          dosageForm: body.dosageForm !== undefined ? String(body.dosageForm).trim() : current.dosageForm,
+          unitName: body.unitName !== undefined ? String(body.unitName).trim() : current.unitName,
+          defaultDose: body.defaultDose !== undefined ? Number(body.defaultDose) : current.defaultDose,
+          nutrients: body.nutrients !== undefined ? body.nutrients : current.nutrients,
+          notes: body.notes !== undefined ? (body.notes ? String(body.notes).trim() : null) : current.notes,
+          isActive: body.isActive !== undefined ? Boolean(body.isActive) : current.isActive,
+          updatedAt: new Date().toISOString(),
+        };
+
+        const updatedList = [...suppState.supplementProducts];
+        updatedList[targetIdx] = updatedSupp;
+
+        const merged = mergeSupplementStateIntoFoodPlan(existingPlanData, {
+          supplementProducts: updatedList,
+        });
+
+        await growdeskFetch(`/api/v1/babies/${babyId}/food-plan`, {
+          method: "PUT",
+          accessToken: bffSession.accessToken,
+          body: { planData: merged },
+        });
+
+        return NextResponse.json(updatedSupp);
+      }
+
+      return NextResponse.json({ error: "无效的产品类型" }, { status: 400 });
+    }
+
     const auth = await requireAuth(request);
     if (auth.errorResponse) return auth.errorResponse;
 
@@ -307,6 +686,79 @@ export async function PUT(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
+    if (GROWDESK_CONFIG.enabled) {
+      const csrfErr = verifyBffCsrf(request);
+      if (csrfErr) return csrfErr;
+
+      const bffSession = await resolveBffSession(request);
+      if (!bffSession) {
+        return NextResponse.json({ error: "Unauthorized: 会话无效或已过期" }, { status: 401 });
+      }
+
+      const identity = await loadWebIdentity(growdeskFetch, bffSession.accessToken);
+      const familyId = identity.family?.id;
+      const babyId = identity.baby?.id;
+
+      const { searchParams } = new URL(request.url);
+      const id = searchParams.get("id");
+      const type = searchParams.get("type") || "formula";
+
+      if (!id) {
+        return NextResponse.json({ error: "请提供产品 ID" }, { status: 400 });
+      }
+
+      if (type === "formula") {
+        const res = await growdeskFetch<any>(`/api/v1/families/${familyId}/nutrition/products/${id}`, {
+          method: "DELETE",
+          accessToken: bffSession.accessToken,
+        });
+
+        if (!res.ok) {
+          if (res.status === 404) {
+            return NextResponse.json({ success: true, id, archived: true });
+          }
+          return NextResponse.json(
+            { error: res.error?.message || "删除产品失败" },
+            { status: res.status }
+          );
+        }
+
+        return NextResponse.json({
+          success: true,
+          id,
+          archived: true,
+          message: "已归档停用该奶粉档案（历史记录继续保留）",
+        });
+      } else if (type === "supplement") {
+        if (babyId) {
+          const fpRes = await growdeskFetch<any>(`/api/v1/babies/${babyId}/food-plan`, {
+            method: "GET",
+            accessToken: bffSession.accessToken,
+          });
+          const existingPlanData = (fpRes.ok && (fpRes.data.data?.planData || fpRes.data.planData)) || {};
+          const suppState = extractSupplementStateFromFoodPlan(existingPlanData);
+
+          const updatedProducts = suppState.supplementProducts.filter((s) => s.id !== id);
+          const updatedSchedules = suppState.supplementSchedules.filter((s) => s.productId !== id);
+
+          const merged = mergeSupplementStateIntoFoodPlan(existingPlanData, {
+            supplementProducts: updatedProducts,
+            supplementSchedules: updatedSchedules,
+          });
+
+          await growdeskFetch(`/api/v1/babies/${babyId}/food-plan`, {
+            method: "PUT",
+            accessToken: bffSession.accessToken,
+            body: { planData: merged },
+          });
+        }
+
+        return NextResponse.json({ success: true, id });
+      }
+
+      return NextResponse.json({ error: "无效的产品类型" }, { status: 400 });
+    }
+
     const auth = await requireAuth(request);
     if (auth.errorResponse) return auth.errorResponse;
 

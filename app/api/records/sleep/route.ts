@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireAuth, requireBaby, getActiveBaby } from "@/lib/api-helpers";
 import * as records from "@/lib/records/service";
 import { ValidationError, NotFoundError, ForbiddenError } from "@/lib/records/service";
+import { BridgeError, bridgeErrorResponse, wireVersion } from "@/lib/growdesk/bridge-protocol";
 import { GROWDESK_CONFIG } from "@/lib/config";
 import { resolveBffSession } from "@/lib/growdesk/session";
 import { verifyBffCsrf } from "@/lib/growdesk/csrf";
@@ -12,7 +13,8 @@ import {
   fromGrowDeskSleepRecord,
   type GrowDeskSleepRecord,
 } from "@/lib/growdesk/sleep-compat";
-import crypto from "node:crypto";
+import { fetchLegacyRecordList } from "@/lib/growdesk/record-list";
+import { fetchRecordDetail, idempotencyKey, readJsonObject, recordPath, requireWriteData } from "@/lib/growdesk/record-route-helpers";
 
 export async function GET(request: Request) {
   try {
@@ -26,24 +28,14 @@ export async function GET(request: Request) {
       if (!babyId) {
         return NextResponse.json({ error: "请提供 babyId" }, { status: 400 });
       }
-      const limit = searchParams.get("limit") || "50";
-      const res = await growdeskFetch<Array<GrowDeskSleepRecord>>(
-        `/api/v1/babies/${babyId}/records/sleep?limit=${limit}`,
-        {
-          method: "GET",
-          accessToken: bffSession.accessToken,
-        },
-      );
-      if (!res.ok) {
-        return NextResponse.json(
-          { error: res.error?.message || "Failed to fetch sleep records" },
-          { status: res.status },
-        );
+      const recordId = searchParams.get("id");
+      if (recordId) {
+        const record = await fetchRecordDetail<GrowDeskSleepRecord>(growdeskFetch, bffSession.accessToken, babyId, recordId, "sleep");
+        return NextResponse.json(fromGrowDeskSleepRecord(record), { headers: { "cache-control": "no-store" } });
       }
-      const rawList = Array.isArray(res.data) ? res.data : (res.data as any)?.data || [];
-      return NextResponse.json(rawList.map(fromGrowDeskSleepRecord));
+      const list = await fetchLegacyRecordList<GrowDeskSleepRecord>(growdeskFetch, bffSession.accessToken, babyId, searchParams, "sleep");
+      return NextResponse.json(list.map(fromGrowDeskSleepRecord), { headers: { "cache-control": "no-store" } });
     }
-
     const auth = await requireAuth(request);
     if (auth.errorResponse) return auth.errorResponse;
     const { searchParams } = new URL(request.url);
@@ -53,6 +45,7 @@ export async function GET(request: Request) {
     const data = await records.getSleepRecords(ctx, { date: searchParams.get("date") || undefined, limit: searchParams.get("limit") || undefined });
     return NextResponse.json(data);
   } catch (e) {
+    if (e instanceof BridgeError) return bridgeErrorResponse(e);
     if (e instanceof ValidationError) return NextResponse.json({ error: e.message }, { status: 400 });
     console.error("GET /api/records/sleep error:", e);
     return NextResponse.json({ error: "Failed to fetch sleep records" }, { status: 500 });
@@ -70,36 +63,21 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "Unauthorized: 会话无效或已过期" }, { status: 401 });
       }
 
-      const body = await request.json().catch(() => ({} as any));
+      const body = await readJsonObject(request);
       const babyId = body.babyId;
-      if (!babyId) {
+      if (typeof babyId !== "string" || !babyId) {
         return NextResponse.json({ error: "请提供 babyId" }, { status: 400 });
       }
-
       const payload = toGrowDeskSleepCreatePayload(body);
-      const idempotencyKey =
-        body.clientId || request.headers.get("idempotency-key") || crypto.randomUUID();
-
-      const res = await growdeskFetch<GrowDeskSleepRecord>(
-        `/api/v1/babies/${babyId}/records/sleep`,
-        {
-          method: "POST",
-          accessToken: bffSession.accessToken,
-          idempotencyKey,
-          body: payload,
-        },
-      );
-
-      if (!res.ok || !res.data) {
-        return NextResponse.json(
-          { error: res.error?.message || "Failed to create sleep record" },
-          { status: res.status },
-        );
-      }
-
-      return NextResponse.json(fromGrowDeskSleepRecord(res.data), { status: 201 });
+      const res = await growdeskFetch<GrowDeskSleepRecord>(recordPath("sleep", babyId), {
+        method: "POST",
+        accessToken: bffSession.accessToken,
+        idempotencyKey: idempotencyKey(body, request),
+        body: payload,
+      });
+      const data = requireWriteData(res, "Failed to create sleep record");
+      return NextResponse.json(fromGrowDeskSleepRecord(data), { status: 201 });
     }
-
     const auth = await requireAuth(request);
     if (auth.errorResponse) return auth.errorResponse;
     const body = await request.json().catch(() => ({} as any));
@@ -122,6 +100,7 @@ export async function POST(request: Request) {
     });
     return NextResponse.json(rec, { status: 201 });
   } catch (e) {
+    if (e instanceof BridgeError) return bridgeErrorResponse(e);
     if (e instanceof ValidationError || e instanceof RangeError) return NextResponse.json({ error: (e as Error).message }, { status: 400 });
     console.error("POST /api/records/sleep error:", e);
     return NextResponse.json({ error: "Failed to create sleep record" }, { status: 500 });
@@ -140,43 +119,29 @@ export async function DELETE(request: Request) {
       }
 
       const { searchParams } = new URL(request.url);
+      let body: Record<string, unknown> = {};
       let id = searchParams.get("id");
       let babyId = searchParams.get("babyId");
-      let baseVersion = searchParams.get("baseVersion") || "1";
-      if (!id) {
-        const body = await request.json().catch(() => ({} as any));
-        id = body?.id;
-        babyId = babyId || body?.babyId;
-        baseVersion = String(body?.baseVersion || baseVersion);
+      let baseVersion: unknown = searchParams.get("baseVersion");
+      if (!id || !babyId || baseVersion === null) {
+        body = await readJsonObject(request);
+        id = id || (typeof body.id === "string" ? body.id : null);
+        babyId = babyId || (typeof body.babyId === "string" ? body.babyId : null);
+        baseVersion = body.baseVersion ?? body.version ?? baseVersion;
       }
-      if (!id || typeof id !== "string") {
-        return NextResponse.json({ error: "请提供要删除的记录 ID" }, { status: 400 });
-      }
-      if (!babyId) {
-        return NextResponse.json({ error: "请提供 babyId" }, { status: 400 });
-      }
-
-      const res = await growdeskFetch(
-        `/api/v1/babies/${babyId}/records/sleep/${id}?baseVersion=${baseVersion}`,
-        {
-          method: "DELETE",
-          accessToken: bffSession.accessToken,
-        },
-      );
-
+      if (!id) return NextResponse.json({ error: "请提供要删除的记录 ID" }, { status: 400 });
+      if (!babyId) return NextResponse.json({ error: "请提供 babyId" }, { status: 400 });
+      const version = wireVersion(baseVersion);
+      const res = await growdeskFetch(recordPath("sleep", babyId, id) + `?baseVersion=${encodeURIComponent(version)}`, {
+        method: "DELETE",
+        accessToken: bffSession.accessToken,
+        idempotencyKey: idempotencyKey(body, request),
+      });
       if (!res.ok) {
-        if (res.status === 404) {
-          return NextResponse.json({ success: true, id, alreadyDeleted: true });
-        }
-        return NextResponse.json(
-          { error: res.error?.message || "Failed to delete sleep record" },
-          { status: res.status },
-        );
+        return NextResponse.json({ error: res.error?.message || "Failed to delete sleep record" }, { status: res.status });
       }
-
       return NextResponse.json({ success: true, id });
     }
-
     const auth = await requireAuth(request);
     if (auth.errorResponse) return auth.errorResponse;
     const { searchParams } = new URL(request.url);
@@ -191,6 +156,7 @@ export async function DELETE(request: Request) {
     await records.deleteRecord({ userId: auth.user.id, babyId: rec.babyId }, "sleep", id);
     return NextResponse.json({ success: true, id });
   } catch (e) {
+    if (e instanceof BridgeError) return bridgeErrorResponse(e);
     if (e instanceof ValidationError) return NextResponse.json({ error: e.message }, { status: 400 });
     if (e instanceof NotFoundError) return NextResponse.json({ error: e.message }, { status: 404 });
     if (e instanceof ForbiddenError) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -210,36 +176,21 @@ export async function PUT(request: Request) {
         return NextResponse.json({ error: "Unauthorized: 会话无效或已过期" }, { status: 401 });
       }
 
-      const body = await request.json().catch(() => ({} as any));
-      const id = body?.id;
-      const babyId = body?.babyId;
-      if (!id || typeof id !== "string") {
-        return NextResponse.json({ error: "请提供要修改的记录 ID" }, { status: 400 });
-      }
-      if (!babyId) {
-        return NextResponse.json({ error: "请提供 babyId" }, { status: 400 });
-      }
-
+      const body = await readJsonObject(request);
+      const id = body.id;
+      const babyId = body.babyId;
+      if (typeof id !== "string" || !id) return NextResponse.json({ error: "请提供要修改的记录 ID" }, { status: 400 });
+      if (typeof babyId !== "string" || !babyId) return NextResponse.json({ error: "请提供 babyId" }, { status: 400 });
       const payload = toGrowDeskSleepUpdatePayload(body);
-      const res = await growdeskFetch<GrowDeskSleepRecord>(
-        `/api/v1/babies/${babyId}/records/sleep/${id}`,
-        {
-          method: "PATCH",
-          accessToken: bffSession.accessToken,
-          body: payload,
-        },
-      );
-
-      if (!res.ok || !res.data) {
-        return NextResponse.json(
-          { error: res.error?.message || "Failed to update sleep record" },
-          { status: res.status },
-        );
-      }
-
-      return NextResponse.json(fromGrowDeskSleepRecord(res.data));
+      const res = await growdeskFetch<GrowDeskSleepRecord>(recordPath("sleep", babyId, id), {
+        method: "PATCH",
+        accessToken: bffSession.accessToken,
+        idempotencyKey: idempotencyKey(body, request),
+        body: payload,
+      });
+      const data = requireWriteData(res, "Failed to update sleep record");
+      return NextResponse.json(fromGrowDeskSleepRecord(data));
     }
-
     const auth = await requireAuth(request);
     if (auth.errorResponse) return auth.errorResponse;
     const body = await request.json().catch(() => ({} as any));
@@ -254,6 +205,7 @@ export async function PUT(request: Request) {
     const updated = await records.updateSleep(ctx, id, body);
     return NextResponse.json(updated);
   } catch (e) {
+    if (e instanceof BridgeError) return bridgeErrorResponse(e);
     if (e instanceof ValidationError) return NextResponse.json({ error: e.message }, { status: 400 });
     if (e instanceof NotFoundError) return NextResponse.json({ error: e.message }, { status: 404 });
     if (e instanceof ForbiddenError) return NextResponse.json({ error: "Forbidden" }, { status: 403 });

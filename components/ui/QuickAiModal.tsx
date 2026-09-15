@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
+import { createPortal } from "react-dom";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useRouter } from "next/navigation";
@@ -42,6 +43,7 @@ import {
   Activity,
   ArrowRight,
   RefreshCw,
+  Square,
 } from "lucide-react";
 import { useBabyStore } from "@/stores/useBabyStore";
 import { BabyAvatar } from "@/components/ui/BabyAvatar";
@@ -504,37 +506,51 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
       setSessionId(s.id);
       setSessionTitle(s.title);
       if (s.messages && s.messages.length > 0) {
-        setMessages(
-          s.messages.map((m: any) => {
-            let imgs: string[] = [];
-            if (Array.isArray(m.images)) {
-              imgs = m.images;
-            } else if (m.image) {
-              if (m.image.startsWith("[")) {
-                try {
-                  const parsed = JSON.parse(m.image);
-                  if (Array.isArray(parsed)) imgs = parsed;
-                } catch {
-                  imgs = [m.image];
-                }
-              } else {
+        const mappedMessages: Message[] = s.messages.map((m: any) => {
+          let imgs: string[] = [];
+          if (Array.isArray(m.images)) {
+            imgs = m.images;
+          } else if (m.image) {
+            if (m.image.startsWith("[")) {
+              try {
+                const parsed = JSON.parse(m.image);
+                if (Array.isArray(parsed)) imgs = parsed;
+              } catch {
                 imgs = [m.image];
               }
+            } else {
+              imgs = [m.image];
             }
-            return {
-              id: m.id,
-              role: m.role,
-              content: m.content,
-              image: m.image || undefined,
-              images: imgs.length > 0 ? imgs : undefined,
-              timestamp: new Date(m.createdAt).toLocaleTimeString([], {
-                hour: "2-digit",
-                minute: "2-digit",
-              }),
-              tools: Array.isArray(m.tools) ? m.tools : [],
-            };
-          })
-        );
+          }
+          return {
+            id: m.id,
+            role: m.role,
+            content: m.content,
+            image: m.image || undefined,
+            images: imgs.length > 0 ? imgs : undefined,
+            timestamp: new Date(m.createdAt).toLocaleTimeString([], {
+              hour: "2-digit",
+              minute: "2-digit",
+            }),
+            tools: Array.isArray(m.tools) ? m.tools : [],
+          };
+        });
+
+        if (data.activeRun && data.activeRun.status === "running") {
+          mappedMessages.push({
+            id: `ai_active_${Date.now()}`,
+            role: "assistant",
+            content: data.activeRun.fullText || "正在思考与记录中...",
+            timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+            isStreaming: true,
+            tools: Array.isArray(data.activeRun.toolTraces) ? data.activeRun.toolTraces : [],
+          });
+          setLoading(true);
+        } else {
+          setLoading(false);
+        }
+
+        setMessages(mappedMessages);
       }
       setShowHistory(false);
       setActiveTab("chat");
@@ -543,11 +559,41 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
     }
   };
 
-  const startNewSession = () => {
+  const handleCancelGeneration = async () => {
+    const sid = sessionIdRef.current;
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
     }
+    if (sid) {
+      try {
+        await fetch("/api/ai/chat/cancel", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionId: sid }),
+        });
+      } catch {}
+    }
+    setLoading(false);
+    setMessages((prev) =>
+      prev.map((msg) => (msg.isStreaming ? { ...msg, isStreaming: false } : msg))
+    );
+  };
+
+  const startNewSession = () => {
+    const sid = sessionIdRef.current;
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    if (sid && loadingRef.current) {
+      void fetch("/api/ai/chat/cancel", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId: sid }),
+      }).catch(() => {});
+    }
+    setLoading(false);
     setSessionId(null);
     setSessionTitle(null);
     const welcome: Message = {
@@ -711,6 +757,8 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
       setLoading(true);
       setActiveTab("chat");
 
+      let accumulatedText = "";
+
       try {
         const history = messagesRef.current
           .filter((m) => m.id !== "welcome")
@@ -741,7 +789,6 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
 
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
-        let accumulatedText = "";
         let buffer = "";
 
         while (true) {
@@ -767,7 +814,11 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
                   setSessionTitle(data.session.title);
                 }
                 if (data.text) {
-                  accumulatedText += data.text;
+                  if (data.replay) {
+                    accumulatedText = data.text;
+                  } else {
+                    accumulatedText += data.text;
+                  }
                   setMessages((prev) =>
                     prev.map((msg) =>
                       msg.id === aiMsgId
@@ -787,7 +838,7 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
                       );
                       if (incoming.status === "end" && idx >= 0) {
                         tools[idx] = { ...tools[idx], ...incoming };
-                      } else {
+                      } else if (idx < 0) {
                         tools.push(incoming);
                       }
                       return { ...msg, tools, isStreaming: true };
@@ -819,18 +870,27 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
           );
           return;
         }
+        if (typeof document !== "undefined" && (document.hidden || !isOpen)) {
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === aiMsgId ? { ...msg, isStreaming: false } : msg
+            )
+          );
+          return;
+        }
         setMessages((prev) =>
           prev.map((msg) =>
             msg.id === aiMsgId
               ? {
                   ...msg,
-                  content: "网络连接暂时超时，请稍后重新提问。若宝宝身体有明显不适，请以专业医生诊断为准。",
+                  content: accumulatedText || "网络连接暂时中断，后台仍将继续处理。稍后切回将自动同步完整结果。",
                   isStreaming: false,
                 }
               : msg
           )
         );
-      } finally {
+      }
+ finally {
         setLoading(false);
         useBabyStore.getState().refreshAll().catch(() => {});
       }
@@ -848,6 +908,203 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isOpen, onClose]);
+
+  const mapDbMessages = useCallback((rawMessages: any[]): Message[] => {
+    return (rawMessages || []).map((m: any) => {
+      let imgs: string[] = [];
+      if (Array.isArray(m.images)) imgs = m.images;
+      else if (m.image) {
+        try {
+          const p = JSON.parse(m.image);
+          if (Array.isArray(p)) imgs = p;
+          else imgs = [m.image];
+        } catch {
+          imgs = [m.image];
+        }
+      }
+      return {
+        id: m.id,
+        role: m.role,
+        content: m.content,
+        image: m.image || undefined,
+        images: imgs.length > 0 ? imgs : undefined,
+        timestamp: new Date(m.createdAt).toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+        tools: Array.isArray(m.tools) ? m.tools : [],
+      };
+    });
+  }, []);
+
+  const isResumingRef = useRef(false);
+
+  const resumeActiveStream = useCallback(
+    async (
+      sid: string,
+      activeAiId: string,
+      initialText: string,
+      initialTools: ToolTrace[] = []
+    ) => {
+      if (isResumingRef.current) return;
+      isResumingRef.current = true;
+
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
+      setLoading(true);
+
+      let accumulatedText = initialText || "";
+
+      try {
+        const res = await fetch(`/api/ai/chat?sessionId=${encodeURIComponent(sid)}&stream=true`, {
+          headers: { Accept: "text/event-stream" },
+          signal: controller.signal,
+        });
+
+        if (!res.body) throw new Error("No response stream");
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() || "";
+
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed || trimmed.startsWith(":")) continue;
+
+            if (trimmed === "data: [DONE]") break;
+
+            if (trimmed.startsWith("data: ")) {
+              try {
+                const data = JSON.parse(trimmed.slice(6));
+                if (data.text) {
+                  if (data.replay) {
+                    accumulatedText = data.text;
+                  } else {
+                    accumulatedText += data.text;
+                  }
+                  setMessages((prev) =>
+                    prev.map((msg) =>
+                      msg.id === activeAiId
+                        ? { ...msg, content: accumulatedText, isStreaming: true }
+                        : msg
+                    )
+                  );
+                }
+                if (data.tool && typeof data.tool.name === "string") {
+                  const incoming = data.tool as ToolTrace;
+                  setMessages((prev) =>
+                    prev.map((msg) => {
+                      if (msg.id !== activeAiId) return msg;
+                      const tools = [...(msg.tools || [])];
+                      const idx = tools.findIndex(
+                        (t) => t.name === incoming.name && t.status === "start"
+                      );
+                      if (incoming.status === "end" && idx >= 0) {
+                        tools[idx] = { ...tools[idx], ...incoming };
+                      } else if (idx < 0) {
+                        tools.push(incoming);
+                      }
+                      return { ...msg, tools, isStreaming: true };
+                    })
+                  );
+                }
+              } catch {}
+            }
+          }
+        }
+
+        // Stream completed normally, pull finalized messages from DB
+        const query = new URLSearchParams();
+        if (baby?.id) query.set("babyId", baby.id);
+        query.set("contextType", currentContextType);
+        const detailRes = await fetch(`/api/ai/sessions/${sid}?${query.toString()}`);
+        if (detailRes.ok) {
+          const detailData = await detailRes.json();
+          if (detailData.session?.messages) {
+            setMessages(mapDbMessages(detailData.session.messages));
+          }
+        }
+      } catch (err: unknown) {
+        if (err instanceof Error && err.name === "AbortError") {
+          return;
+        }
+        try {
+          const query = new URLSearchParams();
+          if (baby?.id) query.set("babyId", baby.id);
+          query.set("contextType", currentContextType);
+          const detailRes = await fetch(`/api/ai/sessions/${sid}?${query.toString()}`);
+          if (detailRes.ok) {
+            const detailData = await detailRes.json();
+            if (detailData.session?.messages) {
+              setMessages(mapDbMessages(detailData.session.messages));
+            }
+          }
+        } catch {}
+      } finally {
+        isResumingRef.current = false;
+        setLoading(false);
+        useBabyStore.getState().refreshAll().catch(() => {});
+        fetchSessions();
+      }
+    },
+    [baby?.id, currentContextType, fetchSessions, mapDbMessages]
+  );
+
+  const syncSessionState = useCallback(
+    async (sid: string) => {
+      try {
+        const query = new URLSearchParams();
+        if (baby?.id) query.set("babyId", baby.id);
+        query.set("contextType", currentContextType);
+        const res = await fetch(`/api/ai/sessions/${sid}?${query.toString()}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        const s = data.session;
+        if (!s) return;
+
+        const mapped: Message[] = mapDbMessages(s.messages || []);
+
+        if (data.activeRun && data.activeRun.status === "running") {
+          const activeAiId = `ai_active_${Date.now()}`;
+          mapped.push({
+            id: activeAiId,
+            role: "assistant",
+            content: data.activeRun.fullText || "正在思考与记录中...",
+            timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+            isStreaming: true,
+            tools: Array.isArray(data.activeRun.toolTraces) ? data.activeRun.toolTraces : [],
+          });
+          setMessages(mapped);
+          setLoading(true);
+          void resumeActiveStream(
+            sid,
+            activeAiId,
+            data.activeRun.fullText || "",
+            Array.isArray(data.activeRun.toolTraces) ? data.activeRun.toolTraces : []
+          );
+          return;
+        } else {
+          setLoading(false);
+        }
+
+        if (mapped.length > 0) {
+          setMessages(mapped);
+        }
+      } catch {}
+    },
+    [baby?.id, currentContextType, mapDbMessages, resumeActiveStream]
+  );
 
   const prevScopeRef = useRef<{ contextType: string; babyId: string | null }>({
     contextType: initialContextType,
@@ -875,7 +1132,11 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
 
       fetchSessions();
 
-      if (messages.length === 0 || isScopeChanged) {
+      if (sessionIdRef.current && !isScopeChanged) {
+        syncSessionState(sessionIdRef.current);
+      }
+
+      if (messagesRef.current.length === 0 || isScopeChanged) {
         const welcome: Message = {
           id: "welcome",
           role: "assistant",
@@ -892,7 +1153,7 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
     } else {
       useBabyStore.getState().refreshAll().catch(() => {});
     }
-  }, [isOpen, initialContextType, initialPrompt, displayTitle, baby?.id, baby?.nickname, age.label, messages.length, handleSend, fetchSessions]);
+  }, [isOpen, initialContextType, initialPrompt, displayTitle, baby?.id, baby?.nickname, age.label, handleSend, fetchSessions, syncSessionState]);
 
   useEffect(() => {
     if (!isOpen && abortControllerRef.current) {
@@ -909,6 +1170,21 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
       }
     };
   }, []);
+
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (
+        typeof document !== "undefined" &&
+        document.visibilityState === "visible" &&
+        isOpen &&
+        sessionIdRef.current
+      ) {
+        syncSessionState(sessionIdRef.current);
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, [isOpen, syncSessionState]);
 
   useEffect(() => {
     if (isOpen && activeTab === "chat") {
@@ -945,6 +1221,8 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
         const compressed = await compressImageForOcr(file);
         const formData = new FormData();
         formData.append("file", compressed);
+        const uploadBabyId = useBabyStore.getState().baby?.id;
+        if (uploadBabyId) formData.append("babyId", uploadBabyId);
         const res = await fetch("/api/medical/upload", {
           method: "POST",
           body: formData,
@@ -989,10 +1267,15 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
   };
 
   const [visionMode, setVisionMode] = useState<string>("medical");
+  const [mounted, setMounted] = useState(false);
 
-  if (!isOpen) return null;
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
-  return (
+  if (!isOpen || !mounted) return null;
+
+  const modalContent = (
     <div
       role="dialog"
       aria-modal="true"
@@ -1012,7 +1295,7 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
         <div className="w-12 h-1.5 rounded-full bg-primary/25 dark:bg-white/20 mx-auto mt-2.5 mb-1 sm:hidden shrink-0" />
 
         {/* ===== Desktop/iPad History Sidebar ===== */}
-        <div className="w-72 border-r border-primary/10 hidden md:flex flex-col bg-white/50 dark:bg-card/50 shrink-0 select-none">
+        <div className="w-60 lg:w-72 border-r border-primary/10 hidden md:flex flex-col bg-white/50 dark:bg-card/50 shrink-0 select-none">
           <div className="flex items-center justify-between px-3.5 py-3 pt-[max(12px,env(safe-area-inset-top))] bg-white/90 dark:bg-card/90 backdrop-blur-md border-b border-primary/10 shrink-0">
             <div className="flex items-center gap-2">
               <div className="w-7 h-7 rounded-xl bg-primary-soft/50 text-primary flex items-center justify-center">
@@ -1724,14 +2007,25 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
                       className="flex-1 px-4 py-2.5 bg-slate-50/90 hover:bg-white focus:bg-white dark:bg-card rounded-2xl text-xs sm:text-sm text-text-primary font-medium border-2 border-primary/20 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all placeholder:text-text-muted/70 shadow-2xs"
                     />
 
-                    <button
-                      type="submit"
-                      disabled={(!inputText.trim() && selectedImages.length === 0) || loading}
-                      className="w-10 h-10 rounded-2xl bg-gradient-to-r from-primary to-pink-500 text-white flex items-center justify-center shadow-button hover:opacity-95 disabled:opacity-35 transition-all shrink-0 active:scale-95 cursor-pointer btn-spring"
-                      title="发送提问或一句话记账"
-                    >
-                      <Send size={15} />
-                    </button>
+                    {loading ? (
+                      <button
+                        type="button"
+                        onClick={handleCancelGeneration}
+                        className="w-10 h-10 rounded-2xl bg-rose-500 hover:bg-rose-600 text-white flex items-center justify-center shadow-button transition-all shrink-0 active:scale-95 cursor-pointer btn-spring"
+                        title="停止生成"
+                      >
+                        <Square size={14} className="fill-current" />
+                      </button>
+                    ) : (
+                      <button
+                        type="submit"
+                        disabled={(!inputText.trim() && selectedImages.length === 0) || loading}
+                        className="w-10 h-10 rounded-2xl bg-gradient-to-r from-primary to-pink-500 text-white flex items-center justify-center shadow-button hover:opacity-95 disabled:opacity-35 transition-all shrink-0 active:scale-95 cursor-pointer btn-spring"
+                        title="发送提问或一句话记账"
+                      >
+                        <Send size={15} />
+                      </button>
+                    )}
                   </form>
                 )}
 
@@ -2094,4 +2388,6 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
       </div>
     </div>
   );
+
+  return typeof document !== "undefined" ? createPortal(modalContent, document.body) : null;
 };

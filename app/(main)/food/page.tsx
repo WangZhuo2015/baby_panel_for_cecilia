@@ -13,6 +13,7 @@ import { Baby, Plus, Utensils, AlertCircle, Trash2, Heart, Smile, Meh, Frown, Re
 import type { FoodLogRecord } from "@/types";
 import { openRecordDrawer } from "@/lib/drawer-bus";
 import { BabyAvatar } from "@/components/ui/BabyAvatar";
+import { isWorkbenchViewport } from "@/lib/responsive";
 
 function generateWeeklyDates() {
   const todayStr = getLocalDateStr();
@@ -115,7 +116,7 @@ export default function FoodPage() {
   };
 
   const handleOpenFoodLog = () => {
-    if (typeof window !== "undefined" && window.innerWidth >= 1024) {
+    if (isWorkbenchViewport()) {
       openRecordDrawer("food");
     } else {
       router.push("/food/log");
@@ -123,12 +124,12 @@ export default function FoodPage() {
   };
 
   return (
-    <div className="min-h-[100dvh] bg-bg pb-36 px-4 max-w-md md:max-w-xl lg:max-w-6xl mx-auto space-y-5">
+    <div className="min-h-[100dvh] bg-bg pb-36 workbench:pb-12 px-4 max-w-md md:max-w-xl workbench:max-w-none lg:max-w-7xl mx-auto space-y-5">
       {/* Baby info header / Desktop Title */}
       <div className="pt-safe-4 flex items-center justify-between">
-        {/* 移动端宝宝头像与信息卡片，PC端由左侧边栏统一承载 */}
+        {/* 移动端宝宝头像与信息卡片，PC与平板横屏工作台由左侧边栏统一承载 */}
         <div
-          className="flex items-center gap-3 cursor-pointer group lg:hidden"
+          className="flex items-center gap-3 cursor-pointer group workbench:hidden"
           onClick={() => router.push("/onboarding")}
           title="点击修改宝宝资料与头像"
         >
@@ -147,8 +148,8 @@ export default function FoodPage() {
           </div>
         </div>
 
-        {/* PC 端主标题 */}
-        <div className="hidden lg:block">
+        {/* PC / 平板横屏端主标题 */}
+        <div className="hidden workbench:block">
           <h1 className="text-xl font-bold text-text-primary">辅食食谱与日记</h1>
         </div>
 
@@ -218,10 +219,10 @@ export default function FoodPage() {
         />
       </div>
 
-      {/* 🌟 iPad / PC 双栏响应式布局 */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+      {/* 🌟 iPad / PC / 小型平板横屏 双栏响应式布局 */}
+      <div className="grid grid-cols-1 workbench:grid-cols-12 gap-5 items-start">
         {/* ===== 左栏：已吃辅食记录 (Col 7) ===== */}
-        <div className="lg:col-span-7 space-y-4">
+        <div className="workbench:col-span-7 space-y-4">
           <div className="flex items-center justify-between px-1">
             <div className="flex items-center gap-1.5">
               <Utensils size={15} className="text-primary" />
@@ -324,7 +325,7 @@ export default function FoodPage() {
         </div>
 
         {/* ===== 右栏：推荐食谱与制作 (Col 5) ===== */}
-        <div className="lg:col-span-5 space-y-4">
+        <div className="workbench:col-span-5 space-y-4">
           <div className="px-1">
             <h3 className="text-xs font-bold text-text-secondary uppercase tracking-wider">
               推荐食谱与制作指南

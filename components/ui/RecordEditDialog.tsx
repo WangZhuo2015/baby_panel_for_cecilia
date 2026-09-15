@@ -19,6 +19,43 @@ interface RecordEditDialogProps {
   onSubmit: (patch: Record<string, unknown>) => Promise<void>;
 }
 
+const DETAIL_ENDPOINTS: Partial<Record<TimelineEntry["type"], string>> = {
+  feeding: "/api/records/feeding",
+  sleep: "/api/records/sleep",
+  diaper: "/api/records/diaper",
+  food: "/api/food/logs",
+};
+
+function hasObservedVersion(record: unknown): boolean {
+  if (!record || typeof record !== "object") return false;
+  const version = (record as Record<string, unknown>).version ?? (record as Record<string, unknown>).baseVersion;
+  return (typeof version === "string" && /^[1-9]\d*$/.test(version))
+    || (typeof version === "number" && Number.isSafeInteger(version) && version > 0);
+}
+
+function hasEditableFields(type: TimelineEntry["type"], record: unknown): record is Record<string, unknown> {
+  if (!record || typeof record !== "object") return false;
+  const value = record as Record<string, unknown>;
+  if (type === "feeding") return typeof value.timestamp === "string" && value.timestamp.length > 0;
+  if (type === "sleep") {
+    const startedAt = value.startedAt ?? value.startTime;
+    const sleepType = value.sleepType ?? value.type;
+    return typeof startedAt === "string" && startedAt.length > 0 && ["nap", "night", "day"].includes(String(sleepType));
+  }
+  if (type === "diaper") return typeof value.timestamp === "string" && value.timestamp.length > 0 && ["pee", "poop", "both"].includes(String(value.type));
+  if (type === "food") {
+    return typeof value.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value.date)
+      && typeof value.time === "string" && /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(value.time)
+      && Array.isArray(value.foods);
+  }
+  return false;
+}
+
+function hasCompleteEditableRecord(type: TimelineEntry["type"], record: unknown): record is Record<string, unknown> {
+  return hasObservedVersion(record) && hasEditableFields(type, record);
+}
+
+
 const typeMeta: Record<
   TimelineEntry["type"],
   { title: string; icon: React.FC<{ size?: number; className?: string }>; color: string }
@@ -44,22 +81,46 @@ export const RecordEditDialog: React.FC<RecordEditDialogProps> = ({ item, onClos
 
   useEffect(() => {
     setError(null);
-    if (!item || item.rawRecord || item.type !== "feeding") return;
+    if (!item) {
+      setLoaded(null);
+      setLoadError(null);
+      return;
+    }
+    const endpoint = DETAIL_ENDPOINTS[item.type];
+    if (!endpoint || (item.rawRecord && hasEditableFields(item.type, item.rawRecord))) {
+      setLoaded(null);
+      setLoadError(null);
+      return;
+    }
+    if (!item.babyId) {
+      setLoaded(null);
+      setLoadError({ key: itemKey, message: "缺少宝宝归属，无法加载记录详情" });
+      return;
+    }
     const controller = new AbortController();
     setLoaded(null);
     setLoadError(null);
-    const query = new URLSearchParams({ babyId: String(item.babyId ?? ""), id: item.id });
-    fetch(`/api/records/feeding?${query}`, { signal: controller.signal })
+    const query = new URLSearchParams({ babyId: item.babyId, id: item.id });
+    fetch(`${endpoint}?${query.toString()}`, { signal: controller.signal })
       .then(async response => {
-        const body = await response.json();
-        if (!response.ok) throw new Error(body.error || "无法加载记录详情");
-        if (body.id !== item.id || body.babyId !== item.babyId || !body.timestamp || !body.version) {
+        const body: unknown = await response.json().catch(() => null);
+        if (!response.ok) {
+          const message = body && typeof body === "object" && typeof (body as Record<string, unknown>).error === "string"
+            ? (body as Record<string, unknown>).error as string
+            : "无法加载记录详情";
+          throw new Error(message);
+        }
+        if (!body || typeof body !== "object" || (body as Record<string, unknown>).id !== item.id
+          || (body as Record<string, unknown>).babyId !== item.babyId
+          || !hasCompleteEditableRecord(item.type, body)) {
           throw new Error("记录详情不完整，请关闭后重试");
         }
-        if (!controller.signal.aborted) setLoaded({ key: itemKey, record: body });
+        if (!controller.signal.aborted) setLoaded({ key: itemKey, record: body as Record<string, unknown> });
       })
       .catch(cause => {
-        if (!controller.signal.aborted) setLoadError({ key: itemKey, message: cause instanceof Error ? cause.message : "无法加载记录详情" });
+        if (!controller.signal.aborted) {
+          setLoadError({ key: itemKey, message: cause instanceof Error ? cause.message : "无法加载记录详情" });
+        }
       });
     return () => controller.abort();
   }, [item, itemKey]);
@@ -73,8 +134,11 @@ export const RecordEditDialog: React.FC<RecordEditDialogProps> = ({ item, onClos
     setSaving(true);
     setError(null);
     try {
-      if (!rawRecord) throw new Error("完整记录尚未加载，暂时无法保存");
-      await onSubmit({ id: item.id, ...patch, ...(rawRecord.version ? { baseVersion: rawRecord.version } : {}) });
+      if (!rawRecord || !hasEditableFields(item.type, rawRecord)) {
+        throw new Error("完整记录尚未加载，暂时无法保存");
+      }
+      const baseVersion = rawRecord.version ?? rawRecord.baseVersion;
+      await onSubmit({ ...patch, id: item.id, ...(hasObservedVersion(rawRecord) ? { baseVersion } : {}) });
       onClose();
     } catch (e: any) {
       setError(e?.message || "保存失败，请重试");
@@ -178,15 +242,15 @@ export const RecordEditDialog: React.FC<RecordEditDialogProps> = ({ item, onClos
             <div className="space-y-4 py-2">
               <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-100 text-emerald-950 space-y-2">
                 <div className="flex items-center justify-between font-bold text-sm">
-                  <span>{item.rawRecord?.productName || item.title}</span>
+                  <span>{rawRecord.productName || item.title}</span>
                   <span className="text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full text-xs">
-                    {item.rawRecord?.dose || 1.0} {item.rawRecord?.unitName || "剂"}
+                    {rawRecord.dose || 1.0} {rawRecord.unitName || "剂"}
                   </span>
                 </div>
                 <div className="text-xs text-emerald-800/80">
-                  <p>打卡日期：{item.rawRecord?.date || item.time}</p>
-                  <p>打卡时间：{item.rawRecord?.time || item.time}</p>
-                  {item.rawRecord?.notes && <p>备注信息：{item.rawRecord.notes}</p>}
+                  <p>打卡日期：{rawRecord.date || item.time}</p>
+                  <p>打卡时间：{rawRecord.time || item.time}</p>
+                  {rawRecord.notes && <p>备注信息：{item.rawRecord.notes}</p>}
                 </div>
               </div>
               <p className="text-xs text-text-muted text-center">

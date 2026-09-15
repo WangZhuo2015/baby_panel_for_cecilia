@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
+import { createPortal } from "react-dom";
 import {
   Key,
   Copy,
@@ -54,6 +55,12 @@ export function PersonalTokenModal({ isOpen, onClose }: Props) {
     } finally {
       setLoading(false);
     }
+  }, []);
+
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
   }, []);
 
   useEffect(() => {
@@ -130,9 +137,9 @@ export function PersonalTokenModal({ isOpen, onClose }: Props) {
     setTimeout(() => setCopiedConfig(false), 2000);
   };
 
-  if (!isOpen) return null;
+  if (!isOpen || !mounted) return null;
 
-  return (
+  const modalContent = (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
       <div
         className="relative w-full max-w-lg max-h-[90vh] bg-white dark:bg-zinc-900 rounded-3xl shadow-2xl border border-primary/20 flex flex-col overflow-hidden animate-scale-up"
@@ -306,4 +313,6 @@ export function PersonalTokenModal({ isOpen, onClose }: Props) {
       </div>
     </div>
   );
+
+  return typeof document !== "undefined" ? createPortal(modalContent, document.body) : null;
 }

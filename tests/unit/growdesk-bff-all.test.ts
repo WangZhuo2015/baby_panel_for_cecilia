@@ -49,23 +49,30 @@ import { POST as FoodLogsPOST, PUT as FoodLogsPUT, DELETE as FoodLogsDELETE } fr
 import { POST as FoodItemsPOST } from "../../app/api/food/items/route";
 import { POST as FoodPlansPOST } from "../../app/api/food/plans/route";
 import { POST as NutritionPOST, DELETE as NutritionDELETE } from "../../app/api/nutrition/records/route";
-import { POST as GrowthPOST, DELETE as GrowthDELETE } from "../../app/api/growth/route";
+import { POST as ProductsPOST, PUT as ProductsPUT, DELETE as ProductsDELETE } from "../../app/api/nutrition/products/route";
+import { POST as SchedulesPOST, DELETE as SchedulesDELETE } from "../../app/api/nutrition/schedules/route";
+import { POST as GrowthPOST, PUT as GrowthPUT, PATCH as GrowthPATCH, DELETE as GrowthDELETE } from "../../app/api/growth/route";
+import { POST as GrowthOcrPOST } from "../../app/api/growth/ocr/route";
 import { POST as MedicalPOST } from "../../app/api/medical/reports/route";
-import { POST as VaccinePOST } from "../../app/api/vaccines/route";
+import { POST as MedicalOcrPOST } from "../../app/api/medical/ocr/route";
+import { POST as VaccinePOST, DELETE as VaccineDELETE } from "../../app/api/vaccines/route";
+import { GET as VaccineSelectionsGET, PUT as VaccineSelectionsPUT } from "../../app/api/vaccines/selections/route";
 import { POST as PushPOST } from "../../app/api/push/subscribe/route";
 
 test("SH-08: Diaper Compat DTO Layer", async (t) => {
   await t.test("toGrowDeskDiaperCreatePayload: normalizes legacy wet/dirty to pee/poop", () => {
-    const p1 = toGrowDeskDiaperCreatePayload({ type: "wet", notes: "Heavy" });
+    const timestamp = "2026-09-12T10:00:00.000Z";
+    const p1 = toGrowDeskDiaperCreatePayload({ type: "wet", notes: "Heavy", timestamp });
     assert.equal(p1.diaperType, "pee");
     assert.equal(p1.notes, "Heavy");
+    assert.equal(p1.occurredAt, timestamp);
 
-    const p2 = toGrowDeskDiaperCreatePayload({ type: "dirty", poopColor: "yellow", poopConsistency: "soft" });
+    const p2 = toGrowDeskDiaperCreatePayload({ type: "dirty", poopColor: "yellow", poopConsistency: "soft", timestamp });
     assert.equal(p2.diaperType, "poop");
     assert.equal(p2.poopColor, "yellow");
     assert.equal(p2.poopConsistency, "soft");
 
-    const p3 = toGrowDeskDiaperCreatePayload({ type: "both" });
+    const p3 = toGrowDeskDiaperCreatePayload({ type: "both", timestamp });
     assert.equal(p3.diaperType, "both");
   });
 
@@ -75,7 +82,7 @@ test("SH-08: Diaper Compat DTO Layer", async (t) => {
       type: "dirty",
       notes: "Updated note",
     });
-    assert.equal(p.baseVersion, 2);
+    assert.equal(p.baseVersion, "2");
     assert.equal(p.diaperType, "poop");
     assert.equal(p.notes, "Updated note");
   });
@@ -102,8 +109,8 @@ test("SH-08: Diaper Compat DTO Layer", async (t) => {
     assert.equal(rec.type, "poop");
     assert.equal(rec.timestamp, "2026-09-12T10:00:00.000Z");
     assert.equal(rec.poopColor, "brown");
-    assert.equal(rec.version, 4);
-    assert.equal(rec.baseVersion, 4);
+    assert.equal(rec.version, "4");
+    assert.equal(rec.baseVersion, "4");
   });
 });
 
@@ -129,7 +136,7 @@ test("SH-08: Sleep Compat DTO Layer", async (t) => {
       endedAt: null,
       nightWakingCount: 2,
     });
-    assert.equal(p.baseVersion, 5);
+    assert.equal(p.baseVersion, "5");
     assert.equal(p.sleepType, "night");
     assert.equal(p.endedAt, null);
     assert.equal(p.nightWakingCount, 2);
@@ -159,7 +166,7 @@ test("SH-08: Sleep Compat DTO Layer", async (t) => {
     assert.equal(rec.startedAt, "2026-09-12T20:00:00.000Z");
     assert.equal(rec.endTime, "2026-09-13T06:00:00.000Z");
     assert.equal(rec.endedAt, "2026-09-13T06:00:00.000Z");
-    assert.equal(rec.version, 3);
+    assert.equal(rec.version, "3");
   });
 });
 
@@ -425,10 +432,22 @@ test("SH-08: Dual-Mode Web Route Handlers Under BFF Mode (Security Rejections)",
     { name: "Food Plans POST", fn: () => FoodPlansPOST(makeReq("http://127.0.0.1:3000/api/food/plans", "POST")) },
     { name: "Nutrition Records POST", fn: () => NutritionPOST(makeReq("http://127.0.0.1:3000/api/nutrition/records", "POST")) },
     { name: "Nutrition Records DELETE", fn: () => NutritionDELETE(makeReq("http://127.0.0.1:3000/api/nutrition/records", "DELETE")) },
+    { name: "Nutrition Products POST", fn: () => ProductsPOST(makeReq("http://127.0.0.1:3000/api/nutrition/products", "POST")) },
+    { name: "Nutrition Products PUT", fn: () => ProductsPUT(makeReq("http://127.0.0.1:3000/api/nutrition/products", "PUT")) },
+    { name: "Nutrition Products DELETE", fn: () => ProductsDELETE(makeReq("http://127.0.0.1:3000/api/nutrition/products", "DELETE")) },
+    { name: "Nutrition Schedules POST", fn: () => SchedulesPOST(makeReq("http://127.0.0.1:3000/api/nutrition/schedules", "POST")) },
+    { name: "Nutrition Schedules DELETE", fn: () => SchedulesDELETE(makeReq("http://127.0.0.1:3000/api/nutrition/schedules", "DELETE")) },
     { name: "Growth POST", fn: () => GrowthPOST(makeReq("http://127.0.0.1:3000/api/growth", "POST")) },
+    { name: "Growth PUT", fn: () => GrowthPUT(makeReq("http://127.0.0.1:3000/api/growth", "PUT")) },
+    { name: "Growth PATCH", fn: () => GrowthPATCH(makeReq("http://127.0.0.1:3000/api/growth", "PATCH")) },
     { name: "Growth DELETE", fn: () => GrowthDELETE(makeReq("http://127.0.0.1:3000/api/growth", "DELETE")) },
+    { name: "Growth OCR POST", fn: () => GrowthOcrPOST(makeReq("http://127.0.0.1:3000/api/growth/ocr", "POST")) },
     { name: "Medical POST", fn: () => MedicalPOST(makeReq("http://127.0.0.1:3000/api/medical/reports", "POST")) },
+    { name: "Medical OCR POST", fn: () => MedicalOcrPOST(makeReq("http://127.0.0.1:3000/api/medical/ocr", "POST")) },
     { name: "Vaccine POST", fn: () => VaccinePOST(makeReq("http://127.0.0.1:3000/api/vaccines", "POST")) },
+    { name: "Vaccine DELETE", fn: () => VaccineDELETE(makeReq("http://127.0.0.1:3000/api/vaccines", "DELETE")) },
+    { name: "Vaccine Selections GET", fn: () => VaccineSelectionsGET(makeReq("http://127.0.0.1:3000/api/vaccines/selections", "GET")) },
+    { name: "Vaccine Selections PUT", fn: () => VaccineSelectionsPUT(makeReq("http://127.0.0.1:3000/api/vaccines/selections", "PUT")) },
     { name: "Push POST", fn: () => PushPOST(makeReq("http://127.0.0.1:3000/api/push/subscribe", "POST")) },
   ];
 
@@ -441,13 +460,14 @@ test("SH-08: Dual-Mode Web Route Handlers Under BFF Mode (Security Rejections)",
 });
 
 function makeReq(url: string, method: string) {
+  const isBodyAllowed = method !== "GET" && method !== "HEAD";
   return new NextRequest(url, {
     method,
     headers: {
       "content-type": "application/json",
       origin: "https://untrusted-attacker.com",
     },
-    body: JSON.stringify({ babyId: "baby-test-1", id: "item-1" }),
+    ...(isBodyAllowed ? { body: JSON.stringify({ babyId: "baby-test-1", id: "item-1" }) } : {}),
   });
 }
 

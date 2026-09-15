@@ -96,11 +96,21 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "请提供 babyId" }, { status: 400 });
       }
 
+      const existingRes = await growdeskFetch<any>(`/api/v1/babies/${babyId}/food-plan`, {
+        method: "GET",
+        accessToken: bffSession.accessToken,
+      });
+      const existingData = (existingRes.ok && existingRes.data?.data?.planData) || {};
+      const mergedPlanData = {
+        ...existingData,
+        ...body,
+      };
+
       const res = await growdeskFetch(`/api/v1/babies/${babyId}/food-plan`, {
         method: "PUT",
         accessToken: bffSession.accessToken,
         body: {
-          planData: body,
+          planData: mergedPlanData,
         },
       });
 

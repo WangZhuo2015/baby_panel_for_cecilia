@@ -1,6 +1,7 @@
 import webPush from "web-push";
 import { prisma } from "@/lib/prisma";
 import { PUSH_CONFIG } from "@/lib/config";
+import { isGrowDeskEnabled } from "@/lib/growdesk/config";
 
 export interface NotifyFamilyOptions {
   familyId: string;
@@ -23,6 +24,10 @@ const RELATION_NAMES: Record<string, string> = {
  * 获取家庭成员在当前家庭中的称谓
  */
 export async function getFamilyMemberLabel(familyId: string, userId: string): Promise<string> {
+  if (isGrowDeskEnabled()) {
+    return "家人";
+  }
+
   try {
     const member = await prisma.familyMember.findUnique({
       where: { familyId_userId: { familyId, userId } },
@@ -41,6 +46,10 @@ export async function getFamilyMemberLabel(familyId: string, userId: string): Pr
  * 给家庭中其他成员发送 Web Push 推送通知（后台异步执行，不阻塞业务主流程）
  */
 export async function notifyFamilyMembers(options: NotifyFamilyOptions): Promise<{ sent: number; failed: number }> {
+  if (isGrowDeskEnabled()) {
+    return { sent: 0, failed: 0 };
+  }
+
   const { familyId, excludeUserId, title, body, url = "/notifications" } = options;
 
   if (!PUSH_CONFIG.publicKey || !PUSH_CONFIG.privateKey) {

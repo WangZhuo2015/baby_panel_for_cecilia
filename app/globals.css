@@ -5,6 +5,20 @@
 @source "../data/**/*.ts";
 @source "../stores/**/*.ts";
 
+/* ===== Responsive Workbench Variants ===== */
+/* 桌面端 (≥ 1024px) 或 小型平板横屏（如 OPPO Pad Mini/iPad mini: 宽 ≥ 768px, 高 ≥ 480px, landscape 方向） */
+@custom-variant workbench {
+  @media (min-width: 1024px), ((min-width: 768px) and (min-height: 480px) and (orientation: landscape)) {
+    @slot;
+  }
+}
+/* 专用于小型平板横屏模式 (768px - 1023px 且 landscape, 高 ≥ 480px)，与桌面端 lg (≥ 1024px) 互补 */
+@custom-variant tablet-landscape {
+  @media ((min-width: 768px) and (max-width: 1023px) and (min-height: 480px) and (orientation: landscape)) {
+    @slot;
+  }
+}
+
 /* ===== Design Tokens ===== */
 @theme {
   /* Primary Pinks */
@@ -91,15 +105,17 @@ body {
   --app-max-width: 100%;
 }
 
-@media (min-width: 640px) and (max-width: 1023px) {
+/* 竖屏平板模式下居中收窄至 768px 手机放大型卡片 */
+@media (min-width: 640px) and (max-width: 1023px) and (orientation: portrait) {
   :root {
     --app-max-width: 768px;
   }
 }
 
-@media (min-width: 1024px) {
+/* 桌面端与平板横屏工作台 (≥ 1024px 或 小型平板横屏)：放开为 80rem (max-w-7xl) 宽屏 */
+@media (min-width: 1024px), ((min-width: 768px) and (min-height: 480px) and (orientation: landscape)) {
   :root {
-    --app-max-width: 100%;
+    --app-max-width: 80rem; /* 1280px = max-w-7xl */
   }
 }
 
@@ -132,7 +148,8 @@ body {
   pointer-events: none;
 }
 
-@media (min-width: 640px) and (max-width: 1023px) {
+/* 竖屏平板模式：展示外侧柔粉色衬底与卡片阴影 */
+@media (min-width: 640px) and (max-width: 1023px) and (orientation: portrait) {
   body {
     background: #F5E8ED;
   }
@@ -141,20 +158,8 @@ body {
   }
 }
 
-@media (min-width: 1024px) {
-  body {
-    background: #F5E8ED;
-  }
-  .app-wrapper {
-    box-shadow: none;
-  }
-}
-
-/* 桌面与 iPad 横屏工作台 (≥ 1024px)：完全放开为 max-w-7xl 宽屏，无多余背景列截断 */
-@media (min-width: 1024px) {
-  :root {
-    --app-max-width: 80rem; /* 1280px = max-w-7xl */
-  }
+/* 桌面与小型平板横屏工作台：无截断边框，背景自然铺满整个屏幕 */
+@media (min-width: 1024px), ((min-width: 768px) and (min-height: 480px) and (orientation: landscape)) {
   body {
     background: var(--color-bg);
   }
@@ -495,7 +500,8 @@ html.dark {
   background: var(--color-bg);
 }
 
-@media (min-width: 640px) and (max-width: 1023px) {
+/* 暗色模式：仅在竖屏平板下居中收窄 */
+@media (min-width: 640px) and (max-width: 1023px) and (orientation: portrait) {
   .dark body {
     background: #0F0B10;
   }
@@ -504,7 +510,8 @@ html.dark {
   }
 }
 
-@media (min-width: 1024px) {
+/* 桌面端与平板横屏工作台暗色模式：全宽无多余阴影 */
+@media (min-width: 1024px), ((min-width: 768px) and (min-height: 480px) and (orientation: landscape)) {
   .dark body {
     background: var(--color-bg);
   }

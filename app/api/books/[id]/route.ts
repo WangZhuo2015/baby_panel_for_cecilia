@@ -1,3 +1,5 @@
+import { GROWDESK_CONFIG } from "@/lib/config";
+import { bookBridge } from "@/lib/growdesk/book-bridge";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth, getActiveBaby } from "@/lib/api-helpers";
@@ -7,6 +9,7 @@ export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  if (GROWDESK_CONFIG.enabled) return bookBridge(request, (await params).id);
   try {
     const auth = await requireAuth(request);
     if (auth.errorResponse) return auth.errorResponse;

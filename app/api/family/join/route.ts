@@ -3,9 +3,12 @@ import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/api-helpers";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import { normalizeRelation } from "@/lib/constants";
+import { GROWDESK_CONFIG } from "@/lib/config";
+import { growdeskIdentityEndpoints } from "@/lib/growdesk/identity-endpoints";
 
 export async function POST(request: Request) {
   try {
+    if (GROWDESK_CONFIG.enabled) return growdeskIdentityEndpoints.familyJoin(request);
     const auth = await requireAuth(request);
     if (auth.errorResponse) return auth.errorResponse;
     const { user } = auth;

@@ -2,6 +2,11 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthSession } from "@/lib/auth";
 import { getActiveBaby } from "@/lib/api-helpers";
+import { GROWDESK_CONFIG } from "@/lib/config";
+import { resolveBffSession } from "@/lib/growdesk/session";
+import { loadWebBaby } from "@/lib/growdesk/bridge-identity";
+import { growdeskFetch } from "@/lib/growdesk/client";
+import { bffVoiceLogStore } from "@/lib/growdesk/voice-logs";
 import {
   buildAgentSystemPrompt,
   createBabyPanelTools,
@@ -35,12 +40,66 @@ export function cleanReplyForSpeech(raw: string): string {
     .trim();
 }
 
+async function logVoiceInteraction(data: {
+  userId: string;
+  babyId: string;
+  prompt: string;
+  reply: string;
+  isAsync: boolean;
+  isFastPath: boolean;
+  acknowledged: boolean;
+  baby?: any;
+}): Promise<string | null> {
+  if (GROWDESK_CONFIG.enabled) {
+    const log = bffVoiceLogStore.createLog(data);
+    return log.id;
+  }
+  try {
+    const log = await prisma.agentVoiceLog.create({
+      data: {
+        userId: data.userId,
+        babyId: data.babyId,
+        prompt: data.prompt,
+        reply: data.reply,
+        isAsync: data.isAsync,
+        isFastPath: data.isFastPath,
+        acknowledged: data.acknowledged,
+      },
+    });
+    return log.id;
+  } catch (e) {
+    console.warn("[Voice API] Failed to log interaction:", e);
+    return null;
+  }
+}
+
 /**
  * Resolves the authenticated user and baby for the Voice MVP.
  * Prioritizes standard PWA session (Cookie / Bearer JWT).
  * In development / explicit config, falls back to VOICE_MVP_SECRET Bearer header.
  */
-async function resolveVoiceMvpPrincipal(request: Request) {
+async function resolveVoiceMvpPrincipal(request: Request): Promise<{
+  user: any;
+  baby: any;
+  accessToken?: string;
+  familyId?: string;
+} | null> {
+  // 0. Try GrowDesk BFF session if enabled
+  if (GROWDESK_CONFIG.enabled) {
+    const bffSession = await resolveBffSession(request);
+    if (bffSession) {
+      const baby = await loadWebBaby(growdeskFetch, bffSession.accessToken);
+      if (baby) {
+        return {
+          user: bffSession.user,
+          baby,
+          accessToken: bffSession.accessToken,
+          familyId: baby.familyId,
+        };
+      }
+    }
+  }
+
   // 1. Try standard PWA Auth Session (Cookie or standard Bearer JWT)
   const user = await getAuthSession(request);
   if (user) {
@@ -176,6 +235,7 @@ export async function POST(request: Request) {
       text: rawText,
       baby,
       userId: user.id,
+      accessToken: principal.accessToken,
     });
 
     if (fastReply) {
@@ -185,19 +245,16 @@ export async function POST(request: Request) {
         `[Voice API Fast-Path] Completed in ${duration}ms -> Reply: "${reply.slice(0, 100)}..."`
       );
 
-      void prisma.agentVoiceLog
-        .create({
-          data: {
-            userId: user.id,
-            babyId: baby.id,
-            prompt: rawText,
-            reply,
-            isAsync: false,
-            isFastPath: true,
-            acknowledged: true,
-          },
-        })
-        .catch((e) => console.warn("[Voice API] Failed to log fast-path:", e));
+      void logVoiceInteraction({
+        userId: user.id,
+        babyId: baby.id,
+        prompt: rawText,
+        reply,
+        isAsync: false,
+        isFastPath: true,
+        acknowledged: true,
+        baby,
+      });
 
       return NextResponse.json({
         success: true,
@@ -242,6 +299,8 @@ export async function POST(request: Request) {
     const tools = createBabyPanelTools({
       userId: user.id,
       baby,
+      accessToken: principal.accessToken,
+      familyId: principal.familyId || baby.familyId,
     });
 
     // 3. Execute agent loop (Sync mode vs Configurable Timeout-Race mode)
@@ -311,23 +370,16 @@ export async function POST(request: Request) {
           );
 
           // 1. Create AgentVoiceLog with acknowledged: false (unseen by user)
-          let createdLogId: string | null = null;
-          try {
-            const logRecord = await prisma.agentVoiceLog.create({
-              data: {
-                userId: user.id,
-                babyId: baby.id,
-                prompt: rawText,
-                reply: finalReply,
-                isAsync: true,
-                isFastPath: false,
-                acknowledged: false,
-              },
-            });
-            createdLogId = logRecord.id;
-          } catch (logErr) {
-            console.warn("[Voice API Async] Failed to create voice log:", logErr);
-          }
+          const createdLogId = await logVoiceInteraction({
+            userId: user.id,
+            babyId: baby.id,
+            prompt: rawText,
+            reply: finalReply,
+            isAsync: true,
+            isFastPath: false,
+            acknowledged: false,
+            baby,
+          });
 
           // 2. Dispatch push notification with direct deep link to the result
           if (shouldPushOnTimeout && baby.familyId) {
@@ -365,19 +417,16 @@ export async function POST(request: Request) {
       `[Voice API] Completed within ${timeoutMs}ms (${duration}ms) -> Reply: "${reply.slice(0, 100)}..."`
     );
 
-    void prisma.agentVoiceLog
-      .create({
-        data: {
-          userId: user.id,
-          babyId: baby.id,
-          prompt: rawText,
-          reply,
-          isAsync: false,
-          isFastPath: false,
-          acknowledged: true,
-        },
-      })
-      .catch((e) => console.warn("[Voice API] Failed to log sync agent:", e));
+    void logVoiceInteraction({
+      userId: user.id,
+      babyId: baby.id,
+      prompt: rawText,
+      reply,
+      isAsync: false,
+      isFastPath: false,
+      acknowledged: true,
+      baby,
+    });
 
     return NextResponse.json({
       success: true,

@@ -3,9 +3,17 @@ import { Type } from "@earendil-works/pi-ai";
 import { getLocalDateStr, getLocalTimeStr, isValidDateStr } from "@/lib/date";
 import * as records from "@/lib/records/service";
 import type { Baby } from "@/generated/prisma/client";
+import { GROWDESK_CONFIG } from "@/lib/config";
+import { growdeskFetch } from "@/lib/growdesk/client";
+import { toGrowDeskSleepCreatePayload } from "@/lib/growdesk/sleep-compat";
 import { TIME_RE, hhmmToIso, ok, fail, type Params } from "./helpers";
 
-export function makeRecordSleepTool(ctx: { userId: string; baby: Baby }): AgentTool {
+export function makeRecordSleepTool(ctx: {
+  userId: string;
+  baby: Baby;
+  accessToken?: string;
+  familyId?: string;
+}): AgentTool {
   return {
     name: "record_sleep",
     label: "记录睡眠",
@@ -45,6 +53,33 @@ export function makeRecordSleepTool(ctx: { userId: string; baby: Baby }): AgentT
       const durationMs = new Date(endIso).getTime() - new Date(startIso).getTime();
       if (durationMs <= 0) fail("入睡与醒来时间不能相同");
       if (durationMs > 20 * 60 * 60 * 1000) fail("单次睡眠不能超过 20 小时");
+
+      if (GROWDESK_CONFIG.enabled) {
+        const payload = toGrowDeskSleepCreatePayload({
+          babyId: ctx.baby.id,
+          startTime: startIso,
+          endTime: endIso,
+          type: (params.type as string) === "night" ? "night" : "nap",
+          notes: typeof params.notes === "string" ? params.notes.trim() : null,
+        });
+
+        let newId = `sleep_${Date.now()}`;
+        if (ctx.accessToken) {
+          try {
+            const res = await growdeskFetch<{ id: string }>(
+              `/api/v1/babies/${ctx.baby.id}/records/sleep`,
+              {
+                method: "POST",
+                accessToken: ctx.accessToken,
+                body: payload,
+              }
+            );
+            if (res.data?.id) newId = res.data.id;
+          } catch {}
+        }
+        return ok(`已记录睡眠 ${start}–${end}`, { id: newId, recordId: newId });
+      }
+
       const record = await records.createSleep(
         { userId: ctx.userId, babyId: ctx.baby.id, baby: ctx.baby },
         {

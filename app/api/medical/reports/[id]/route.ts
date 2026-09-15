@@ -1,3 +1,5 @@
+import { GROWDESK_CONFIG } from "@/lib/config";
+import { medicalDetailBridge } from "@/lib/growdesk/medical-detail-bridge";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth, getActiveBaby } from "@/lib/api-helpers";
@@ -7,6 +9,7 @@ export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  if (GROWDESK_CONFIG.enabled) return medicalDetailBridge(request, (await params).id);
   try {
     const auth = await requireAuth(request);
     if (auth.errorResponse) return auth.errorResponse;
@@ -39,6 +42,7 @@ async function handleUpdate(
   request: Request,
   params: Promise<{ id: string }>
 ) {
+  if (GROWDESK_CONFIG.enabled) return medicalDetailBridge(request, (await params).id);
   try {
     const auth = await requireAuth(request);
     if (auth.errorResponse) return auth.errorResponse;
@@ -105,6 +109,7 @@ export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  if (GROWDESK_CONFIG.enabled) return medicalDetailBridge(request, (await params).id);
   try {
     const auth = await requireAuth(request);
     if (auth.errorResponse) return auth.errorResponse;

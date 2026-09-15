@@ -25,6 +25,7 @@ export interface GrowDeskResponse<T> {
   status: number;
   data?: T;
   page?: { nextCursor: string | null };
+  dataRelease?: Record<string, unknown>;
   error?: GrowDeskErrorPayload;
 }
 
@@ -106,6 +107,7 @@ export async function growdeskFetch<T>(
         status: res.status,
         data: json.data !== undefined ? json.data : json,
         page: json.page,
+        dataRelease: json.dataRelease,
       };
     }
 
