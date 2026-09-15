@@ -348,6 +348,7 @@ def main():
         })
 
     # 7. Feeding Records & Timeline
+    formula_prod_map = {fp["id"]: fp for fp in formula_products}
     for fr in feeding_records:
         payload = json.dumps(fr, sort_keys=True, ensure_ascii=False)
         insert("legacy_import.import_rows", {
@@ -370,11 +371,11 @@ def main():
             "baby_id": fr["babyId"],
             "feeding_type": fr["type"],
             "occurred_at": occ,
-            "amount_ml": fr.get("amountMl"),
+            "amount_ml": str(fr["amountMl"]) if fr.get("amountMl") is not None else None,
             "left_minutes": fr.get("leftMinutes"),
             "right_minutes": fr.get("rightMinutes"),
             "duration_minutes": dur,
-            "spit_up": "true" if fr.get("spitUp") else "false",
+            "spit_up": bool(fr.get("spitUp")),
             "formula_product_id": fr.get("formulaProductId"),
             "notes": fr.get("notes"),
             "source": fr.get("source") or "manual",
@@ -384,9 +385,27 @@ def main():
             "created_at": iso_ts(fr["createdAt"]),
             "updated_at": iso_ts(fr["createdAt"]),
         })
-        summary = f"Feeding: {fr['type']}"
-        if fr.get("amountMl"):
-            summary += f" {fr['amountMl']}ml"
+        fp = formula_prod_map.get(fr.get("formulaProductId"))
+        fp_name = (fp.get("name") or fp.get("brand")) if fp else ""
+        ftype = fr.get("type", "formula")
+        ftype_label = {"formula": "配方奶", "breast": "母乳亲喂", "mixed": "混合喂养", "bottle_breast": "瓶喂母乳"}.get(ftype, "喂奶")
+        amt = f"{fr['amountMl']}ml" if fr.get("amountMl") else ""
+        sides = []
+        if fr.get("leftMinutes"): sides.append(f"左{fr['leftMinutes']}分")
+        if fr.get("rightMinutes"): sides.append(f"右{fr['rightMinutes']}分")
+        side_str = f" ({'+'.join(sides)})" if sides else ""
+        spit = " · 吐奶" if fr.get("spitUp") else ""
+        note = f" · {fr['notes']}" if fr.get("notes") else ""
+        if ftype == "formula":
+            summary = f"配方奶 {amt}" + (f" ({fp_name})" if fp_name else "") + spit + note
+        elif ftype == "mixed":
+            summary = f"混合喂养 {amt}" + (f" ({fp_name})" if fp_name else "") + side_str + spit + note
+        elif ftype == "breast":
+            summary = f"母乳亲喂 {side_str or amt}".strip() + spit + note
+        elif ftype == "bottle_breast":
+            summary = f"瓶喂母乳 {amt}".strip() + spit + note
+        else:
+            summary = f"{ftype_label} {amt}".strip() + spit + note
         insert("public.timeline_entries", {
             "id": str(uuid.uuid4()),
             "family_id": family_id,
@@ -394,8 +413,8 @@ def main():
             "entity_type": "feeding",
             "entity_id": fr["id"],
             "occurred_at": occ,
-            "summary": summary,
-            "details": json.dumps({"amountMl": fr.get("amountMl"), "feedingType": fr["type"], "spitUp": bool(fr.get("spitUp"))}),
+            "summary": summary.strip(),
+            "details": json.dumps({"amountMl": fr.get("amountMl"), "feedingType": fr["type"], "spitUp": bool(fr.get("spitUp")), "formulaProductId": fr.get("formulaProductId")}),
             "source": fr.get("source") or "manual",
             "version": 1,
             "created_at": iso_ts(fr["createdAt"]),
@@ -434,7 +453,12 @@ def main():
             "created_at": iso_ts(sr["createdAt"]),
             "updated_at": iso_ts(sr["createdAt"]),
         })
-        summary = f"Sleep: {stype}" + (" (finished)" if et else " (in progress)")
+        stype_label = "夜间睡眠" if stype == "night" else "白天小睡"
+        st_parts = st.split("T")[1][:5] if "T" in st else ""
+        et_parts = et.split("T")[1][:5] if et and "T" in et else ""
+        time_range = f" ({st_parts}–{et_parts})" if st_parts and et_parts else ""
+        note = f" · {sr['notes']}" if sr.get("notes") else ""
+        summary = f"{stype_label}{time_range}{note}"
         insert("public.timeline_entries", {
             "id": str(uuid.uuid4()),
             "family_id": family_id,
@@ -442,7 +466,7 @@ def main():
             "entity_type": "sleep",
             "entity_id": sr["id"],
             "occurred_at": st,
-            "summary": summary,
+            "summary": summary.strip(),
             "details": json.dumps({"sleepType": stype, "startedAt": st, "endedAt": et}),
             "source": sr.get("source") or "manual",
             "version": 1,
@@ -480,6 +504,14 @@ def main():
             "created_at": iso_ts(dr["createdAt"]),
             "updated_at": iso_ts(dr["createdAt"]),
         })
+        dtype_label = {"pee": "嘘嘘", "poop": "便便", "both": "嘘嘘 + 便便"}.get(dr["type"], "换尿布")
+        color_map = {"yellow": "黄色", "green": "绿色", "brown": "棕色", "other": "其他"}
+        cons_map = {"loose": "稀便", "paste": "糊状", "formed": "成形"}
+        d_details = [dtype_label]
+        if dr.get("poopColor"): d_details.append(color_map.get(dr["poopColor"], dr["poopColor"]))
+        if dr.get("poopConsistency"): d_details.append(cons_map.get(dr["poopConsistency"], dr["poopConsistency"]))
+        if dr.get("notes"): d_details.append(dr["notes"])
+        summary = f"换尿布: {' · '.join(d_details)}"
         insert("public.timeline_entries", {
             "id": str(uuid.uuid4()),
             "family_id": family_id,
@@ -487,7 +519,7 @@ def main():
             "entity_type": "diaper",
             "entity_id": dr["id"],
             "occurred_at": occ,
-            "summary": f"Diaper: {dr['type']}",
+            "summary": summary.strip(),
             "details": json.dumps({"diaperType": dr["type"], "poopColor": dr.get("poopColor")}),
             "source": dr.get("source") or "manual",
             "version": 1,
@@ -542,6 +574,9 @@ def main():
             "created_at": iso_ts(fl["createdAt"]),
             "updated_at": iso_ts(fl["createdAt"]),
         })
+        food_str = "、".join(food_list) if food_list else "辅食"
+        note = f" · {fl.get('abnormalNotes') or fl.get('notes') or ''}" if (fl.get('abnormalNotes') or fl.get('notes')) else ""
+        summary = f"辅食餐点: {food_str}{note}"
         insert("public.timeline_entries", {
             "id": str(uuid.uuid4()),
             "family_id": family_id,
@@ -549,7 +584,7 @@ def main():
             "entity_type": "food",
             "entity_id": fl["id"],
             "occurred_at": occ,
-            "summary": f"Food: {', '.join(food_list) if food_list else '辅食'}",
+            "summary": summary.strip(),
             "details": json.dumps({"foodItemIds": food_list, "portion": fl.get("portion")}),
             "source": fl.get("source") or "manual",
             "version": 1,
@@ -636,6 +671,8 @@ def main():
             "created_at": iso_ts(sr["createdAt"]),
             "updated_at": iso_ts(sr["createdAt"]),
         })
+        note = f" · {sr['notes']}" if sr.get("notes") else ""
+        summary = f"补剂打卡: {sname} {amt or ''}{note}".strip()
         insert("public.timeline_entries", {
             "id": str(uuid.uuid4()),
             "family_id": family_id,
@@ -643,7 +680,7 @@ def main():
             "entity_type": "supplement",
             "entity_id": sr["id"],
             "occurred_at": occ,
-            "summary": f"Supplement: {sname} ({amt or '常规剂量'})",
+            "summary": summary,
             "details": json.dumps({"supplementName": sname, "amount": amt}),
             "source": sr.get("source") or "manual",
             "version": 1,

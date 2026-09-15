@@ -408,6 +408,54 @@ test("SH-08: Timeline Compat DTO Layer", async (t) => {
     assert.equal(items[1].title, "尿布");
     assert.equal(items[1].icon, "🧷");
   });
+
+  await t.test("fromGrowDeskTimelineResponse: enriches feeding with formula product and rawRecord", () => {
+    const feedings = new Map([
+      [
+        "feed-10",
+        {
+          id: "feed-10",
+          babyId: "baby-1",
+          type: "formula",
+          occurredAt: "2026-09-12T12:00:00.000Z",
+          amountMl: 140,
+          formulaProductId: "fp-aptamil",
+          recordedByUserId: "user-dad",
+          version: 1,
+        },
+      ],
+    ]);
+    const formulaProducts = new Map([
+      ["fp-aptamil", { id: "fp-aptamil", name: "澳洲爱他美白金版 Profutura 1段 (0-6个月)", brand: "Aptamil" }],
+    ]);
+    const memberNames = new Map([["user-dad", "爸爸"]]);
+
+    const items = fromGrowDeskTimelineResponse(
+      [
+        {
+          id: "tl-1",
+          babyId: "baby-1",
+          entityType: "feeding",
+          entityId: "feed-10",
+          occurredAt: "2026-09-12T12:00:00.000Z",
+          summary: "配方奶 140ml",
+          version: "1",
+        },
+      ],
+      { feedings, formulaProducts, memberNames },
+    );
+
+    assert.equal(items.length, 1);
+    assert.equal(items[0].id, "feed-10");
+    assert.equal(items[0].title, "配方奶");
+    assert.equal(items[0].formulaProductId, "fp-aptamil");
+    assert.equal(items[0].formulaProductName, "澳洲爱他美白金版 Profutura 1段 (0-6个月)");
+    assert.equal(items[0].detail, "配方140ml (澳洲爱他美白金版 Profutura 1段 (0-6个月))");
+    assert.equal(items[0].recorderName, "爸爸");
+    assert.ok(items[0].rawRecord, "rawRecord should be populated");
+    assert.equal(items[0].rawRecord.amountMl, 140);
+    assert.equal(items[0].rawRecord.formulaProductId, "fp-aptamil");
+  });
 });
 
 test("SH-08: Dual-Mode Web Route Handlers Under BFF Mode (Security Rejections)", async (t) => {
