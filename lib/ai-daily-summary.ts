@@ -11,6 +11,13 @@ import { getLlmProfiles, type LlmProfile } from "@/lib/llm-profiles";
 import { archiveText } from "@/lib/archive";
 import { safeJsonParse } from "@/lib/json";
 import { getFeedingEffectiveMl } from "@/lib/nutrition/breastmilk";
+import { isGrowDeskEnabled } from "@/lib/growdesk/config";
+import { growdeskFetch } from "@/lib/growdesk/client";
+import { fetchLegacyRecordList, familyDayBounds } from "@/lib/growdesk/record-list";
+import { fromGrowDeskFeedingRecord, type GrowDeskFeedingRecord } from "@/lib/growdesk/feeding-compat";
+import { fromGrowDeskSleepRecord, type GrowDeskSleepRecord } from "@/lib/growdesk/sleep-compat";
+import { fromGrowDeskDiaperRecord, type GrowDeskDiaperRecord } from "@/lib/growdesk/diaper-compat";
+import { fromGrowDeskFoodRecord, type GrowDeskFoodRecord } from "@/lib/growdesk/food-compat";
 import type {
   DailyComprehensiveMetrics,
   DailyFeedingDetail,
@@ -25,6 +32,8 @@ export interface RecordContext {
   userId: string;
   babyId: string;
   baby?: any;
+  accessToken?: string;
+  familyId?: string;
 }
 
 const TYPE_LABELS: Record<string, string> = {
@@ -65,52 +74,105 @@ export async function fetchDailyComprehensiveMetrics(
       ? targetDateStr
       : getLocalDateStr();
 
-  const { start, end } = getLocalDayUtcRange(date);
-  const dayStartMs = new Date(start).getTime();
-  const dayEndMs = new Date(end).getTime();
+  const useGrowDesk = isGrowDeskEnabled() || Boolean(ctx.accessToken);
+  const token = ctx.accessToken || "";
 
-  const [
-    feedingRecords,
-    sleepRecords,
-    diaperRecords,
-    foodLogs,
-    supplementRecords,
-    growthRecords,
-    medicalReports,
-  ] = await Promise.all([
-    prisma.feedingRecord.findMany({
-      where: { babyId: ctx.babyId, timestamp: { gte: start, lt: end } },
-      orderBy: { timestamp: "asc" },
-    }),
-    prisma.sleepRecord.findMany({
-      where: {
-        babyId: ctx.babyId,
-        startTime: { lt: end },
-        endTime: { gt: start },
-      },
-      orderBy: { startTime: "asc" },
-    }),
-    prisma.diaperRecord.findMany({
-      where: { babyId: ctx.babyId, timestamp: { gte: start, lt: end } },
-      orderBy: { timestamp: "asc" },
-    }),
-    prisma.foodLogRecord.findMany({
-      where: { babyId: ctx.babyId, date },
-      orderBy: { time: "asc" },
-    }),
-    prisma.supplementRecord.findMany({
-      where: { babyId: ctx.babyId, date },
-      include: { product: true },
-      orderBy: { time: "asc" },
-    }),
-    prisma.growthMeasurement.findFirst({
-      where: { babyId: ctx.babyId, date },
-      orderBy: { createdAt: "desc" },
-    }),
-    prisma.medicalReport.count({
-      where: { babyId: ctx.babyId, date },
-    }),
-  ]);
+  let feedingRecords: any[] = [];
+  let sleepRecords: any[] = [];
+  let diaperRecords: any[] = [];
+  let foodLogs: any[] = [];
+  let supplementRecords: any[] = [];
+  let growthRecords: any = null;
+  let medicalReports: number = 0;
+  let dayStartMs = 0;
+  let dayEndMs = 0;
+
+  if (useGrowDesk) {
+    const dateQuery = new URLSearchParams({ date });
+    const [feedingRaw, sleepRaw, diaperRaw, foodRaw, bounds] = await Promise.all([
+      fetchLegacyRecordList<GrowDeskFeedingRecord>(growdeskFetch, token, ctx.babyId, dateQuery, "feeding").catch(() => []),
+      fetchLegacyRecordList<GrowDeskSleepRecord>(growdeskFetch, token, ctx.babyId, dateQuery, "sleep").catch(() => []),
+      fetchLegacyRecordList<GrowDeskDiaperRecord>(growdeskFetch, token, ctx.babyId, dateQuery, "diaper").catch(() => []),
+      fetchLegacyRecordList<GrowDeskFoodRecord>(growdeskFetch, token, ctx.babyId, dateQuery, "food").catch(() => []),
+      familyDayBounds(growdeskFetch, token, ctx.babyId, date).catch(() => {
+        const { start, end } = getLocalDayUtcRange(date);
+        return { start: new Date(start), end: new Date(end) };
+      }),
+    ]);
+    feedingRecords = feedingRaw.map(fromGrowDeskFeedingRecord);
+    sleepRecords = sleepRaw.map(fromGrowDeskSleepRecord);
+    diaperRecords = diaperRaw.map(fromGrowDeskDiaperRecord);
+    foodLogs = foodRaw.map(fromGrowDeskFoodRecord);
+    dayStartMs = bounds.start.getTime();
+    dayEndMs = bounds.end.getTime();
+
+    // Fetch latest growth measurement in BFF mode
+    try {
+      const growthRes = await growdeskFetch<any>(
+        `/api/v1/babies/${ctx.babyId}/growth-measurements?limit=1`,
+        { accessToken: token }
+      );
+      if (growthRes.ok) {
+        const gmList = Array.isArray(growthRes.data)
+          ? growthRes.data
+          : (growthRes.data as any)?.data || [];
+        if (gmList.length > 0) {
+          const gm = gmList[0];
+          growthRecords = {
+            weightKg: gm.weightKg ?? gm.weight_kg ?? null,
+            heightCm: gm.heightCm ?? gm.height_cm ?? null,
+            headCircumferenceCm: gm.headCircumferenceCm ?? gm.head_circumference_cm ?? null,
+          };
+        }
+      }
+    } catch {}
+  } else {
+    const { start, end } = getLocalDayUtcRange(date);
+    dayStartMs = new Date(start).getTime();
+    dayEndMs = new Date(end).getTime();
+
+    const results = await Promise.all([
+      prisma.feedingRecord.findMany({
+        where: { babyId: ctx.babyId, timestamp: { gte: start, lt: end } },
+        orderBy: { timestamp: "asc" },
+      }),
+      prisma.sleepRecord.findMany({
+        where: {
+          babyId: ctx.babyId,
+          startTime: { lt: end },
+          endTime: { gt: start },
+        },
+        orderBy: { startTime: "asc" },
+      }),
+      prisma.diaperRecord.findMany({
+        where: { babyId: ctx.babyId, timestamp: { gte: start, lt: end } },
+        orderBy: { timestamp: "asc" },
+      }),
+      prisma.foodLogRecord.findMany({
+        where: { babyId: ctx.babyId, date },
+        orderBy: { time: "asc" },
+      }),
+      prisma.supplementRecord.findMany({
+        where: { babyId: ctx.babyId, date },
+        include: { product: true },
+        orderBy: { time: "asc" },
+      }),
+      prisma.growthMeasurement.findFirst({
+        where: { babyId: ctx.babyId, date },
+        orderBy: { createdAt: "desc" },
+      }),
+      prisma.medicalReport.count({
+        where: { babyId: ctx.babyId, date },
+      }),
+    ]);
+    feedingRecords = results[0];
+    sleepRecords = results[1];
+    diaperRecords = results[2];
+    foodLogs = results[3];
+    supplementRecords = results[4];
+    growthRecords = results[5];
+    medicalReports = results[6];
+  }
 
   // 1. Feeding Aggregations
   let totalFeedingMl = 0;
@@ -622,6 +684,8 @@ function formatCandidate(key: string, p: LlmProfile): CandidateProfile {
   };
 }
 
+export const summaryMemoryCache = new Map<string, { summary: AiDailySummaryResult; timestamp: number }>();
+
 /**
  * Generate AI Daily Summary via LLM (OpenRouter / Opencode / AMD) with robust error handling and fallback.
  */
@@ -641,7 +705,15 @@ export async function generateAiDailySummary(
   }
 
   // 1. Gather comprehensive stats for the day
-  const metrics = await fetchDailyComprehensiveMetrics({ userId: ctx.userId, babyId: baby.id }, date);
+  const metrics = await fetchDailyComprehensiveMetrics(
+    {
+      userId: ctx.userId,
+      babyId: baby.id,
+      accessToken: ctx.accessToken,
+      familyId: ctx.familyId,
+    },
+    date
+  );
 
   // 2. Build default high-quality rule-based summary
   const curatedFallback = generateCuratedDailySummary(baby, metrics);
@@ -662,22 +734,32 @@ export async function generateAiDailySummary(
   // Check cache unless forceRefresh is true
   const cacheKey = `ai_daily_summary_${baby.id}_${date}`;
   if (!options?.forceRefresh) {
-    try {
-      const cached = await prisma.aiArchive.findFirst({
-        where: { kind: "output_json", content: { startsWith: `{"_cacheKey":"${cacheKey}"` } },
-        orderBy: { createdAt: "desc" },
-      });
-      if (cached?.content) {
-        const parsed = JSON.parse(cached.content);
-        const cachedSummary = parsed?.summary as AiDailySummaryResult | undefined;
-        if (cachedSummary && isDailySummaryCacheFresh(cachedSummary, metrics, isToday)) {
-          return {
-            ...cachedSummary,
-            metrics, // keep fresh raw metrics
-          };
-        }
+    if (isGrowDeskEnabled()) {
+      const cached = summaryMemoryCache.get(cacheKey);
+      if (cached && isDailySummaryCacheFresh(cached.summary, metrics, isToday)) {
+        return {
+          ...cached.summary,
+          metrics,
+        };
       }
-    } catch {}
+    } else {
+      try {
+        const cached = await prisma.aiArchive.findFirst({
+          where: { kind: "output_json", content: { startsWith: `{"_cacheKey":"${cacheKey}"` } },
+          orderBy: { createdAt: "desc" },
+        });
+        if (cached?.content) {
+          const parsed = JSON.parse(cached.content);
+          const cachedSummary = parsed?.summary as AiDailySummaryResult | undefined;
+          if (cachedSummary && isDailySummaryCacheFresh(cachedSummary, metrics, isToday)) {
+            return {
+              ...cachedSummary,
+              metrics, // keep fresh raw metrics
+            };
+          }
+        }
+      } catch {}
+    }
   }
 
   // 3. Build Prompt for LLM
@@ -856,6 +938,10 @@ export async function generateAiDailySummary(
   };
 
   // Save into AiArchive for fast cache & audit
+  if (isGrowDeskEnabled()) {
+    summaryMemoryCache.set(cacheKey, { summary: aiResult, timestamp: Date.now() });
+  }
+
   void archiveText("output_json", JSON.stringify({
     _cacheKey: cacheKey,
     summary: aiResult,

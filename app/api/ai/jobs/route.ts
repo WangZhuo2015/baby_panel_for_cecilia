@@ -1,9 +1,41 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/api-helpers";
+import { GROWDESK_CONFIG } from "@/lib/config";
+import { resolveBffSession } from "@/lib/growdesk/session";
+import { bffAiJobStore } from "@/lib/growdesk/ai-jobs";
+
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 /** 当前用户的 AI 任务列表（待领取优先，最近 10 条） */
 export async function GET(request: Request) {
+  if (GROWDESK_CONFIG.enabled) {
+    const bffSession = await resolveBffSession(request);
+    if (!bffSession) {
+      return NextResponse.json({ error: "Unauthorized: 会话无效或已过期" }, { status: 401 });
+    }
+
+    const { pendingClaim, jobs } = bffAiJobStore.listJobs(bffSession.user.id, {
+      type: "medical_ocr",
+      limit: 10,
+    });
+
+    const formatted = jobs.map((j) => ({
+      id: j.id,
+      status: j.status === "succeeded" ? "done" : j.status === "running" ? "processing" : j.status,
+      imageUrl: j.imageUrl,
+      errorMessage: j.errorMessage,
+      claimed: j.claimed,
+      createdAt: j.createdAt,
+    }));
+
+    return NextResponse.json({
+      pendingClaim,
+      jobs: formatted,
+    });
+  }
+
   const auth = await requireAuth(request);
   if (auth.errorResponse) return auth.errorResponse;
 
@@ -38,7 +70,6 @@ export async function GET(request: Request) {
       errorMessage: j.errorMessage,
       claimed: j.claimed,
       createdAt: j.createdAt,
-      finishedAt: j.finishedAt,
     })),
   });
 }

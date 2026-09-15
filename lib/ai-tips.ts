@@ -52,10 +52,13 @@ function getCuratedTips(ageMonths: number, nickname: string, _genderWord: string
   ];
 }
 
-export async function getAiTips(babyId?: string): Promise<string[]> {
-  const baby = babyId
-    ? await prisma.baby.findUnique({ where: { id: babyId } })
-    : await prisma.baby.findFirst();
+export async function getAiTips(babyIdOrBaby?: string | any): Promise<string[]> {
+  let baby = typeof babyIdOrBaby === "object" && babyIdOrBaby !== null ? babyIdOrBaby : null;
+  if (!baby) {
+    baby = babyIdOrBaby
+      ? await prisma.baby.findUnique({ where: { id: babyIdOrBaby } })
+      : await prisma.baby.findFirst();
+  }
 
   if (!baby) {
     throw new Error("尚未创建宝宝档案，请先完善宝宝信息");
