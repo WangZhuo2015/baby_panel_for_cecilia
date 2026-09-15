@@ -38,17 +38,28 @@ function nullableText(value: unknown): string | null {
   return value;
 }
 export function toGrowDeskFeedingCreatePayload(body: Record<string, unknown>) {
-  return {
+  const payload: Record<string, unknown> = {
     feedingType: feedingKind(body.type),
     occurredAt: isoTimestamp(body.timestamp),
     amountMl: milk(body.amountMl),
     leftMinutes: nullableNumber(body.leftMinutes, true),
     rightMinutes: nullableNumber(body.rightMinutes, true),
     spitUp: body.spitUp === true || body.spitUp === "true" || body.spitUp === 1,
-    formulaProductId: nullableText(body.formulaProductId), notes: nullableText(body.notes),
     source: typeof body.source === "string" ? body.source : "ui_manual",
-    sourceAgent: nullableText(body.sourceAgent),
   };
+  const formulaProductId = nullableText(body.formulaProductId);
+  if (formulaProductId !== null) {
+    payload.formulaProductId = formulaProductId;
+  }
+  const notes = nullableText(body.notes);
+  if (notes !== null) {
+    payload.notes = notes;
+  }
+  const sourceAgent = nullableText(body.sourceAgent);
+  if (sourceAgent !== null) {
+    payload.sourceAgent = sourceAgent;
+  }
+  return payload;
 }
 export function toGrowDeskFeedingUpdatePayload(body: Record<string, unknown>) {
   const out: Record<string, unknown> = { baseVersion: wireVersion(body.baseVersion ?? body.version) };
@@ -58,7 +69,12 @@ export function toGrowDeskFeedingUpdatePayload(body: Record<string, unknown>) {
   if (body.leftMinutes !== undefined) out.leftMinutes = nullableNumber(body.leftMinutes, true);
   if (body.rightMinutes !== undefined) out.rightMinutes = nullableNumber(body.rightMinutes, true);
   if (body.spitUp !== undefined) out.spitUp = body.spitUp === true || body.spitUp === "true" || body.spitUp === 1;
-  if (body.formulaProductId !== undefined) out.formulaProductId = nullableText(body.formulaProductId);
+  if (body.formulaProductId !== undefined) {
+    const pid = nullableText(body.formulaProductId);
+    if (pid !== null) {
+      out.formulaProductId = pid;
+    }
+  }
   if (body.notes !== undefined) out.notes = nullableText(body.notes);
   return out;
 }

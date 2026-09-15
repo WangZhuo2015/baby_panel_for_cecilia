@@ -148,10 +148,12 @@ test("browser can use a matching timeline version without mixing record types", 
 
 test("unsupported reads cannot reach old authentication and falsely log out a BFF user", async () => {
   const { isBridgedMethod } = await import("../../lib/growdesk/bridge-policy");
-  for (const path of ["/api/records/daily-summary", "/api/family/members", "/api/ai/daily-summary", "/api/unknown"]) {
+  for (const path of ["/api/ai/daily-summary", "/api/cron/daily-summary", "/api/unknown"]) {
     assert.equal(isBridgedMethod(path, "GET"), false);
   }
   assert.equal(isBridgedMethod("/api/auth/me", "GET"), true);
+  assert.equal(isBridgedMethod("/api/records/daily-summary", "GET"), true);
+  assert.equal(isBridgedMethod("/api/family/members", "GET"), true);
 });
 test("migration policy checks the HTTP method, not just a filename marker", async () => {
   const { isBridgedMethod } = await import("../../lib/growdesk/bridge-policy");
