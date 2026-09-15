@@ -6,6 +6,12 @@ import { GROWDESK_CONFIG } from "@/lib/config";
 import { resolveBffSession } from "@/lib/growdesk/session";
 import { growdeskFetch } from "@/lib/growdesk/client";
 
+import {
+  fromGrowDeskGrowthRecord,
+  transformWhoPercentilesForLegacy,
+} from "@/lib/growdesk/growth-compat";
+import { loadWebBaby } from "@/lib/growdesk/bridge-identity";
+
 export async function GET(request: Request) {
   try {
     if (GROWDESK_CONFIG.enabled) {
@@ -34,7 +40,29 @@ export async function GET(request: Request) {
         );
       }
 
-      return NextResponse.json(res.data?.data || res.data);
+      const chartData = res.data?.data || res.data || {};
+      const rawMeasurements = Array.isArray(chartData.measurements) ? chartData.measurements : [];
+      const legacyMeasurements = rawMeasurements.map(fromGrowDeskGrowthRecord);
+
+      let babyGender = "female";
+      try {
+        const baby = await loadWebBaby(growdeskFetch, bffSession.accessToken, requestedBabyId);
+        if (baby?.gender === "boy" || (baby as any)?.gender === "male") babyGender = "male";
+      } catch {
+        // Fallback to default
+      }
+
+      const transformedPercentiles = transformWhoPercentilesForLegacy(chartData.whoPercentiles);
+      const hasPoints = Object.values(transformedPercentiles).some((s) => s.P50 && s.P50.length > 0);
+      const whoPercentiles = hasPoints ? transformedPercentiles : getWhoStandard(babyGender);
+
+      return NextResponse.json({
+        measurements: legacyMeasurements,
+        whoPercentiles,
+        monthLabels: WHO_MONTHS,
+        gender: babyGender,
+        rawWhoPercentiles: chartData.whoPercentiles,
+      });
     }
 
     const auth = await requireAuth(request);

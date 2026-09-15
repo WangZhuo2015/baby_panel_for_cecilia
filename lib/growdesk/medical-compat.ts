@@ -41,7 +41,7 @@ export interface GrowDeskMedicalReport {
 function attachmentId(value: unknown): string {
   if (typeof value !== "string" || !value.trim()) throw new BridgeError(400, "INVALID_ATTACHMENT", "无效的附件");
   const trimmed = value.trim();
-  if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) return trimmed;
+  if (trimmed.startsWith("http://") || trimmed.startsWith("https://") || trimmed.startsWith("/uploads/")) return trimmed;
   const id = trimmed.replace(/^\/api\/attachments\//, "");
   if (!/^[a-f0-9-]{36}$/i.test(id)) throw new BridgeError(400, "INVALID_ATTACHMENT", "请重新上传图片");
   return id;
@@ -65,7 +65,7 @@ export function toGrowDeskMedicalCreatePayload(body: Record<string, unknown>) {
 
   return {
     reportDate,
-    items: body.items ?? [],
+    items: Array.isArray(body.items) ? body.items : ([] as unknown[]),
     ...(body.growthData && typeof body.growthData === "object" ? { growthData: Object.fromEntries(Object.entries(body.growthData).filter(([, value]) => value !== undefined && value !== null).map(([key, value]) => [key, String(value)])) } : {}),
     title,
     hospital,

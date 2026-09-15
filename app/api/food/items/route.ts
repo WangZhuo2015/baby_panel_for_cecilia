@@ -28,9 +28,21 @@ export async function GET(request: Request) {
         );
       }
       const rawList = Array.isArray(res.data) ? res.data : (res.data as any)?.data || [];
+      const parsedList = rawList.map((item: any) => ({
+        ...item,
+        foodId: item.foodId ?? item.id,
+        recommendedFromMonth: item.recommendedFromMonth ?? item.recommendedAgeMonths ?? 6,
+        status: item.status ?? "to_try",
+        firstAddedDate: item.firstAddedDate ?? null,
+        acceptance: item.acceptance ?? 0,
+        preparation: Array.isArray(item.preparation) ? item.preparation : [],
+        nutrition: Array.isArray(item.nutrition) ? item.nutrition : [],
+        textureByAge: Array.isArray(item.textureByAge) ? item.textureByAge : [],
+        sourceRefs: Array.isArray(item.sourceRefs) ? item.sourceRefs : [],
+      }));
       const filtered = status && status !== "all"
-        ? rawList.filter((item: any) => item.status === status)
-        : rawList;
+        ? parsedList.filter((item: any) => item.status === status)
+        : parsedList;
       return NextResponse.json(filtered);
     }
 

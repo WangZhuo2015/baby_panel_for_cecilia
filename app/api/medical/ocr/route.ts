@@ -12,6 +12,14 @@ import { archiveBuffer, archiveText } from "@/lib/archive";
 import { composeMedicalAiSummary } from "@/lib/medical-summary";
 import { resolveImageContent } from "@/lib/agent/images";
 
+import { GROWDESK_CONFIG } from "@/lib/config";
+import { resolveBffSession } from "@/lib/growdesk/session";
+import { verifyBffCsrf } from "@/lib/growdesk/csrf";
+import { growdeskFetch } from "@/lib/growdesk/client";
+import { loadWebBaby, creationFamilyId } from "@/lib/growdesk/bridge-identity";
+import { requireData, pathId } from "@/lib/growdesk/bridge-protocol";
+import { validateUploadedImage } from "@/lib/upload";
+
 export const maxDuration = 120;
 
 const SYSTEM_PROMPT = `你是儿科检验单 OCR 助手。只输出一个 JSON 对象，不要 markdown，不要把字段包进 type/data。
@@ -38,6 +46,115 @@ items[]：
 `;
 
 export async function POST(request: Request) {
+  if (GROWDESK_CONFIG.enabled) {
+    const csrfErr = verifyBffCsrf(request);
+    if (csrfErr) return csrfErr;
+
+    const session = await resolveBffSession(request);
+    if (!session) {
+      return NextResponse.json({ error: "Unauthorized: 会话无效或已过期" }, { status: 401 });
+    }
+
+    try {
+      const form = await request.formData();
+      const file = (form.get("image") || form.get("file")) as File | null;
+      if (!(file instanceof File) || !file.size || file.size > 20 * 1024 * 1024) {
+        return NextResponse.json({ error: "请选择不超过 20 MB 的图片" }, { status: 400 });
+      }
+
+      const bytes = Buffer.from(await file.arrayBuffer());
+      const checked = validateUploadedImage(file, bytes);
+      if (!checked.valid) {
+        return NextResponse.json({ error: checked.error || "图片格式不合法" }, { status: 400 });
+      }
+
+      const babyIdParam = form.get("babyId");
+      const baby = await loadWebBaby(growdeskFetch, session.accessToken, babyIdParam || undefined);
+      const familyId = baby?.familyId || (await creationFamilyId(growdeskFetch, session.accessToken));
+
+      const sha256 = crypto.createHash("sha256").update(bytes).digest("hex");
+      const mimeType =
+        ({ ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp", ".heic": "image/heic" } as Record<string, string>)[
+          checked.ext || ".jpg"
+        ] || file.type;
+
+      const created = requireData(
+        await growdeskFetch<{ id: string; uploadUrl: string }>("/api/v1/attachments", {
+          method: "POST",
+          accessToken: session.accessToken,
+          body: {
+            purpose: "medical_report",
+            mimeType,
+            byteSize: bytes.length,
+            sha256,
+            ownerScope: { familyId, ...(baby ? { babyId: baby.id } : {}) },
+          },
+        })
+      );
+
+      const uploaded = await fetch(created.uploadUrl, {
+        method: "PUT",
+        body: bytes,
+        headers: { "content-type": mimeType },
+        redirect: "error",
+        signal: AbortSignal.timeout(30000),
+      });
+      if (!uploaded.ok) {
+        return NextResponse.json({ error: "文件上传至对象存储失败" }, { status: 502 });
+      }
+
+      requireData(
+        await growdeskFetch(`/api/v1/attachments/${pathId(created.id)}/complete`, {
+          method: "POST",
+          accessToken: session.accessToken,
+          body: { byteSize: bytes.length, sha256 },
+        })
+      );
+
+      const imageUrl = `/api/attachments/${created.id}`;
+      const imageBase64 = bytes.toString("base64");
+      const imageDataUrl = `data:${mimeType};base64,${imageBase64}`;
+
+      const res = await fetch(`${AI_CONFIG.baseUrl.replace(/\/+$/, "")}/chat/completions`, {
+        method: "POST",
+        headers: AI_CONFIG.headers,
+        body: JSON.stringify({
+          model: AI_CONFIG.visionModel,
+          messages: [
+            { role: "system", content: SYSTEM_PROMPT },
+            {
+              role: "user",
+              content: [
+                { type: "text", text: "请结构化识别这张化验单/体检报告/生长记录单，提取所有指标项、参考值、异常标记和临床总结，输出为 JSON。" },
+                { type: "image_url", image_url: { url: imageDataUrl } },
+              ],
+            },
+          ],
+          temperature: 0.1,
+          max_tokens: 8000,
+          ...AI_CONFIG.completionExtras,
+          response_format: { type: "json_object" },
+        }),
+        signal: AbortSignal.timeout(100000),
+      });
+
+      if (!res.ok) {
+        return NextResponse.json({ error: "AI 识别服务暂时不可用，请手动录入" }, { status: 503 });
+      }
+
+      const aiData = await res.json();
+      const parsed = parseOcrSuccess(aiData, imageUrl);
+      return NextResponse.json({
+        ...parsed,
+        attachmentId: created.id,
+        imageUrl,
+      });
+    } catch (err: any) {
+      console.error("GrowDesk medical OCR error:", err);
+      return NextResponse.json({ error: err?.message || "识别失败，请重试" }, { status: 500 });
+    }
+  }
+
   try {
     const auth = await requireAuth(request);
     if (auth.errorResponse) return auth.errorResponse;

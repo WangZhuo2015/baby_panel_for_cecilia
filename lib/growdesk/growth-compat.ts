@@ -1,3 +1,5 @@
+import { wireVersion } from "./bridge-protocol";
+
 if (typeof window !== "undefined") {
   throw new Error("This module can only be loaded on the server.");
 }
@@ -15,8 +17,8 @@ export interface LegacyGrowthRecord {
   notes?: string | null;
   source?: string;
   sourceAgent?: string | null;
-  version?: number;
-  baseVersion?: number;
+  version?: string | number;
+  baseVersion?: string | number;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -34,6 +36,30 @@ export interface GrowDeskGrowthRecord {
   version: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface GrowDeskWhoPercentilePoint {
+  month: number;
+  p3: string;
+  p15: string;
+  p50: string;
+  p85: string;
+  p97: string;
+}
+
+export interface LegacyPercentileData {
+  P97: number[];
+  P85: number[];
+  P50: number[];
+  P15: number[];
+  P3: number[];
+}
+
+export interface LegacyGrowthStandardSet {
+  months: number[];
+  weight: LegacyPercentileData;
+  height: LegacyPercentileData;
+  headCircumference: LegacyPercentileData;
 }
 
 function toDecimalStr(val: unknown, precision: number): string | null {
@@ -61,7 +87,7 @@ export function toGrowDeskGrowthCreatePayload(body: Record<string, unknown>) {
 
 export function toGrowDeskGrowthUpdatePayload(body: Record<string, unknown>) {
   const payload: Record<string, unknown> = {
-    baseVersion: Number(body.baseVersion ?? body.version ?? 1),
+    baseVersion: wireVersion(body.baseVersion ?? body.version),
   };
 
   if (body.measurementDate || body.date) {
@@ -98,6 +124,7 @@ export function fromGrowDeskGrowthRecord(rec: GrowDeskGrowthRecord): LegacyGrowt
   const weight = rec.weightKg !== null ? Number(rec.weightKg) : null;
   const height = rec.heightCm !== null ? Number(rec.heightCm) : null;
   const head = rec.headCircumferenceCm !== null ? Number(rec.headCircumferenceCm) : null;
+  const version = wireVersion(rec.version);
 
   return {
     id: rec.id,
@@ -110,9 +137,35 @@ export function fromGrowDeskGrowthRecord(rec: GrowDeskGrowthRecord): LegacyGrowt
     headCircumference: head,
     headCircumferenceCm: head,
     notes: rec.notes,
-    version: Number(rec.version ?? 1),
-    baseVersion: Number(rec.version ?? 1),
+    version,
+    baseVersion: version,
     createdAt: rec.createdAt,
     updatedAt: rec.updatedAt,
+  };
+}
+
+export function transformWhoSeriesToLegacy(points?: GrowDeskWhoPercentilePoint[]): LegacyPercentileData {
+  if (!Array.isArray(points) || points.length === 0) {
+    return { P97: [], P85: [], P50: [], P15: [], P3: [] };
+  }
+  const sorted = [...points].sort((a, b) => a.month - b.month);
+  return {
+    P97: sorted.map((p) => Number(p.p97)),
+    P85: sorted.map((p) => Number(p.p85)),
+    P50: sorted.map((p) => Number(p.p50)),
+    P15: sorted.map((p) => Number(p.p15)),
+    P3: sorted.map((p) => Number(p.p3)),
+  };
+}
+
+export function transformWhoPercentilesForLegacy(data?: {
+  weightForAge?: GrowDeskWhoPercentilePoint[];
+  heightForAge?: GrowDeskWhoPercentilePoint[];
+  headCircumferenceForAge?: GrowDeskWhoPercentilePoint[];
+}): Record<string, LegacyPercentileData> {
+  return {
+    weight: transformWhoSeriesToLegacy(data?.weightForAge),
+    height: transformWhoSeriesToLegacy(data?.heightForAge),
+    headCircumference: transformWhoSeriesToLegacy(data?.headCircumferenceForAge),
   };
 }
