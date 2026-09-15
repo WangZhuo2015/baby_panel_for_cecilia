@@ -479,5 +479,93 @@ export function makeNutritionTools(ctx: {
     },
   };
 
-  return [recordSupplement, getNutritionAnalysis];
+  const queryNutritionProducts: AgentTool = {
+    name: "query_nutrition_products",
+    label: "查询家庭奶粉与补剂库",
+    description: "查询家庭当前正在使用 (Active) 或已录入的配方奶粉与补剂档案详情（包含冲调浓度、成分表、单次剂量等）。",
+    parameters: Type.Object({
+      type: Type.Optional(
+        Type.Union([
+          Type.Literal("all"),
+          Type.Literal("formula"),
+          Type.Literal("supplement"),
+        ])
+      ),
+    }),
+    execute: async (_id, raw) => {
+      const params = raw as Params;
+      const type = typeof params.type === "string" ? params.type : "all";
+
+      if (GROWDESK_CONFIG.enabled) {
+        return ok(
+          JSON.stringify(
+            {
+              activeFormulas: [],
+              allFormulas: [],
+              activeSupplements: [],
+              allSupplements: [],
+            },
+            null,
+            2
+          )
+        );
+      }
+
+      const [formulas, supplements] = await Promise.all([
+        type === "all" || type === "formula"
+          ? prisma.formulaProduct.findMany({
+              where: { familyId },
+              orderBy: [{ isActive: "desc" }, { createdAt: "desc" }],
+            })
+          : [],
+        type === "all" || type === "supplement"
+          ? prisma.supplementProduct.findMany({
+              where: { familyId },
+              orderBy: [{ isActive: "desc" }, { createdAt: "desc" }],
+            })
+          : [],
+      ]);
+
+      const formattedFormulas = formulas.map((f) => ({
+        id: f.id,
+        name: f.name,
+        brand: f.brand,
+        stage: f.stage ? `${f.stage}段` : null,
+        isActive: f.isActive,
+        reconstitution: `每勺${f.scoopWeightG}g兑${f.waterPerScoopMl}ml水（浓度约${(f.reconstitutionRatio * 100).toFixed(1)}%）`,
+      }));
+
+      const formattedSupplements = supplements.map((s) => {
+        let nutrients = {};
+        try {
+          nutrients = JSON.parse(s.nutrientsJson);
+        } catch {}
+        return {
+          id: s.id,
+          name: s.name,
+          brand: s.brand,
+          dosageForm: s.dosageForm,
+          unitName: s.unitName,
+          defaultDose: s.defaultDose,
+          isActive: s.isActive,
+          nutrients,
+        };
+      });
+
+      return ok(
+        JSON.stringify(
+          {
+            activeFormulas: formattedFormulas.filter((f) => f.isActive),
+            allFormulas: formattedFormulas,
+            activeSupplements: formattedSupplements.filter((s) => s.isActive),
+            allSupplements: formattedSupplements,
+          },
+          null,
+          2
+        )
+      );
+    },
+  };
+
+  return [recordSupplement, getNutritionAnalysis, queryNutritionProducts];
 }
