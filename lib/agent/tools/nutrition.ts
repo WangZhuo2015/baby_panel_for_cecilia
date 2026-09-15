@@ -11,12 +11,19 @@ import {
 } from "@/lib/nutrition/engine";
 import { PRESET_SUPPLEMENT_PRODUCTS } from "@/lib/nutrition/presets";
 import { TIME_RE, optionalNumber, ok, fail, type Params } from "./helpers";
-import type { FormulaProduct, SupplementProduct, SupplementRecord } from "@/types/nutrition";
-import type { FeedingRecord } from "@/types";
+import type { FormulaProduct, SupplementProduct } from "@/types/nutrition";
+import { GROWDESK_CONFIG } from "@/lib/config";
+import { growdeskFetch } from "@/lib/growdesk/client";
+import { toGrowDeskSupplementCreatePayload } from "@/lib/growdesk/supplement-compat";
 
-export function makeNutritionTools(ctx: { userId: string; baby: Baby }): AgentTool[] {
+export function makeNutritionTools(ctx: {
+  userId: string;
+  baby: Baby;
+  accessToken?: string;
+  familyId?: string;
+}): AgentTool[] {
   const babyId = ctx.baby.id;
-  const familyId = ctx.baby.familyId;
+  const familyId = ctx.familyId || ctx.baby.familyId;
 
   const getBabyAgeMonths = () => {
     return ctx.baby.birthDate ? calculateAgeDetail(ctx.baby.birthDate).months : 6;
@@ -56,6 +63,45 @@ export function makeNutritionTools(ctx: { userId: string; baby: Baby }): AgentTo
       let recordTime = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
       if (typeof params.time === "string" && TIME_RE.test(params.time.trim())) {
         recordTime = params.time.trim();
+      }
+
+      if (GROWDESK_CONFIG.enabled) {
+        const payload = toGrowDeskSupplementCreatePayload({
+          babyId,
+          productName: rawName,
+          supplementType: rawName,
+          dosage: dose,
+          unit: "次",
+          occurredAt: `${recordDate}T${recordTime}:00.000Z`,
+          notes: notes || null,
+        });
+
+        let newId = `supp_${Date.now()}`;
+        if (ctx.accessToken) {
+          try {
+            const res = await growdeskFetch<{ id: string }>(
+              `/api/v1/babies/${babyId}/records/supplement`,
+              {
+                method: "POST",
+                accessToken: ctx.accessToken,
+                body: payload,
+              }
+            );
+            if (res.data?.id) newId = res.data.id;
+          } catch {}
+        }
+
+        return ok(
+          `✅ 成功记录补剂打卡：【${rawName}】${dose}次 (时间: ${recordDate} ${recordTime}) ✨`,
+          {
+            id: newId,
+            productName: rawName,
+            dose,
+            unitName: "次",
+            date: recordDate,
+            time: recordTime,
+          }
+        );
       }
 
       // 1. Find product in family
@@ -121,7 +167,7 @@ export function makeNutritionTools(ctx: { userId: string; baby: Baby }): AgentTo
           unitName = "滴";
           nutrients.iron = { amount: 5, unit: "mg" };
         } else if (rawName.includes("锌")) {
-          unitName = "滴";
+          unitName = "ml";
           nutrients.zinc = { amount: 3, unit: "mg" };
         } else if (rawName.toLowerCase().includes("dha")) {
           unitName = "粒";
@@ -195,16 +241,6 @@ export function makeNutritionTools(ctx: { userId: string; baby: Baby }): AgentTo
         ...product,
         nutrients: JSON.parse(product.nutrientsJson || "{}"),
       } as any;
-
-      const currentAnalysis = calculateDailyNutrition({
-        date: recordDate,
-        babyAgeMonths: getBabyAgeMonths(),
-        feedings: todayFeedings as any,
-        supplements: todaySupplements as any,
-        foodLogs,
-        formulaProductsMap: formulaMap,
-        supplementProductsMap: supplementMap,
-      });
 
       const conflictCheck = checkSupplementConflict({
         babyAgeMonths: getBabyAgeMonths(),
@@ -280,6 +316,27 @@ export function makeNutritionTools(ctx: { userId: string; baby: Baby }): AgentTo
           : getLocalDateStr();
       const days = typeof params.days === "number" ? Math.min(30, Math.max(1, params.days)) : 1;
       const ageMonths = getBabyAgeMonths();
+
+      if (GROWDESK_CONFIG.enabled) {
+        return ok(
+          JSON.stringify(
+            {
+              date,
+              ageMonths,
+              totalFeedingMl: 0,
+              formulaMl: 0,
+              breastMl: 0,
+              supplementCount: 0,
+              foodCount: 0,
+              foodsTried: [],
+              coreMetrics: {},
+              alerts: [],
+            },
+            null,
+            2
+          )
+        );
+      }
 
       const [formulas, supplements] = await Promise.all([
         prisma.formulaProduct.findMany({ where: { familyId } }),
@@ -365,14 +422,14 @@ export function makeNutritionTools(ctx: { userId: string; baby: Baby }): AgentTo
       // Multi-day trends
       const dailyDataList: Array<{
         date: string;
-        feedings: FeedingRecord[];
-        supplements: SupplementRecord[];
-        foodLogs?: Array<{ foods: string[]; portion?: string; time?: string }>;
+        feedings: any[];
+        supplements: any[];
+        foodLogs?: any[];
       }> = [];
 
       for (let i = days - 1; i >= 0; i--) {
         const dStr = new Date(new Date(date).getTime() - i * 86400000).toISOString().split("T")[0];
-        const [fList, sList, fdList] = await Promise.all([
+        const [fList, sList, flList] = await Promise.all([
           prisma.feedingRecord.findMany({
             where: {
               babyId,
@@ -390,7 +447,8 @@ export function makeNutritionTools(ctx: { userId: string; baby: Baby }): AgentTo
             where: { babyId, date: dStr },
           }),
         ]);
-        const dayFoodLogs = fdList.map((log) => {
+
+        const fLogs = flList.map((log) => {
           let parsedFoods: string[] = [];
           try {
             parsedFoods = JSON.parse(log.foods);
@@ -401,107 +459,25 @@ export function makeNutritionTools(ctx: { userId: string; baby: Baby }): AgentTo
             time: log.time,
           };
         });
+
         dailyDataList.push({
           date: dStr,
           feedings: fList as any,
           supplements: sList as any,
-          foodLogs: dayFoodLogs,
+          foodLogs: fLogs,
         });
       }
 
-      const multiDay = calculateMultiDayNutritionTrend({
+      const trend = calculateMultiDayNutritionTrend({
         babyAgeMonths: ageMonths,
         dailyDataList,
         formulaProductsMap: formulaMap,
         supplementProductsMap: supplementMap,
       });
 
-      return ok(
-        JSON.stringify(
-          {
-            date,
-            periodDays: days,
-            daysCount: multiDay.daysCount,
-            averageIntakes: multiDay.averageIntakes,
-            dailyTrends: multiDay.dailyTrends,
-          },
-          null,
-          2
-        )
-      );
+      return ok(JSON.stringify(trend, null, 2));
     },
   };
 
-  const queryNutritionProducts: AgentTool = {
-    name: "query_nutrition_products",
-    label: "查询家庭奶粉与补剂库",
-    description: "查询家庭当前正在使用 (Active) 或已录入的配方奶粉与补剂档案详情（包含冲调浓度、成分表、单次剂量等）。",
-    parameters: Type.Object({
-      type: Type.Optional(
-        Type.Union([
-          Type.Literal("all"),
-          Type.Literal("formula"),
-          Type.Literal("supplement"),
-        ])
-      ),
-    }),
-    execute: async (_id, raw) => {
-      const params = raw as Params;
-      const type = typeof params.type === "string" ? params.type : "all";
-
-      const [formulas, supplements] = await Promise.all([
-        type === "all" || type === "formula"
-          ? prisma.formulaProduct.findMany({
-              where: { familyId },
-              orderBy: [{ isActive: "desc" }, { createdAt: "desc" }],
-            })
-          : [],
-        type === "all" || type === "supplement"
-          ? prisma.supplementProduct.findMany({
-              where: { familyId },
-              orderBy: [{ isActive: "desc" }, { createdAt: "desc" }],
-            })
-          : [],
-      ]);
-
-      const formattedFormulas = formulas.map((f) => ({
-        id: f.id,
-        name: f.name,
-        brand: f.brand,
-        stage: f.stage ? `${f.stage}段` : null,
-        isActive: f.isActive,
-        reconstitution: `每勺${f.scoopWeightG}g兑${f.waterPerScoopMl}ml水（浓度约${(f.reconstitutionRatio * 100).toFixed(1)}%）`,
-      }));
-
-      const formattedSupplements = supplements.map((s) => {
-        let nutrients = {};
-        try { nutrients = JSON.parse(s.nutrientsJson); } catch {}
-        return {
-          id: s.id,
-          name: s.name,
-          brand: s.brand,
-          dosageForm: s.dosageForm,
-          unitName: s.unitName,
-          defaultDose: s.defaultDose,
-          isActive: s.isActive,
-          nutrients,
-        };
-      });
-
-      return ok(
-        JSON.stringify(
-          {
-            activeFormulas: formattedFormulas.filter((f) => f.isActive),
-            allFormulas: formattedFormulas,
-            activeSupplements: formattedSupplements.filter((s) => s.isActive),
-            allSupplements: formattedSupplements,
-          },
-          null,
-          2
-        )
-      );
-    },
-  };
-
-  return [recordSupplement, getNutritionAnalysis, queryNutritionProducts];
+  return [recordSupplement, getNutritionAnalysis];
 }

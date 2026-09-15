@@ -1,11 +1,29 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/api-helpers";
+import { GROWDESK_CONFIG } from "@/lib/config";
+import { resolveBffSession } from "@/lib/growdesk/session";
+import { bffVoiceLogStore } from "@/lib/growdesk/voice-logs";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
   try {
+    if (GROWDESK_CONFIG.enabled) {
+      const bffSession = await resolveBffSession(request);
+      if (!bffSession) {
+        return NextResponse.json({ success: false, error: "Unauthorized: 会话无效或已过期" }, { status: 401 });
+      }
+      const { searchParams } = new URL(request.url);
+      const unreadAsyncOnly = searchParams.get("unreadAsync") === "true";
+      const limit = Math.min(50, Math.max(1, parseInt(searchParams.get("limit") || "20", 10)));
+      const res = bffVoiceLogStore.listLogs(bffSession.user.id, { limit, unreadAsyncOnly });
+      if (unreadAsyncOnly) {
+        return NextResponse.json({ success: true, unreadLog: res.unreadLog || null });
+      }
+      return NextResponse.json({ success: true, logs: res.logs });
+    }
+
     const auth = await requireAuth(request);
     if (auth.errorResponse) return auth.errorResponse;
 

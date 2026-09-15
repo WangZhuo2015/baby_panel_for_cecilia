@@ -4,6 +4,7 @@
 import { prisma } from "@/lib/prisma";
 import { generateAiDailySummary } from "@/lib/ai-daily-summary";
 import { getLocalDateStr, addDays, isValidDateStr } from "@/lib/date";
+import { isGrowDeskEnabled } from "@/lib/growdesk/config";
 
 export interface CronDailySummaryResult {
   babyId: string;
@@ -21,6 +22,11 @@ export async function runDailySummaryCron(options?: {
   babyId?: string;
   forceRefresh?: boolean;
 }): Promise<CronDailySummaryResult[]> {
+  if (isGrowDeskEnabled()) {
+    console.log("[Cron Daily Summary] GrowDesk mode enabled; cron summary runs via server-side tasks.");
+    return [];
+  }
+
   const todayStr = getLocalDateStr();
   const yesterdayStr = addDays(todayStr, -1);
 

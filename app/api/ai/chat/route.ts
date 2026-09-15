@@ -4,6 +4,9 @@ import { prisma } from "@/lib/prisma";
 import { requireAuth, requireBaby } from "@/lib/api-helpers";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import { archiveText } from "@/lib/archive";
+import { GROWDESK_CONFIG } from "@/lib/config";
+import { resolveBffSession } from "@/lib/growdesk/session";
+import { bffAiSessionStore } from "@/lib/growdesk/ai-sessions";
 import {
   buildAgentSystemPrompt,
   createLlmBackend,
@@ -67,9 +70,16 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "sessionId is required" }, { status: 400 });
     }
 
-    const session = await prisma.aiChatSession.findFirst({
-      where: { id: sessionId, userId: user.id },
-    });
+    let session: any = null;
+    if (GROWDESK_CONFIG.enabled) {
+      const bffSession = await resolveBffSession(request);
+      if (!bffSession) return NextResponse.json({ error: "Unauthorized: 会话无效或已过期" }, { status: 401 });
+      session = await bffAiSessionStore.getSession(sessionId, user.id, bffSession.accessToken);
+    } else {
+      session = await prisma.aiChatSession.findFirst({
+        where: { id: sessionId, userId: user.id },
+      });
+    }
     if (!session) {
       return NextResponse.json({ error: "对话会话不存在或已删除" }, { status: 404 });
     }
@@ -237,12 +247,20 @@ export async function POST(request: Request) {
       void archiveText("input_text", promptText).catch(() => {});
     }
 
+    let bffSession: any = null;
+    if (GROWDESK_CONFIG.enabled) {
+      bffSession = await resolveBffSession(request);
+      if (!bffSession) return NextResponse.json({ error: "Unauthorized: 会话无效或已过期" }, { status: 401 });
+    }
+
     // 1. Session Persistence Setup
-    let activeSession: { id: string; title: string; contextType: string } | null = null;
+    let activeSession: { id: string; title: string; contextType: string; babyId?: string | null } | null = null;
     if (sessionId && typeof sessionId === "string") {
-      const existing = await prisma.aiChatSession.findFirst({
-        where: { id: sessionId, userId: user.id },
-      });
+      const existing = bffSession
+        ? await bffAiSessionStore.getSession(sessionId, user.id, bffSession.accessToken)
+        : await prisma.aiChatSession.findFirst({
+            where: { id: sessionId, userId: user.id },
+          });
       if (!existing) {
         return NextResponse.json({ error: "对话会话不存在或已删除" }, { status: 404 });
       }
@@ -256,17 +274,32 @@ export async function POST(request: Request) {
     }
     if (!activeSession) {
       const generatedTitle = promptText.replace(/[\r\n\t]+/g, " ").trim().slice(0, 24) || "新对话";
-      activeSession = await prisma.aiChatSession.create({
-        data: {
-          userId: user.id,
-          babyId: targetBaby.id,
-          title: generatedTitle,
-          contextType,
-        },
-      });
+      activeSession = bffSession
+        ? await bffAiSessionStore.createSession(
+            {
+              userId: user.id,
+              babyId: targetBaby.id,
+              title: generatedTitle,
+              contextType,
+            },
+            bffSession.accessToken
+          )
+        : await prisma.aiChatSession.create({
+            data: {
+              userId: user.id,
+              babyId: targetBaby.id,
+              title: generatedTitle,
+              contextType,
+            },
+          });
     }
 
-    const sid = activeSession.id;
+    if (!activeSession) {
+      return NextResponse.json({ error: "无法创建或找到会话" }, { status: 500 });
+    }
+
+    const currentSession = activeSession;
+    const sid = currentSession.id;
     const imagePersistStr =
       imageList.length === 1
         ? imageList[0]
@@ -288,14 +321,27 @@ export async function POST(request: Request) {
     }
 
     // 2. Prompt-First Persistence: Save user prompt to DB BEFORE agent starts
-    await prisma.aiChatMessage.create({
-      data: {
-        sessionId: sid,
-        role: "user",
-        content: promptText,
-        image: imagePersistStr,
-      },
-    });
+    if (bffSession) {
+      await bffAiSessionStore.addMessage(
+        sid,
+        user.id,
+        {
+          role: "user",
+          content: promptText,
+          image: imagePersistStr ?? undefined,
+        },
+        bffSession.accessToken
+      );
+    } else {
+      await prisma.aiChatMessage.create({
+        data: {
+          sessionId: sid,
+          role: "user",
+          content: promptText,
+          image: imagePersistStr,
+        },
+      });
+    }
 
     const systemPrompt = buildAgentSystemPrompt({
       contextType,
@@ -318,10 +364,12 @@ export async function POST(request: Request) {
       systemPrompt,
       history: toHistory(prior.slice(-8)),
       sessionMeta: {
-        id: activeSession.id,
-        title: activeSession.title,
-        contextType: activeSession.contextType,
+        id: currentSession.id,
+        title: currentSession.title,
+        contextType: currentSession.contextType,
       },
+      accessToken: bffSession?.accessToken,
+      familyId: targetBaby.familyId || undefined,
     });
 
     // 4. Stream response to this client, detaching cleanly on client disconnect without aborting the background run

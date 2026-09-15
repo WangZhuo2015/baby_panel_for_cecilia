@@ -5,6 +5,8 @@ import { archiveText } from "@/lib/archive";
 import { createBabyPanelTools } from "@/lib/agent/tools";
 import { resolveImageContent } from "@/lib/agent/images";
 import { runBabyAgent } from "@/lib/agent/run";
+import { isGrowDeskEnabled } from "@/lib/growdesk/config";
+import { bffAiSessionStore } from "@/lib/growdesk/ai-sessions";
 
 export type ChatRunStatus = "running" | "completed" | "failed" | "cancelled";
 
@@ -48,6 +50,51 @@ export interface StartChatRunParams {
   streamFn?: StreamFn;
   model?: Model<any>;
   getApiKey?: (provider: string) => string | undefined;
+  accessToken?: string;
+  familyId?: string;
+}
+
+async function saveAssistantMessage(
+  sessionId: string,
+  userId: string,
+  content: string,
+  toolTraces: any[],
+  accessToken?: string
+): Promise<void> {
+  const toolsJson = toolTraces.length > 0 ? JSON.stringify(toolTraces) : null;
+  if (isGrowDeskEnabled()) {
+    try {
+      await bffAiSessionStore.addMessage(
+        sessionId,
+        userId,
+        {
+          role: "assistant",
+          content,
+          toolsJson: toolsJson ?? undefined,
+        },
+        accessToken
+      );
+    } catch (e) {
+      console.error("[SessionRunner] Failed to persist assistant message in BFF store:", e);
+    }
+    return;
+  }
+  try {
+    await prisma.aiChatMessage.create({
+      data: {
+        sessionId,
+        role: "assistant",
+        content,
+        toolsJson,
+      },
+    });
+    await prisma.aiChatSession.update({
+      where: { id: sessionId },
+      data: { updatedAt: new Date() },
+    });
+  } catch (dbErr) {
+    console.error("[SessionRunner] Failed to persist assistant message:", dbErr);
+  }
 }
 
 export class ActiveChatRunManager {
@@ -135,6 +182,8 @@ export class ActiveChatRunManager {
         const tools: AgentTool[] = createBabyPanelTools({
           userId: params.userId,
           baby: params.baby,
+          accessToken: params.accessToken,
+          familyId: params.familyId,
         });
 
         await runBabyAgent({
@@ -175,43 +224,25 @@ export class ActiveChatRunManager {
           }
           const finalMsg =
             run.fullText || (isTimedOut ? "AI 会话执行超时，请稍后重试。" : "已取消生成。");
-          try {
-            await prisma.aiChatMessage.create({
-              data: {
-                sessionId: run.sessionId,
-                role: "assistant",
-                content: finalMsg,
-                toolsJson: run.toolTraces.length > 0 ? JSON.stringify(run.toolTraces) : null,
-              },
-            });
-            await prisma.aiChatSession.update({
-              where: { id: run.sessionId },
-              data: { updatedAt: new Date() },
-            });
-          } catch (dbErr) {
-            console.error("[SessionRunner] Failed to persist partial assistant message:", dbErr);
-          }
+          await saveAssistantMessage(
+            run.sessionId,
+            run.userId,
+            finalMsg,
+            run.toolTraces,
+            params.accessToken
+          );
           run.broadcast({ type: "done" });
           return;
         }
 
         // Persist assistant response upon successful completion
-        try {
-          await prisma.aiChatMessage.create({
-            data: {
-              sessionId: run.sessionId,
-              role: "assistant",
-              content: run.fullText || "未能获取有效回复，请重试。",
-              toolsJson: run.toolTraces.length > 0 ? JSON.stringify(run.toolTraces) : null,
-            },
-          });
-          await prisma.aiChatSession.update({
-            where: { id: run.sessionId },
-            data: { updatedAt: new Date() },
-          });
-        } catch (dbErr) {
-          console.error("[SessionRunner] Failed to persist assistant message:", dbErr);
-        }
+        await saveAssistantMessage(
+          run.sessionId,
+          run.userId,
+          run.fullText || "未能获取有效回复，请重试。",
+          run.toolTraces,
+          params.accessToken
+        );
 
         run.status = "completed";
         run.broadcast({ type: "done" });
@@ -221,42 +252,24 @@ export class ActiveChatRunManager {
         if (isTimedOut) {
           run.status = "failed";
           const fallback = run.fullText || "AI 会话执行超时，请稍后重试。";
-          try {
-            await prisma.aiChatMessage.create({
-              data: {
-                sessionId: run.sessionId,
-                role: "assistant",
-                content: fallback,
-                toolsJson: run.toolTraces.length > 0 ? JSON.stringify(run.toolTraces) : null,
-              },
-            });
-            await prisma.aiChatSession.update({
-              where: { id: run.sessionId },
-              data: { updatedAt: new Date() },
-            });
-          } catch (dbErr) {
-            console.error("[SessionRunner] Failed to persist timeout assistant message:", dbErr);
-          }
+          await saveAssistantMessage(
+            run.sessionId,
+            run.userId,
+            fallback,
+            run.toolTraces,
+            params.accessToken
+          );
           run.broadcast({ type: "done" });
         } else if (isAborted) {
           run.status = "cancelled";
           const fallback = run.fullText || "已取消生成。";
-          try {
-            await prisma.aiChatMessage.create({
-              data: {
-                sessionId: run.sessionId,
-                role: "assistant",
-                content: fallback,
-                toolsJson: run.toolTraces.length > 0 ? JSON.stringify(run.toolTraces) : null,
-              },
-            });
-            await prisma.aiChatSession.update({
-              where: { id: run.sessionId },
-              data: { updatedAt: new Date() },
-            });
-          } catch (dbErr) {
-            console.error("[SessionRunner] Failed to persist cancelled assistant message:", dbErr);
-          }
+          await saveAssistantMessage(
+            run.sessionId,
+            run.userId,
+            fallback,
+            run.toolTraces,
+            params.accessToken
+          );
           run.broadcast({ type: "done" });
         } else {
           console.error("[SessionRunner] AI agent execution error:", err);
@@ -267,22 +280,13 @@ export class ActiveChatRunManager {
           if (!run.fullText) {
             run.broadcast({ type: "text", text: fallback });
           }
-          try {
-            await prisma.aiChatMessage.create({
-              data: {
-                sessionId: run.sessionId,
-                role: "assistant",
-                content: fallback,
-                toolsJson: run.toolTraces.length > 0 ? JSON.stringify(run.toolTraces) : null,
-              },
-            });
-            await prisma.aiChatSession.update({
-              where: { id: run.sessionId },
-              data: { updatedAt: new Date() },
-            });
-          } catch (dbErr) {
-            console.error("[SessionRunner] Failed to persist fallback message:", dbErr);
-          }
+          await saveAssistantMessage(
+            run.sessionId,
+            run.userId,
+            fallback,
+            run.toolTraces,
+            params.accessToken
+          );
           run.broadcast({ type: "done" });
         }
       } finally {

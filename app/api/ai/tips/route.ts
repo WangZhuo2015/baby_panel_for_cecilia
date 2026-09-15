@@ -2,9 +2,39 @@ import { NextResponse } from "next/server";
 import { getAiTips } from "@/lib/ai-tips";
 import { requireAuth, requireBaby } from "@/lib/api-helpers";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
+import { GROWDESK_CONFIG } from "@/lib/config";
+import { resolveBffSession } from "@/lib/growdesk/session";
+import { loadWebBaby } from "@/lib/growdesk/bridge-identity";
+import { growdeskFetch } from "@/lib/growdesk/client";
 
 export async function GET(request: Request) {
   try {
+    if (GROWDESK_CONFIG.enabled) {
+      const bffSession = await resolveBffSession(request);
+      if (!bffSession) {
+        return NextResponse.json({ error: "Unauthorized: 会话无效或已过期" }, { status: 401 });
+      }
+      const { searchParams } = new URL(request.url);
+      const requestedBabyId = searchParams.get("babyId");
+      let baby: any = null;
+      if (requestedBabyId) {
+        const babyRes = await growdeskFetch<any>(`/api/v1/babies/${requestedBabyId}`, {
+          accessToken: bffSession.accessToken,
+        });
+        if (babyRes.ok && babyRes.data) {
+          baby = babyRes.data;
+        }
+      }
+      if (!baby) {
+        baby = await loadWebBaby(growdeskFetch, bffSession.accessToken);
+      }
+      if (!baby) {
+        return NextResponse.json({ error: "未找到宝宝档案" }, { status: 404 });
+      }
+      const tips = await getAiTips(baby);
+      return NextResponse.json(tips);
+    }
+
     const auth = await requireAuth(request);
     if (auth.errorResponse) return auth.errorResponse;
     const { user } = auth;

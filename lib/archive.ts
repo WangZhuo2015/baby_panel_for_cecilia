@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { isGrowDeskEnabled } from "@/lib/growdesk/config";
 import { mkdir, writeFile, chmod } from "fs/promises";
 import path from "path";
 import crypto from "crypto";
@@ -33,15 +34,20 @@ export async function archiveBuffer(
   await chmod(filePath, 0o444).catch(() => {});
   const hash = crypto.createHash("sha256").update(buf).digest("hex");
 
+  const relPath = path.relative(process.cwd(), filePath);
+  if (isGrowDeskEnabled()) {
+    return { id: `arch_${hash.slice(0, 16)}`, filePath: relPath, hash };
+  }
+
   const row = await prisma.aiArchive.create({
     data: {
       kind,
-      filePath: path.relative(process.cwd(), filePath),
+      filePath: relPath,
       contentHash: hash,
       byteSize: buf.length,
     },
   });
-  return { id: row.id, filePath: path.relative(process.cwd(), filePath), hash };
+  return { id: row.id, filePath: relPath, hash };
 }
 
 export async function archiveText(
@@ -49,6 +55,9 @@ export async function archiveText(
   content: string
 ): Promise<string> {
   const hash = crypto.createHash("sha256").update(content).digest("hex");
+  if (isGrowDeskEnabled()) {
+    return `arch_${hash.slice(0, 16)}`;
+  }
   const row = await prisma.aiArchive.create({
     data: { kind, content, contentHash: hash, byteSize: Buffer.byteLength(content) },
   });

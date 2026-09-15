@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/api-helpers";
+import { GROWDESK_CONFIG } from "@/lib/config";
+import { resolveBffSession } from "@/lib/growdesk/session";
+import { bffVoiceLogStore } from "@/lib/growdesk/voice-logs";
 
 export const dynamic = "force-dynamic";
 
@@ -9,6 +12,22 @@ export async function GET(
   props: { params: Promise<{ id: string }> }
 ) {
   try {
+    if (GROWDESK_CONFIG.enabled) {
+      const bffSession = await resolveBffSession(request);
+      if (!bffSession) {
+        return NextResponse.json({ success: false, error: "Unauthorized: 会话无效或已过期" }, { status: 401 });
+      }
+      const { id } = await props.params;
+      const log = bffVoiceLogStore.getLog(id, bffSession.user.id);
+      if (!log) {
+        return NextResponse.json(
+          { success: false, error: "未找到该语音交互记录" },
+          { status: 404 }
+        );
+      }
+      return NextResponse.json({ success: true, log });
+    }
+
     const auth = await requireAuth(request);
     if (auth.errorResponse) return auth.errorResponse;
 
@@ -42,6 +61,25 @@ export async function PATCH(
   props: { params: Promise<{ id: string }> }
 ) {
   try {
+    if (GROWDESK_CONFIG.enabled) {
+      const bffSession = await resolveBffSession(request);
+      if (!bffSession) {
+        return NextResponse.json({ success: false, error: "Unauthorized: 会话无效或已过期" }, { status: 401 });
+      }
+      const { id } = await props.params;
+      const body = await request.json().catch(() => ({}));
+      const acknowledged = body.acknowledged === true || body.acknowledged === "true";
+
+      const ok = bffVoiceLogStore.acknowledgeLog(id, bffSession.user.id, acknowledged);
+      if (!ok) {
+        return NextResponse.json(
+          { success: false, error: "记录不存在或无权修改" },
+          { status: 404 }
+        );
+      }
+      return NextResponse.json({ success: true });
+    }
+
     const auth = await requireAuth(request);
     if (auth.errorResponse) return auth.errorResponse;
 

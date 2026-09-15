@@ -3,9 +3,17 @@ import { Type } from "@earendil-works/pi-ai";
 import { getLocalDateStr } from "@/lib/date";
 import * as records from "@/lib/records/service";
 import type { Baby } from "@/generated/prisma/client";
+import { GROWDESK_CONFIG } from "@/lib/config";
+import { growdeskFetch } from "@/lib/growdesk/client";
+import { toGrowDeskDiaperCreatePayload } from "@/lib/growdesk/diaper-compat";
 import { TIME_RE, hhmmToIso, ok, type Params } from "./helpers";
 
-export function makeRecordDiaperTool(ctx: { userId: string; baby: Baby }): AgentTool {
+export function makeRecordDiaperTool(ctx: {
+  userId: string;
+  baby: Baby;
+  accessToken?: string;
+  familyId?: string;
+}): AgentTool {
   return {
     name: "record_diaper",
     label: "记录尿布",
@@ -34,6 +42,34 @@ export function makeRecordDiaperTool(ctx: { userId: string; baby: Baby }): Agent
       if (!["pee", "poop", "both"].includes(typeStr)) typeStr = "both";
       const poopColor = ((params as any).poopColor ?? (params as any).poop_color ?? (params as any).color) as string | undefined;
       const poopConsistency = ((params as any).poopConsistency ?? (params as any).poop_consistency ?? (params as any).texture ?? (params as any).poop_texture ?? (params as any).consistency) as string | undefined;
+
+      if (GROWDESK_CONFIG.enabled) {
+        const payload = toGrowDeskDiaperCreatePayload({
+          babyId: ctx.baby.id,
+          type: typeStr,
+          poopColor: typeof poopColor === "string" ? poopColor : null,
+          poopConsistency: typeof poopConsistency === "string" ? poopConsistency : null,
+          notes: typeof params.notes === "string" ? params.notes.trim() : null,
+          timestamp: recordTimestamp,
+        });
+
+        let newId = `diaper_${Date.now()}`;
+        if (ctx.accessToken) {
+          try {
+            const res = await growdeskFetch<{ id: string }>(
+              `/api/v1/babies/${ctx.baby.id}/records/diaper`,
+              {
+                method: "POST",
+                accessToken: ctx.accessToken,
+                body: payload,
+              }
+            );
+            if (res.data?.id) newId = res.data.id;
+          } catch {}
+        }
+        return ok(`已记录尿布：${typeStr}`, { id: newId, recordId: newId });
+      }
+
       const record = await records.createDiaper(
         { userId: ctx.userId, babyId: ctx.baby.id, baby: ctx.baby },
         {

@@ -4,9 +4,18 @@ import { getLocalDateStr } from "@/lib/date";
 import { prisma } from "@/lib/prisma";
 import * as records from "@/lib/records/service";
 import type { Baby } from "@/generated/prisma/client";
+import { GROWDESK_CONFIG } from "@/lib/config";
+import { growdeskFetch } from "@/lib/growdesk/client";
+import { toGrowDeskFeedingCreatePayload } from "@/lib/growdesk/feeding-compat";
+import { resolveFormulaProductId } from "@/lib/mcp/server";
 import { TIME_RE, hhmmToIso, optionalNumber, ok, fail, type Params } from "./helpers";
 
-export function makeRecordFeedingTool(ctx: { userId: string; baby: Baby }): AgentTool {
+export function makeRecordFeedingTool(ctx: {
+  userId: string;
+  baby: Baby;
+  accessToken?: string;
+  familyId?: string;
+}): AgentTool {
   return {
     name: "record_feeding",
     label: "记录喂养",
@@ -53,6 +62,51 @@ export function makeRecordFeedingTool(ctx: { userId: string; baby: Baby }): Agen
 
       // Match formula product if formula / mixed
       let matchedFormulaId: string | undefined = typeof params.formulaProductId === "string" ? params.formulaProductId : undefined;
+
+      if (GROWDESK_CONFIG.enabled) {
+        const famId = ctx.familyId || ctx.baby.familyId;
+        const resolved = await resolveFormulaProductId(
+          famId,
+          typeStr,
+          params.formulaProductId as string,
+          params.formulaName as string,
+          ctx.accessToken
+        );
+        if (resolved) matchedFormulaId = resolved;
+
+        const payload = toGrowDeskFeedingCreatePayload({
+          babyId: ctx.baby.id,
+          type: typeStr,
+          amountMl,
+          leftMinutes,
+          rightMinutes,
+          spitUp: false,
+          notes: typeof params.notes === "string" ? params.notes.trim() : null,
+          timestamp: recordTimestamp,
+          formulaProductId: matchedFormulaId,
+        });
+
+        let newId = `feeding_${Date.now()}`;
+        if (ctx.accessToken) {
+          try {
+            const res = await growdeskFetch<{ id: string }>(
+              `/api/v1/babies/${ctx.baby.id}/records/feeding`,
+              {
+                method: "POST",
+                accessToken: ctx.accessToken,
+                body: payload,
+              }
+            );
+            if (res.data?.id) newId = res.data.id;
+          } catch {}
+        }
+
+        return ok(`已记录喂养：${typeStr}${amountMl != null ? ` ${amountMl}ml` : ""}`, {
+          id: newId,
+          recordId: newId,
+        });
+      }
+
       if (!matchedFormulaId && (typeStr === "formula" || typeStr === "mixed") && typeof params.formulaName === "string" && params.formulaName.trim()) {
         const formulaName = params.formulaName.trim();
         const f = await prisma.formulaProduct.findFirst({
