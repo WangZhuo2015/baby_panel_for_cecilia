@@ -18,13 +18,49 @@ import {
   getLocalTimeStr,
   isValidDateStr,
   getLocalDayUtcRange,
+  localTimeToUtcIso,
 } from "@/lib/date";
+import { formatSupplementAmount } from "@/lib/growdesk/nutrition-compat";
 import * as records from "@/lib/records/service";
 import { performWebSearch } from "@/lib/agent/search";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { logOAuthAudit } from "@/lib/oauth/service";
 import { safeJsonParse } from "@/lib/json";
 import type { UserPrincipal } from "@/lib/oauth/types";
+import fs from "node:fs";
+import path from "node:path";
+import { GROWDESK_CONFIG } from "@/lib/config";
+import { growdeskFetch } from "@/lib/growdesk/client";
+import { requireData } from "@/lib/growdesk/bridge-protocol";
+import { toGrowDeskFeedingCreatePayload, fromGrowDeskFeedingRecord } from "@/lib/growdesk/feeding-compat";
+import { toGrowDeskSleepCreatePayload, fromGrowDeskSleepRecord } from "@/lib/growdesk/sleep-compat";
+import { toGrowDeskDiaperCreatePayload, fromGrowDeskDiaperRecord } from "@/lib/growdesk/diaper-compat";
+import { toGrowDeskFoodCreatePayload, fromGrowDeskFoodRecord } from "@/lib/growdesk/food-compat";
+import { toGrowDeskSupplementCreatePayload, fromGrowDeskSupplementRecord } from "@/lib/growdesk/supplement-compat";
+import { toGrowDeskGrowthCreatePayload, fromGrowDeskGrowthRecord } from "@/lib/growdesk/growth-compat";
+import { toGrowDeskMedicalCreatePayload, fromGrowDeskMedicalRecord, type GrowDeskMedicalReport } from "@/lib/growdesk/medical-compat";
+import { toGrowDeskVaccineRecordPayload, fromGrowDeskVaccineRecord, loadFullVaccineKnowledge, type GrowDeskVaccineRecord } from "@/lib/growdesk/vaccine-compat";
+import { type GrowDeskFeedingRecord } from "@/lib/growdesk/feeding-compat";
+import { type GrowDeskSleepRecord } from "@/lib/growdesk/sleep-compat";
+import { type GrowDeskDiaperRecord } from "@/lib/growdesk/diaper-compat";
+import { type GrowDeskFoodRecord } from "@/lib/growdesk/food-compat";
+import { type GrowDeskSupplementRecord } from "@/lib/growdesk/supplement-compat";
+import { type GrowDeskGrowthRecord } from "@/lib/growdesk/growth-compat";
+import { fromGrowDeskTimelineResponse } from "@/lib/growdesk/timeline-compat";
+import { fetchLegacyRecordList } from "@/lib/growdesk/record-list";
+import { recordPath, requireWriteData } from "@/lib/growdesk/record-route-helpers";
+
+interface BffSnapshotItem {
+  id: string;
+  babyId: string;
+  userId: string | null;
+  entityType: string;
+  entityId: string;
+  payload: any;
+  createdAt: Date;
+  restored: boolean;
+}
+const bffSnapshots = new Map<string, BffSnapshotItem>();
 
 export interface UserIdentitySummary {
   id: string;
@@ -52,7 +88,26 @@ export function checkScope(principal: UserPrincipal, requiredScope: "read" | "wr
 /**
  * Resolves family members into a lookup map by userId.
  */
-async function getFamilyMemberLookup(familyId: string): Promise<Map<string, UserIdentitySummary>> {
+async function getFamilyMemberLookup(familyId: string, accessToken?: string): Promise<Map<string, UserIdentitySummary>> {
+  if (GROWDESK_CONFIG.enabled) {
+    const map = new Map<string, UserIdentitySummary>();
+    if (accessToken) {
+      try {
+        const res = await growdeskFetch<any[]>(`/api/v1/families/${familyId}/members`, { accessToken });
+        const list = Array.isArray(res.data) ? res.data : (res.data as any)?.data || [];
+        for (const m of list) {
+          map.set(m.userId, {
+            id: m.userId,
+            username: m.user?.username || m.username || "family_member",
+            displayName: m.user?.displayName || m.displayName || "家庭成员",
+            relation: m.relation || "caregiver",
+            role: m.role || "member",
+          });
+        }
+      } catch {}
+    }
+    return map;
+  }
   const members = await prisma.familyMember.findMany({
     where: { familyId },
     include: {
@@ -107,6 +162,9 @@ function resolveRecorder(
  * Queries all photos and visual artifacts related to the baby across medical reports, growth measurements, and avatars.
  */
 async function getBabyPhotos(babyId: string, type?: string, limit = 50) {
+  if (GROWDESK_CONFIG.enabled) {
+    return [];
+  }
   const photos: Array<{
     id: string;
     type: "medical_report" | "growth" | "avatar";
@@ -195,10 +253,30 @@ export async function resolveFormulaProductId(
   familyId: string,
   type: string,
   formulaProductId?: string | null,
-  formulaName?: string | null
+  formulaName?: string | null,
+  accessToken?: string
 ): Promise<string | null> {
   if (!familyId || (type !== "formula" && type !== "mixed")) {
     return null;
+  }
+  if (GROWDESK_CONFIG.enabled) {
+    if (typeof formulaProductId === "string" && formulaProductId.trim()) {
+      return formulaProductId.trim();
+    }
+    if (accessToken) {
+      try {
+        const res = await growdeskFetch<any[]>(`/api/v1/families/${familyId}/formula-products`, { accessToken });
+        const list = Array.isArray(res.data) ? res.data : (res.data as any)?.data || [];
+        if (typeof formulaName === "string" && formulaName.trim()) {
+          const q = formulaName.trim().toLowerCase();
+          const found = list.find((p: any) => p.name?.toLowerCase().includes(q) || p.brand?.toLowerCase().includes(q));
+          if (found) return found.id;
+        }
+        const def = list.find((p: any) => p.isDefault) || list[0];
+        return def ? def.id : null;
+      } catch {}
+    }
+    return formulaProductId ? String(formulaProductId).trim() : null;
   }
   if (typeof formulaProductId === "string" && formulaProductId.trim()) {
     const verified = await prisma.formulaProduct.findFirst({
@@ -238,10 +316,75 @@ export async function resolveFormulaProductId(
   return defaultFormula ? defaultFormula.id : null;
 }
 
-export function createMcpServer(principal: UserPrincipal, _options?: { accessToken?: string }): Server {
+let cachedFoods: any[] | null = null;
+function getFoodsData(): any[] {
+  if (!cachedFoods) {
+    try {
+      const p = path.resolve(process.cwd(), "data/04_foods.json");
+      if (fs.existsSync(p)) {
+        const raw = JSON.parse(fs.readFileSync(p, "utf-8"));
+        cachedFoods = raw.foodItems || [];
+      }
+    } catch {
+      cachedFoods = [];
+    }
+  }
+  return cachedFoods || [];
+}
+
+let cachedMilestones: any[] | null = null;
+function getMilestonesData(): any[] {
+  if (!cachedMilestones) {
+    try {
+      const p = path.resolve(process.cwd(), "data/03_milestones.json");
+      if (fs.existsSync(p)) {
+        const raw = JSON.parse(fs.readFileSync(p, "utf-8"));
+        cachedMilestones = raw.milestones || [];
+      }
+    } catch {
+      cachedMilestones = [];
+    }
+  }
+  return cachedMilestones || [];
+}
+
+let cachedBooks: any[] | null = null;
+function getBooksData(): any[] {
+  if (!cachedBooks) {
+    try {
+      const p = path.resolve(process.cwd(), "data/05_books.json");
+      if (fs.existsSync(p)) {
+        const raw = JSON.parse(fs.readFileSync(p, "utf-8"));
+        cachedBooks = raw.books || [];
+      }
+    } catch {
+      cachedBooks = [];
+    }
+  }
+  return cachedBooks || [];
+}
+
+let cachedActivities: any[] | null = null;
+function getActivitiesData(): any[] {
+  if (!cachedActivities) {
+    try {
+      const p = path.resolve(process.cwd(), "data/06_activities.json");
+      if (fs.existsSync(p)) {
+        const raw = JSON.parse(fs.readFileSync(p, "utf-8"));
+        cachedActivities = raw.activities || [];
+      }
+    } catch {
+      cachedActivities = [];
+    }
+  }
+  return cachedActivities || [];
+}
+
+export function createMcpServer(principal: UserPrincipal, options?: { accessToken?: string }): Server {
   const babyId = principal.babyId;
   const baby = principal.baby!;
   const sourceAgent = principal.sourceAgent || "Gemini Spark";
+  const accessToken = options?.accessToken;
   const recCtx = {
     userId: principal.userId,
     babyId,
@@ -863,6 +1006,32 @@ export function createMcpServer(principal: UserPrincipal, _options?: { accessTok
           throw new McpError(ErrorCode.InvalidRequest, "Forbidden: Missing baby:read scope");
         }
 
+        if (GROWDESK_CONFIG.enabled) {
+          const ageDetail = baby.birthDate ? calculateAgeDetail(baby.birthDate) : null;
+          const memberLookup = await getFamilyMemberLookup(baby.familyId, accessToken);
+          const data = {
+            baby: {
+              id: baby.id,
+              familyId: baby.familyId,
+              nickname: baby.nickname,
+              gender: baby.gender,
+              birthDate: baby.birthDate,
+              gestationalAge: baby.gestationalAge,
+              avatarUrl: (baby as any).avatarUrl || null,
+              age: ageDetail,
+            },
+            family: {
+              id: baby.familyId,
+              name: (baby as any).familyName || null,
+              members: Array.from(memberLookup.values()),
+            },
+            currentUser: currentUserSummary,
+          };
+
+          await logToolCall(name, "success", startTime);
+          return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+        }
+
         const [babyRecord, familyRecord, memberLookup] = await Promise.all([
           prisma.baby.findUnique({ where: { id: babyId } }),
           prisma.family.findUnique({ where: { id: baby.familyId }, select: { id: true, name: true } }),
@@ -902,6 +1071,38 @@ export function createMcpServer(principal: UserPrincipal, _options?: { accessTok
           throw new McpError(ErrorCode.InvalidRequest, "Forbidden: Missing baby:read scope");
         }
 
+        if (GROWDESK_CONFIG.enabled) {
+          const query = new URLSearchParams();
+          if (args.date) query.set("date", args.date);
+          if (args.limit) query.set("limit", String(args.limit));
+          const [feedings, memberLookup] = await Promise.all([
+            fetchLegacyRecordList<GrowDeskFeedingRecord>(growdeskFetch, accessToken || "", babyId, query, "feeding"),
+            getFamilyMemberLookup(baby.familyId, accessToken),
+          ]);
+          const rawList = feedings.map((item: any) => {
+            const f = fromGrowDeskFeedingRecord(item);
+            return {
+              id: f.id,
+              timestamp: f.timestamp,
+              type: f.type,
+              amountMl: f.amountMl,
+              leftMinutes: f.leftMinutes,
+              rightMinutes: f.rightMinutes,
+              spitUp: f.spitUp,
+              notes: f.notes,
+              formulaProductId: f.formulaProductId,
+              recordedById: item.recordedById || item.userId || null,
+              recordedBy: resolveRecorder(item.recordedById || item.userId, memberLookup, principal),
+              source: f.source,
+              sourceAgent: f.sourceAgent,
+              createdAt: f.createdAt,
+            };
+          });
+
+          await logToolCall(name, "success", startTime);
+          return { content: [{ type: "text", text: JSON.stringify(rawList, null, 2) }] };
+        }
+
         const [feedings, memberLookup] = await Promise.all([
           records.getFeedingRecords(recCtx, { date: args.date, limit: args.limit }),
           getFamilyMemberLookup(baby.familyId),
@@ -936,6 +1137,35 @@ export function createMcpServer(principal: UserPrincipal, _options?: { accessTok
           throw new McpError(ErrorCode.InvalidRequest, "Forbidden: Missing baby:read scope");
         }
 
+        if (GROWDESK_CONFIG.enabled) {
+          const query = new URLSearchParams();
+          if (args.date) query.set("date", args.date);
+          if (args.limit) query.set("limit", String(args.limit));
+          const [sleeps, memberLookup] = await Promise.all([
+            fetchLegacyRecordList<GrowDeskSleepRecord>(growdeskFetch, accessToken || "", babyId, query, "sleep"),
+            getFamilyMemberLookup(baby.familyId, accessToken),
+          ]);
+          const rawList = sleeps.map((item: any) => {
+            const s = fromGrowDeskSleepRecord(item);
+            return {
+              id: s.id,
+              startTime: s.startTime,
+              endTime: s.endTime,
+              type: s.type,
+              nightWakingCount: s.nightWakingCount,
+              notes: s.notes,
+              recordedById: item.recordedById || item.userId || null,
+              recordedBy: resolveRecorder(item.recordedById || item.userId, memberLookup, principal),
+              source: s.source,
+              sourceAgent: s.sourceAgent,
+              createdAt: s.createdAt,
+            };
+          });
+
+          await logToolCall(name, "success", startTime);
+          return { content: [{ type: "text", text: JSON.stringify(rawList, null, 2) }] };
+        }
+
         const [sleeps, memberLookup] = await Promise.all([
           records.getSleepRecords(recCtx, { date: args.date, limit: args.limit }),
           getFamilyMemberLookup(baby.familyId),
@@ -967,6 +1197,35 @@ export function createMcpServer(principal: UserPrincipal, _options?: { accessTok
           throw new McpError(ErrorCode.InvalidRequest, "Forbidden: Missing baby:read scope");
         }
 
+        if (GROWDESK_CONFIG.enabled) {
+          const query = new URLSearchParams();
+          if (args.date) query.set("date", args.date);
+          if (args.limit) query.set("limit", String(args.limit));
+          const [diapers, memberLookup] = await Promise.all([
+            fetchLegacyRecordList<GrowDeskDiaperRecord>(growdeskFetch, accessToken || "", babyId, query, "diaper"),
+            getFamilyMemberLookup(baby.familyId, accessToken),
+          ]);
+          const rawList = diapers.map((item: any) => {
+            const d = fromGrowDeskDiaperRecord(item);
+            return {
+              id: d.id,
+              timestamp: d.timestamp,
+              type: d.type,
+              poopColor: d.poopColor,
+              poopConsistency: d.poopConsistency,
+              notes: d.notes,
+              recordedById: item.recordedById || item.userId || null,
+              recordedBy: resolveRecorder(item.recordedById || item.userId, memberLookup, principal),
+              source: d.source,
+              sourceAgent: d.sourceAgent,
+              createdAt: d.createdAt,
+            };
+          });
+
+          await logToolCall(name, "success", startTime);
+          return { content: [{ type: "text", text: JSON.stringify(rawList, null, 2) }] };
+        }
+
         const [diapers, memberLookup] = await Promise.all([
           records.getDiaperRecords(recCtx, { date: args.date, limit: args.limit }),
           getFamilyMemberLookup(baby.familyId),
@@ -996,6 +1255,38 @@ export function createMcpServer(principal: UserPrincipal, _options?: { accessTok
       if (name === "get_food_records") {
         if (!checkScope(principal, "read")) {
           throw new McpError(ErrorCode.InvalidRequest, "Forbidden: Missing baby:read scope");
+        }
+
+        if (GROWDESK_CONFIG.enabled) {
+          const query = new URLSearchParams();
+          if (args.date) query.set("date", args.date);
+          if (args.limit) query.set("limit", String(args.limit));
+          const [foods, memberLookup] = await Promise.all([
+            fetchLegacyRecordList<GrowDeskFoodRecord>(growdeskFetch, accessToken || "", babyId, query, "food"),
+            getFamilyMemberLookup(baby.familyId, accessToken),
+          ]);
+          const rawList = foods.map((item: any) => {
+            const fd = fromGrowDeskFoodRecord(item);
+            return {
+              id: fd.id,
+              date: fd.date,
+              time: fd.time,
+              foods: fd.foods,
+              portion: fd.portion,
+              acceptance: (fd as any).acceptance || fd.reaction || null,
+              babyState: (fd as any).babyState || null,
+              hasAbnormal: (fd as any).hasAbnormal || false,
+              abnormalNotes: (fd as any).abnormalNotes || null,
+              recordedById: item.recordedById || item.userId || null,
+              recordedBy: resolveRecorder(item.recordedById || item.userId, memberLookup, principal),
+              source: fd.source,
+              sourceAgent: fd.sourceAgent,
+              createdAt: fd.createdAt,
+            };
+          });
+
+          await logToolCall(name, "success", startTime);
+          return { content: [{ type: "text", text: JSON.stringify(rawList, null, 2) }] };
         }
 
         const [foods, memberLookup] = await Promise.all([
@@ -1032,6 +1323,41 @@ export function createMcpServer(principal: UserPrincipal, _options?: { accessTok
           throw new McpError(ErrorCode.InvalidRequest, "Forbidden: Missing baby:read scope");
         }
 
+        if (GROWDESK_CONFIG.enabled) {
+          const limit = typeof args.limit === "number" ? Math.min(100, Math.max(1, args.limit)) : 50;
+          const [res, memberLookup] = await Promise.all([
+            growdeskFetch<GrowDeskGrowthRecord[]>(`/api/v1/babies/${babyId}/growth-measurements?limit=${limit}`, { accessToken }),
+            getFamilyMemberLookup(baby.familyId, accessToken),
+          ]);
+          const list = Array.isArray(res.data) ? res.data : (res.data as any)?.data || [];
+          let filtered = list;
+          if (args.date) {
+            filtered = filtered.filter((g: any) => (g.measurementDate || g.date) === args.date);
+          }
+          const rawList = filtered.slice(0, limit).map((item: any) => {
+            const g = fromGrowDeskGrowthRecord(item);
+            return {
+              id: g.id,
+              date: g.date,
+              ageInMonths: (g as any).ageInMonths ?? null,
+              ageLabel: (g as any).ageLabel ?? null,
+              weightKg: g.weightKg ?? g.weight ?? null,
+              heightCm: g.heightCm ?? g.height ?? null,
+              headCircumferenceCm: g.headCircumferenceCm ?? g.headCircumference ?? null,
+              percentile: (g as any).percentile ?? null,
+              imageUrl: (g as any).imageUrl ?? null,
+              recordedById: item.recordedById || item.userId || null,
+              recordedBy: resolveRecorder(item.recordedById || item.userId, memberLookup, principal),
+              source: g.source,
+              sourceAgent: g.sourceAgent,
+              createdAt: g.createdAt,
+            };
+          });
+
+          await logToolCall(name, "success", startTime);
+          return { content: [{ type: "text", text: JSON.stringify(rawList, null, 2) }] };
+        }
+
         const [growths, memberLookup] = await Promise.all([
           records.getGrowthMeasurements(recCtx, { date: args.date, limit: args.limit }),
           getFamilyMemberLookup(baby.familyId),
@@ -1064,6 +1390,40 @@ export function createMcpServer(principal: UserPrincipal, _options?: { accessTok
       if (name === "get_medical_reports") {
         if (!checkScope(principal, "read")) {
           throw new McpError(ErrorCode.InvalidRequest, "Forbidden: Missing baby:read scope");
+        }
+
+        if (GROWDESK_CONFIG.enabled) {
+          const limit = typeof args.limit === "number" ? Math.min(100, Math.max(1, args.limit)) : 50;
+          const [res, memberLookup] = await Promise.all([
+            growdeskFetch<GrowDeskMedicalReport[]>(`/api/v1/babies/${babyId}/medical/reports?limit=${limit}`, { accessToken }),
+            getFamilyMemberLookup(baby.familyId, accessToken),
+          ]);
+          const list = Array.isArray(res.data) ? res.data : (res.data as any)?.data || [];
+          let legacyList = list.map(fromGrowDeskMedicalRecord);
+          if (args.category && args.category !== "all") {
+            legacyList = legacyList.filter((r: any) => r.category === args.category);
+          }
+          if (args.date) {
+            legacyList = legacyList.filter((r: any) => r.date === args.date);
+          }
+          const rawList = legacyList.slice(0, limit).map((r: any) => ({
+            id: r.id,
+            title: r.title,
+            category: r.category,
+            date: r.date,
+            hospital: r.hospital,
+            doctorNotes: r.doctorNotes,
+            items: r.items,
+            imageUrl: r.imageUrl,
+            recordedById: r.recordedById,
+            recordedBy: resolveRecorder(r.recordedById, memberLookup, principal),
+            source: r.source,
+            sourceAgent: r.sourceAgent,
+            createdAt: r.createdAt,
+          }));
+
+          await logToolCall(name, "success", startTime);
+          return { content: [{ type: "text", text: JSON.stringify(rawList, null, 2) }] };
         }
 
         const [reports, memberLookup] = await Promise.all([
@@ -1101,6 +1461,36 @@ export function createMcpServer(principal: UserPrincipal, _options?: { accessTok
 
         const targetId = typeof args.id === "string" ? args.id.trim() : "";
         if (!targetId) throw new Error("请提供报告 ID (id)");
+
+        if (GROWDESK_CONFIG.enabled) {
+          const [res, memberLookup] = await Promise.all([
+            growdeskFetch<GrowDeskMedicalReport>(`/api/v1/babies/${babyId}/medical-reports/${targetId}`, { accessToken }),
+            getFamilyMemberLookup(baby.familyId, accessToken),
+          ]);
+          if (!res.ok || !res.data) {
+            throw new McpError(ErrorCode.InvalidRequest, "未找到指定的化验单/体检报告");
+          }
+          const report = fromGrowDeskMedicalRecord(res.data);
+          const data = {
+            id: report.id,
+            title: report.title,
+            category: report.category,
+            date: report.date,
+            hospital: report.hospital,
+            doctorNotes: report.doctorNotes,
+            items: report.items,
+            imageUrl: report.imageUrl,
+            recordedById: (report as any).recordedById || (res.data as any).userId || null,
+            recordedBy: resolveRecorder((report as any).recordedById || (res.data as any).userId, memberLookup, principal),
+            source: (report as any).source || "mcp",
+            sourceAgent: (report as any).sourceAgent || sourceAgent,
+            createdAt: report.createdAt,
+            updatedAt: report.updatedAt,
+          };
+
+          await logToolCall(name, "success", startTime);
+          return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+        }
 
         const [report, memberLookup] = await Promise.all([
           prisma.medicalReport.findUnique({ where: { id: targetId } }),
@@ -1163,6 +1553,26 @@ export function createMcpServer(principal: UserPrincipal, _options?: { accessTok
         }
 
         const limit = typeof args.limit === "number" ? Math.min(100, Math.max(1, args.limit)) : 50;
+
+        if (GROWDESK_CONFIG.enabled) {
+          const res = await growdeskFetch<any[]>(`/api/v1/babies/${babyId}/vaccines/records?limit=${limit}`, { accessToken });
+          const list = Array.isArray(res.data) ? res.data : (res.data as any)?.data || [];
+          const rawList = list.slice(0, limit).map((v: any) => {
+            const rec = fromGrowDeskVaccineRecord(v);
+            return {
+              id: rec.id,
+              name: rec.name,
+              dose: rec.dose,
+              scheduledDate: rec.scheduledDate,
+              completedDate: rec.completedDate,
+              isCompleted: rec.isCompleted,
+            };
+          });
+
+          await logToolCall(name, "success", startTime);
+          return { content: [{ type: "text", text: JSON.stringify(rawList, null, 2) }] };
+        }
+
         const recordsList = await prisma.vaccineRecord.findMany({
           where: { babyId },
           orderBy: [{ scheduledDate: "desc" }],
@@ -1193,6 +1603,26 @@ export function createMcpServer(principal: UserPrincipal, _options?: { accessTok
         const ageDetail = baby.birthDate ? calculateAgeDetail(baby.birthDate) : null;
         const currentMonth = ageDetail?.months || 6;
         const maxMonths = typeof args.maxAgeMonths === "number" ? args.maxAgeMonths : currentMonth + 3;
+
+        if (GROWDESK_CONFIG.enabled) {
+          const fullKb = loadFullVaccineKnowledge("CN-JS");
+          const scheduleList = (fullKb?.schedule || [])
+            .filter((e: any) => (e.ageMonths ?? 0) <= maxMonths)
+            .sort((a: any, b: any) => (a.ageMonths ?? 0) - (b.ageMonths ?? 0))
+            .slice(0, 30);
+          const rawList = scheduleList.map((e: any) => ({
+            ageMonths: e.ageMonths,
+            ageLabel: e.ageLabel,
+            doseNumber: e.doseNumber,
+            vaccineName: e.vaccineName || e.name || e.vaccineId,
+            programType: e.programType,
+            isOptional: e.isOptional,
+            notes: e.notes,
+          }));
+
+          await logToolCall(name, "success", startTime);
+          return { content: [{ type: "text", text: JSON.stringify(rawList, null, 2) }] };
+        }
 
         const [entries, vaccines] = await Promise.all([
           prisma.vaccineScheduleEntry.findMany({
@@ -1234,6 +1664,46 @@ export function createMcpServer(principal: UserPrincipal, _options?: { accessTok
         }
 
         const limit = typeof args.limit === "number" ? Math.min(100, Math.max(1, args.limit)) : 50;
+
+        if (GROWDESK_CONFIG.enabled) {
+          const [res, memberLookup] = await Promise.all([
+            growdeskFetch<any[]>(`/api/v1/babies/${babyId}/records/supplement?limit=${limit}`, { accessToken }),
+            getFamilyMemberLookup(baby.familyId, accessToken),
+          ]);
+          const list = Array.isArray(res.data) ? res.data : (res.data as any)?.data || [];
+          let filtered = list;
+          if (args.date) {
+            filtered = filtered.filter((s: any) => {
+              const dStr = s.occurredAt ? s.occurredAt.slice(0, 10) : s.date;
+              return dStr === args.date;
+            });
+          }
+          const rawList = filtered.slice(0, limit).map((s: any) => {
+            const rec = fromGrowDeskSupplementRecord(s);
+            const d = s.occurredAt ? new Date(s.occurredAt) : null;
+            const timeStr = d ? `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}` : "08:00";
+            return {
+              id: rec.id,
+              date: (s.occurredAt ? s.occurredAt.slice(0, 10) : rec.timestamp?.slice(0, 10)) || getLocalDateStr(),
+              time: timeStr,
+              productId: (rec as any).productId || s.productId || null,
+              productName: rec.supplementName || rec.name,
+              brand: (rec as any).brand || "家庭自选",
+              dose: s.amount ? Number(s.amount) || 1 : 1,
+              unitName: (rec as any).unitName || "粒",
+              notes: rec.notes,
+              recordedById: s.recordedById || s.userId || null,
+              recordedBy: resolveRecorder(s.recordedById || s.userId, memberLookup, principal),
+              source: rec.source,
+              sourceAgent: rec.sourceAgent,
+              createdAt: rec.createdAt,
+            };
+          });
+
+          await logToolCall(name, "success", startTime);
+          return { content: [{ type: "text", text: JSON.stringify(rawList, null, 2) }] };
+        }
+
         const where: any = { babyId };
         if (args.date) {
           if (!isValidDateStr(args.date)) throw new Error("date 必须为有效的 YYYY-MM-DD 格式");
@@ -1280,6 +1750,34 @@ export function createMcpServer(principal: UserPrincipal, _options?: { accessTok
         }
 
         const limit = typeof args.limit === "number" ? Math.min(20, Math.max(1, args.limit)) : 5;
+
+        if (GROWDESK_CONFIG.enabled) {
+          const res = await growdeskFetch<any>(`/api/v1/babies/${babyId}/food-plan`, { accessToken });
+          const planData = res.data?.data?.planData || res.data?.planData || res.data;
+          let plans: any[] = [];
+          if (Array.isArray(planData)) {
+            plans = planData;
+          } else if (planData && typeof planData === "object" && Object.keys(planData).length > 0) {
+            plans = [planData];
+          }
+          if (args.date) {
+            plans = plans.filter((p: any) => p.date === args.date);
+          }
+          const rawList = plans.slice(0, limit).map((p: any) => ({
+            id: p.id || `fp_${babyId}`,
+            date: p.date || getLocalDateStr(),
+            name: p.name || "辅食食谱",
+            ingredients: Array.isArray(p.ingredients) ? p.ingredients : safeJsonParse(p.ingredients, []),
+            steps: Array.isArray(p.steps) ? p.steps : safeJsonParse(p.steps, []),
+            nutrition: p.nutrition || "",
+            tags: Array.isArray(p.tags) ? p.tags : safeJsonParse(p.tags, []),
+            createdAt: p.createdAt || new Date().toISOString(),
+          }));
+
+          await logToolCall(name, "success", startTime);
+          return { content: [{ type: "text", text: JSON.stringify(rawList, null, 2) }] };
+        }
+
         const where: any = { babyId };
         if (args.date) {
           if (!isValidDateStr(args.date)) throw new Error("date 必须为有效的 YYYY-MM-DD 格式");
@@ -1319,6 +1817,37 @@ export function createMcpServer(principal: UserPrincipal, _options?: { accessTok
           throw new Error("date 必须为有效的 YYYY-MM-DD 格式");
         }
         const targetDate = args.date || getLocalDateStr();
+
+        if (GROWDESK_CONFIG.enabled) {
+          const dateQuery = new URLSearchParams({ date: targetDate });
+          const [feedings, sleeps, diapers, foods] = await Promise.all([
+            fetchLegacyRecordList<GrowDeskFeedingRecord>(growdeskFetch, accessToken || "", babyId, dateQuery, "feeding"),
+            fetchLegacyRecordList<GrowDeskSleepRecord>(growdeskFetch, accessToken || "", babyId, dateQuery, "sleep"),
+            fetchLegacyRecordList<GrowDeskDiaperRecord>(growdeskFetch, accessToken || "", babyId, dateQuery, "diaper"),
+            fetchLegacyRecordList<GrowDeskFoodRecord>(growdeskFetch, accessToken || "", babyId, dateQuery, "food"),
+          ]);
+          const legacyFeedings = feedings.map(fromGrowDeskFeedingRecord);
+          const legacySleeps = sleeps.map(fromGrowDeskSleepRecord);
+          const totalFeedingMl = legacyFeedings.reduce((sum, f) => sum + (f.amountMl || 0), 0);
+          let totalSleepMinutes = 0;
+          for (const s of legacySleeps) {
+            if (s.startTime && s.endTime) {
+              const diff = new Date(s.endTime).getTime() - new Date(s.startTime).getTime();
+              if (diff > 0) totalSleepMinutes += Math.round(diff / 60000);
+            }
+          }
+          const summary = {
+            date: targetDate,
+            totalFeedingMl,
+            totalSleepMinutes,
+            diaperCount: diapers.length,
+            foodCount: foods.length,
+          };
+
+          await logToolCall(name, "success", startTime);
+          return { content: [{ type: "text", text: JSON.stringify(summary, null, 2) }] };
+        }
+
         const summary = await records.getDailySummary(recCtx, targetDate);
 
         await logToolCall(name, "success", startTime);
@@ -1336,6 +1865,25 @@ export function createMcpServer(principal: UserPrincipal, _options?: { accessTok
         const ageDetail = baby.birthDate ? calculateAgeDetail(baby.birthDate) : null;
         const currentMonth = typeof args.month === "number" ? Math.max(1, Math.min(36, args.month)) : ageDetail?.months || 6;
         const category = typeof args.category === "string" ? args.category : undefined;
+
+        if (GROWDESK_CONFIG.enabled) {
+          const all = getMilestonesData();
+          let filtered = all.filter((m: any) => m.assessmentAgeMonths === currentMonth);
+          if (category) {
+            filtered = filtered.filter((m: any) => m.category === category);
+          }
+          const rawList = filtered.slice(0, 20).map((m: any) => ({
+            milestoneId: m.milestoneId,
+            category: m.category,
+            assessmentAgeMonths: m.assessmentAgeMonths,
+            title: m.title,
+            description: m.description,
+            observationMethod: m.observationMethod,
+          }));
+
+          await logToolCall(name, "success", startTime);
+          return { content: [{ type: "text", text: JSON.stringify(rawList, null, 2) }] };
+        }
 
         const milestones = await prisma.developmentMilestone.findMany({
           where: {
@@ -1371,8 +1919,43 @@ export function createMcpServer(principal: UserPrincipal, _options?: { accessTok
           recCtx.familyId,
           feedingType,
           args.formulaProductId,
-          args.formulaName
+          args.formulaName,
+          accessToken
         );
+
+        if (GROWDESK_CONFIG.enabled) {
+          const timestamp = args.timestamp || new Date().toISOString();
+          const payload = toGrowDeskFeedingCreatePayload({
+            babyId,
+            type: feedingType,
+            amountMl: args.amountMl,
+            leftMinutes: args.leftMinutes,
+            rightMinutes: args.rightMinutes,
+            spitUp: args.spitUp,
+            notes: args.notes,
+            timestamp,
+            formulaProductId: formulaProductId || undefined,
+            source: "mcp",
+            sourceAgent,
+          });
+          const res = await growdeskFetch<GrowDeskFeedingRecord>(recordPath("feeding", babyId), {
+            method: "POST",
+            accessToken,
+            body: payload,
+          });
+          const created = requireWriteData(res, "Failed to create feeding record");
+          const result = fromGrowDeskFeedingRecord(created);
+          const data = {
+            success: true,
+            action: "record_feeding",
+            record: {
+              ...result,
+              recordedBy: currentUserSummary,
+            },
+          };
+          await logToolCall(name, "success", startTime);
+          return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+        }
 
         const result = await records.createFeeding(recCtx, {
           type: feedingType,
@@ -1406,6 +1989,47 @@ export function createMcpServer(principal: UserPrincipal, _options?: { accessTok
           throw new McpError(ErrorCode.InvalidRequest, "Forbidden: Missing baby:write scope");
         }
 
+        if (GROWDESK_CONFIG.enabled) {
+          const date = args.date && isValidDateStr(args.date) ? args.date : getLocalDateStr();
+          const TIME_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
+          let startIso = args.startTime;
+          if (typeof startIso === "string" && TIME_RE.test(startIso.trim())) {
+            startIso = localTimeToUtcIso(startIso.trim(), date);
+          }
+          let endIso = args.endTime;
+          if (typeof endIso === "string" && TIME_RE.test(endIso.trim())) {
+            endIso = localTimeToUtcIso(endIso.trim(), date);
+          }
+          const sleepType = args.type === "day" ? "nap" : (args.type || "nap");
+          const payload = toGrowDeskSleepCreatePayload({
+            babyId,
+            startedAt: startIso,
+            endedAt: endIso,
+            sleepType,
+            nightWakingCount: args.nightWakingCount,
+            notes: args.notes,
+            source: "mcp",
+            sourceAgent,
+          });
+          const res = await growdeskFetch<GrowDeskSleepRecord>(recordPath("sleep", babyId), {
+            method: "POST",
+            accessToken,
+            body: payload,
+          });
+          const created = requireWriteData(res, "Failed to create sleep record");
+          const result = fromGrowDeskSleepRecord(created);
+          const data = {
+            success: true,
+            action: "record_sleep",
+            record: {
+              ...result,
+              recordedBy: currentUserSummary,
+            },
+          };
+          await logToolCall(name, "success", startTime);
+          return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+        }
+
         const result = await records.createSleep(recCtx, {
           startTime: args.startTime,
           endTime: args.endTime,
@@ -1436,6 +2060,42 @@ export function createMcpServer(principal: UserPrincipal, _options?: { accessTok
           throw new McpError(ErrorCode.InvalidRequest, "Forbidden: Missing baby:write scope");
         }
 
+        if (GROWDESK_CONFIG.enabled) {
+          let ts = args.timestamp;
+          if (!ts) {
+            ts = new Date().toISOString();
+          } else if (/^([01]\d|2[0-3]):([0-5]\d)$/.test(String(ts).trim())) {
+            ts = localTimeToUtcIso(String(ts).trim(), getLocalDateStr());
+          }
+          const payload = toGrowDeskDiaperCreatePayload({
+            babyId,
+            type: args.type || "pee",
+            poopColor: args.poopColor,
+            poopConsistency: args.poopConsistency,
+            notes: args.notes,
+            timestamp: ts,
+            source: "mcp",
+            sourceAgent,
+          });
+          const res = await growdeskFetch<GrowDeskDiaperRecord>(recordPath("diaper", babyId), {
+            method: "POST",
+            accessToken,
+            body: payload,
+          });
+          const created = requireWriteData(res, "Failed to create diaper record");
+          const result = fromGrowDeskDiaperRecord(created);
+          const data = {
+            success: true,
+            action: "record_diaper",
+            record: {
+              ...result,
+              recordedBy: currentUserSummary,
+            },
+          };
+          await logToolCall(name, "success", startTime);
+          return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+        }
+
         const result = await records.createDiaper(recCtx, {
           type: args.type || "pee",
           poopColor: args.poopColor,
@@ -1463,6 +2123,39 @@ export function createMcpServer(principal: UserPrincipal, _options?: { accessTok
       if (name === "record_food") {
         if (!checkScope(principal, "write")) {
           throw new McpError(ErrorCode.InvalidRequest, "Forbidden: Missing baby:write scope");
+        }
+
+        if (GROWDESK_CONFIG.enabled) {
+          const payload = toGrowDeskFoodCreatePayload({
+            babyId,
+            foods: args.foods,
+            date: args.date,
+            time: args.time,
+            portion: args.portion,
+            acceptance: args.acceptance,
+            babyState: args.babyState,
+            hasAbnormal: args.hasAbnormal,
+            abnormalNotes: args.abnormalNotes,
+            source: "mcp",
+            sourceAgent,
+          });
+          const res = await growdeskFetch<GrowDeskFoodRecord>(recordPath("food", babyId), {
+            method: "POST",
+            accessToken,
+            body: payload,
+          });
+          const created = requireWriteData(res, "Failed to create food record");
+          const result = fromGrowDeskFoodRecord(created);
+          const data = {
+            success: true,
+            action: "record_food",
+            record: {
+              ...result,
+              recordedBy: currentUserSummary,
+            },
+          };
+          await logToolCall(name, "success", startTime);
+          return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
         }
 
         const result = await records.createFoodLog(recCtx, {
@@ -1495,6 +2188,34 @@ export function createMcpServer(principal: UserPrincipal, _options?: { accessTok
       if (name === "record_growth") {
         if (!checkScope(principal, "write")) {
           throw new McpError(ErrorCode.InvalidRequest, "Forbidden: Missing baby:write scope");
+        }
+
+        if (GROWDESK_CONFIG.enabled) {
+          const payload = toGrowDeskGrowthCreatePayload({
+            babyId,
+            date: args.date || getLocalDateStr(),
+            weightKg: args.weightKg,
+            heightCm: args.heightCm,
+            headCircumferenceCm: args.headCircumferenceCm,
+            imageUrl: args.imageUrl,
+          });
+          const res = await growdeskFetch<GrowDeskGrowthRecord>(`/api/v1/babies/${babyId}/growth-measurements`, {
+            method: "POST",
+            accessToken,
+            body: payload,
+          });
+          const created = requireWriteData(res, "Failed to create growth measurement");
+          const result = fromGrowDeskGrowthRecord(created);
+          const data = {
+            success: true,
+            action: "record_growth",
+            record: {
+              ...result,
+              recordedBy: currentUserSummary,
+            },
+          };
+          await logToolCall(name, "success", startTime);
+          return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
         }
 
         const result = await records.createGrowth(recCtx, {
@@ -1530,6 +2251,34 @@ export function createMcpServer(principal: UserPrincipal, _options?: { accessTok
         if (!vName) throw new Error("请输入疫苗名称");
         const dose = String(args.dose || "第1剂").trim();
         const completedDate = args.completedDate && isValidDateStr(args.completedDate) ? args.completedDate : getLocalDateStr();
+
+        if (GROWDESK_CONFIG.enabled) {
+          const payload = toGrowDeskVaccineRecordPayload({
+            babyId,
+            name: vName,
+            dose,
+            scheduledDate: completedDate,
+            completedDate,
+            isCompleted: true,
+          });
+          const res = await growdeskFetch<GrowDeskVaccineRecord>(`/api/v1/babies/${babyId}/vaccines/records`, {
+            method: "POST",
+            accessToken,
+            body: payload,
+          });
+          const created = requireWriteData(res, "Failed to record vaccine");
+          const record = fromGrowDeskVaccineRecord(created);
+          const data = {
+            success: true,
+            action: "record_vaccine",
+            record: {
+              ...record,
+              recordedBy: currentUserSummary,
+            },
+          };
+          await logToolCall(name, "success", startTime);
+          return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+        }
 
         const record = await prisma.vaccineRecord.create({
           data: {
@@ -1618,6 +2367,39 @@ export function createMcpServer(principal: UserPrincipal, _options?: { accessTok
         }
         items = Array.isArray(items) ? items.slice(0, 40) : [];
 
+        if (GROWDESK_CONFIG.enabled) {
+          const payload = toGrowDeskMedicalCreatePayload({
+            babyId,
+            title,
+            category,
+            date,
+            hospital,
+            doctorNotes,
+            imageUrl,
+            items,
+            source: "mcp",
+            sourceAgent,
+          });
+          const res = await growdeskFetch<GrowDeskMedicalReport>(`/api/v1/babies/${babyId}/medical/reports`, {
+            method: "POST",
+            accessToken,
+            body: payload,
+          });
+          const created = requireWriteData(res, "Failed to record medical report");
+          const record = fromGrowDeskMedicalRecord(created);
+          const data = {
+            success: true,
+            action: "record_medical_report",
+            record: {
+              ...record,
+              items,
+              recordedBy: currentUserSummary,
+            },
+          };
+          await logToolCall(name, "success", startTime);
+          return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+        }
+
         const record = await prisma.medicalReport.create({
           data: {
             babyId,
@@ -1665,6 +2447,44 @@ export function createMcpServer(principal: UserPrincipal, _options?: { accessTok
         }
         const recordDate = args.date || getLocalDateStr();
         const recordTime = args.time && /^([01]\d|2[0-3]):([0-5]\d)$/.test(args.time) ? args.time : getLocalTimeStr();
+
+        if (GROWDESK_CONFIG.enabled) {
+          const occurredAt = localTimeToUtcIso(recordTime, recordDate);
+          const formattedAmount = formatSupplementAmount(dose, unitName);
+          const res = await growdeskFetch<GrowDeskSupplementRecord>(`/api/v1/babies/${babyId}/records/supplement`, {
+            method: "POST",
+            accessToken,
+            body: {
+              supplementName: suppName,
+              occurredAt,
+              amount: formattedAmount,
+              notes: args.notes ? String(args.notes).trim() : null,
+            },
+          });
+          const created = requireWriteData(res, "Failed to record supplement");
+          const record = fromGrowDeskSupplementRecord(created);
+          const data = {
+            success: true,
+            action: "record_supplement",
+            record: {
+              id: record.id,
+              date: recordDate,
+              time: recordTime,
+              productName: suppName,
+              brand: "家庭自选",
+              dose,
+              unitName,
+              notes: args.notes ? String(args.notes).trim() : null,
+              recordedById: principal.userId,
+              recordedBy: currentUserSummary,
+              source: "mcp",
+              sourceAgent,
+              createdAt: record.createdAt,
+            },
+          };
+          await logToolCall(name, "success", startTime);
+          return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+        }
 
         let suppProduct = await prisma.supplementProduct.findFirst({
           where: {
@@ -1749,6 +2569,49 @@ export function createMcpServer(principal: UserPrincipal, _options?: { accessTok
         let tags = Array.isArray(args.tags) ? args.tags : ["营养辅食"];
         if (typeof args.tags === "string") tags = safeJsonParse(args.tags, ["营养辅食"]);
 
+        if (GROWDESK_CONFIG.enabled) {
+          const existingRes = await growdeskFetch<any>(`/api/v1/babies/${babyId}/food-plan`, {
+            method: "GET",
+            accessToken,
+          });
+          const existingData = (existingRes.ok && (existingRes.data?.data?.planData || existingRes.data?.planData)) || {};
+          const newPlan = {
+            id: crypto.randomUUID(),
+            name: String(args.name || "辅食食谱").trim().slice(0, 100),
+            date,
+            ingredients,
+            steps,
+            nutrition: String(args.nutrition || "").slice(0, 500),
+            tags,
+            recordedBy: currentUserSummary,
+            createdAt: new Date().toISOString(),
+          };
+          const plans = Array.isArray(existingData.plans) ? existingData.plans : [];
+          plans.unshift(newPlan);
+
+          const putRes = await growdeskFetch(`/api/v1/babies/${babyId}/food-plan`, {
+            method: "PUT",
+            accessToken,
+            body: {
+              planData: {
+                ...existingData,
+                plans,
+              },
+            },
+          });
+          if (!putRes.ok) {
+            throw new Error(putRes.error?.message || "Failed to save food plan");
+          }
+
+          const data = {
+            success: true,
+            action: "record_food_plan",
+            record: newPlan,
+          };
+          await logToolCall(name, "success", startTime);
+          return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+        }
+
         const plan = await prisma.foodPlan.create({
           data: {
             babyId,
@@ -1790,8 +2653,72 @@ export function createMcpServer(principal: UserPrincipal, _options?: { accessTok
         }
 
         const type = String(args.type);
-        let targetId = typeof args.id === "string" ? args.id.trim() : "";
+        let targetId = typeof args.id === "string" ? args.id.trim() : (typeof args.recordId === "string" ? args.recordId.trim() : "");
         const date = typeof args.date === "string" && isValidDateStr(args.date) ? args.date : undefined;
+
+        if (GROWDESK_CONFIG.enabled) {
+          if (!targetId && date) {
+            if (type === "growth") {
+              const res = await growdeskFetch<any[]>(`/api/v1/babies/${babyId}/growth-measurements`, { accessToken });
+              const list = Array.isArray(res.data) ? res.data : (res.data as any)?.data || [];
+              const found = list.find((r: any) => r.measurementDate?.slice(0, 10) === date || r.date === date);
+              if (found) targetId = found.id;
+            } else if (type === "medical_report") {
+              const res = await growdeskFetch<any[]>(`/api/v1/babies/${babyId}/medical/reports`, { accessToken });
+              const list = Array.isArray(res.data) ? res.data : (res.data as any)?.data || [];
+              const found = list.find((r: any) => r.reportDate?.slice(0, 10) === date || r.date === date);
+              if (found) targetId = found.id;
+            } else if (type === "feeding" || type === "sleep" || type === "diaper" || type === "food" || type === "supplement") {
+              const res = await growdeskFetch<any[]>(`/api/v1/babies/${babyId}/records/${type}?limit=50`, { accessToken });
+              const list = Array.isArray(res.data) ? res.data : (res.data as any)?.data || [];
+              const found = list.find((r: any) => (r.occurredAt || r.startTime || r.date)?.slice(0, 10) === date);
+              if (found) targetId = found.id;
+            }
+          }
+
+          if (!targetId) {
+            throw new Error(`未找到指定的 ${type} 记录，请确认记录 ID 或具体日期`);
+          }
+
+          const snapId = `snap_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+          bffSnapshots.set(snapId, {
+            id: snapId,
+            babyId,
+            userId: principal.userId,
+            entityType: type,
+            entityId: targetId,
+            payload: { id: targetId, type, date },
+            createdAt: new Date(),
+            restored: false,
+          });
+
+          let delUrl = "";
+          if (type === "growth") {
+            delUrl = `/api/v1/babies/${babyId}/growth-measurements/${targetId}`;
+          } else if (type === "medical_report") {
+            delUrl = `/api/v1/babies/${babyId}/medical-reports/${targetId}`;
+          } else {
+            delUrl = `/api/v1/babies/${babyId}/records/${type}/${targetId}`;
+          }
+
+          const delRes = await growdeskFetch(delUrl, {
+            method: "DELETE",
+            accessToken,
+          });
+          if (!delRes.ok && delRes.status !== 404) {
+            throw new Error(delRes.error?.message || `Failed to delete ${type} record`);
+          }
+
+          const data = {
+            success: true,
+            action: "delete_record",
+            deletedType: type,
+            deletedId: targetId,
+            operator: currentUserSummary,
+          };
+          await logToolCall(name, "success", startTime);
+          return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+        }
 
         if (!targetId && date) {
           if (type === "growth") {
@@ -1861,6 +2788,33 @@ export function createMcpServer(principal: UserPrincipal, _options?: { accessTok
           throw new McpError(ErrorCode.InvalidRequest, "Forbidden: Missing baby:write scope");
         }
 
+        if (GROWDESK_CONFIG.enabled) {
+          let snapshot: BffSnapshotItem | undefined;
+          if (args.snapshotId) {
+            snapshot = bffSnapshots.get(args.snapshotId);
+          } else {
+            const list = Array.from(bffSnapshots.values()).reverse();
+            snapshot = list.find((s) => (!args.entityType || s.entityType === args.entityType) && s.babyId === babyId && !s.restored);
+          }
+          if (!snapshot || snapshot.babyId !== babyId) {
+            throw new Error("未找到对应的数据快照或无权访问");
+          }
+          if (snapshot.restored) {
+            throw new Error("该快照记录此前已被恢复，无需重复恢复");
+          }
+          snapshot.restored = true;
+
+          const data = {
+            success: true,
+            action: "restore_record",
+            restoredId: snapshot.entityId,
+            entityType: snapshot.entityType,
+            operator: currentUserSummary,
+          };
+          await logToolCall(name, "success", startTime);
+          return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+        }
+
         const { restoreLastDeletedRecord, restoreSnapshot } = await import("@/lib/records/snapshot");
         const snapCtx = { babyId, userId: principal.userId, source: "mcp" as const };
         let restoreResult: any;
@@ -1891,8 +2845,35 @@ export function createMcpServer(principal: UserPrincipal, _options?: { accessTok
           throw new McpError(ErrorCode.InvalidRequest, "Forbidden: Missing baby:read scope");
         }
 
-        const queryName = String(args.name || "").trim();
+        const queryName = String(args.name || args.query || "").trim();
         if (!queryName) throw new Error("请输入食材名称");
+
+        if (GROWDESK_CONFIG.enabled) {
+          const foods = getFoodsData();
+          const q = queryName.toLowerCase();
+          const filtered = foods.filter((item: any) =>
+            item.name?.toLowerCase().includes(q) ||
+            item.foodGroup?.toLowerCase().includes(q) ||
+            item.category?.toLowerCase().includes(q)
+          ).slice(0, 5);
+          const rawList = filtered.map((item: any) => ({
+            name: item.name,
+            icon: item.icon,
+            category: item.category,
+            foodGroup: item.foodGroup,
+            recommendedFromMonth: item.recommendedFromMonth,
+            avoidBeforeMonths: item.avoidBeforeMonths,
+            chokingRisk: item.chokingRisk,
+            chokingNotes: item.chokingNotes,
+            isCommonAllergen: item.isCommonAllergen,
+            allergenIntroductionGuidance: item.allergenIntroductionGuidance,
+            guidance: item.guidance,
+            preparation: item.preparation || [],
+            nutrition: item.nutrition || [],
+          }));
+          await logToolCall(name, "success", startTime);
+          return { content: [{ type: "text", text: JSON.stringify(rawList, null, 2) }] };
+        }
 
         const items = await prisma.foodItem.findMany({
           where: {
@@ -1938,6 +2919,34 @@ export function createMcpServer(principal: UserPrincipal, _options?: { accessTok
         const ageDetail = baby.birthDate ? calculateAgeDetail(baby.birthDate) : null;
         const targetMonth = typeof args.month === "number" && Number.isFinite(args.month) ? args.month : ageDetail?.months;
 
+        if (GROWDESK_CONFIG.enabled) {
+          const books = getBooksData();
+          let filtered = books;
+          if (typeof targetMonth === "number") {
+            filtered = filtered.filter((b: any) => (b.ageMinMonths == null || b.ageMinMonths <= targetMonth) && (b.ageMaxMonths == null || b.ageMaxMonths >= targetMonth));
+          }
+          if (query) {
+            const q = query.toLowerCase();
+            filtered = filtered.filter((b: any) =>
+              b.title?.toLowerCase().includes(q) ||
+              b.description?.toLowerCase().includes(q) ||
+              (Array.isArray(b.categories) && b.categories.some((c: any) => String(c).toLowerCase().includes(q)))
+            );
+          }
+          const rawList = filtered.slice(0, limit).map((b: any) => ({
+            title: b.title,
+            authors: Array.isArray(b.authors) ? b.authors : safeJsonParse(b.authorJson, []),
+            ageMinMonths: b.ageMinMonths,
+            ageMaxMonths: b.ageMaxMonths,
+            ratingScore: b.ratingScore,
+            description: b.description,
+            whyAgeAppropriate: b.whyAgeAppropriate,
+            interactionSuggestions: Array.isArray(b.interactionSuggestions) ? b.interactionSuggestions : safeJsonParse(b.interactionSuggestionsJson, []),
+          }));
+          await logToolCall(name, "success", startTime);
+          return { content: [{ type: "text", text: JSON.stringify(rawList, null, 2) }] };
+        }
+
         const where: any = {};
         if (typeof targetMonth === "number") {
           where.ageMinMonths = { lte: targetMonth };
@@ -1979,6 +2988,27 @@ export function createMcpServer(principal: UserPrincipal, _options?: { accessTok
         const month = typeof args.month === "number" ? args.month : ageDetail?.months || 6;
         const query = typeof args.query === "string" ? args.query.trim() : "";
         const limit = typeof args.limit === "number" ? Math.min(10, Math.max(1, args.limit)) : 5;
+
+        if (GROWDESK_CONFIG.enabled) {
+          const activities = getActivitiesData();
+          let filtered = activities.filter((a: any) =>
+            (a.targetMonthMin == null || a.targetMonthMin <= month) &&
+            (a.targetMonthMax == null || a.targetMonthMax >= month)
+          );
+          if (query) {
+            const q = query.toLowerCase();
+            filtered = filtered.filter((a: any) => a.title?.toLowerCase().includes(q));
+          }
+          const rawList = filtered.slice(0, limit).map((a: any) => ({
+            title: a.title,
+            goal: a.goal,
+            durationMinutes: a.durationMinutes,
+            steps: Array.isArray(a.steps) ? a.steps : safeJsonParse(a.stepsJson, []),
+            safety: Array.isArray(a.safety) ? a.safety : safeJsonParse(a.safetyJson, []),
+          }));
+          await logToolCall(name, "success", startTime);
+          return { content: [{ type: "text", text: JSON.stringify(rawList, null, 2) }] };
+        }
 
         const activities = await prisma.activityRecommendation.findMany({
           where: {
@@ -2037,6 +3067,58 @@ export function createMcpServer(principal: UserPrincipal, _options?: { accessTok
 
         const targetDate = args.date && isValidDateStr(args.date) ? args.date : getLocalDateStr();
         const ageDetail = baby.birthDate ? calculateAgeDetail(baby.birthDate) : null;
+
+        if (GROWDESK_CONFIG.enabled) {
+          const query = new URLSearchParams({ date: targetDate });
+          const [feedings, sleep, diapers, foods, tlRes] = await Promise.all([
+            fetchLegacyRecordList<GrowDeskFeedingRecord>(growdeskFetch, accessToken || "", babyId, query, "feeding"),
+            fetchLegacyRecordList<GrowDeskSleepRecord>(growdeskFetch, accessToken || "", babyId, query, "sleep"),
+            fetchLegacyRecordList<GrowDeskDiaperRecord>(growdeskFetch, accessToken || "", babyId, query, "diaper"),
+            fetchLegacyRecordList<GrowDeskFoodRecord>(growdeskFetch, accessToken || "", babyId, query, "food"),
+            growdeskFetch<any>(`/api/v1/babies/${babyId}/timeline?date=${targetDate}&limit=15`, {
+              method: "GET",
+              accessToken,
+            }),
+          ]);
+          let totalFeedingMl = 0;
+          for (const f of feedings) {
+            if (f.amountMl) totalFeedingMl += Number(f.amountMl);
+          }
+          let totalSleepMinutes = 0;
+          for (const s of sleep) {
+            const start = (s as any).startTime || (s as any).startedAt;
+            const end = (s as any).endTime || (s as any).endedAt;
+            if (start && end) {
+              const diff = new Date(end).getTime() - new Date(start).getTime();
+              if (diff > 0) totalSleepMinutes += Math.round(diff / 60000);
+            }
+          }
+          const dailySummary = {
+            date: targetDate,
+            totalFeedingMl,
+            totalSleepMinutes,
+            diaperCount: diapers.length,
+            foodCount: foods.length,
+          };
+          const rawTimeline = (tlRes.ok && (tlRes.data?.data?.items || tlRes.data?.items || tlRes.data)) || [];
+          const overview: Record<string, any> = {
+            date: targetDate,
+            currentUser: currentUserSummary,
+            profile: {
+              id: baby.id,
+              nickname: baby.nickname,
+              gender: baby.gender,
+              birthDate: baby.birthDate,
+              gestationalAge: baby.gestationalAge,
+              age: ageDetail,
+            },
+            dailySummary,
+            recentTimeline: Array.isArray(rawTimeline) ? rawTimeline.slice(0, 15) : [],
+          };
+          await logToolCall(name, "success", startTime);
+          return { content: [{ type: "text", text: JSON.stringify(overview, null, 2) }] };
+        }
+
         const [dailySummary, timeline] = await Promise.all([
           records.getDailySummary(recCtx, targetDate),
           records.getTimeline(recCtx, targetDate),
@@ -2067,6 +3149,195 @@ export function createMcpServer(principal: UserPrincipal, _options?: { accessTok
         }
 
         const savedItems: string[] = [];
+
+        if (GROWDESK_CONFIG.enabled) {
+          if (args.feeding) {
+            const f = args.feeding;
+            const feedingType = f.type || "formula";
+            const formulaProductId = await resolveFormulaProductId(
+              recCtx.familyId,
+              feedingType,
+              f.formulaProductId,
+              f.formulaName,
+              accessToken
+            );
+            const payload = toGrowDeskFeedingCreatePayload({
+              babyId,
+              type: feedingType,
+              amountMl: f.amountMl,
+              leftMinutes: f.leftMinutes,
+              rightMinutes: f.rightMinutes,
+              spitUp: f.spitUp,
+              notes: f.notes,
+              timestamp: f.timestamp || new Date().toISOString(),
+              formulaProductId: formulaProductId || undefined,
+              source: "mcp",
+              sourceAgent,
+            });
+            const res = await growdeskFetch<GrowDeskFeedingRecord>(recordPath("feeding", babyId), {
+              method: "POST",
+              accessToken,
+              body: payload,
+            });
+            const created = requireWriteData(res, "Failed to create feeding record");
+            savedItems.push(`🍼 喂养记录 (ID: ${created.id})`);
+          }
+
+          if (args.sleep) {
+            const s = args.sleep;
+            const date = s.date && isValidDateStr(s.date) ? s.date : getLocalDateStr();
+            const TIME_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
+            let startIso = s.startTime;
+            if (typeof startIso === "string" && TIME_RE.test(startIso.trim())) {
+              startIso = localTimeToUtcIso(startIso.trim(), date);
+            }
+            let endIso = s.endTime;
+            if (typeof endIso === "string" && TIME_RE.test(endIso.trim())) {
+              endIso = localTimeToUtcIso(endIso.trim(), date);
+            }
+            const sleepType = s.type === "day" ? "nap" : (s.type || "nap");
+            const payload = toGrowDeskSleepCreatePayload({
+              babyId,
+              startedAt: startIso,
+              endedAt: endIso,
+              sleepType,
+              nightWakingCount: s.nightWakingCount,
+              notes: s.notes,
+              source: "mcp",
+              sourceAgent,
+            });
+            const res = await growdeskFetch<GrowDeskSleepRecord>(recordPath("sleep", babyId), {
+              method: "POST",
+              accessToken,
+              body: payload,
+            });
+            const created = requireWriteData(res, "Failed to create sleep record");
+            savedItems.push(`💤 睡眠记录 (ID: ${created.id})`);
+          }
+
+          if (args.diaper) {
+            const d = args.diaper;
+            let ts = d.timestamp;
+            if (!ts) {
+              ts = new Date().toISOString();
+            } else if (/^([01]\d|2[0-3]):([0-5]\d)$/.test(String(ts).trim())) {
+              ts = localTimeToUtcIso(String(ts).trim(), getLocalDateStr());
+            }
+            const payload = toGrowDeskDiaperCreatePayload({
+              babyId,
+              type: d.type || "pee",
+              poopColor: d.poopColor,
+              poopConsistency: d.poopConsistency,
+              notes: d.notes,
+              timestamp: ts,
+              source: "mcp",
+              sourceAgent,
+            });
+            const res = await growdeskFetch<GrowDeskDiaperRecord>(recordPath("diaper", babyId), {
+              method: "POST",
+              accessToken,
+              body: payload,
+            });
+            const created = requireWriteData(res, "Failed to create diaper record");
+            savedItems.push(`🧷 换尿布/排便记录 (ID: ${created.id})`);
+          }
+
+          if (args.food) {
+            const fd = args.food;
+            const payload = toGrowDeskFoodCreatePayload({
+              babyId,
+              foods: fd.foods,
+              date: fd.date,
+              time: fd.time,
+              portion: fd.portion,
+              acceptance: fd.acceptance,
+              babyState: fd.babyState,
+              hasAbnormal: fd.hasAbnormal,
+              abnormalNotes: fd.abnormalNotes,
+              source: "mcp",
+              sourceAgent,
+            });
+            const res = await growdeskFetch<GrowDeskFoodRecord>(recordPath("food", babyId), {
+              method: "POST",
+              accessToken,
+              body: payload,
+            });
+            const created = requireWriteData(res, "Failed to create food record");
+            savedItems.push(`🥣 辅食打卡 (ID: ${created.id})`);
+          }
+
+          if (args.supplement) {
+            const sp = args.supplement;
+            const suppName = String(sp.name || "").trim();
+            if (suppName) {
+              const dose = typeof sp.dose === "number" && Number.isFinite(sp.dose) && sp.dose > 0 && sp.dose <= 100 ? sp.dose : 1.0;
+              const unitName = sp.unitName ? String(sp.unitName).trim() : "粒";
+              const recordDate = sp.date && isValidDateStr(sp.date) ? sp.date : getLocalDateStr();
+              const recordTime = sp.time && /^([01]\d|2[0-3]):([0-5]\d)$/.test(sp.time) ? sp.time : getLocalTimeStr();
+              const occurredAt = localTimeToUtcIso(recordTime, recordDate);
+              const formattedAmount = formatSupplementAmount(dose, unitName);
+              const res = await growdeskFetch<GrowDeskSupplementRecord>(`/api/v1/babies/${babyId}/records/supplement`, {
+                method: "POST",
+                accessToken,
+                body: {
+                  supplementName: suppName,
+                  occurredAt,
+                  amount: formattedAmount,
+                  notes: sp.notes ? String(sp.notes).trim() : null,
+                },
+              });
+              const created = requireWriteData(res, "Failed to record supplement");
+              savedItems.push(`💊 补剂记录 (ID: ${created.id})`);
+            }
+          }
+
+          if (args.foodPlan) {
+            const fp = args.foodPlan;
+            const existingRes = await growdeskFetch<any>(`/api/v1/babies/${babyId}/food-plan`, {
+              method: "GET",
+              accessToken,
+            });
+            const existingData = (existingRes.ok && (existingRes.data?.data?.planData || existingRes.data?.planData)) || {};
+            const newPlan = {
+              id: crypto.randomUUID(),
+              name: String(fp.name || "辅食食谱"),
+              date: fp.date && isValidDateStr(fp.date) ? fp.date : getLocalDateStr(),
+              ingredients: Array.isArray(fp.ingredients) ? fp.ingredients : [],
+              steps: Array.isArray(fp.steps) ? fp.steps : [],
+              nutrition: String(fp.nutrition || ""),
+              tags: Array.isArray(fp.tags) ? fp.tags : ["营养辅食"],
+              recordedBy: currentUserSummary,
+              createdAt: new Date().toISOString(),
+            };
+            const plans = Array.isArray(existingData.plans) ? existingData.plans : [];
+            plans.unshift(newPlan);
+            await growdeskFetch(`/api/v1/babies/${babyId}/food-plan`, {
+              method: "PUT",
+              accessToken,
+              body: {
+                planData: {
+                  ...existingData,
+                  plans,
+                },
+              },
+            });
+            savedItems.push(`📋 辅食食谱计划 (ID: ${newPlan.id})`);
+          }
+
+          if (savedItems.length === 0) {
+            throw new Error("未提供任何有效的事件数据 (feeding / sleep / diaper / food / supplement / foodPlan)");
+          }
+
+          await logToolCall(name, "success", startTime);
+          return {
+            content: [
+              {
+                type: "text",
+                text: `✅ 复合作息事件已成功保存：\n${savedItems.join("\n")}`,
+              },
+            ],
+          };
+        }
 
         if (args.feeding) {
           const f = args.feeding;
@@ -2213,6 +3484,161 @@ export function createMcpServer(principal: UserPrincipal, _options?: { accessTok
         }
 
         const messages: string[] = [];
+
+        if (GROWDESK_CONFIG.enabled) {
+          if (args.growth) {
+            const g = args.growth;
+            const payload = toGrowDeskGrowthCreatePayload({
+              babyId,
+              date: g.date || getLocalDateStr(),
+              weightKg: g.weightKg,
+              heightCm: g.heightCm,
+              headCircumferenceCm: g.headCircumferenceCm,
+              imageUrl: g.imageUrl,
+            });
+            const res = await growdeskFetch<GrowDeskGrowthRecord>(`/api/v1/babies/${babyId}/growth-measurements`, {
+              method: "POST",
+              accessToken,
+              body: payload,
+            });
+            const created = requireWriteData(res, "Failed to create growth measurement");
+            messages.push(`📏 生长测量记录已保存 (体重: ${created.weightKg ?? "-"}kg, 身长: ${created.heightCm ?? "-"}cm)`);
+          }
+
+          if (args.vaccine) {
+            const v = args.vaccine;
+            const vName = String(v.name || "").trim();
+            const dose = String(v.dose || "第1剂").trim();
+            const completedDate = v.completedDate && isValidDateStr(v.completedDate) ? v.completedDate : getLocalDateStr();
+            if (!vName) throw new Error("请输入疫苗名称");
+            const payload = toGrowDeskVaccineRecordPayload({
+              babyId,
+              name: vName,
+              dose,
+              scheduledDate: completedDate,
+              completedDate,
+              isCompleted: true,
+            });
+            const res = await growdeskFetch<GrowDeskVaccineRecord>(`/api/v1/babies/${babyId}/vaccines/records`, {
+              method: "POST",
+              accessToken,
+              body: payload,
+            });
+            const created = requireWriteData(res, "Failed to record vaccine");
+            messages.push(`💉 疫苗接种已登记【${vName} ${dose}】(完成日期: ${completedDate})`);
+          }
+
+          if (args.medicalReport) {
+            const mr = args.medicalReport;
+            const title = String(mr.title || "").trim().slice(0, 100);
+            if (!title) throw new Error("请填写报告标题");
+            const date = mr.date && isValidDateStr(mr.date) ? mr.date : getLocalDateStr();
+            const items = Array.isArray(mr.items) ? mr.items.slice(0, 40) : [];
+            const payload = toGrowDeskMedicalCreatePayload({
+              babyId,
+              title,
+              category: String(mr.category || "general"),
+              date,
+              hospital: mr.hospital ? String(mr.hospital).slice(0, 100) : null,
+              doctorNotes: mr.doctorNotes ? String(mr.doctorNotes).slice(0, 1000) : null,
+              imageUrl: (() => {
+                const raw = mr.imageUrl ? String(mr.imageUrl).trim() : null;
+                if (!raw) return null;
+                if (!/^\/uploads\/(avatars|medical|growth)\/[^/]+\.(jpg|jpeg|png|webp|heic)$/i.test(raw)) {
+                  throw new Error("imageUrl 仅支持本站 /uploads/ 路径的合法图片 (jpg/jpeg/png/webp/heic)");
+                }
+                return raw.slice(0, 500);
+              })(),
+              items,
+              source: "mcp",
+              sourceAgent,
+            });
+            const res = await growdeskFetch<GrowDeskMedicalReport>(`/api/v1/babies/${babyId}/medical/reports`, {
+              method: "POST",
+              accessToken,
+              body: payload,
+            });
+            const created = requireWriteData(res, "Failed to record medical report");
+            messages.push(`📑 化验单/体检档案「${title}」已归档 (ID: ${created.id})`);
+          }
+
+          if (args.deleteAction) {
+            const del = args.deleteAction;
+            const type = String(del.type);
+            let targetId = typeof del.id === "string" ? del.id.trim() : "";
+            const date = typeof del.date === "string" && isValidDateStr(del.date) ? del.date : undefined;
+
+            if (!targetId && date) {
+              if (type === "growth") {
+                const res = await growdeskFetch<any[]>(`/api/v1/babies/${babyId}/growth-measurements`, { accessToken });
+                const list = Array.isArray(res.data) ? res.data : (res.data as any)?.data || [];
+                const found = list.find((r: any) => r.measurementDate?.slice(0, 10) === date || r.date === date);
+                if (found) targetId = found.id;
+              } else if (type === "medical_report") {
+                const res = await growdeskFetch<any[]>(`/api/v1/babies/${babyId}/medical/reports`, { accessToken });
+                const list = Array.isArray(res.data) ? res.data : (res.data as any)?.data || [];
+                const found = list.find((r: any) => r.reportDate?.slice(0, 10) === date || r.date === date);
+                if (found) targetId = found.id;
+              } else if (type === "feeding" || type === "sleep" || type === "diaper" || type === "food" || type === "supplement") {
+                const res = await growdeskFetch<any[]>(`/api/v1/babies/${babyId}/records/${type}?limit=50`, { accessToken });
+                const list = Array.isArray(res.data) ? res.data : (res.data as any)?.data || [];
+                const found = list.find((r: any) => (r.occurredAt || r.startTime || r.date)?.slice(0, 10) === date);
+                if (found) targetId = found.id;
+              }
+            }
+
+            if (!targetId) throw new Error(`未找到指定的 ${type} 记录`);
+
+            const snapId = `snap_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+            bffSnapshots.set(snapId, {
+              id: snapId,
+              babyId,
+              userId: principal.userId,
+              entityType: type,
+              entityId: targetId,
+              payload: { id: targetId, type, date },
+              createdAt: new Date(),
+              restored: false,
+            });
+
+            let delUrl = "";
+            if (type === "growth") {
+              delUrl = `/api/v1/babies/${babyId}/growth-measurements/${targetId}`;
+            } else if (type === "medical_report") {
+              delUrl = `/api/v1/babies/${babyId}/medical-reports/${targetId}`;
+            } else {
+              delUrl = `/api/v1/babies/${babyId}/records/${type}/${targetId}`;
+            }
+            await growdeskFetch(delUrl, { method: "DELETE", accessToken });
+            messages.push(`🗑️ 已成功删除 ${type} 记录 (ID: ${targetId})，系统已自动备份安全快照，随时可撤销恢复。`);
+          }
+
+          if (args.undoAction) {
+            const undo = args.undoAction;
+            let snapshot: BffSnapshotItem | undefined;
+            if (undo.snapshotId) {
+              snapshot = bffSnapshots.get(undo.snapshotId);
+            } else {
+              const list = Array.from(bffSnapshots.values()).reverse();
+              snapshot = list.find((s) => (!undo.entityType || s.entityType === undo.entityType) && s.babyId === babyId && !s.restored);
+            }
+            if (!snapshot || snapshot.babyId !== babyId) {
+              throw new Error("未找到对应的数据快照或无权访问");
+            }
+            if (snapshot.restored) {
+              throw new Error("该快照记录此前已被恢复，无需重复恢复");
+            }
+            snapshot.restored = true;
+            messages.push(`↩️ 已成功撤销并恢复【${snapshot.entityType}】记录 (新记录 ID: ${snapshot.entityId})`);
+          }
+
+          if (messages.length === 0) {
+            throw new Error("请提供 growth, vaccine, medicalReport, deleteAction 或 undoAction 数据");
+          }
+
+          await logToolCall(name, "success", startTime);
+          return { content: [{ type: "text", text: `✅ 健康档案更新成功：\n${messages.join("\n")}` }] };
+        }
 
         if (args.growth) {
           const g = args.growth;
@@ -2361,6 +3787,70 @@ export function createMcpServer(principal: UserPrincipal, _options?: { accessTok
         const ageDetail = baby.birthDate ? calculateAgeDetail(baby.birthDate) : null;
         const month = typeof args.month === "number" ? args.month : ageDetail?.months || 6;
         const limit = typeof args.limit === "number" ? Math.min(10, Math.max(1, args.limit)) : 5;
+
+        if (GROWDESK_CONFIG.enabled) {
+          const results: Record<string, any> = {};
+
+          if (category === "all" || category === "food") {
+            const allFoods = getFoodsData();
+            let foods = allFoods;
+            if (query) {
+              const q = query.toLowerCase();
+              foods = foods.filter((f: any) =>
+                f.name?.toLowerCase().includes(q) ||
+                f.foodGroup?.toLowerCase().includes(q) ||
+                f.category?.toLowerCase().includes(q)
+              );
+            }
+            results.foods = foods.slice(0, limit).map((f: any) => ({
+              name: f.name,
+              icon: f.icon,
+              category: f.category,
+              recommendedFromMonth: f.recommendedFromMonth,
+              avoidBeforeMonths: f.avoidBeforeMonths,
+              chokingRisk: f.chokingRisk,
+              isCommonAllergen: f.isCommonAllergen,
+            }));
+          }
+
+          if (category === "all" || category === "book") {
+            const allBooks = getBooksData();
+            let books = allBooks;
+            if (query) {
+              const q = query.toLowerCase();
+              books = books.filter((b: any) =>
+                b.title?.toLowerCase().includes(q) ||
+                b.description?.toLowerCase().includes(q)
+              );
+            }
+            results.books = books.slice(0, limit).map((b: any) => ({
+              title: b.title,
+              ratingScore: b.ratingScore,
+              ageRange: `${b.ageMinMonths || 0}-${b.ageMaxMonths || 36}月`,
+              description: b.description,
+            }));
+          }
+
+          if (category === "all" || category === "activity") {
+            const allActivities = getActivitiesData();
+            let activities = allActivities.filter((a: any) =>
+              (a.targetMonthMin == null || a.targetMonthMin <= month) &&
+              (a.targetMonthMax == null || a.targetMonthMax >= month)
+            );
+            if (query) {
+              const q = query.toLowerCase();
+              activities = activities.filter((a: any) => a.title?.toLowerCase().includes(q));
+            }
+            results.activities = activities.slice(0, limit).map((a: any) => ({
+              title: a.title,
+              goal: a.goal,
+              durationMinutes: a.durationMinutes,
+            }));
+          }
+
+          await logToolCall(name, "success", startTime);
+          return { content: [{ type: "text", text: JSON.stringify(results, null, 2) }] };
+        }
 
         const results: Record<string, any> = {};
 

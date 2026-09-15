@@ -5,7 +5,7 @@
 import crypto from "node:crypto";
 import { SignJWT, jwtVerify } from "jose";
 import { prisma } from "@/lib/prisma";
-import { getJwtSecretBytes } from "@/lib/config";
+import { getJwtSecretBytes, GROWDESK_CONFIG } from "@/lib/config";
 import {
   OAUTH_SCOPES,
   DEFAULT_SCOPES,
@@ -44,6 +44,51 @@ export function hashSecret(raw: string): string {
   return crypto.createHash("sha256").update(raw).digest("hex");
 }
 
+interface BffClientItem {
+  id: string;
+  clientId: string;
+  clientSecret: string | null;
+  clientName: string;
+  redirectUrisJson: string;
+  grantTypesJson: string;
+  responseTypesJson: string;
+  scope: string;
+  tokenEndpointAuthMethod: string;
+  isDynamic: boolean;
+  createdAt: Date;
+}
+
+interface BffAuthCodeItem {
+  id: string;
+  code: string;
+  clientId: string;
+  userId: string;
+  babyId: string | null;
+  redirectUri: string;
+  scope: string;
+  resource: string | null;
+  codeChallenge: string;
+  codeChallengeMethod: string;
+  expiresAt: Date;
+  used: boolean;
+}
+
+interface BffRefreshTokenItem {
+  id: string;
+  tokenHash: string;
+  clientId: string;
+  userId: string;
+  babyId: string | null;
+  scope: string;
+  resource: string | null;
+  expiresAt: Date;
+  revoked: boolean;
+}
+
+const bffClients = new Map<string, BffClientItem>();
+const bffAuthCodes = new Map<string, BffAuthCodeItem>();
+const bffRefreshTokens = new Map<string, BffRefreshTokenItem>();
+
 // In-memory sync flag & concurrency lock to avoid DB write amplification on read/auth paths
 let staticClientsSynced = false;
 let staticClientsSyncPromise: Promise<void> | null = null;
@@ -53,6 +98,28 @@ let staticClientsSyncPromise: Promise<void> | null = null;
  */
 export async function ensureStaticClients(force = false): Promise<void> {
   if (staticClientsSynced && !force) return;
+
+  if (GROWDESK_CONFIG.enabled) {
+    for (const staticClient of STATIC_OAUTH_CLIENTS) {
+      const clientSecretHash = staticClient.clientSecret ? hashSecret(staticClient.clientSecret) : null;
+      bffClients.set(staticClient.clientId, {
+        id: staticClient.clientId,
+        clientId: staticClient.clientId,
+        clientSecret: clientSecretHash,
+        clientName: staticClient.clientName,
+        redirectUrisJson: JSON.stringify(staticClient.redirectUris),
+        grantTypesJson: JSON.stringify(staticClient.grantTypes),
+        responseTypesJson: JSON.stringify(staticClient.responseTypes),
+        scope: staticClient.scope,
+        tokenEndpointAuthMethod: staticClient.tokenEndpointAuthMethod,
+        isDynamic: false,
+        createdAt: new Date(),
+      });
+    }
+    staticClientsSynced = true;
+    return;
+  }
+
   if (staticClientsSyncPromise) return staticClientsSyncPromise;
 
   staticClientsSyncPromise = (async () => {
@@ -120,6 +187,13 @@ export async function ensureStaticClients(force = false): Promise<void> {
  * Looks up a client by ID, checking static clients if not in DB
  */
 export async function findClient(clientId: string) {
+  if (GROWDESK_CONFIG.enabled) {
+    if (!staticClientsSynced) {
+      await ensureStaticClients(true);
+    }
+    return bffClients.get(clientId) || null;
+  }
+
   let client = await prisma.oAuthClient.findUnique({
     where: { clientId },
   });
@@ -176,6 +250,36 @@ export async function registerClient(
       (uri) => uri.includes("googleusercontent.com") || uri.includes("gemini.google.com")
     );
   const clientName = isGoogleOrGemini ? "Gemini Spark" : rawClientName;
+
+  if (GROWDESK_CONFIG.enabled) {
+    const createdAt = new Date();
+    const clientRecord: BffClientItem = {
+      id: clientId,
+      clientId,
+      clientSecret: clientSecretHash,
+      clientName,
+      redirectUrisJson: JSON.stringify(body.redirect_uris),
+      grantTypesJson: JSON.stringify(grantTypes),
+      responseTypesJson: JSON.stringify(responseTypes),
+      scope,
+      tokenEndpointAuthMethod: authMethod,
+      isDynamic: true,
+      createdAt,
+    };
+    bffClients.set(clientId, clientRecord);
+
+    return {
+      client_id: clientRecord.clientId,
+      client_secret: authMethod !== "none" ? rawSecret : undefined,
+      client_id_issued_at: Math.floor(clientRecord.createdAt.getTime() / 1000),
+      client_name: clientRecord.clientName || undefined,
+      redirect_uris: JSON.parse(clientRecord.redirectUrisJson),
+      grant_types: JSON.parse(clientRecord.grantTypesJson),
+      response_types: JSON.parse(clientRecord.responseTypesJson),
+      scope: clientRecord.scope || scope,
+      token_endpoint_auth_method: clientRecord.tokenEndpointAuthMethod,
+    };
+  }
 
   const client = await prisma.oAuthClient.create({
     data: {
@@ -292,6 +396,25 @@ export async function createAuthorizationCode(params: {
   const code = `code_${crypto.randomBytes(32).toString("base64url")}`;
   const expiresAt = new Date(Date.now() + OAUTH_EXPIRATIONS.AUTH_CODE_SECONDS * 1000);
 
+  if (GROWDESK_CONFIG.enabled) {
+    const id = `code_id_${crypto.randomUUID()}`;
+    bffAuthCodes.set(code, {
+      id,
+      code,
+      clientId: params.clientId,
+      userId: params.userId,
+      babyId: params.babyId || null,
+      redirectUri: params.redirectUri,
+      scope: params.scope,
+      resource: params.resource || null,
+      codeChallenge: params.codeChallenge,
+      codeChallengeMethod: params.codeChallengeMethod || "S256",
+      expiresAt,
+      used: false,
+    });
+    return code;
+  }
+
   await prisma.oAuthAuthorizationCode.create({
     data: {
       code,
@@ -356,6 +479,83 @@ export async function exchangeAuthorizationCode(params: {
   ip?: string;
 }): Promise<TokenResponse> {
   const client = await authenticateClient(params.clientId, params.clientSecret);
+
+  if (GROWDESK_CONFIG.enabled) {
+    const authCode = bffAuthCodes.get(params.code);
+    if (!authCode) {
+      throw new OAuthError("invalid_grant", "Authorization code not found", 400);
+    }
+
+    if (authCode.used) {
+      for (const rt of bffRefreshTokens.values()) {
+        if (rt.clientId === authCode.clientId && rt.userId === authCode.userId) {
+          rt.revoked = true;
+        }
+      }
+      throw new OAuthError("invalid_grant", "Authorization code has already been used (replay detected)", 400);
+    }
+
+    authCode.used = true;
+
+    if (authCode.expiresAt < new Date()) {
+      throw new OAuthError("invalid_grant", "Authorization code expired", 400);
+    }
+
+    if (authCode.clientId !== params.clientId) {
+      throw new OAuthError("invalid_grant", "Authorization code was issued to a different client", 400);
+    }
+
+    if (authCode.redirectUri !== params.redirectUri) {
+      throw new OAuthError("invalid_grant", "redirect_uri mismatch", 400);
+    }
+
+    if (!verifyCodeChallenge(params.codeVerifier, authCode.codeChallenge, authCode.codeChallengeMethod)) {
+      throw new OAuthError("invalid_grant", "PKCE code_verifier verification failed", 400);
+    }
+
+    const targetResource = params.resource || authCode.resource || `${params.baseUrl}/mcp`;
+    const tokenId = crypto.randomUUID();
+    const now = Math.floor(Date.now() / 1000);
+    const expiresIn = OAUTH_EXPIRATIONS.ACCESS_TOKEN_SECONDS;
+
+    const accessToken = await new SignJWT({
+      sub: authCode.userId,
+      iss: params.baseUrl,
+      aud: targetResource,
+      client_id: authCode.clientId,
+      scope: authCode.scope,
+      baby_id: authCode.babyId,
+      jti: tokenId,
+    })
+      .setProtectedHeader({ alg: "HS256" })
+      .setIssuedAt(now)
+      .setExpirationTime(now + expiresIn)
+      .sign(getJwtSecretBytes());
+
+    const rawRefreshToken = `rt_${crypto.randomBytes(32).toString("base64url")}`;
+    const tokenHash = hashSecret(rawRefreshToken);
+    const refreshExpiresAt = new Date(Date.now() + OAUTH_EXPIRATIONS.REFRESH_TOKEN_SECONDS * 1000);
+
+    bffRefreshTokens.set(tokenHash, {
+      id: `rt_id_${crypto.randomUUID()}`,
+      tokenHash,
+      clientId: authCode.clientId,
+      userId: authCode.userId,
+      babyId: authCode.babyId,
+      scope: authCode.scope,
+      resource: targetResource,
+      expiresAt: refreshExpiresAt,
+      revoked: false,
+    });
+
+    return {
+      access_token: accessToken,
+      token_type: "Bearer",
+      expires_in: expiresIn,
+      refresh_token: rawRefreshToken,
+      scope: authCode.scope,
+    };
+  }
 
   const authCode = await prisma.oAuthAuthorizationCode.findUnique({
     where: { code: params.code },
@@ -477,6 +677,64 @@ export async function refreshAccessToken(params: {
   await authenticateClient(params.clientId, params.clientSecret);
 
   const tokenHash = hashSecret(params.refreshToken);
+
+  if (GROWDESK_CONFIG.enabled) {
+    const storedToken = bffRefreshTokens.get(tokenHash);
+    if (!storedToken || storedToken.revoked || storedToken.expiresAt < new Date()) {
+      throw new OAuthError("invalid_grant", "Refresh token is invalid, expired, or revoked", 400);
+    }
+
+    if (storedToken.clientId !== params.clientId) {
+      throw new OAuthError("invalid_grant", "Refresh token was issued to a different client", 400);
+    }
+
+    storedToken.revoked = true;
+
+    const targetResource = params.resource || storedToken.resource || `${params.baseUrl}/mcp`;
+    const grantedScope = params.scope || storedToken.scope;
+    const now = Math.floor(Date.now() / 1000);
+    const expiresIn = OAUTH_EXPIRATIONS.ACCESS_TOKEN_SECONDS;
+    const tokenId = crypto.randomUUID();
+
+    const accessToken = await new SignJWT({
+      sub: storedToken.userId,
+      iss: params.baseUrl,
+      aud: targetResource,
+      client_id: storedToken.clientId,
+      scope: grantedScope,
+      baby_id: storedToken.babyId,
+      jti: tokenId,
+    })
+      .setProtectedHeader({ alg: "HS256" })
+      .setIssuedAt(now)
+      .setExpirationTime(now + expiresIn)
+      .sign(getJwtSecretBytes());
+
+    const newRawRefreshToken = `rt_${crypto.randomBytes(32).toString("base64url")}`;
+    const newRefreshHash = hashSecret(newRawRefreshToken);
+    const refreshExpiresAt = new Date(Date.now() + OAUTH_EXPIRATIONS.REFRESH_TOKEN_SECONDS * 1000);
+
+    bffRefreshTokens.set(newRefreshHash, {
+      id: `rt_id_${crypto.randomUUID()}`,
+      tokenHash: newRefreshHash,
+      clientId: storedToken.clientId,
+      userId: storedToken.userId,
+      babyId: storedToken.babyId,
+      scope: grantedScope,
+      resource: targetResource,
+      expiresAt: refreshExpiresAt,
+      revoked: false,
+    });
+
+    return {
+      access_token: accessToken,
+      token_type: "Bearer",
+      expires_in: expiresIn,
+      refresh_token: newRawRefreshToken,
+      scope: grantedScope,
+    };
+  }
+
   const storedToken = await prisma.oAuthRefreshToken.findUnique({
     where: { tokenHash },
   });
@@ -574,6 +832,15 @@ export async function revokeToken(params: {
   } catch {}
 
   const tokenHash = hashSecret(params.token);
+
+  if (GROWDESK_CONFIG.enabled) {
+    const stored = bffRefreshTokens.get(tokenHash);
+    if (stored) {
+      stored.revoked = true;
+    }
+    return;
+  }
+
   await prisma.oAuthRefreshToken.updateMany({
     where: { tokenHash },
     data: { revoked: true },
@@ -663,6 +930,34 @@ export async function verifyMcpAccessToken(
   token: string,
   request?: Request
 ): Promise<UserPrincipal> {
+  if (token.startsWith("bp_pat_")) {
+    const { verifyPersonalAccessToken } = await import("@/lib/tokens");
+    const verifiedPat = await verifyPersonalAccessToken(token);
+    if (!verifiedPat) {
+      throw new OAuthError("invalid_token", "Personal access token invalid or revoked", 401);
+    }
+    const user = verifiedPat.user;
+    const userAgent = request?.headers?.get("user-agent") || undefined;
+    const sourceAgent = resolveSourceAgent("pat-client", undefined, userAgent);
+    return {
+      userId: user.id,
+      username: user.username,
+      displayName: user.displayName,
+      babyId: "baby-1",
+      scopes: new Set(["baby:read", "baby:write", "knowledge:read", "family:read"]),
+      clientId: "pat-client",
+      clientName: "Personal Access Token",
+      sourceAgent,
+      baby: {
+        id: "baby-1",
+        nickname: "宝宝",
+        gender: "female",
+        birthDate: "2026-01-01",
+        familyId: "family-1",
+      },
+    };
+  }
+
   const baseUrl = getBaseUrl(request);
   const expectedResource = normalizeResourceUrl(`${baseUrl}/mcp`);
 
@@ -694,6 +989,34 @@ export async function verifyMcpAccessToken(
   const userId = typeof payload.sub === "string" ? payload.sub : "";
   if (!userId) {
     throw new OAuthError("invalid_token", "Token subject (user_id) missing", 401);
+  }
+
+  if (GROWDESK_CONFIG.enabled) {
+    const scopesList: string[] = typeof payload.scope === "string"
+      ? payload.scope.split(/\s+/).filter(Boolean)
+      : [];
+    const clientId = typeof payload.client_id === "string" ? payload.client_id : "unknown";
+    const userAgent = request?.headers?.get("user-agent") || undefined;
+    const ip = request ? getClientIp(request) : undefined;
+    const sourceAgent = resolveSourceAgent(clientId, undefined, userAgent);
+
+    return {
+      userId,
+      username: (payload.username as string) || "mcp_user",
+      displayName: (payload.displayName as string) || "MCP User",
+      babyId: (payload.baby_id as string) || "baby-1",
+      scopes: new Set(scopesList),
+      clientId,
+      clientName: "External MCP Client",
+      sourceAgent,
+      baby: {
+        id: (payload.baby_id as string) || "baby-1",
+        nickname: "宝宝",
+        gender: "female",
+        birthDate: "2026-01-01",
+        familyId: "family-1",
+      },
+    };
   }
 
   // Load User & verify existence in database
@@ -839,6 +1162,9 @@ export async function logOAuthAudit(params: {
   userAgent?: string | null;
   metadata?: Record<string, unknown>;
 }): Promise<void> {
+  if (GROWDESK_CONFIG.enabled) {
+    return;
+  }
   try {
     const cleanMeta: Record<string, unknown> = {};
     if (params.metadata) {
