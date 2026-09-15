@@ -31,6 +31,8 @@ const upstream = http.createServer(async (req, res) => {
   if (url.pathname === `/api/v1/babies/${baby.id}`) { send(baby); return; }
   if (url.pathname.endsWith(`/records/feeding/${feedingDetail.id}`)) { send(feedingDetail); return; }
   if (url.pathname.endsWith('/records/feeding')) { res.end(JSON.stringify({ data: [], page: { nextCursor: null } })); return; }
+  if (url.pathname === '/api/v1/notifications') { res.end(JSON.stringify({ data: [{ id: 'notif_1', eventKey: 'daily.summary', title: '今日日报', body: '测试内容', createdAt: new Date().toISOString() }], page: { nextCursor: null } })); return; }
+  if (url.pathname.startsWith('/api/v1/devices/')) { send({ success: true }); return; }
   res.writeHead(404); res.end('{}');
 });
 let child;
@@ -76,6 +78,18 @@ try {
   assert.equal(editRecord.amountMl, 85);
   assert.equal(editRecord.notes, feedingDetail.notes);
   assert.equal(editRecord.version, '4');
+  const notifs = await call('/api/notifications', { headers: { cookie } });
+  assert.equal(notifs.status, 200);
+  const notifList = await notifs.json();
+  assert.ok(Array.isArray(notifList));
+  assert.equal(notifList[0]?.id, 'notif_1');
+  const pushSub = await call('/api/push/subscribe', {
+    method: 'POST',
+    headers: { cookie, origin, 'content-type': 'application/json' },
+    body: JSON.stringify({ endpoint: 'https://push.example.com/test_token' }),
+  });
+  assert.equal(pushSub.status, 200);
+  assert.equal((await pushSub.json()).success, true);
   assert.equal((await call('/api/auth/register', { method: 'POST' })).status, 501);
   assert.equal((await call('/api/baby', { method: 'PUT', headers: { cookie, origin: 'https://test_attacker.invalid' }, body: '{}' })).status, 403);
   outage = true;
