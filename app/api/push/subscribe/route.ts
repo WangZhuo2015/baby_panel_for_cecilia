@@ -30,7 +30,7 @@ export async function POST(request: Request) {
         method: "PUT",
         accessToken: bffSession.accessToken,
         body: {
-          pushToken: endpoint,
+          token: endpoint,
           platform: "web",
           environment: "production",
         },
@@ -109,5 +109,48 @@ export async function POST(request: Request) {
       { error: "订阅保存失败" },
       { status: 500 }
     );
+  }
+}
+
+export async function DELETE(request: Request) {
+  try {
+    if (GROWDESK_CONFIG.enabled) {
+      const csrfErr = verifyBffCsrf(request);
+      if (csrfErr) return csrfErr;
+
+      const bffSession = await resolveBffSession(request);
+      if (!bffSession) {
+        return NextResponse.json({ error: "Unauthorized: 会话无效或已过期" }, { status: 401 });
+      }
+
+      const body = await request.json().catch(() => ({}));
+      const endpoint = body?.endpoint ? String(body.endpoint).trim() : "";
+      if (endpoint) {
+        const installationId = crypto.createHash("sha256").update(endpoint).digest("hex").slice(0, 32);
+        await growdeskFetch(`/api/v1/devices/${installationId}/push`, {
+          method: "DELETE",
+          accessToken: bffSession.accessToken,
+        });
+      }
+
+      return NextResponse.json({ success: true });
+    }
+
+    const auth = await requireAuth(request);
+    if (auth.errorResponse) return auth.errorResponse;
+    const { user } = auth;
+
+    const body = await request.json().catch(() => ({}));
+    const endpoint = body?.endpoint ? String(body.endpoint).trim() : "";
+    if (endpoint) {
+      await prisma.pushSubscription.deleteMany({
+        where: { endpoint, userId: user.id },
+      });
+    }
+
+    return NextResponse.json({ success: true });
+  } catch (error: any) {
+    console.error("DELETE /api/push/subscribe error:", error);
+    return NextResponse.json({ error: error?.message || "退订失败" }, { status: 500 });
   }
 }
