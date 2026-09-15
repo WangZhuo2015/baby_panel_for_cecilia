@@ -37,14 +37,21 @@ export function verifyBffCsrf(
 
   try {
     const parsed = new URL(checkUrl);
-    const expected = process.env.GROWDESK_WEB_ORIGIN ||
+    const rawExpected = process.env.GROWDESK_WEB_ORIGIN ||
       (config.isProduction ? "https://baby.zwang.fun" : new URL(request.url).origin);
-    const canonical = new URL(expected);
-    if (!["http:", "https:"].includes(parsed.protocol) || canonical.username || canonical.password) {
-      return NextResponse.json({ error: "Forbidden: Invalid origin configuration" }, { status: 403 });
-    }
-    // Compare the complete origin, including scheme and port. Never trust a supplied Host header.
-    if (parsed.origin === canonical.origin) return null;
+    const expectedList = rawExpected.split(",").map((s) => s.trim()).filter(Boolean);
+    const matched = expectedList.some((expected) => {
+      try {
+        const canonical = new URL(expected);
+        if (!["http:", "https:"].includes(parsed.protocol) || canonical.username || canonical.password) {
+          return false;
+        }
+        return parsed.origin === canonical.origin;
+      } catch {
+        return false;
+      }
+    });
+    if (matched) return null;
 
     return NextResponse.json(
       {
