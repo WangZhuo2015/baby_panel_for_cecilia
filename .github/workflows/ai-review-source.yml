@@ -1,0 +1,33 @@
+name: AI integration source
+on:
+  push:
+    branches: [codex/ai-integration-complete-20260916]
+    paths: [.github/workflows/ai-review-source.yml]
+permissions:
+  contents: read
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.x
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Package tracked source and Next.js guides only
+        run: |
+          mkdir -p "$RUNNER_TEMP/review"
+          git archive --format=tar HEAD | gzip > "$RUNNER_TEMP/review/source.tar.gz"
+          git rev-parse HEAD > "$RUNNER_TEMP/review/HEAD.txt"
+          if test -d node_modules/next/dist/docs; then
+            tar -czf "$RUNNER_TEMP/review/next-guides.tar.gz" -C node_modules/next/dist docs
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ai-review-source
+          path: ${{ runner.temp }}/review
+          retention-days: 1
