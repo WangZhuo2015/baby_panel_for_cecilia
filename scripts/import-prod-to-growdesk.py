@@ -59,6 +59,13 @@ def date_val(val):
         return s.split("T")[0]
     return s[:10]
 
+def local_to_utc_iso(date_str, time_str, default_time="12:00"):
+    t = (time_str or default_time).strip()
+    if len(t) == 5:
+        t = f"{t}:00"
+    dt = datetime.datetime.fromisoformat(f"{date_str}T{t}+08:00")
+    return dt.astimezone(datetime.timezone.utc).isoformat()
+
 def main():
     print("=" * 60)
     print("GrowDesk Full Production Data Import Starting")
@@ -541,7 +548,7 @@ def main():
             "captured_at": iso_ts(fl["createdAt"]),
         })
         rdate = date_val(fl["date"])
-        occ = f"{rdate}T{fl['time']}:00.000Z" if fl.get("time") else f"{rdate}T12:00:00.000Z"
+        occ = local_to_utc_iso(rdate, fl.get("time"), "12:00")
         food_list = []
         try:
             parsed = json.loads(fl["foods"])
@@ -655,7 +662,7 @@ def main():
             "captured_at": iso_ts(sr["createdAt"]),
         })
         sdate = date_val(sr["date"])
-        occ = f"{sdate}T{sr['time']}:00.000Z" if sr.get("time") else f"{sdate}T08:00:00.000Z"
+        occ = local_to_utc_iso(sdate, sr.get("time"), "08:00")
         prod = supp_prod_map.get(sr.get("productId"))
         sname = prod["name"] if prod else "营养补剂"
         amt = f"{sr['dose']} {sr['unitName']}" if sr.get("dose") and sr.get("unitName") else (str(sr.get("dose")) if sr.get("dose") else None)
@@ -855,6 +862,34 @@ def main():
     sql_script += "SET LOCAL standard_conforming_strings=on;\n"
     sql_script += "SET LOCAL lock_timeout='10s';\n"
     sql_script += "SET LOCAL statement_timeout='120s';\n\n"
+    sql_script += """TRUNCATE TABLE 
+  public.ai_messages,
+  public.ai_sessions,
+  public.ai_runs,
+  public.ai_run_events,
+  public.vaccine_records,
+  public.medical_report_attachments,
+  public.medical_reports,
+  public.supplement_records,
+  public.growth_measurements,
+  public.food_records,
+  public.diaper_records,
+  public.sleep_records,
+  public.feeding_records,
+  public.timeline_entries,
+  public.formula_products,
+  public.baby_members,
+  public.family_members,
+  public.babies,
+  public.families,
+  public.user_sync_states,
+  public.users,
+  public.daily_summaries,
+  legacy_import.import_rows,
+  legacy_import.import_batches
+CASCADE;
+
+"""
     sql_script += "\n".join(inserts)
     sql_script += "\n\nCOMMIT;\n"
 

@@ -61,3 +61,5 @@ database_backup_full.*
 
 # 不可变审计存档（含患者影像，禁止入库）
 data/archive/
+.data/
+scripts/diff_output.md
