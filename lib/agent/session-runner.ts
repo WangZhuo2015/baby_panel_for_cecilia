@@ -63,7 +63,6 @@ async function saveAssistantMessage(
 ): Promise<void> {
   const toolsJson = toolTraces.length > 0 ? JSON.stringify(toolTraces) : null;
   if (isGrowDeskEnabled()) {
-    try {
       await bffAiSessionStore.addMessage(
         sessionId,
         userId,
@@ -74,9 +73,6 @@ async function saveAssistantMessage(
         },
         accessToken
       );
-    } catch (e) {
-      console.error("[SessionRunner] Failed to persist assistant message in BFF store:", e);
-    }
     return;
   }
   try {

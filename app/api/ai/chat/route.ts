@@ -1,3 +1,4 @@
+import {durableChatRequest} from "@/lib/growdesk/durable-chat";
 import { NextResponse } from "next/server";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import { prisma } from "@/lib/prisma";
@@ -59,6 +60,7 @@ function toHistory(messages: { role?: string; content?: unknown }[]): AgentMessa
 }
 
 export async function GET(request: Request) {
+  if(GROWDESK_CONFIG.enabled)return durableChatRequest(request);
   try {
     const auth = await requireAuth(request);
     if (auth.errorResponse) return auth.errorResponse;
@@ -172,6 +174,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  if(GROWDESK_CONFIG.enabled)return durableChatRequest(request);
   try {
     const auth = await requireAuth(request);
     if (auth.errorResponse) return auth.errorResponse;

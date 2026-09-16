@@ -1,3 +1,4 @@
+import { durableVoiceRequest } from "@/lib/growdesk/voice-request";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthSession } from "@/lib/auth";
@@ -49,9 +50,10 @@ async function logVoiceInteraction(data: {
   isFastPath: boolean;
   acknowledged: boolean;
   baby?: any;
+  accessToken?: string;
 }): Promise<string | null> {
   if (GROWDESK_CONFIG.enabled) {
-    const log = bffVoiceLogStore.createLog(data);
+    const log = await bffVoiceLogStore.createLog(data);
     return log.id;
   }
   try {
@@ -98,6 +100,7 @@ async function resolveVoiceMvpPrincipal(request: Request): Promise<{
         };
       }
     }
+    return null; // Never reuse legacy credentials after a failed BFF session.
   }
 
   // 1. Try standard PWA Auth Session (Cookie or standard Bearer JWT)
@@ -169,6 +172,7 @@ async function resolveVoiceMvpPrincipal(request: Request): Promise<{
 }
 
 export async function POST(request: Request) {
+  if (GROWDESK_CONFIG.enabled) return durableVoiceRequest(request);
   try {
     const principal = await resolveVoiceMvpPrincipal(request);
     if (!principal) {
@@ -245,8 +249,9 @@ export async function POST(request: Request) {
         `[Voice API Fast-Path] Completed in ${duration}ms -> Reply: "${reply.slice(0, 100)}..."`
       );
 
-      void logVoiceInteraction({
+      await logVoiceInteraction({
         userId: user.id,
+        accessToken: principal.accessToken,
         babyId: baby.id,
         prompt: rawText,
         reply,
@@ -372,6 +377,7 @@ export async function POST(request: Request) {
           // 1. Create AgentVoiceLog with acknowledged: false (unseen by user)
           const createdLogId = await logVoiceInteraction({
             userId: user.id,
+            accessToken: principal.accessToken,
             babyId: baby.id,
             prompt: rawText,
             reply: finalReply,
@@ -417,8 +423,9 @@ export async function POST(request: Request) {
       `[Voice API] Completed within ${timeoutMs}ms (${duration}ms) -> Reply: "${reply.slice(0, 100)}..."`
     );
 
-    void logVoiceInteraction({
+    await logVoiceInteraction({
       userId: user.id,
+      accessToken: principal.accessToken,
       babyId: baby.id,
       prompt: rawText,
       reply,

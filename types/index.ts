@@ -452,7 +452,7 @@ export interface MedicalReportItem {
   value: string | number;
   unit?: string;
   referenceRange?: string;
-  status: "normal" | "high" | "low" | "abnormal" | "positive" | "negative";
+  status: "normal" | "high" | "low" | "abnormal" | "positive" | "negative" | "unknown";
   interpretation?: string;
 }
 
@@ -488,7 +488,7 @@ export interface MedicalOcrResponse {
     value: string | number;
     unit?: string;
     referenceRange?: string;
-    status: "normal" | "high" | "low" | "abnormal" | "positive" | "negative";
+    status: "normal" | "high" | "low" | "abnormal" | "positive" | "negative" | "unknown";
     interpretation?: string;
   }>;
   growthData?: {

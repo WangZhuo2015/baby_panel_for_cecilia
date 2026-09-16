@@ -32,12 +32,13 @@ import type { MedicalReportCategory, MedicalReportItem } from "@/types";
 export default function MedicalAddPage() {
   const router = useRouter();
   const { showToast } = useToast();
-  const { baby, fetchBaby, addMedicalReport } = useBabyStore();
+  const { user, baby, fetchBaby, addMedicalReport } = useBabyStore();
 
   useEffect(() => {
     if (!baby) fetchBaby();
   }, [baby, fetchBaby]);
 
+  const pendingKey=`pending-ocr-job:${user?.id ?? "none"}:${baby?.id ?? "none"}`;
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [uploadedImageUrl, setUploadedImageUrl] = useState<string | null>(null);
@@ -86,6 +87,9 @@ export default function MedicalAddPage() {
 
       const formData = new FormData();
       formData.append("image", compressed);
+      if (!baby) throw new Error("请先选择宝宝");
+      formData.append("babyId",baby.id);
+      formData.append("clientRequestId",crypto.randomUUID());
 
       const res = await fetch("/api/medical/ocr", {
         method: "POST",
@@ -96,7 +100,7 @@ export default function MedicalAddPage() {
 
       // ===== 异步任务模式：立即拿到 jobId，后台识别（约 1 分钟）=====
       if (res.status === 202 && data.jobId) {
-        sessionStorage.setItem("pending-ocr-job", data.jobId);
+        sessionStorage.setItem(pendingKey, data.jobId);
         showToast("已提交后台识别，正在返回列表显示进度…");
         setTimeout(() => router.push("/health/medical"), 600);
         return;
@@ -142,7 +146,7 @@ export default function MedicalAddPage() {
           value: it.value ?? "",
           unit: it.unit || "",
           referenceRange: it.referenceRange || "",
-          status: it.status || "normal",
+          status: it.status || "unknown",
           interpretation: it.interpretation || "",
         }))
       );
@@ -165,19 +169,22 @@ export default function MedicalAddPage() {
   const startJobPolling = (id: string) => {
     const tick = async () => {
       try {
-        const res = await fetch(`/api/ai/jobs/${id}`);
+        const res = await fetch(`/api/ai/jobs/${id}?babyId=${encodeURIComponent(baby?.id || "")}`);
+        if ([401,403,404].includes(res.status)) {
+          setOcrError("任务会话或宝宝归属已失效，请重新登录并选择原宝宝");setOcrLoading(false);return true;
+        }
         if (!res.ok) return false;
         const job = await res.json();
         if (job.status === "done" && job.result) {
-          sessionStorage.removeItem("pending-ocr-job");
+          sessionStorage.removeItem(pendingKey);
           applyOcrResult(job.result);
           setClaimJobId(id);
           setOcrLoading(false);
           setJobId(null);
           return true;
         }
-        if (job.status === "failed") {
-          sessionStorage.removeItem("pending-ocr-job");
+        if (job.status === "failed" || job.status === "cancelled") {
+          sessionStorage.removeItem(pendingKey);
           setOcrError(job.errorMessage || "识别失败，请重试或手动录入");
           setOcrLoading(false);
           setJobId(null);
@@ -206,8 +213,9 @@ export default function MedicalAddPage() {
 
   // 刷新/离开后回来：恢复未完成任务轮询；支持 ?job= 直达领取
   useEffect(() => {
+    if (!user || !baby) return;
     const fromUrl = new URLSearchParams(window.location.search).get("job");
-    const stored = sessionStorage.getItem("pending-ocr-job") || fromUrl;
+    const stored = sessionStorage.getItem(pendingKey) || fromUrl;
     if (stored && !ocrDone) {
       setJobId(stored);
       setOcrLoading(true);
@@ -215,7 +223,7 @@ export default function MedicalAddPage() {
       return stop;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [user?.id, baby?.id]);
 
   const handleAddItem = () => {
     setItems((prev) => [

@@ -16,6 +16,7 @@ export function composeMedicalAiSummary(items: SummaryItem[]): string {
   const list = Array.isArray(items) ? items : [];
   if (list.length === 0) return "";
 
+  const unknown = list.filter(i=>!i.status || i.status === "unknown");
   const abnormal = list.filter((i) => ABNORMAL.has(String(i.status || "")));
   const bullets = (abnormal.length ? abnormal : []).map((i) => {
     const interp = String(i.interpretation || "").trim();
@@ -29,7 +30,7 @@ export function composeMedicalAiSummary(items: SummaryItem[]): string {
     "## 总体印象",
     abnormal.length > 0
       ? `本次共识别 **${list.length}** 项，其中 **${abnormal.length}** 项相对单据参考区间有偏离，优先结合月龄与症状理解，不必单独看到箭头就紧张。`
-      : `本次共识别 **${list.length}** 项，相对单据印刷参考区间未见明显偏离。`,
+      : unknown.length > 0 ? `本次共识别 **${list.length}** 项，其中 **${unknown.length}** 项的印刷标记或参考范围尚未确认，不能据此判断正常或异常。` : `本次共识别 **${list.length}** 项，相对单据印刷参考区间未见明显偏离。`,
   ];
 
   if (bullets.length > 0) {

@@ -1,3 +1,5 @@
+import { growdeskRouteBoundary } from "@/lib/growdesk/route-boundary";
+import { bridgeErrorResponse } from "@/lib/growdesk/bridge-protocol";
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getLocalDateStr, getLocalDayUtcRange, formatIsoToLocalTime } from '@/lib/date'
@@ -54,6 +56,7 @@ import { growdeskFetch } from "@/lib/growdesk/client"
 import { fromGrowDeskNotification, bffNotificationStore } from "@/lib/growdesk/notifications"
 
 export async function GET(request: Request) {
+  return growdeskRouteBoundary(request, async () => {
   try {
     if (GROWDESK_CONFIG.enabled) {
       const bffSession = await resolveBffSession(request)
@@ -61,41 +64,8 @@ export async function GET(request: Request) {
         return NextResponse.json({ error: "Unauthorized: 会话无效或已过期" }, { status: 401 })
       }
 
-      let remoteItems: any[] = []
-      try {
-        const res = await growdeskFetch<{ data: any[]; page?: { nextCursor: string | null } }>(
-          "/api/v1/notifications",
-          {
-            method: "GET",
-            accessToken: bffSession.accessToken,
-          }
-        )
-        if (res.ok && res.data) {
-          const list = Array.isArray(res.data) ? res.data : (res.data as any).data
-          if (Array.isArray(list)) {
-            remoteItems = list
-          }
-        }
-      } catch {}
-
-      // Fallback & merge with local BFF store notifications
-      const localStore = bffNotificationStore.listNotifications(bffSession.user.id)
-      const combined = [...remoteItems, ...localStore.data]
-
-      // Deduplicate by id / eventKey
-      const seen = new Set<string>()
-      const deduped: any[] = []
-      for (const item of combined) {
-        const key = item.id || item.eventKey
-        if (key && !seen.has(key)) {
-          seen.add(key)
-          deduped.push(item)
-        } else if (!key) {
-          deduped.push(item)
-        }
-      }
-
-      const formatted: NotificationItem[] = deduped.map(fromGrowDeskNotification)
+      const remote = await bffNotificationStore.listNotifications(bffSession.user.id, { accessToken: bffSession.accessToken });
+      const formatted: NotificationItem[] = remote.data.map(fromGrowDeskNotification)
       return NextResponse.json(formatted)
     }
 
@@ -435,10 +405,12 @@ export async function GET(request: Request) {
 
     return NextResponse.json(notifications)
   } catch (error) {
+    if (GROWDESK_CONFIG.enabled) return bridgeErrorResponse(error);
     console.error('GET /api/notifications error:', error)
     return NextResponse.json(
       { error: 'Failed to fetch notifications' },
       { status: 500 }
     )
   }
+  });
 }

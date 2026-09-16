@@ -82,10 +82,13 @@ export default function MedicalReportsPage() {
 
   const fetchAiJobs = React.useCallback(async () => {
     try {
-      const d = await fetch("/api/ai/jobs").then((r) => r.json());
+      if (!baby) { setAiJobs([]); return; }
+      const res=await fetch(`/api/ai/jobs?babyId=${encodeURIComponent(baby.id)}`);
+      if (!res.ok) throw new Error("任务读取失败");
+      const d=await res.json();
       setAiJobs(d.jobs || []);
     } catch { /* 离线忽略 */ }
-  }, []);
+  }, [baby?.id]);
 
   useEffect(() => {
     fetchAiJobs();

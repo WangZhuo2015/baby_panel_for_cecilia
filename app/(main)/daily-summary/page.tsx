@@ -26,6 +26,7 @@ import {
   ShieldCheck,
   Lightbulb,
 } from "lucide-react";
+import { useToast } from "@/components/ui/Toast";
 import { useBabyStore } from "@/stores/useBabyStore";
 import { CuteCard } from "@/components/ui/CuteCard";
 import { CuteButton } from "@/components/ui/CuteButton";
@@ -40,6 +41,7 @@ import {
   isValidDateStr,
 } from "@/lib/date";
 import { calculateAge } from "@/lib/age";
+import { loadDailySummaryFromBackend } from "@/lib/growdesk/daily-summary-client";
 import type { AiDailySummaryResult } from "@/types/daily-summary";
 import { DailySummaryPosterModal } from "@/components/daily-summary/DailySummaryPosterModal";
 import { BabyAvatar } from "@/components/ui/BabyAvatar";
@@ -75,6 +77,7 @@ export default function DailySummaryPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
+  const {showToast}=useToast();
   const baby = useBabyStore((s) => s.baby);
   const timeline = useBabyStore((s) => s.timeline);
   const fetchTimeline = useBabyStore((s) => s.fetchTimeline);
@@ -130,16 +133,14 @@ export default function DailySummaryPage() {
     else setLoading(true);
 
     try {
-      const url = `/api/ai/daily-summary?date=${date}${force ? "&force=1" : ""}`;
-      const res = await fetch(url);
-      if (res.ok) {
-        const data = await res.json();
-        if (data.summary) {
-          setSummary(data.summary);
-        }
-      }
+      const identity=useBabyStore.getState();
+      if(!identity.baby||!identity.user)return;
+      const result=await loadDailySummaryFromBackend({babyId:identity.baby.id,userId:identity.user.id,date,generate:force});
+      if(useBabyStore.getState().baby?.id===identity.baby.id&&useBabyStore.getState().user?.id===identity.user.id)setSummary(result);
+
     } catch (e) {
       console.error("Failed to load daily summary:", e);
+      showToast(e instanceof Error?e.message:"日报读取失败");
     } finally {
       setLoading(false);
       setRegenerating(false);
@@ -155,7 +156,7 @@ export default function DailySummaryPage() {
   useEffect(() => {
     loadDailySummary(selectedDate);
     fetchTimeline(selectedDate, true);
-  }, [selectedDate, fetchTimeline]);
+  }, [selectedDate, fetchTimeline, baby?.id]);
 
   const handlePrevDay = () => {
     updateSelectedDate(addDays(selectedDate, -1));

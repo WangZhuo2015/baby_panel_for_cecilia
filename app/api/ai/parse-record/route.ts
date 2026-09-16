@@ -1,3 +1,5 @@
+import { durableParseRecord } from "@/lib/growdesk/parse-record-request";
+import { GROWDESK_CONFIG } from "@/lib/config";
 import { NextResponse } from "next/server";
 import { requireAuth, requireBaby } from "@/lib/api-helpers";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
@@ -18,6 +20,7 @@ const HINT: Record<string, string> = {
 };
 
 export async function POST(request: Request) {
+  if(GROWDESK_CONFIG.enabled)return durableParseRecord(request);
   const auth = await requireAuth(request);
   if (auth.errorResponse) return auth.errorResponse;
 

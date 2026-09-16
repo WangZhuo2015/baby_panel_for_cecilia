@@ -41,11 +41,22 @@ export const BRIDGED_METHODS: Readonly<Record<string, readonly string[]>> = {
   "/api/agent/voice": ["POST"],
   "/api/agent/voice/logs": ["GET"],
   "/api/ai/sessions": ["GET", "POST"],
-  "/api/ai/chat": ["POST"],
+  "/api/ai/chat": ["GET", "POST"],
+  "/api/ai/chat/cancel": ["POST"],
+  "/api/ai/chat/confirm": ["POST"],
+  "/api/ai/chat/retry": ["POST"],
+  "/api/asr/transcribe": ["POST"],
+  "/api/ai/parse-record": ["POST"],
+  "/api/ai/daily-summary": ["GET", "POST"],
   "/api/ai/jobs": ["GET", "POST"],
   "/api/user/tokens": ["GET", "POST"],
 };
 export function isBridgedMethod(pathname: string, method: string): boolean {
+  if (/^\/api\/ai\/jobs\/[a-f0-9-]{36}\/(retry|cancel)$/i.test(pathname)) return method.toUpperCase() === "POST";
+  if (/^\/api\/ai\/jobs\/[a-f0-9-]{36}$/i.test(pathname)) return ["GET", "PATCH"].includes(method.toUpperCase());
+  if (/^\/api\/ai\/sessions\/[a-f0-9-]{36}$/i.test(pathname)) return ["GET", "PATCH", "DELETE"].includes(method.toUpperCase());
+  if (/^\/api\/agent\/voice\/logs\/[a-f0-9-]{36}$/i.test(pathname)) return ["GET", "PATCH"].includes(method.toUpperCase());
+  if (/^\/api\/notifications\/[a-f0-9-]{36}$/i.test(pathname)) return ["POST", "PATCH", "DELETE"].includes(method.toUpperCase());
   if (/^\/api\/books\/[^/]+$/.test(pathname)) return method.toUpperCase() === "PATCH";
   if (/^\/api\/medical\/reports\/[a-f0-9-]{36}$/i.test(pathname)) return ["GET", "PUT", "PATCH", "DELETE"].includes(method.toUpperCase());
   if (/^\/api\/attachments\/[a-f0-9-]{36}$/i.test(pathname)) return method.toUpperCase() === "GET";

@@ -1,3 +1,7 @@
+import { familyTimeZone } from "@/lib/growdesk/record-list";
+import { growdeskRouteBoundary } from "@/lib/growdesk/route-boundary";
+import { readWebDailySummary, enqueueWebDailySummary } from "@/lib/growdesk/daily-summary";
+import { readJsonObject } from "@/lib/growdesk/record-route-helpers";
 import { NextResponse } from "next/server";
 import { requireAuth, requireBaby } from "@/lib/api-helpers";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
@@ -12,48 +16,12 @@ export const maxDuration = 120;
 
 export async function GET(request: Request) {
   try {
-    if (GROWDESK_CONFIG.enabled) {
-      const bffSession = await resolveBffSession(request);
-      if (!bffSession) return NextResponse.json({ error: "Unauthorized: 会话无效或已过期" }, { status: 401 });
-      const { searchParams } = new URL(request.url);
-      const requestedBabyId = searchParams.get("babyId");
-      const dateParam = searchParams.get("date");
-      const forceParam = searchParams.get("force");
-
-      const date = dateParam && isValidDateStr(dateParam) ? dateParam : getLocalDateStr();
-      if (dateParam && !isValidDateStr(dateParam)) {
-        return NextResponse.json({ error: "日期格式无效，必须为 YYYY-MM-DD" }, { status: 400 });
-      }
-
-      let baby: any = null;
-      if (requestedBabyId) {
-        const babyRes = await growdeskFetch<any>(`/api/v1/babies/${requestedBabyId}`, {
-          accessToken: bffSession.accessToken,
-        });
-        if (babyRes.ok && babyRes.data) {
-          baby = babyRes.data;
-        }
-      }
-      if (!baby) {
-        baby = await loadWebBaby(growdeskFetch, bffSession.accessToken);
-      }
-      if (!baby) {
-        return NextResponse.json({ error: "未找到宝宝档案" }, { status: 404 });
-      }
-
-      const summary = await generateAiDailySummary(
-        {
-          userId: bffSession.user.id,
-          babyId: baby.id,
-          baby,
-          accessToken: bffSession.accessToken,
-          familyId: baby.familyId,
-        },
-        date,
-        { forceRefresh: forceParam === "true" || forceParam === "1" }
-      );
-      return NextResponse.json({ summary });
-    }
+    if (GROWDESK_CONFIG.enabled) return growdeskRouteBoundary(request,async()=>{
+      const session=await resolveBffSession(request);
+      if(!session) return NextResponse.json({error:"会话已过期"},{status:401});
+      const query=new URL(request.url).searchParams;
+      return NextResponse.json(await readWebDailySummary(growdeskFetch,session.accessToken,session.user.id,query.get("babyId"),query.get("date")));
+    });
 
     const auth = await requireAuth(request);
     if (auth.errorResponse) return auth.errorResponse;
@@ -99,46 +67,19 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    if (GROWDESK_CONFIG.enabled) {
-      const bffSession = await resolveBffSession(request);
-      if (!bffSession) return NextResponse.json({ error: "Unauthorized: 会话无效或已过期" }, { status: 401 });
-      const body = await request.json().catch(() => ({}));
-      const { babyId: requestedBabyId, date: dateParam, force } = body;
-
-      const date = dateParam && isValidDateStr(dateParam) ? dateParam : getLocalDateStr();
-      if (dateParam && !isValidDateStr(dateParam)) {
-        return NextResponse.json({ error: "日期格式无效，必须为 YYYY-MM-DD" }, { status: 400 });
+    if (GROWDESK_CONFIG.enabled) return growdeskRouteBoundary(request,async()=>{
+      const session=await resolveBffSession(request);
+      if(!session) return NextResponse.json({error:"会话已过期"},{status:401});
+      const body=await readJsonObject(request);
+      if(!body.date) {
+        const baby=await loadWebBaby(growdeskFetch,session.accessToken,body.babyId);
+        if(!baby) return NextResponse.json({error:"宝宝不存在"},{status:404});
+        const zone=await familyTimeZone(growdeskFetch,session.accessToken,baby.id);
+        body.date=new Intl.DateTimeFormat("en-CA",{timeZone:zone,year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());
       }
-
-      let baby: any = null;
-      if (requestedBabyId) {
-        const babyRes = await growdeskFetch<any>(`/api/v1/babies/${requestedBabyId}`, {
-          accessToken: bffSession.accessToken,
-        });
-        if (babyRes.ok && babyRes.data) {
-          baby = babyRes.data;
-        }
-      }
-      if (!baby) {
-        baby = await loadWebBaby(growdeskFetch, bffSession.accessToken);
-      }
-      if (!baby) {
-        return NextResponse.json({ error: "未找到宝宝档案" }, { status: 404 });
-      }
-
-      const summary = await generateAiDailySummary(
-        {
-          userId: bffSession.user.id,
-          babyId: baby.id,
-          baby,
-          accessToken: bffSession.accessToken,
-          familyId: baby.familyId,
-        },
-        date,
-        { forceRefresh: force !== false }
-      );
-      return NextResponse.json({ summary });
-    }
+      const job=await enqueueWebDailySummary(growdeskFetch,session.accessToken,session.user.id,body);
+      return NextResponse.json({jobId:job.id,babyId:job.babyId,status:"processing"},{status:202});
+    });
 
     const auth = await requireAuth(request);
     if (auth.errorResponse) return auth.errorResponse;

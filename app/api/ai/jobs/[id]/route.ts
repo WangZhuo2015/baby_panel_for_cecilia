@@ -1,3 +1,4 @@
+import { growdeskRouteBoundary } from "@/lib/growdesk/route-boundary";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/api-helpers";
@@ -18,6 +19,7 @@ export async function GET(
   request: Request,
   context: { params: Promise<{ id: string }> }
 ) {
+  return growdeskRouteBoundary(request, async () => {
   const { id } = await context.params;
 
   if (GROWDESK_CONFIG.enabled) {
@@ -26,13 +28,14 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized: 会话无效或已过期" }, { status: 401 });
     }
 
-    const job = bffAiJobStore.getJob(id, bffSession.user.id);
-    if (!job) {
+    const job = await bffAiJobStore.getJob(id, bffSession.user.id, bffSession.accessToken);
+    const requestedBaby=new URL(request.url).searchParams.get("babyId");
+    if (!job || (requestedBaby && job.babyId !== requestedBaby)) {
       return NextResponse.json({ error: "任务不存在" }, { status: 404 });
     }
 
     const status =
-      job.status === "succeeded" ? "done" : job.status === "running" ? "processing" : job.status;
+      job.status === "succeeded" ? "done" : ["pending", "running"].includes(job.status) ? "processing" : job.status;
     let result: any = null;
     if (job.status === "succeeded" && job.resultJson) {
       try {
@@ -43,7 +46,7 @@ export async function GET(
     }
 
     return NextResponse.json({
-      id: job.id,
+      id: job.id, babyId: job.babyId, type: job.type, taskStatus: job.status,
       status,
       result,
       errorMessage: job.errorMessage,
@@ -78,6 +81,7 @@ export async function GET(
     imageUrl: job.imageUrl,
     claimed: job.claimed,
   });
+  });
 }
 
 /** 领取（确认入库后标记），防止重复提醒 */
@@ -85,6 +89,7 @@ export async function PATCH(
   request: Request,
   context: { params: Promise<{ id: string }> }
 ) {
+  return growdeskRouteBoundary(request, async () => {
   const { id } = await context.params;
 
   if (GROWDESK_CONFIG.enabled) {
@@ -93,7 +98,7 @@ export async function PATCH(
       return NextResponse.json({ error: "Unauthorized: 会话无效或已过期" }, { status: 401 });
     }
 
-    const claimed = bffAiJobStore.claimJob(id, bffSession.user.id);
+    const claimed = await bffAiJobStore.claimJob(id, bffSession.user.id, bffSession.accessToken);
     if (!claimed) {
       return NextResponse.json({ error: "任务不存在" }, { status: 404 });
     }
@@ -109,4 +114,5 @@ export async function PATCH(
 
   await prisma.aiJob.update({ where: { id }, data: { claimed: true } });
   return NextResponse.json({ success: true });
+  });
 }

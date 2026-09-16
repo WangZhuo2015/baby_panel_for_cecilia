@@ -1,3 +1,5 @@
+import { readJsonObject } from "@/lib/growdesk/record-route-helpers";
+import { growdeskRouteBoundary } from "@/lib/growdesk/route-boundary";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth, requireBaby } from "@/lib/api-helpers";
@@ -12,6 +14,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export async function GET(request: Request) {
+  return growdeskRouteBoundary(request, async () => {
   if (GROWDESK_CONFIG.enabled) {
     const bffSession = await resolveBffSession(request);
     if (!bffSession) {
@@ -53,7 +56,7 @@ export async function GET(request: Request) {
   const offset = Math.max(0, parseInt(url.searchParams.get("offset") || "0", 10));
 
   if (babyId) {
-    const babyResult = await requireBaby(user.id, babyId);
+    const babyResult = await requireBaby(user.id, typeof babyId === "string" ? babyId : undefined);
     if (babyResult.errorResponse) return babyResult.errorResponse;
   }
 
@@ -107,9 +110,11 @@ export async function GET(request: Request) {
   }));
 
   return NextResponse.json({ total, sessions: formatted });
+  });
 }
 
 export async function POST(request: Request) {
+  return growdeskRouteBoundary(request, async () => {
   if (GROWDESK_CONFIG.enabled) {
     const bffSession = await resolveBffSession(request);
     if (!bffSession) {
@@ -125,7 +130,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const body = await request.json().catch(() => ({}));
+    const body = await readJsonObject(request);
     const { babyId, title } = body;
     const contextType =
       typeof body.contextType === "string" && body.contextType.trim()
@@ -147,7 +152,7 @@ export async function POST(request: Request) {
     const session = await bffAiSessionStore.createSession({
       userId: bffSession.user.id,
       babyId: targetBabyId,
-      title,
+      title: typeof title === "string" ? title : undefined,
       contextType,
       accessToken: bffSession.accessToken,
     });
@@ -178,7 +183,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const body = await request.json().catch(() => ({}));
+  const body = await readJsonObject(request);
   const { babyId, title } = body;
   const contextType =
     typeof body.contextType === "string" && body.contextType.trim()
@@ -187,7 +192,7 @@ export async function POST(request: Request) {
 
   let targetBabyId: string | null = null;
   if (babyId) {
-    const babyRes = await requireBaby(user.id, babyId);
+    const babyRes = await requireBaby(user.id, typeof babyId === "string" ? babyId : undefined);
     if (babyRes.errorResponse) return babyRes.errorResponse;
     targetBabyId = babyRes.baby.id;
   } else {
@@ -216,5 +221,6 @@ export async function POST(request: Request) {
       updatedAt: session.updatedAt.toISOString(),
       messages: [],
     },
+  });
   });
 }

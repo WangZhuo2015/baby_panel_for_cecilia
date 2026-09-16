@@ -45,6 +45,8 @@ import {
   RefreshCw,
   Square,
 } from "lucide-react";
+import { pollJobResult } from "@/lib/growdesk/job-poll";
+import type { ChatPlan } from "@/lib/growdesk/durable-chat";
 import { useBabyStore } from "@/stores/useBabyStore";
 import { BabyAvatar } from "@/components/ui/BabyAvatar";
 import { calculateAge } from "@/lib/age";
@@ -52,6 +54,7 @@ import { AiActionCard, ActionCardData } from "@/components/ui/AiActionCard";
 import { VoiceRecordingBar } from "@/components/ui/VoiceRecordingBar";
 import { useToast } from "@/components/ui/Toast";
 import { compressImageForOcr } from "@/lib/upload";
+import { loadDailySummaryFromBackend } from "@/lib/growdesk/daily-summary-client";
 import type { AiDailySummaryResult } from "@/types/daily-summary";
 
 export type AiContextType =
@@ -438,6 +441,14 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [pendingPlan,setPendingPlan]=useState<{runId:string;plan:ChatPlan}|null>(null);
+  const [confirmingPlan,setConfirmingPlan]=useState(false);
+  useEffect(()=>setPendingPlan(null),[baby?.id,currentContextType]);
+  const applyPendingPlan=async()=>{
+    if(!pendingPlan||!baby)return;setConfirmingPlan(true);
+    try{const response=await fetch('/api/ai/chat/confirm',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({runId:pendingPlan.runId,planHash:pendingPlan.plan.planHash,actionIds:pendingPlan.plan.actions.map(a=>a.actionId),babyId:baby.id})});const data=await response.json();if(!response.ok)throw new Error(data.error||'确认失败');setPendingPlan(null);showToast('已确认并保存记录');await useBabyStore.getState().refreshAll();}
+    catch(error){showToast(error instanceof Error?error.message:'确认失败');}finally{setConfirmingPlan(false);}
+  };
   const [sessionTitle, setSessionTitle] = useState<string | null>(null);
   const sessionIdRef = useRef<string | null>(sessionId);
   sessionIdRef.current = sessionId;
@@ -454,14 +465,13 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
     if (!baby?.id) return;
     setLoadingDailySummary(true);
     try {
-      const url = `/api/ai/daily-summary?babyId=${baby.id}${force ? "&force=true" : ""}`;
-      const res = await fetch(url);
-      if (res.ok) {
-        const data = await res.json();
-        setDailySummaryData(data.summary);
-      }
-    } catch {
-      // ignore
+      const identity=useBabyStore.getState();
+      if(!identity.user)return;
+      const data=await loadDailySummaryFromBackend({babyId:baby.id,userId:identity.user.id,generate:force});
+      if(useBabyStore.getState().baby?.id===baby.id&&useBabyStore.getState().user?.id===identity.user.id)setDailySummaryData(data);
+
+    } catch(error) {
+      showToast(error instanceof Error?error.message:"日报读取失败");
     } finally {
       setLoadingDailySummary(false);
     }
@@ -503,6 +513,7 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
       if (!res.ok) throw new Error("加载历史对话失败");
       const data = await res.json();
       const s = data.session;
+      setPendingPlan(data.pendingPlan&&data.runId?{runId:data.runId,plan:data.pendingPlan}:null);
       setSessionId(s.id);
       setSessionTitle(s.title);
       if (s.messages && s.messages.length > 0) {
@@ -687,10 +698,17 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
           const blob = new Blob(chunksRef.current, { type: mr.mimeType || "audio/webm" });
           if (blob.size < 800) throw new Error("录音太短");
           const fd = new FormData();
+          const recordedScope=useBabyStore.getState();
+          if(!recordedScope.baby||!recordedScope.user)throw new Error('请先选择宝宝');
+          fd.append('babyId',recordedScope.baby.id);
+          fd.append('clientRequestId',crypto.randomUUID());
           fd.append("audio", blob, `voice${mime.includes("mp4") ? ".m4a" : ".webm"}`);
           const res = await fetch("/api/asr/transcribe", { method: "POST", body: fd });
-          const data = await res.json().catch(() => ({}));
+          let data = await res.json().catch(() => ({}));
           if (!res.ok) throw new Error(data?.error || "识别失败");
+          if(res.status===202){data=await pollJobResult(String(data.jobId),recordedScope.baby.id);}
+          if(useBabyStore.getState().baby?.id!==recordedScope.baby.id||useBabyStore.getState().user?.id!==recordedScope.user.id)throw new Error('账号或宝宝已切换，识别结果保留在原账号任务中');
+          if(typeof data.text!=='string')throw new Error('识别结果缺少文本');
           showToast(`已识别：${String(data.text).slice(0, 30)}${data.text.length > 30 ? "…" : ""}`);
           handleSend(String(data.text));
         } catch (err: unknown) {
@@ -782,9 +800,11 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
             images: currentImgs,
             image: currentImgs.length === 1 ? currentImgs[0] : undefined,
             sessionId: sessionIdRef.current || undefined,
+            clientMessageId: crypto.randomUUID(),
           }),
         });
 
+        if(!res.ok){const error=await res.json().catch(()=>({}));throw new Error(error.error||`请求失败 HTTP ${res.status}`);}
         if (!res.body) throw new Error("No response stream");
 
         const reader = res.body.getReader();
@@ -808,6 +828,9 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
             if (trimmed.startsWith("data: ")) {
               try {
                 const data = JSON.parse(trimmed.slice(6));
+                if(data.plan&&typeof data.runId==='string')setPendingPlan({runId:data.runId,plan:data.plan});
+                if(data.pending)showToast(data.message||'任务仍在后端处理中');
+                if(data.error)showToast(String(data.error));
                 if (data.session && typeof data.session.id === "string") {
                   setSessionId(data.session.id);
                   sessionIdRef.current = data.session.id;
@@ -964,6 +987,7 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
           signal: controller.signal,
         });
 
+        if(!res.ok){const error=await res.json().catch(()=>({}));throw new Error(error.error||`请求失败 HTTP ${res.status}`);}
         if (!res.body) throw new Error("No response stream");
 
         const reader = res.body.getReader();
@@ -987,6 +1011,9 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
             if (trimmed.startsWith("data: ")) {
               try {
                 const data = JSON.parse(trimmed.slice(6));
+                if(data.plan&&typeof data.runId==='string')setPendingPlan({runId:data.runId,plan:data.plan});
+                if(data.pending)showToast(data.message||'任务仍在后端处理中');
+                if(data.error)showToast(String(data.error));
                 if (data.text) {
                   if (data.replay) {
                     accumulatedText = data.text;
@@ -1071,6 +1098,7 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
         if (!res.ok) return;
         const data = await res.json();
         const s = data.session;
+      setPendingPlan(data.pendingPlan&&data.runId?{runId:data.runId,plan:data.pendingPlan}:null);
         if (!s) return;
 
         const mapped: Message[] = mapDbMessages(s.messages || []);
@@ -1886,6 +1914,12 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
                 <div ref={messagesEndRef} />
               </div>
 
+              {pendingPlan&&(<section className="p-3 border-t border-primary/20 bg-card" aria-label="待确认的记录变更">
+                <p className="text-sm font-semibold">以下变更尚未写入，请核对</p>
+                {pendingPlan.plan.actions.map(action=><details key={action.actionId} className="text-xs my-2"><summary>{action.summary}</summary><pre className="whitespace-pre-wrap">{JSON.stringify(action.payload,null,2)}</pre></details>)}
+                <button type="button" disabled={confirmingPlan} onClick={()=>void applyPendingPlan()} className="px-3 py-2 rounded bg-primary text-white disabled:opacity-50">确认保存</button>
+                <button type="button" disabled={confirmingPlan} onClick={async()=>{try{const res=await fetch('/api/ai/chat/cancel',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({runId:pendingPlan.runId,babyId:baby?.id})});if(!res.ok)throw new Error('取消失败');setPendingPlan(null);}catch(e){showToast(e instanceof Error?e.message:'取消失败');}}} className="px-3 py-2">不执行</button>
+              </section>)}
               {/* Bottom Input Area */}
               <div
                 className="p-3 pb-[max(14px,env(safe-area-inset-bottom))] relative bg-card border-t border-primary/15 flex flex-col gap-2 shrink-0 z-30"

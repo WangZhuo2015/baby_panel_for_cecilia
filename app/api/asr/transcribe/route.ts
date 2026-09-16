@@ -1,3 +1,5 @@
+import {GROWDESK_CONFIG} from "@/lib/config";
+import {transcribeThroughBackend} from "@/lib/growdesk/transcription-route";
 import { NextResponse } from "next/server";
 import { requireAuth } from "@/lib/api-helpers";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
@@ -22,6 +24,7 @@ export const maxDuration = 120;
  *   ASR_COMMAND="python3 /srv/asr/faster_whisper.py --lang zh {input}"
  */
 export async function POST(request: Request) {
+  if(GROWDESK_CONFIG.enabled)return transcribeThroughBackend(request);
   try {
     const auth = await requireAuth(request);
     if (auth.errorResponse) return auth.errorResponse;

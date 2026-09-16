@@ -1,3 +1,5 @@
+import {GROWDESK_CONFIG} from "@/lib/config";
+import {durableChatAction} from "@/lib/growdesk/durable-chat";
 import { NextResponse } from "next/server";
 import { requireAuth } from "@/lib/api-helpers";
 import { activeChatRunManager } from "@/lib/agent";
@@ -6,6 +8,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
+  if(GROWDESK_CONFIG.enabled)return durableChatAction(request,"cancel");
   try {
     const auth = await requireAuth(request);
     if (auth.errorResponse) return auth.errorResponse;

@@ -1,3 +1,5 @@
+import { growdeskRouteBoundary } from "@/lib/growdesk/route-boundary";
+import { bridgeErrorResponse } from "@/lib/growdesk/bridge-protocol";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/api-helpers";
@@ -11,6 +13,7 @@ export async function GET(
   request: Request,
   props: { params: Promise<{ id: string }> }
 ) {
+  return growdeskRouteBoundary(request, async () => {
   try {
     if (GROWDESK_CONFIG.enabled) {
       const bffSession = await resolveBffSession(request);
@@ -18,7 +21,7 @@ export async function GET(
         return NextResponse.json({ success: false, error: "Unauthorized: 会话无效或已过期" }, { status: 401 });
       }
       const { id } = await props.params;
-      const log = bffVoiceLogStore.getLog(id, bffSession.user.id);
+      const log = await bffVoiceLogStore.getLog(id, bffSession.user.id, bffSession.accessToken);
       if (!log) {
         return NextResponse.json(
           { success: false, error: "未找到该语音交互记录" },
@@ -48,18 +51,21 @@ export async function GET(
 
     return NextResponse.json({ success: true, log });
   } catch (error: any) {
+    if (GROWDESK_CONFIG.enabled) return bridgeErrorResponse(error);
     console.error("GET /api/agent/voice/logs/[id] error:", error);
     return NextResponse.json(
       { success: false, error: error?.message || "获取记录失败" },
       { status: 500 }
     );
   }
+  });
 }
 
 export async function PATCH(
   request: Request,
   props: { params: Promise<{ id: string }> }
 ) {
+  return growdeskRouteBoundary(request, async () => {
   try {
     if (GROWDESK_CONFIG.enabled) {
       const bffSession = await resolveBffSession(request);
@@ -70,7 +76,7 @@ export async function PATCH(
       const body = await request.json().catch(() => ({}));
       const acknowledged = body.acknowledged === true || body.acknowledged === "true";
 
-      const ok = bffVoiceLogStore.acknowledgeLog(id, bffSession.user.id, acknowledged);
+      const ok = await bffVoiceLogStore.acknowledgeLog(id, bffSession.user.id, acknowledged, bffSession.accessToken);
       if (!ok) {
         return NextResponse.json(
           { success: false, error: "记录不存在或无权修改" },
@@ -101,10 +107,12 @@ export async function PATCH(
 
     return NextResponse.json({ success: true });
   } catch (error: any) {
+    if (GROWDESK_CONFIG.enabled) return bridgeErrorResponse(error);
     console.error("PATCH /api/agent/voice/logs/[id] error:", error);
     return NextResponse.json(
       { success: false, error: error?.message || "更新状态失败" },
       { status: 500 }
     );
   }
+  });
 }

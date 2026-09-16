@@ -9,7 +9,7 @@ import {
 } from "./bridge-protocol";
 
 /** The old Web handlers return an array, while GrowDesk uses keyset pages. */
-export type LegacyRecordKind = "feeding" | "sleep" | "diaper" | "food" | "timeline";
+export type LegacyRecordKind = "feeding" | "sleep" | "diaper" | "food" | "supplement" | "timeline";
 
 export interface DatedRecord {
   occurredAt?: string | null;

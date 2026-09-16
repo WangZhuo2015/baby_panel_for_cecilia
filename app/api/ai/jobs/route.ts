@@ -1,3 +1,5 @@
+import { readJsonObject } from "@/lib/growdesk/record-route-helpers";
+import { growdeskRouteBoundary } from "@/lib/growdesk/route-boundary";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/api-helpers";
@@ -10,20 +12,23 @@ export const runtime = "nodejs";
 
 /** 当前用户的 AI 任务列表（待领取优先，最近 10 条） */
 export async function GET(request: Request) {
+  return growdeskRouteBoundary(request, async () => {
   if (GROWDESK_CONFIG.enabled) {
     const bffSession = await resolveBffSession(request);
     if (!bffSession) {
       return NextResponse.json({ error: "Unauthorized: 会话无效或已过期" }, { status: 401 });
     }
 
-    const { pendingClaim, jobs } = bffAiJobStore.listJobs(bffSession.user.id, {
+    const { pendingClaim, jobs } = await bffAiJobStore.listJobs(bffSession.user.id, {
       type: "medical_ocr",
+      babyId: new URL(request.url).searchParams.get("babyId") || undefined,
+      accessToken: bffSession.accessToken,
       limit: 10,
     });
 
     const formatted = jobs.map((j) => ({
-      id: j.id,
-      status: j.status === "succeeded" ? "done" : j.status === "running" ? "processing" : j.status,
+      id: j.id, babyId: j.babyId, type: j.type, taskStatus: j.status,
+      status: j.status === "succeeded" ? "done" : ["pending", "running"].includes(j.status) ? "processing" : j.status,
       imageUrl: j.imageUrl,
       errorMessage: j.errorMessage,
       claimed: j.claimed,
@@ -64,12 +69,31 @@ export async function GET(request: Request) {
   return NextResponse.json({
     pendingClaim: jobs.filter((j) => j.status === "done" && !j.claimed).length,
     jobs: jobs.map((j) => ({
-      id: j.id,
+      id: j.id, babyId: j.babyId, type: j.type, taskStatus: j.status,
       status: j.status,
       imageUrl: j.imageUrl,
       errorMessage: j.errorMessage,
       claimed: j.claimed,
       createdAt: j.createdAt,
     })),
+  });
+  });
+}
+
+/** Explicit submission only; this endpoint never evaluates client-supplied identity. */
+export async function POST(request: Request) {
+  return growdeskRouteBoundary(request, async () => {
+    if (!GROWDESK_CONFIG.enabled) return NextResponse.json({ error: "该接口需要 GrowDesk" }, { status: 501 });
+    const session = await resolveBffSession(request);
+    if (!session) return NextResponse.json({ error: "会话已过期" }, { status: 401 });
+    const body = await readJsonObject(request);
+    const result = await bffAiJobStore.createJob({
+      userId: session.user.id, babyId: String(body.babyId || ""), type: String(body.type || ""),
+      clientRequestId: String(body.clientRequestId || ""),
+      attachmentId: typeof body.attachmentId === "string" ? body.attachmentId : undefined,
+      targetDate: typeof body.targetDate === "string" ? body.targetDate : undefined,
+      accessToken: session.accessToken,
+    });
+    return NextResponse.json({ jobId: result.id, babyId: result.babyId, status: "processing" }, { status: 202 });
   });
 }

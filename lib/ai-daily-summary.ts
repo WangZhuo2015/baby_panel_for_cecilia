@@ -1,3 +1,5 @@
+import { fetchScopedPages } from "@/lib/growdesk/page-list";
+import { pathId } from "@/lib/growdesk/bridge-protocol";
 import { prisma } from "@/lib/prisma";
 import {
   getLocalDayUtcRange,
@@ -90,14 +92,11 @@ export async function fetchDailyComprehensiveMetrics(
   if (useGrowDesk) {
     const dateQuery = new URLSearchParams({ date });
     const [feedingRaw, sleepRaw, diaperRaw, foodRaw, bounds] = await Promise.all([
-      fetchLegacyRecordList<GrowDeskFeedingRecord>(growdeskFetch, token, ctx.babyId, dateQuery, "feeding").catch(() => []),
-      fetchLegacyRecordList<GrowDeskSleepRecord>(growdeskFetch, token, ctx.babyId, dateQuery, "sleep").catch(() => []),
-      fetchLegacyRecordList<GrowDeskDiaperRecord>(growdeskFetch, token, ctx.babyId, dateQuery, "diaper").catch(() => []),
-      fetchLegacyRecordList<GrowDeskFoodRecord>(growdeskFetch, token, ctx.babyId, dateQuery, "food").catch(() => []),
-      familyDayBounds(growdeskFetch, token, ctx.babyId, date).catch(() => {
-        const { start, end } = getLocalDayUtcRange(date);
-        return { start: new Date(start), end: new Date(end) };
-      }),
+      fetchLegacyRecordList<GrowDeskFeedingRecord>(growdeskFetch, token, ctx.babyId, dateQuery, "feeding"),
+      fetchLegacyRecordList<GrowDeskSleepRecord>(growdeskFetch, token, ctx.babyId, dateQuery, "sleep"),
+      fetchLegacyRecordList<GrowDeskDiaperRecord>(growdeskFetch, token, ctx.babyId, dateQuery, "diaper"),
+      fetchLegacyRecordList<GrowDeskFoodRecord>(growdeskFetch, token, ctx.babyId, dateQuery, "food"),
+      familyDayBounds(growdeskFetch, token, ctx.babyId, date),
     ]);
     feedingRecords = feedingRaw.map(fromGrowDeskFeedingRecord);
     sleepRecords = sleepRaw.map(fromGrowDeskSleepRecord);
@@ -106,26 +105,16 @@ export async function fetchDailyComprehensiveMetrics(
     dayStartMs = bounds.start.getTime();
     dayEndMs = bounds.end.getTime();
 
-    // Fetch latest growth measurement in BFF mode
-    try {
-      const growthRes = await growdeskFetch<any>(
-        `/api/v1/babies/${ctx.babyId}/growth-measurements?limit=1`,
-        { accessToken: token }
-      );
-      if (growthRes.ok) {
-        const gmList = Array.isArray(growthRes.data)
-          ? growthRes.data
-          : (growthRes.data as any)?.data || [];
-        if (gmList.length > 0) {
-          const gm = gmList[0];
-          growthRecords = {
-            weightKg: gm.weightKg ?? gm.weight_kg ?? null,
-            heightCm: gm.heightCm ?? gm.height_cm ?? null,
-            headCircumferenceCm: gm.headCircumferenceCm ?? gm.head_circumference_cm ?? null,
-          };
-        }
-      }
-    } catch {}
+    const [supplements, growth, reports] = await Promise.all([
+      fetchLegacyRecordList<{id:string;occurredAt:string;supplementName:string;amount:string|null}>(growdeskFetch,token,ctx.babyId,dateQuery,"supplement"),
+      fetchScopedPages<{id:string;babyId:string;measurementDate:string;weightKg:string|null;heightCm:string|null;headCircumferenceCm:string|null}>(growdeskFetch,token,`/api/v1/babies/${pathId(ctx.babyId)}/growth-measurements`,ctx.babyId),
+      fetchScopedPages<{id:string;babyId:string;reportDate:string}>(growdeskFetch,token,`/api/v1/babies/${pathId(ctx.babyId)}/medical-reports`,ctx.babyId),
+    ]);
+    supplementRecords = supplements.map(record=>({ id:record.id,time:formatIsoToLocalTime(record.occurredAt),
+      dose: 0, unitName: record.amount, product:{name:record.supplementName} }));
+    const measurement=growth.find(record=>record.measurementDate===date);
+    if(measurement) growthRecords={weightKg:measurement.weightKg===null?null:Number(measurement.weightKg),heightCm:measurement.heightCm===null?null:Number(measurement.heightCm),headCircumferenceCm:measurement.headCircumferenceCm===null?null:Number(measurement.headCircumferenceCm)};
+    medicalReports=reports.filter(record=>record.reportDate===date).length;
   } else {
     const { start, end } = getLocalDayUtcRange(date);
     dayStartMs = new Date(start).getTime();

@@ -1,3 +1,4 @@
+import { bffAiJobStore } from "@/lib/growdesk/ai-jobs";
 import { NextResponse } from "next/server";
 import { writeFile, mkdir } from "fs/promises";
 import path from "path";
@@ -16,8 +17,8 @@ import { GROWDESK_CONFIG } from "@/lib/config";
 import { resolveBffSession } from "@/lib/growdesk/session";
 import { verifyBffCsrf } from "@/lib/growdesk/csrf";
 import { growdeskFetch } from "@/lib/growdesk/client";
-import { loadWebBaby, creationFamilyId } from "@/lib/growdesk/bridge-identity";
-import { requireData, pathId } from "@/lib/growdesk/bridge-protocol";
+import { loadWebBaby } from "@/lib/growdesk/bridge-identity";
+import { requireData, pathId, BridgeError, bridgeErrorResponse } from "@/lib/growdesk/bridge-protocol";
 import { validateUploadedImage } from "@/lib/upload";
 
 export const maxDuration = 120;
@@ -55,6 +56,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Unauthorized: 会话无效或已过期" }, { status: 401 });
     }
 
+    const limit = checkRateLimit(`medical_ocr:${session.user.id}`, 15, 60_000);
+    if (!limit.success) return NextResponse.json({ error: "请求过于频繁" }, { status: 429, headers: { "retry-after": String(limit.resetSeconds) } });
     try {
       const form = await request.formData();
       const file = (form.get("image") || form.get("file")) as File | null;
@@ -70,7 +73,8 @@ export async function POST(request: Request) {
 
       const babyIdParam = form.get("babyId");
       const baby = await loadWebBaby(growdeskFetch, session.accessToken, babyIdParam || undefined);
-      const familyId = baby?.familyId || (await creationFamilyId(growdeskFetch, session.accessToken));
+      if (!baby) throw new BridgeError(404, "BABY_NOT_FOUND", "请先选择宝宝");
+      const familyId = baby.familyId;
 
       const sha256 = crypto.createHash("sha256").update(bytes).digest("hex");
       const mimeType =
@@ -111,47 +115,16 @@ export async function POST(request: Request) {
         })
       );
 
-      const imageUrl = `/api/attachments/${created.id}`;
-      const imageBase64 = bytes.toString("base64");
-      const imageDataUrl = `data:${mimeType};base64,${imageBase64}`;
-
-      const res = await fetch(`${AI_CONFIG.baseUrl.replace(/\/+$/, "")}/chat/completions`, {
-        method: "POST",
-        headers: AI_CONFIG.headers,
-        body: JSON.stringify({
-          model: AI_CONFIG.visionModel,
-          messages: [
-            { role: "system", content: SYSTEM_PROMPT },
-            {
-              role: "user",
-              content: [
-                { type: "text", text: "请结构化识别这张化验单/体检报告/生长记录单，提取所有指标项、参考值、异常标记和临床总结，输出为 JSON。" },
-                { type: "image_url", image_url: { url: imageDataUrl } },
-              ],
-            },
-          ],
-          temperature: 0.1,
-          max_tokens: 8000,
-          ...AI_CONFIG.completionExtras,
-          response_format: { type: "json_object" },
-        }),
-        signal: AbortSignal.timeout(100000),
-      });
-
-      if (!res.ok) {
-        return NextResponse.json({ error: "AI 识别服务暂时不可用，请手动录入" }, { status: 503 });
-      }
-
-      const aiData = await res.json();
-      const parsed = parseOcrSuccess(aiData, imageUrl);
-      return NextResponse.json({
-        ...parsed,
+      const job = await bffAiJobStore.createJob({
+        userId: session.user.id, babyId: baby.id, type: "medical_ocr",
         attachmentId: created.id,
-        imageUrl,
+        clientRequestId: String(form.get("clientRequestId") || crypto.randomUUID()),
+        accessToken: session.accessToken,
       });
-    } catch (err: any) {
-      console.error("GrowDesk medical OCR error:", err);
-      return NextResponse.json({ error: err?.message || "识别失败，请重试" }, { status: 500 });
+      return NextResponse.json({ jobId: job.id, status: "processing", babyId: baby.id,
+        imageUrl: `/api/attachments/${created.id}` }, { status: 202, headers: { "cache-control": "no-store" } });
+    } catch (err: unknown) {
+      return bridgeErrorResponse(err);
     }
   }
 

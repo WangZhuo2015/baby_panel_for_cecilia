@@ -1,3 +1,8 @@
+import { growdeskFetch } from "@/lib/growdesk/client";
+import { requireData, pathId } from "@/lib/growdesk/bridge-protocol";
+import {latestChatRun} from "@/lib/growdesk/durable-chat";
+import { readJsonObject } from "@/lib/growdesk/record-route-helpers";
+import { growdeskRouteBoundary } from "@/lib/growdesk/route-boundary";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/api-helpers";
@@ -14,6 +19,7 @@ export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  return growdeskRouteBoundary(request, async () => {
   const { id } = await params;
   const url = new URL(request.url);
   const requestedBabyId = url.searchParams.get("babyId");
@@ -78,17 +84,9 @@ export async function GET(
       }),
     };
 
-    const activeRun = activeChatRunManager.get(session.id);
-    const activeRunData =
-      activeRun && activeRun.userId === bffSession.user.id && activeRun.status === "running"
-        ? {
-            status: "running",
-            fullText: activeRun.fullText,
-            toolTraces: activeRun.toolTraces,
-          }
-        : null;
-
-    return NextResponse.json({ session: formatted, activeRun: activeRunData });
+    const run=await latestChatRun(session.id,bffSession);
+    const activeRunData=run&&['queued','running','cancelling'].includes(run.status)?{status:'running',fullText:run.resultSummary||'',toolTraces:[],runId:run.id}:null;
+    return NextResponse.json({session:formatted,activeRun:activeRunData,runId:run?.id,pendingPlan:run?.status==='awaiting_confirmation'?run.proposedPlan:null});
   }
 
   const auth = await requireAuth(request);
@@ -161,14 +159,16 @@ export async function GET(
       : null;
 
   return NextResponse.json({ session: formatted, activeRun: activeRunData });
+  });
 }
 
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  return growdeskRouteBoundary(request, async () => {
   const { id } = await params;
-  const body = await request.json().catch(() => ({}));
+  const body = await readJsonObject(request);
   const title = typeof body.title === "string" ? body.title.trim().slice(0, 50) : undefined;
 
   if (!title) {
@@ -213,12 +213,14 @@ export async function PATCH(
   });
 
   return NextResponse.json({ session: updated });
+  });
 }
 
 export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  return growdeskRouteBoundary(request, async () => {
   const { id } = await params;
 
   if (GROWDESK_CONFIG.enabled) {
@@ -227,8 +229,10 @@ export async function DELETE(
       return NextResponse.json({ error: "Unauthorized: 会话无效或已过期" }, { status: 401 });
     }
 
-    await activeChatRunManager.cancelRun(id, bffSession.user.id);
-    activeChatRunManager.delete(id);
+    const pending = await latestChatRun(id, bffSession);
+    if (pending && ["queued", "running", "cancelling", "awaiting_confirmation"].includes(pending.status)) {
+      requireData(await growdeskFetch(`/api/v1/ai/runs/${pathId(pending.id)}/cancel`, { method: "POST", accessToken: bffSession.accessToken }));
+    }
 
     const deleted = await bffAiSessionStore.deleteSession(id, bffSession.user.id, bffSession.accessToken);
     if (!deleted) {
@@ -258,4 +262,5 @@ export async function DELETE(
   });
 
   return NextResponse.json({ success: true, id });
+  });
 }

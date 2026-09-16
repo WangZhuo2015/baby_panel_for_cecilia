@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import Image from "next/image";
 import {
   Upload,
@@ -29,6 +29,7 @@ import { compressImageForOcr } from "@/lib/upload";
 import { useBabyStore } from "@/stores/useBabyStore";
 import { WhoPercentileBreakdown } from "@/components/growth/WhoPercentileCard";
 import { getWhoMetricsForBaby } from "@/lib/who-growth-standards";
+import { pollJobResult } from "@/lib/growdesk/job-poll";
 import type { GrowthMeasurement } from "@/types";
 
 type InputMode = "manual" | "ocr";
@@ -56,7 +57,9 @@ export function GrowthForm({
 }: GrowthFormProps) {
   const isEdit = formMode === "edit";
   const { showToast } = useToast();
-  const { baby } = useBabyStore();
+  const { baby, user } = useBabyStore();
+  const pendingKey=`growth-ocr-job:${user?.id ?? "none"}:${baby?.id ?? "none"}`;
+  const ocrController=useRef<AbortController|null>(null);
 
   const [inputMode, setInputMode] = useState<InputMode>("manual");
   const [date, setDate] = useState(() => initialData?.date || getLocalDateStr());
@@ -84,6 +87,24 @@ export function GrowthForm({
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
 
+  useEffect(()=>{
+    if(!baby||!user)return;
+    const id=sessionStorage.getItem(pendingKey);
+    const controller=new AbortController();
+    if(id){
+      setInputMode("ocr");setOcrLoading(true);
+      void pollJobResult(id,baby.id,{signal:controller.signal}).then(data=>{
+        if(typeof data.date==='string')setDate(data.date);
+        if(data.weightKg!=null)setWeight(String(data.weightKg));
+        if(data.heightCm!=null)setHeight(String(data.heightCm));
+        if(data.headCircumferenceCm!=null)setHead(String(data.headCircumferenceCm));
+        if(typeof data.imageUrl==='string')setUploadedImageUrl(data.imageUrl);
+        setOcrDone(true);sessionStorage.removeItem(pendingKey);
+      }).catch(error=>{if(!controller.signal.aborted)setOcrError(error.message);}).finally(()=>{if(!controller.signal.aborted)setOcrLoading(false);});
+    }
+    return ()=>{controller.abort();ocrController.current?.abort();};
+  },[baby?.id,user?.id]);
+
   const handleOcrUpload = async (file: File | null | undefined) => {
     if (!file) return;
     if (!file.type.startsWith("image/")) {
@@ -100,7 +121,8 @@ export function GrowthForm({
       setOcrElapsed((s) => s + 1);
     }, 1000);
 
-    const controller = new AbortController();
+    ocrController.current?.abort();
+    const controller = new AbortController();ocrController.current=controller;
     const timeoutId = setTimeout(() => controller.abort(), 45000);
 
     try {
@@ -109,6 +131,9 @@ export function GrowthForm({
 
       const formData = new FormData();
       formData.append("image", compressed);
+      if (!baby) throw new Error("请先选择宝宝");
+      formData.append("babyId",baby.id);
+      formData.append("clientRequestId",crypto.randomUUID());
       const res = await fetch("/api/growth/ocr", {
         method: "POST",
         body: formData,
@@ -116,11 +141,17 @@ export function GrowthForm({
       });
       clearTimeout(timeoutId);
 
-      const data = await res.json();
+      let data = await res.json();
       if (!res.ok) {
         setOcrError(data.error || "识别未能提取到有效数据，请手动核对录入");
         return;
       }
+      if(res.status===202&&typeof data.jobId==='string') {
+        sessionStorage.setItem(pendingKey,data.jobId);
+        data=await pollJobResult(data.jobId,baby.id,{signal:controller.signal});
+        sessionStorage.removeItem(pendingKey);
+      }
+      if (useBabyStore.getState().baby?.id !== baby.id || useBabyStore.getState().user?.id !== user?.id) return;
       if (data.date) setDate(data.date);
       if (data.weightKg != null) setWeight(String(data.weightKg));
       if (data.heightCm != null) setHeight(String(data.heightCm));

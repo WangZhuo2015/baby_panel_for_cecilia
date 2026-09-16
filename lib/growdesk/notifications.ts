@@ -1,6 +1,8 @@
 import crypto from "node:crypto";
-import fs from "node:fs";
-import path from "node:path";
+import { BridgeError, type BridgeFetch, requireData, pathId } from "./bridge-protocol";
+import { requireAccessToken } from "./ai-session-client";
+import { growdeskFetch } from "./client";
+
 import type { NotificationItem } from "@/app/api/notifications/route";
 
 export interface BffNotification {
@@ -21,9 +23,6 @@ export interface CreateBffNotificationInput {
   body: string;
   data?: Record<string, unknown> | null;
 }
-
-const DATA_DIR = path.resolve(process.cwd(), ".data");
-const NOTIFICATIONS_FILE = path.join(DATA_DIR, "growdesk-notifications.json");
 
 function formatRelativeTime(date: Date): string {
   const diffMs = Date.now() - date.getTime();
@@ -76,132 +75,31 @@ export function fromGrowDeskNotification(rec: any): NotificationItem {
   };
 }
 
-class BffNotificationStore {
-  private notifications = new Map<string, BffNotification>();
-  private loaded = false;
-
-  private ensureLoaded(): void {
-    if (this.loaded) return;
-    this.loaded = true;
-    try {
-      if (fs.existsSync(NOTIFICATIONS_FILE)) {
-        const raw = fs.readFileSync(NOTIFICATIONS_FILE, "utf-8");
-        const list: BffNotification[] = JSON.parse(raw);
-        for (const n of list) {
-          this.notifications.set(n.id, n);
-        }
-      }
-    } catch {
-      // Fallback to memory
-    }
-  }
-
-  private persist(): void {
-    try {
-      if (!fs.existsSync(DATA_DIR)) {
-        fs.mkdirSync(DATA_DIR, { recursive: true });
-      }
-      const list = Array.from(this.notifications.values());
-      const tmpFile = `${NOTIFICATIONS_FILE}.${Date.now()}.tmp`;
-      fs.writeFileSync(tmpFile, JSON.stringify(list, null, 2), "utf-8");
-      fs.renameSync(tmpFile, NOTIFICATIONS_FILE);
-    } catch {}
-  }
-
-  public createNotification(input: CreateBffNotificationInput): BffNotification {
-    this.ensureLoaded();
-
-    // Idempotent deduplication: do not duplicate identical eventKey within 24h for same user
-    const since24h = Date.now() - 24 * 60 * 60 * 1000;
-    for (const existing of this.notifications.values()) {
-      if (
-        existing.userId === input.userId &&
-        existing.eventKey === input.eventKey &&
-        new Date(existing.createdAt).getTime() > since24h
-      ) {
-        return existing;
-      }
-    }
-
-    const id = crypto.randomUUID();
-    const now = new Date().toISOString();
-    const notif: BffNotification = {
-      id,
-      userId: input.userId,
-      eventKey: input.eventKey,
-      title: input.title,
-      body: input.body,
-      data: input.data || null,
-      readAt: null,
-      createdAt: now,
-    };
-
-    this.notifications.set(id, notif);
-    this.persist();
-    return notif;
-  }
-
-  public listNotifications(
-    userId: string,
-    options: { limit?: number; unreadOnly?: boolean } = {}
-  ): { data: BffNotification[]; total: number; unreadCount: number } {
-    this.ensureLoaded();
-
-    const limit = Math.min(Math.max(options.limit || 20, 1), 100);
-    const userItems = Array.from(this.notifications.values())
-      .filter((n) => n.userId === userId)
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-
-    const unreadCount = userItems.filter((n) => !n.readAt).length;
-    let filtered = userItems;
-    if (options.unreadOnly) {
-      filtered = filtered.filter((n) => !n.readAt);
-    }
-
-    return {
-      data: filtered.slice(0, limit),
-      total: userItems.length,
-      unreadCount,
-    };
-  }
-
-  public markAsRead(userId: string, id: string): boolean {
-    this.ensureLoaded();
-    const notif = this.notifications.get(id);
-    if (!notif || notif.userId !== userId) {
-      return false;
-    }
-    notif.readAt = new Date().toISOString();
-    this.persist();
-    return true;
-  }
-
-  public deleteNotification(userId: string, id: string): boolean {
-    this.ensureLoaded();
-    const notif = this.notifications.get(id);
-    if (!notif || notif.userId !== userId) {
-      return false;
-    }
-    this.notifications.delete(id);
-    this.persist();
-    return true;
-  }
-
-  public clearAllForTest(): void {
-    this.notifications.clear();
-    this.loaded = true;
-    try {
-      if (fs.existsSync(NOTIFICATIONS_FILE)) {
-        fs.unlinkSync(NOTIFICATIONS_FILE);
-      }
-    } catch {}
-  }
+function notification(value: unknown, userId: string): BffNotification {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new BridgeError(502,"UPSTREAM_INVALID_NOTIFICATION","通知响应无效");
+  const row = value as BffNotification;
+  if (typeof row.id !== "string" || !row.id || row.userId !== userId || typeof row.eventKey !== "string" || typeof row.title !== "string" || typeof row.body !== "string" || typeof row.createdAt !== "string" || !Number.isFinite(Date.parse(row.createdAt))) throw new BridgeError(502,"UPSTREAM_INVALID_NOTIFICATION","通知数据缺失或归属不符");
+  return row;
 }
-
-const globalForNotifications = globalThis as unknown as {
-  __bffNotificationStore?: BffNotificationStore;
-};
-
-export const bffNotificationStore =
-  globalForNotifications.__bffNotificationStore ??
-  (globalForNotifications.__bffNotificationStore = new BffNotificationStore());
+export function createNotificationClient(fetchApi: BridgeFetch) {
+  async function mutate(userId: string,id: string,token: string|undefined,read: boolean) {
+    const response=await fetchApi<{success:boolean}>(`/api/v1/notifications/${pathId(id)}${read?"/read":""}`,{method:read?"POST":"DELETE",accessToken:requireAccessToken(token)});
+    if(!response.ok&&response.status===404)return false;
+    const data=requireData(response);
+    if(!data||data.success!==true)throw new BridgeError(502,"UPSTREAM_INVALID_NOTIFICATION","通知更新未得到确认");
+    return true;
+  }
+  return {
+    async listNotifications(userId: string,options:{limit?:number;cursor?:string;accessToken?:string}={}) {
+      const query=new URLSearchParams({limit:String(options.limit??100)});if(options.cursor)query.set("cursor",options.cursor);
+      const response=await fetchApi<unknown>(`/api/v1/notifications?${query}`,{accessToken:requireAccessToken(options.accessToken)});
+      const data=requireData(response);if(!Array.isArray(data))throw new BridgeError(502,"UPSTREAM_INVALID_NOTIFICATION","通知列表无效");
+      const list=data.map(row=>notification(row,userId));
+      if(new Set(list.map(row=>row.id)).size!==list.length)throw new BridgeError(502,"UPSTREAM_INVALID_NOTIFICATION","通知列表包含重复记录");
+      return {data:list,page:response.page};
+    },
+    markAsRead:(userId:string,id:string,token?:string)=>mutate(userId,id,token,true),
+    deleteNotification:(userId:string,id:string,token?:string)=>mutate(userId,id,token,false),
+  };
+}
+export const bffNotificationStore=createNotificationClient(growdeskFetch);
