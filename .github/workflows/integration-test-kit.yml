@@ -20,7 +20,7 @@ jobs:
       - run: npx prisma generate
       - name: Package only locked dependencies and generated client
         run: |
-          tar --exclude='*.woff' --exclude='*.woff2' --exclude='*.ttf' --exclude='*.otf' -czf "$RUNNER_TEMP/dependencies.tar.gz" node_modules lib/generated
+          tar --exclude='*.woff' --exclude='*.woff2' --exclude='*.ttf' --exclude='*.otf' -czf "$RUNNER_TEMP/dependencies.tar.gz" node_modules generated/prisma
       - uses: actions/upload-artifact@v4
         with:
           name: isolated-dev-dependencies
