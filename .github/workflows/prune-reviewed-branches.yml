@@ -1,0 +1,70 @@
+name: Prune reviewed merged branches
+on:
+  push:
+    branches: [codex/complete-integration-20260916, main]
+    paths: [.github/workflows/prune-reviewed-branches.yml]
+permissions:
+  contents: write
+  pull-requests: read
+jobs:
+  prune:
+    if: github.repository == 'WangZhuo2015/baby_panel_for_cecilia'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Verify reachability and compare-and-delete reviewed refs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import json, os, subprocess
+          def git(*args):
+              return subprocess.check_output(['git', *args], text=True).strip()
+          expected = {
+              'codex/e2e-prod-verification': 'dbcc771614872acd47129c28e2fb349e9d9b6ac6',
+              'codex/growdesk-ai-jobs-20260915': 'e2a54cddf475fb34cae0cae50569e118182148ce',
+              'codex/growdesk-feature-parity-20260914': '374e8d790006ce8069b88ee67f6616fb05fefcc0',
+              'codex/growdesk-identity-offline-20260914': 'b16ec03a5aa8525f6f8c43f0cca2194612817e6f',
+              'codex/growdesk-mcp-oauth-20260914': '30462aacf46c2ccccbf62fcc575653fbf1908170',
+              'codex/growdesk-medical-books-20260914': 'c111885a964770e8b340df9cd0a1140894ec5dee',
+              'codex/growdesk-migration-e2e-20260915': '81b9ac521f097b56711d6e5395cc5916c6e64ac6',
+              'codex/growdesk-notifications-cron-20260915': '138834cfba0f4717699006477c9805c1d92e4989',
+              'codex/growdesk-nutrition-parity-20260914': 'f27a77afa1452d24a3f1a4f794d5aa4e333360b1',
+              'codex/merge-readiness-20260916': '99a9d97cbfd7ca8cfd9f5ef89365fbeb8e15375b',
+              'codex/wip-growdesk-web-integration-20260914': '7b29d4fc1189f615bb501d5c6684f8334d316e18',
+          }
+          git('fetch', '--prune', 'origin')
+          main = git('rev-parse', 'refs/remotes/origin/main')
+          prs = json.loads(subprocess.check_output(['gh', 'pr', 'list', '--state', 'open', '--limit', '100', '--json', 'headRefName'], text=True))
+          if len(prs) >= 100: raise SystemExit('Refusing incomplete PR inventory')
+          open_heads = {p['headRefName'] for p in prs}
+          refs = {ref.removeprefix('refs/heads/'): sha for sha, ref in (line.split() for line in git('ls-remote', '--heads', 'origin').splitlines())}
+          if os.environ['GITHUB_REF'] == 'refs/heads/main':
+              name = 'codex/complete-integration-20260916'
+              if name in refs: expected[name] = refs[name]
+          for name, sha in expected.items():
+              if name not in refs:
+                  print('Already absent:', name); continue
+              if refs[name] != sha or name in open_heads:
+                  print('Preserved changed/open branch:', name); continue
+              merged = subprocess.run(['git', 'merge-base', '--is-ancestor', sha, main]).returncode == 0
+              if not merged and name == 'codex/growdesk-migration-e2e-20260915':
+                  base = git('merge-base', main, sha)
+                  paths = ['lib/growdesk/migration.ts', 'scripts/review/check-growdesk-runtime.mjs', 'tests/unit/growdesk-migration-e2e.test.ts']
+                  changed = git('diff', '--name-only', base, sha).splitlines()
+                  equivalent = sorted(changed) == sorted(paths) and all(git('ls-tree', sha, '--', p) == git('ls-tree', main, '--', p) for p in paths)
+                  if equivalent:
+                      tag = 'refs/tags/archive/20260916/migration-e2e'
+                      existing = git('ls-remote', 'origin', tag)
+                      if existing and existing.split()[0] != sha: raise SystemExit('Archive tag conflict')
+                      if not existing: subprocess.run(['git', 'push', 'origin', sha + ':' + tag], check=True)
+                      merged = True
+                      print('Verified patch-equivalent files; preserved original tip in', tag)
+              if not merged:
+                  print('Preserved unmerged branch:', name); continue
+              ref = 'refs/heads/' + name
+              subprocess.run(['git', 'push', '--force-with-lease=' + ref + ':' + sha, 'origin', ':' + ref], check=True)
+              print('Deleted merged branch:', name, sha)
+          PY
