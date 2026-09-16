@@ -1,0 +1,28 @@
+name: Integration development dependencies
+on:
+  push:
+    branches: [codex/ai-integration-complete-20260916]
+    paths: [.github/workflows/integration-test-kit.yml]
+permissions:
+  contents: read
+jobs:
+  dependencies:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.x
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npx prisma generate
+      - name: Package only locked dependencies and generated client
+        run: |
+          tar --exclude='*.woff' --exclude='*.woff2' --exclude='*.ttf' --exclude='*.otf' -czf "$RUNNER_TEMP/dependencies.tar.gz" node_modules lib/generated
+      - uses: actions/upload-artifact@v4
+        with:
+          name: isolated-dev-dependencies
+          path: ${{ runner.temp }}/dependencies.tar.gz
+          retention-days: 1
