@@ -1,253 +1,169 @@
 #!/usr/bin/env python3
-"""
-Comprehensive Data Diff & Parity Comparison Tool
-Compares Legacy Production (Port 3088) vs GrowDesk Preview (Port 3089)
-Across all modules, pages, and API endpoints.
+"""Compare complete, explicitly exported legacy/GrowDesk API response snapshots.
+
+This replaces the unsafe live-production probe. It never logs in, rewrites
+Secure cookies, contacts a server, or modifies either database. Supply two JSON
+objects keyed by endpoint; each value must contain {"status": 200, "body": ...}.
+Use exports from isolated test tenants. This is a payload comparator, NOT proof
+of a production cutover, live authorization, or completeness of an export.
+
+All fields are compared unless --ignore-field is explicitly supplied. Every
+record and nested value is checked; display truncation never changes exit
+status. Diagnostics contain paths/reasons, never sensitive field values.
 """
 
-import requests
+import argparse
+from decimal import Decimal
 import json
+from pathlib import Path
 import sys
-from datetime import datetime
 
-LEGACY_BASE = "http://127.0.0.1:3088"
-GROWDESK_BASE = "http://127.0.0.1:3089"
 
-session_legacy = requests.Session()
-session_growdesk = requests.Session()
+def strict_object(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("Duplicate JSON object key")
+        result[key] = value
+    return result
 
-report = []
 
-def log(msg=""):
-    print(msg)
-    report.append(msg)
+def reject_constant(_value):
+    raise ValueError("Non-finite JSON number")
 
-def login():
-    # Login Legacy
-    r1 = session_legacy.post(
-        f"{LEGACY_BASE}/api/auth/login",
-        json={"username": "wangzhuo", "password": "123456"},
-        headers={"Origin": LEGACY_BASE, "Content-Type": "application/json"}
-    )
-    for c in session_legacy.cookies:
-        c.secure = False
 
-    # Login GrowDesk
-    r2 = session_growdesk.post(
-        f"{GROWDESK_BASE}/api/auth/login",
-        json={"username": "wangzhuo", "password": "123456"},
-        headers={"Origin": GROWDESK_BASE, "Content-Type": "application/json"}
-    )
-    for c in session_growdesk.cookies:
-        c.secure = False
+def load_snapshot(path):
+    with Path(path).open("r", encoding="utf-8") as stream:
+        data = json.load(stream, parse_float=Decimal,
+                         parse_constant=reject_constant,
+                         object_pairs_hook=strict_object)
+    if not isinstance(data, dict) or not data:
+        raise ValueError("Snapshot must be a non-empty endpoint object")
+    return data
 
-    if r1.status_code != 200 or r2.status_code != 200:
-        log(f"Login failed! Legacy: {r1.status_code}, GrowDesk: {r2.status_code}")
-        sys.exit(1)
 
-    baby_id_1 = r1.json().get("baby", {}).get("id")
-    baby_id_2 = r2.json().get("baby", {}).get("id")
-    return baby_id_1, baby_id_2
+def pointer(value):
+    return str(value).replace("~", "~0").replace("/", "~1")
 
-def normalize(val):
-    if val is None:
-        return None
-    if isinstance(val, (int, float)):
-        return float(val)
-    if isinstance(val, str):
-        # normalize version strings if needed
-        return val.strip()
-    return val
 
-def compare_endpoint(name, path, params=None, id_key="id", ignore_keys=None):
-    if ignore_keys is None:
-        ignore_keys = {"version", "baseVersion", "updatedAt", "createdAt"}
-    
-    url_l = f"{LEGACY_BASE}{path}"
-    url_g = f"{GROWDESK_BASE}{path}"
-    
-    try:
-        res_l = session_legacy.get(url_l, params=params, timeout=10)
-        res_g = session_growdesk.get(url_g, params=params, timeout=10)
-    except Exception as e:
-        return {
-            "name": name,
-            "path": path,
-            "status": "ERROR",
-            "detail": f"Request exception: {str(e)}"
-        }
+def is_number(value):
+    return not isinstance(value, bool) and isinstance(value, (int, Decimal))
 
-    status_match = (res_l.status_code == res_g.status_code)
-    if not status_match:
-        return {
-            "name": name,
-            "path": path,
-            "status": "FAIL",
-            "legacy_status": res_l.status_code,
-            "growdesk_status": res_g.status_code,
-            "detail": f"Status code mismatch: {res_l.status_code} vs {res_g.status_code}"
-        }
 
-    try:
-        data_l = res_l.json()
-        data_g = res_g.json()
-    except Exception:
-        return {
-            "name": name,
-            "path": path,
-            "status": "PASS" if status_match else "FAIL",
-            "detail": "Non-JSON response matched status code"
-        }
-
-    # Case 1: Both are lists
-    if isinstance(data_l, list) and isinstance(data_g, list):
-        count_l = len(data_l)
-        count_g = len(data_g)
-        
-        # Check IDs
-        map_l = {item.get(id_key): item for item in data_l if isinstance(item, dict) and item.get(id_key)}
-        map_g = {item.get(id_key): item for item in data_g if isinstance(item, dict) and item.get(id_key)}
-        
-        common_ids = set(map_l.keys()) & set(map_g.keys())
-        only_l = set(map_l.keys()) - set(map_g.keys())
-        only_g = set(map_g.keys()) - set(map_l.keys())
-        
-        # Check value differences on common items
-        diff_samples = []
-        for cid in list(common_ids)[:20]:
-            il = map_l[cid]
-            ig = map_g[cid]
-            for k in set(il.keys()) | set(ig.keys()):
-                if k in ignore_keys:
-                    continue
-                vl = normalize(il.get(k))
-                vg = normalize(ig.get(k))
-                if vl != vg:
-                    diff_samples.append(f"ID {cid} key '{k}': Legacy={vl!r} vs GrowDesk={vg!r}")
-
-        return {
-            "name": name,
-            "path": path,
-            "status": "PASS" if count_l == count_g and len(only_l) == 0 and len(diff_samples) == 0 else "DIFF",
-            "legacy_count": count_l,
-            "growdesk_count": count_g,
-            "common_count": len(common_ids),
-            "only_legacy": len(only_l),
-            "only_growdesk": len(only_g),
-            "diff_samples": diff_samples[:5],
-            "detail": f"Legacy={count_l}, GrowDesk={count_g}, Shared={len(common_ids)}"
-        }
-
-    # Case 2: Both are dicts
-    elif isinstance(data_l, dict) and isinstance(data_g, dict):
-        diffs = []
-        all_keys = set(data_l.keys()) | set(data_g.keys())
-        for k in all_keys:
-            if k in ignore_keys:
+def differences(left, right, path, ignored, id_key):
+    """Yield ALL differences, with exact numeric and missing-vs-null semantics."""
+    if is_number(left) and is_number(right):
+        if left != right:
+            yield {"path": path, "reason": "numeric_value_mismatch"}
+        return
+    if type(left) is not type(right):
+        yield {"path": path, "reason": "type_mismatch"}
+        return
+    if isinstance(left, dict):
+        for key in sorted(set(left) | set(right)):
+            if key in ignored:
                 continue
-            vl = data_l.get(k)
-            vg = data_g.get(k)
-            if isinstance(vl, list) and isinstance(vg, list):
-                if len(vl) != len(vg):
-                    diffs.append(f"list key '{k}' count: {len(vl)} vs {len(vg)}")
-            elif normalize(vl) != normalize(vg):
-                diffs.append(f"key '{k}': {vl!r} vs {vg!r}")
+            child = f"{path}/{pointer(key)}"
+            if key not in left or key not in right:
+                yield {"path": child, "reason": "missing_field"}
+            else:
+                yield from differences(left[key], right[key], child, ignored, id_key)
+        return
+    if isinstance(left, list):
+        if len(left) != len(right):
+            yield {"path": path, "reason": "list_length_mismatch"}
+        combined = left + right
+        # Entity arrays are compared by ID, not incidental response ordering.
+        # Ordinary scalar/anonymous arrays retain their meaningful order.
+        has_ids = any(isinstance(item, dict) and id_key in item for item in combined)
+        if has_ids:
+            maps = []
+            for side, values in (("legacy", left), ("growdesk", right)):
+                mapped = {}
+                valid = True
+                for index, item in enumerate(values):
+                    identifier = item.get(id_key) if isinstance(item, dict) else None
+                    if not isinstance(identifier, str) or not identifier or identifier in mapped:
+                        yield {"path": f"{path}/{index}", "reason": f"{side}_missing_or_duplicate_id"}
+                        valid = False
+                    else:
+                        mapped[identifier] = item
+                maps.append(mapped if valid else None)
+            if any(item is None for item in maps):
+                return
+            first, second = maps
+            for identifier in sorted(set(first) | set(second)):
+                child = f"{path}/{pointer(identifier)}"
+                if identifier not in first or identifier not in second:
+                    yield {"path": child, "reason": "missing_record"}
+                else:
+                    yield from differences(first[identifier], second[identifier], child, ignored, id_key)
+        else:
+            for index, (a, b) in enumerate(zip(left, right)):
+                yield from differences(a, b, f"{path}/{index}", ignored, id_key)
+        return
+    if left != right:
+        yield {"path": path, "reason": "value_mismatch"}
 
-        return {
-            "name": name,
-            "path": path,
-            "status": "PASS" if len(diffs) == 0 else "DIFF",
-            "diff_samples": diffs[:5],
-            "detail": f"{len(diffs)} field differences" if diffs else "Exact match"
-        }
 
-    else:
-        match = (data_l == data_g)
-        return {
-            "name": name,
-            "path": path,
-            "status": "PASS" if match else "DIFF",
-            "detail": f"Literal match: {match}"
-        }
+def compare_snapshots(legacy, growdesk, ignored=(), id_key="id", max_details=50):
+    outcomes = []
+    ignored = frozenset(ignored)
+    for endpoint in sorted(set(legacy) | set(growdesk)):
+        result = {"endpoint": endpoint, "status": "FAIL", "differenceCount": 0, "differences": []}
+        if endpoint not in legacy or endpoint not in growdesk:
+            result["reason"] = "missing_endpoint"
+            outcomes.append(result)
+            continue
+        left, right = legacy[endpoint], growdesk[endpoint]
+        valid = True
+        for response in (left, right):
+            if (not isinstance(response, dict) or type(response.get("status")) is not int
+                    or "body" not in response):
+                valid = False
+        if not valid:
+            result["reason"] = "invalid_response_envelope"
+        elif not (200 <= left["status"] < 300 and 200 <= right["status"] < 300):
+            # Two identical 401/500 errors must never count as successful parity.
+            result["reason"] = "non_success_http_status"
+        elif left["status"] != right["status"]:
+            result["reason"] = "http_status_mismatch"
+        else:
+            for item in differences(left["body"], right["body"], "", ignored, id_key):
+                result["differenceCount"] += 1
+                if len(result["differences"]) < max_details:
+                    result["differences"].append(item)
+            result["status"] = "PASS" if result["differenceCount"] == 0 else "DIFF"
+        outcomes.append(result)
+    passed = bool(outcomes) and all(item["status"] == "PASS" for item in outcomes)
+    return {"passed": passed, "scope": "exported_payloads_only", "ignoredFields": sorted(ignored),
+            "endpoints": outcomes}
 
-def main():
-    baby_id_1, baby_id_2 = login()
-    log(f"# 🔍 双系统全页面与全接口数据差分比对报告 (Legacy 3088 vs GrowDesk 3089)")
-    log(f"**生成时间**: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}")
-    log(f"**测试宝宝 ID**: `{baby_id_1}`\n")
 
-    endpoints_to_test = [
-        # 1. 核心档案与身份
-        ("用户资料 (Me)", "/api/auth/me", None, "id", None),
-        ("宝宝主档 (Baby)", f"/api/baby", {"id": baby_id_1}, "id", None),
-        ("家庭成员 (Family Members)", "/api/family/members", None, "id", None),
-        
-        # 2. 三大核心照护流水
-        ("喂养记录流水 (Feeding List)", "/api/records/feeding", {"babyId": baby_id_1, "limit": 100}, "id", None),
-        ("睡眠记录全量 (Sleep List)", "/api/records/sleep", {"babyId": baby_id_1, "limit": 100}, "id", None),
-        ("尿布记录全量 (Diaper List)", "/api/records/diaper", {"babyId": baby_id_1, "limit": 100}, "id", None),
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--legacy-json", required=True, type=Path)
+    parser.add_argument("--growdesk-json", required=True, type=Path)
+    parser.add_argument("--ignore-field", action="append", default=[],
+                        help="Explicit field exclusion, applied recursively and recorded in the report")
+    parser.add_argument("--id-key", default="id")
+    parser.add_argument("--max-details", type=int, default=50,
+                        help="Display limit only; all differences still affect pass/fail")
+    args = parser.parse_args(argv)
+    if args.max_details < 0 or not args.id_key:
+        parser.error("max-details must be non-negative and id-key must be non-empty")
+    try:
+        legacy = load_snapshot(args.legacy_json)
+        growdesk = load_snapshot(args.growdesk_json)
+        report = compare_snapshots(legacy, growdesk, args.ignore_field, args.id_key, args.max_details)
+    except (OSError, ValueError, TypeError):
+        # Do not print raw response bodies, credentials, filesystem contents or
+        # exception messages containing patient data from malformed exports.
+        print("Cannot read valid snapshot JSON; no live server was contacted.", file=sys.stderr)
+        return 2
+    print(json.dumps(report, ensure_ascii=False, indent=2))
+    return 0 if report["passed"] else 1
 
-        # 3. 时间轴 (Timeline) 与日报 (Daily Summary)
-        ("历史时间轴 (Timeline 2026-09-12)", "/api/records/timeline", {"babyId": baby_id_1, "date": "2026-09-12"}, "id", {"sortMs", "version", "baseVersion"}),
-        ("历史时间轴 (Timeline 2026-09-11)", "/api/records/timeline", {"babyId": baby_id_1, "date": "2026-09-11"}, "id", {"sortMs", "version", "baseVersion"}),
-        ("历史时间轴 (Timeline 2026-09-10)", "/api/records/timeline", {"babyId": baby_id_1, "date": "2026-09-10"}, "id", {"sortMs", "version", "baseVersion"}),
-        ("日报摘要 (Daily Summary 2026-09-12)", "/api/records/daily-summary", {"babyId": baby_id_1, "date": "2026-09-12"}, "id", None),
-        ("日报摘要 (Daily Summary 2026-09-11)", "/api/records/daily-summary", {"babyId": baby_id_1, "date": "2026-09-11"}, "id", None),
-        ("日报摘要 (Daily Summary 2026-09-10)", "/api/records/daily-summary", {"babyId": baby_id_1, "date": "2026-09-10"}, "id", None),
-
-        # 4. 辅食餐点与计划
-        ("辅食记录 (Food Logs)", "/api/food/logs", {"babyId": baby_id_1, "limit": 200}, "id", None),
-        ("食材库 (Food Items)", "/api/food/items", {"babyId": baby_id_1}, "foodId", None),
-        ("辅食计划 (Food Plans)", "/api/food/plans", {"babyId": baby_id_1}, "id", None),
-        ("月龄辅食指南 (Guidelines)", "/api/food/feeding-guidelines", None, "ageMinMonths", None),
-
-        # 5. 生长发育与体检
-        ("生长测量记录 (Growth Records)", "/api/growth", {"babyId": baby_id_1, "limit": 100}, "id", None),
-        ("生长曲线图表 (Growth Chart)", "/api/growth/chart", {"babyId": baby_id_1}, "id", None),
-
-        # 6. 医疗与疫苗
-        ("疫苗名录 (Vaccines)", "/api/vaccines", None, "id", None),
-        ("接种记录 (Vaccine Selections)", "/api/vaccines/selections", {"babyId": baby_id_1}, "id", None),
-        ("医疗化验报告 (Medical Reports)", "/api/medical/reports", {"babyId": baby_id_1}, "id", None),
-
-        # 7. 营养专区
-        ("配方奶粉与补剂库 (Nutrition Products)", "/api/nutrition/products", {"babyId": baby_id_1}, "id", None),
-        ("营养补剂打卡明细 (Nutrition Records)", "/api/nutrition/records", {"babyId": baby_id_1, "limit": 200}, "id", None),
-        ("营养日程计划 (Nutrition Schedules)", "/api/nutrition/schedules", {"babyId": baby_id_1}, "id", None),
-        ("营养摄入分析 (Nutrition Analysis 09-12)", "/api/nutrition/analysis", {"babyId": baby_id_1, "date": "2026-09-12"}, "id", None),
-
-        # 8. 发育里程碑与读物
-        ("发育里程碑 (Milestones)", "/api/development/milestones", None, "id", None),
-        ("发育预警信号 (Warning Signs)", "/api/development/warning-signs", None, "warningSignId", None),
-        ("亲子早教活动 (Activities)", "/api/development/activities", None, "activityId", None),
-        ("育儿书单 (Books)", "/api/books", None, "bookId", None),
-
-        # 9. 系统配置与通知
-        ("应用系统配置 (App Config)", "/api/app-config", None, "id", None),
-        ("系统通知 (Notifications)", "/api/notifications", {"babyId": baby_id_1}, "id", None),
-        ("AI 对话会话 (AI Sessions)", "/api/ai/sessions", {"babyId": baby_id_1}, "id", None),
-    ]
-
-    results = []
-    for item in endpoints_to_test:
-        res = compare_endpoint(*item)
-        results.append(res)
-        status_icon = "✅ 一致" if res["status"] == "PASS" else ("⚠️ 微异" if res["status"] == "DIFF" else "❌ 失败")
-        print(f"{status_icon:6s} | {res['name']:35s} | {res.get('detail', '')}")
-
-    # Output Markdown summary table
-    log("\n## 📊 比对汇总矩阵表\n")
-    log("| 模块 / 接口名称 | 请求路径 | 比对状态 | 旧版 SQLite (3088) | 新版 GrowDesk (3089) | 详细差分分析 |")
-    log("| :--- | :--- | :---: | :---: | :---: | :--- |")
-    for r in results:
-        status_badge = "✅ **一致**" if r["status"] == "PASS" else ("⚠️ **预期差异**" if r["status"] == "DIFF" else "❌ **失败**")
-        l_info = str(r.get("legacy_count") if "legacy_count" in r else ("200 OK" if r["status"] in ("PASS", "DIFF") else r.get("legacy_status", "-")))
-        g_info = str(r.get("growdesk_count") if "growdesk_count" in r else ("200 OK" if r["status"] in ("PASS", "DIFF") else r.get("growdesk_status", "-")))
-        
-        diff_note = r.get("detail", "")
-        if r.get("diff_samples"):
-            diff_note += "<br/>示例: " + "; ".join(r["diff_samples"][:2])
-        log(f"| {r['name']} | `{r['path']}` | {status_badge} | {l_info} | {g_info} | {diff_note} |")
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
