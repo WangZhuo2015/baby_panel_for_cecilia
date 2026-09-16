@@ -20,7 +20,6 @@ export interface DatedRecord {
 
 const MAX_SCAN_ITEMS = 20_000;
 const UPSTREAM_PAGE_SIZE = 200;
-const MAX_PAGES = Math.ceil(MAX_SCAN_ITEMS / UPSTREAM_PAGE_SIZE);
 
 /**
  * First instant of an IANA calendar day, not "midnight minus today's offset".
@@ -129,6 +128,12 @@ export async function fetchLegacyRecordList<T extends DatedRecord>(
     throw new BridgeError(400, "LEGACY_CURSOR_UNSUPPORTED", "此旧版数组接口不接收游标，请使用新 API 分页接口");
   }
   const { limit, explicit } = validateLimit(query);
+  // Some existing care repositories cap even their internal lookahead at 200.
+  // Requesting 100 preserves their next cursor without changing the legacy
+  // array contract or total scan limit. Feeding/timeline have paired backend
+  // fixes that correctly retain a 201st lookahead row.
+  const pageSize = kind === "feeding" || kind === "timeline" ? UPSTREAM_PAGE_SIZE : 100;
+  const maxPages = Math.ceil(MAX_SCAN_ITEMS / pageSize);
 
   let dayStart: Date | undefined;
   let dayEnd: Date | undefined;
@@ -142,12 +147,12 @@ export async function fetchLegacyRecordList<T extends DatedRecord>(
   const visited = new Set<string>();
   let cursor: string | null = null;
   let scanned = 0;
-  for (let pageNumber = 0; pageNumber < MAX_PAGES; pageNumber += 1) {
-    const params = new URLSearchParams({ limit: String(UPSTREAM_PAGE_SIZE) });
+  for (let pageNumber = 0; pageNumber < maxPages; pageNumber += 1) {
+    const params = new URLSearchParams({ limit: String(pageSize) });
     if (cursor !== null) params.set("cursor", cursor);
     const response = await fetchApi<T[]>(`${endpointFor(kind, babyId)}?${params.toString()}`, { accessToken: token });
     const items = requireData(response);
-    if (!Array.isArray(items) || items.length > UPSTREAM_PAGE_SIZE || !response.page || !(response.page.nextCursor === null || typeof response.page.nextCursor === "string")) {
+    if (!Array.isArray(items) || items.length > pageSize || !response.page || !(response.page.nextCursor === null || typeof response.page.nextCursor === "string")) {
       throw new BridgeError(502, "UPSTREAM_INVALID_PAGE", "GrowDesk 未返回完整的分页信息");
     }
 
@@ -181,7 +186,7 @@ export async function fetchLegacyRecordList<T extends DatedRecord>(
 
     cursor = response.page.nextCursor;
     if (cursor === null) return out;
-    if (pageNumber + 1 >= MAX_PAGES) throw new BridgeError(503, "HISTORY_SCAN_LIMIT", "记录量超出兼容接口上限，未返回截断数据");
+    if (pageNumber + 1 >= maxPages) throw new BridgeError(503, "HISTORY_SCAN_LIMIT", "记录量超出兼容接口上限，未返回截断数据");
     if (!cursor || visited.has(cursor)) throw new BridgeError(502, "UPSTREAM_CURSOR_LOOP", "GrowDesk 返回了重复的分页游标");
     visited.add(cursor);
   }
