@@ -15,8 +15,8 @@ function store() {
   Object.assign(state, createAuthSlice(set, get), createRecordsSlice(set, get), {
     user: { id: "test_user_food", username: "test_user_food" },
     family: { id: "test_family_food", name: "test_family_food" },
-    babies: [{ id: babyA }, { id: babyB }],
-    baby: { id: babyA },
+    babies: [{ id: babyA, familyId: "test_family_food" }, { id: babyB, familyId: "test_family_food" }],
+    baby: { id: babyA, familyId: "test_family_food" },
     selectedBabyId: babyA,
     authLoading: false,
   });

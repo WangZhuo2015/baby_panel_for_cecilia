@@ -133,14 +133,14 @@ test("feeding date filtering respects family timezone and consumes all pages", a
     if (path === `/api/v1/babies/${apiBaby.id}`) return ok(apiBaby);
     if (path === `/api/v1/families/${family.id}`) return ok(family);
     pages++;
-    return pages === 1 ? ok([{ id: "test_new", occurredAt: "2026-09-12T15:30:00Z" }], "test_next") : ok([{ id: "test_old", occurredAt: "2026-09-12T14:30:00Z" }], null);
+    return pages === 1 ? ok([{ id: "test_new", babyId: apiBaby.id, occurredAt: "2026-09-12T15:30:00Z" }], "test_next") : ok([{ id: "test_old", babyId: apiBaby.id, occurredAt: "2026-09-12T14:30:00Z" }], null);
   });
   const data = await fetchLegacyFeedingList<{ id: string; occurredAt: string }>(fetchApi, "test_token", apiBaby.id, new URLSearchParams({ date: "2026-09-13" }));
   assert.equal(pages, 2); assert.deepEqual(data.map(r => r.id), ["test_new"]);
 });
 test("feeding list can return more than 200 records", async () => {
   let calls = 0;
-  const result = await fetchLegacyFeedingList(fake(() => ++calls === 1 ? ok(Array.from({ length: 200 }, (_, i) => ({ id: `test_${i}`, occurredAt: "2026-09-13T00:00:00Z" })), "test_next") : ok([{ id: "test_200", occurredAt: "2026-09-12T00:00:00Z" }], null)), "test_token", apiBaby.id, new URLSearchParams());
+  const result = await fetchLegacyFeedingList(fake(() => ++calls === 1 ? ok(Array.from({ length: 200 }, (_, i) => ({ id: `test_${i}`, babyId: apiBaby.id, occurredAt: "2026-09-13T00:00:00Z" })), "test_next") : ok([{ id: "test_200", babyId: apiBaby.id, occurredAt: "2026-09-12T00:00:00Z" }], null)), "test_token", apiBaby.id, new URLSearchParams());
   assert.equal(result.length, 201);
 });
 test("missing pagination metadata fails instead of returning partial data", async () => {
@@ -150,7 +150,7 @@ test("cursor loop fails instead of repeating records forever", async () => {
   await assert.rejects(fetchLegacyFeedingList(fake(() => ok([], "test_same")), "test_token", apiBaby.id, new URLSearchParams()), isStatus(502));
 });
 test("explicit legacy limit is honored", async () => {
-  const data = await fetchLegacyFeedingList(fake(() => ok([{ occurredAt: "2026-09-13T00:00:00Z" }, { occurredAt: "2026-09-13T01:00:00Z" }], null)), "test_token", apiBaby.id, new URLSearchParams({ limit: "1" }));
+  const data = await fetchLegacyFeedingList(fake(() => ok([{ babyId: apiBaby.id, occurredAt: "2026-09-13T00:00:00Z" }, { babyId: apiBaby.id, occurredAt: "2026-09-13T01:00:00Z" }], null)), "test_token", apiBaby.id, new URLSearchParams({ limit: "1" }));
   assert.equal(data.length, 1);
 });
 test("invalid date fails before issuing requests", async () => {
