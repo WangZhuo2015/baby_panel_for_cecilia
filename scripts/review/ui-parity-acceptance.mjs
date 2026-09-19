@@ -675,7 +675,11 @@ try {
       );
       const growthOcrPromise = page.waitForResponse((response) => response.request().method() === "POST"
         && new URL(response.url()).pathname === "/api/growth/ocr");
-      await page.locator('input[type="file"][accept="image/*"]:not([capture])').setInputFiles({
+      const growthGalleryInput = page.getByTestId("growth-ocr-gallery-input");
+      if (await growthGalleryInput.count() !== 1) {
+        throw new Error(`expected exactly one growth OCR gallery input, found ${await growthGalleryInput.count()}`);
+      }
+      await growthGalleryInput.setInputFiles({
         name: `e2e_growth_${suffix}.png`,
         mimeType: "image/png",
         buffer: fixtureBuffer,

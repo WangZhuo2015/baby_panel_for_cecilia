@@ -232,6 +232,7 @@ export function GrowthForm({
           />
           <input
             ref={galleryInputRef}
+            data-testid="growth-ocr-gallery-input"
             type="file"
             accept="image/*"
             className="hidden"
