@@ -14,6 +14,13 @@ import {
   type GrowDeskVaccineRecord,
 } from "@/lib/growdesk/vaccine-compat"
 import { loadWebBaby } from "@/lib/growdesk/bridge-identity"
+import { bridgeErrorResponse } from "@/lib/growdesk/bridge-protocol"
+import {
+  createLegacyPendingVaccine,
+  mergeLegacyPendingVaccine,
+  removeLegacyPendingVaccine,
+} from "@/lib/growdesk/vaccine-pending-compat"
+import { foodPlanWriteBody, readGrowDeskFoodPlan } from "@/lib/growdesk/food-plan-state"
 import crypto from "node:crypto"
 
 export async function GET(request: Request) {
@@ -141,6 +148,30 @@ export async function POST(request: Request) {
       }
       if (!babyId) {
         return NextResponse.json({ error: "请提供 babyId" }, { status: 400 });
+      }
+
+      if (body.isCompleted === false) {
+        const pending = createLegacyPendingVaccine(body, babyId);
+        const planRes = await growdeskFetch<any>(`/api/v1/babies/${babyId}/food-plan`, {
+          accessToken: bffSession.accessToken,
+        });
+        if (!planRes.ok) {
+          return NextResponse.json({ error: planRes.error?.message || "Failed to fetch food plan" }, { status: planRes.status });
+        }
+        const plan = readGrowDeskFoodPlan(planRes, babyId);
+        const merged = mergeLegacyPendingVaccine(plan, pending);
+        if (!merged.created) {
+          return NextResponse.json({ record: merged.item }, { status: 201 });
+        }
+        const saveRes = await growdeskFetch(`/api/v1/babies/${babyId}/food-plan`, {
+          method: "PUT",
+          accessToken: bffSession.accessToken,
+          body: foodPlanWriteBody(plan, merged.planData),
+        });
+        if (!saveRes.ok) {
+          return NextResponse.json({ error: saveRes.error?.message || "Failed to save pending vaccine" }, { status: saveRes.status });
+        }
+        return NextResponse.json({ record: merged.item }, { status: 201 });
       }
 
       const payload = toGrowDeskVaccineRecordPayload(body);
@@ -283,6 +314,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ record: result }, { status: 201 });
   } catch (error) {
+    if (GROWDESK_CONFIG.enabled) return bridgeErrorResponse(error);
     console.error("POST /api/vaccines error:", error);
     return NextResponse.json(
       { error: "Failed to save vaccine record" },
@@ -321,6 +353,26 @@ export async function DELETE(request: Request) {
         return NextResponse.json({ error: "请提供 babyId" }, { status: 400 });
       }
 
+      const planRes = await growdeskFetch<any>(`/api/v1/babies/${babyId}/food-plan`, {
+        accessToken: bffSession.accessToken,
+      });
+      if (!planRes.ok) {
+        return NextResponse.json({ error: planRes.error?.message || "Failed to fetch food plan" }, { status: planRes.status });
+      }
+      const plan = readGrowDeskFoodPlan(planRes, babyId);
+      const pendingRemoval = removeLegacyPendingVaccine(plan, id);
+      if (pendingRemoval.found) {
+        const saveRes = await growdeskFetch(`/api/v1/babies/${babyId}/food-plan`, {
+          method: "PUT",
+          accessToken: bffSession.accessToken,
+          body: foodPlanWriteBody(plan, pendingRemoval.planData),
+        });
+        if (!saveRes.ok) {
+          return NextResponse.json({ error: saveRes.error?.message || "Failed to delete pending vaccine" }, { status: saveRes.status });
+        }
+        return NextResponse.json({ success: true, id });
+      }
+
       const res = await growdeskFetch(
         `/api/v1/babies/${babyId}/vaccines/records/${id}`,
         {
@@ -356,6 +408,7 @@ export async function DELETE(request: Request) {
     await prisma.vaccineRecord.delete({ where: { id } });
     return NextResponse.json({ success: true, id });
   } catch (error: any) {
+    if (GROWDESK_CONFIG.enabled) return bridgeErrorResponse(error);
     console.error("DELETE /api/vaccines error:", error);
     return NextResponse.json({ error: error?.message || "Failed to delete vaccine record" }, { status: 500 });
   }
