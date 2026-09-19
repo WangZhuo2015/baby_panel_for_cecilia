@@ -36,6 +36,23 @@ export interface RecordsSlice {
   deleteTimelineRecord: (type: TimelineEntry['type'], id: string) => Promise<void>;
 }
 
+function currentBabyId(get: any): string {
+  const state = get();
+  const loadedId = typeof state.baby?.id === "string" ? state.baby.id.trim() : "";
+  const selectedId = typeof state.selectedBabyId === "string" ? state.selectedBabyId.trim() : "";
+  if (loadedId && selectedId && loadedId !== selectedId) throw new Error("宝宝正在切换，请稍后重试");
+  const babyId = selectedId || loadedId;
+  if (!babyId) throw new Error("请先选择宝宝");
+  return babyId;
+}
+
+function isCurrentBaby(get: any, babyId: string): boolean {
+  const state = get();
+  const loadedId = typeof state.baby?.id === "string" ? state.baby.id.trim() : "";
+  const selectedId = typeof state.selectedBabyId === "string" ? state.selectedBabyId.trim() : "";
+  return loadedId === babyId && (!selectedId || selectedId === babyId);
+}
+
 export const createRecordsSlice = (set: any, get: any): RecordsSlice => ({
   baby: null,
   feedingRecords: [],
@@ -149,8 +166,8 @@ export const createRecordsSlice = (set: any, get: any): RecordsSlice => ({
   fetchFoodLogRecords: async (date?: string, force?: boolean) => {
     if (!get().user && !get().authLoading) return;
     if (!get().baby?.id) await get().fetchBaby();
-    const babyId = get().baby?.id;
-    if (!babyId) return;
+    let babyId: string;
+    try { babyId = currentBabyId(get); } catch { return; }
     const key = `foodLogRecords:${babyId || ''}:${date || ''}`;
     if (!force && get().foodLogRecords.length > 0 && isFresh(key)) return;
     if (force) invalidateCache(key);
@@ -158,7 +175,7 @@ export const createRecordsSlice = (set: any, get: any): RecordsSlice => ({
       try {
         const query = toQuery({ date, babyId });
         const data = await request<FoodLogRecord[]>(`/api/food/logs${query}`);
-        if (get().baby?.id !== babyId) return;
+        if (!isCurrentBaby(get, babyId)) return;
         set({ foodLogRecords: data || [] });
         markFetched(key);
       } catch (e) {
@@ -391,13 +408,17 @@ export const createRecordsSlice = (set: any, get: any): RecordsSlice => ({
 
   addFoodLogRecord: async (record) => {
     const clientId = crypto.randomUUID();
-    const payload = { babyId: get().baby?.id, ...record, clientId };
+    const babyId = currentBabyId(get);
+    const userId = get().user?.id;
+    const familyId = get().family?.id;
+    const payload = { ...record, babyId, clientId };
     try {
       const newRecord = (await request<FoodLogRecord>("/api/food/logs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       })) as FoodLogRecord;
+      if (!isCurrentBaby(get, babyId)) return;
       invalidateCache("foodLogRecords");
       invalidateCache("foodPlans");
       invalidateCache("dailySummary");
@@ -412,9 +433,9 @@ export const createRecordsSlice = (set: any, get: any): RecordsSlice => ({
           url: "/api/food/logs",
           body: payload as any,
           createdAt: Date.now(),
-          userId: get().user?.id,
-          familyId: get().family?.id,
-          babyId: get().baby?.id,
+          userId,
+          familyId,
+          babyId,
         });
         throw new Error("当前离线，记录已保存，联网后自动同步 ⏳");
       }
@@ -425,12 +446,14 @@ export const createRecordsSlice = (set: any, get: any): RecordsSlice => ({
 
   updateTimelineRecord: async (type, id, patch) => {
     const endpoint = type === "food" ? "/api/food/logs" : `/api/records/${type}`;
+    const babyId = currentBabyId(get);
     try {
       const updated = await request<Record<string, unknown>>(endpoint, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, ...recordWriteContext(get(), type, id), ...patch }),
+        body: JSON.stringify({ id, ...recordWriteContext(get(), type, id), ...patch, babyId }),
       });
+      if (!isCurrentBaby(get, babyId)) return;
       const listKey = type === "feeding" ? "feedingRecords" : type === "sleep" ? "sleepRecords" : type === "diaper" ? "diaperRecords" : "foodLogRecords";
       set((state: any) => ({
         [listKey]: (state as any)[listKey].map((r: { id: string }) => r.id === id ? { ...r, ...(updated as object) } : r),
@@ -450,12 +473,14 @@ export const createRecordsSlice = (set: any, get: any): RecordsSlice => ({
 
   deleteTimelineRecord: async (type, id) => {
     const endpoint = type === "food" ? "/api/food/logs" : type === "supplement" ? "/api/nutrition/records" : `/api/records/${type}`;
+    const babyId = currentBabyId(get);
     try {
       await request<{ success: boolean }>(endpoint, {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, ...recordWriteContext(get(), type, id) }),
+        body: JSON.stringify({ id, ...recordWriteContext(get(), type, id), babyId }),
       });
+      if (!isCurrentBaby(get, babyId)) return;
       const listKey = type === "feeding" ? "feedingRecords" : type === "sleep" ? "sleepRecords" : type === "diaper" ? "diaperRecords" : type === "food" ? "foodLogRecords" : null;
       if (listKey) {
         set((state: any) => ({
