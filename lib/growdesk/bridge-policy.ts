@@ -14,6 +14,7 @@ export const BRIDGED_METHODS: Readonly<Record<string, readonly string[]>> = {
   "/api/auth/logout": ["POST"],
   "/api/auth/me": ["GET"],
   "/api/baby": ["GET", "POST", "PUT"],
+  "/api/baby/members": ["GET", "POST", "DELETE"],
   "/api/family/members": ["GET"],
   "/api/family/invite": ["POST"],
   "/api/family/join": ["POST"],

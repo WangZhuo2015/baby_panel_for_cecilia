@@ -11,6 +11,8 @@ import {
 import {
   type ApiFamily,
   type ApiFamilyMember,
+  type ApiBabyMember,
+  type ApiBabyMemberRole,
   type LegacyBaby,
   accessibleFamily,
   loadFamilyBabies,
@@ -115,6 +117,31 @@ function mapMember(member: ApiFamilyMember, familyId: string): Record<string, un
     displayName: member.displayName,
     role: member.role,
     relation: member.relation,
+    joinedAt: member.joinedAt,
+  };
+}
+
+const BABY_MEMBER_ROLES = new Set<ApiBabyMemberRole>(["admin", "member", "viewer"]);
+
+function mapBabyMember(member: ApiBabyMember): Record<string, unknown> {
+  if (
+    !member ||
+    typeof member !== "object" ||
+    typeof member.userId !== "string" ||
+    typeof member.babyId !== "string" ||
+    typeof member.familyId !== "string" ||
+    typeof member.displayName !== "string" ||
+    typeof member.joinedAt !== "string" ||
+    !BABY_MEMBER_ROLES.has(member.role)
+  ) {
+    throw new BridgeError(502, "UPSTREAM_INVALID_RESPONSE", "GrowDesk 宝宝成员响应无效");
+  }
+  return {
+    userId: member.userId,
+    babyId: member.babyId,
+    familyId: member.familyId,
+    role: member.role,
+    displayName: member.displayName,
     joinedAt: member.joinedAt,
   };
 }
@@ -301,6 +328,68 @@ export function createIdentityEndpoints(deps: EndpointDependencies) {
           throw new BridgeError(502, "UPSTREAM_INVALID_RESPONSE", "GrowDesk 邀请响应无效");
         }
         return json({ familyId: family.id, inviteCode: invite.inviteCode, expiresAt: invite.expiresAt });
+      } catch (error) {
+        return bridgeErrorResponse(error);
+      }
+    },
+
+    async babyMembers(request: Request): Promise<Response> {
+      try {
+        if (!["GET", "POST", "DELETE"].includes(request.method)) {
+          return json({ error: "Method not allowed" }, 405);
+        }
+
+        if (request.method !== "GET") {
+          const csrf = deps.verifyCsrf(request);
+          if (csrf) return csrf;
+        }
+
+        const session = await deps.resolveSession(request);
+        if (!session) throw new BridgeError(401, "UNAUTHORIZED", "会话无效或已过期");
+
+        if (request.method === "GET") {
+          const requestedBabyId = new URL(request.url).searchParams.get("babyId");
+          // The no-scope GET is a capability probe for the legacy page. It
+          // returns no member data and therefore never substitutes a baby or
+          // family scope; a scoped request below still goes through the
+          // canonical authorization check.
+          if (!requestedBabyId) return json({ supported: true, babyId: null, members: [] });
+          const babyId = pathId(requestedBabyId);
+          const members = requireData(await deps.fetchApi<ApiBabyMember[]>(
+            `/api/v1/babies/${babyId}/members`,
+            { accessToken: session.accessToken },
+          ));
+          if (!Array.isArray(members)) {
+            throw new BridgeError(502, "UPSTREAM_INVALID_RESPONSE", "GrowDesk 宝宝成员列表格式错误");
+          }
+          return json({ supported: true, babyId: decodeURIComponent(babyId), members: members.map(mapBabyMember) });
+        }
+
+        const body = await jsonObject(request);
+        const babyId = pathId(body.babyId);
+        const userId = pathId(body.userId);
+
+        if (request.method === "POST") {
+          const role = body.role === undefined ? "member" : body.role;
+          if (typeof role !== "string" || !BABY_MEMBER_ROLES.has(role as ApiBabyMemberRole)) {
+            throw new BridgeError(400, "INVALID_BABY_MEMBER_ROLE", "宝宝成员角色无效");
+          }
+          const result = requireData(await deps.fetchApi<{ success: true }>(
+            `/api/v1/babies/${babyId}/members`,
+            {
+              method: "POST",
+              accessToken: session.accessToken,
+              body: { userId: decodeURIComponent(userId), role },
+            },
+          ));
+          return json({ babyId: decodeURIComponent(babyId), userId: decodeURIComponent(userId), ...result }, 201);
+        }
+
+        const result = requireData(await deps.fetchApi<{ removed: true }>(
+          `/api/v1/babies/${babyId}/members/${userId}`,
+          { method: "DELETE", accessToken: session.accessToken },
+        ));
+        return json({ babyId: decodeURIComponent(babyId), userId: decodeURIComponent(userId), ...result });
       } catch (error) {
         return bridgeErrorResponse(error);
       }

@@ -28,6 +28,17 @@ export interface FamilyMember {
   joinedAt: string;
 }
 
+export type BabyMemberRole = 'admin' | 'member' | 'viewer';
+
+export interface BabyMember {
+  userId: string;
+  babyId: string;
+  familyId: string;
+  role: BabyMemberRole;
+  displayName: string;
+  joinedAt: string;
+}
+
 // ===== Baby Types =====
 export interface Baby {
   id: string;

@@ -1,5 +1,5 @@
 "use client";
-import type { User, Family, FamilyMember, Baby } from "@/types";
+import type { User, Family, FamilyMember, Baby, BabyMember, BabyMemberRole } from "@/types";
 import { isFresh, markFetched, invalidateCache, dedup } from "./helpers";
 import { request, isAuthError } from "./helpers";
 
@@ -19,6 +19,8 @@ export interface AuthSlice {
   babies: Baby[];
   selectedBabyId: string | null;
   familyMembers: FamilyMember[];
+  babyMembers: BabyMember[];
+  babyMembersSupported: boolean;
   authLoading: boolean;
   fetchUser: () => Promise<User | null>;
   login: (data: { username: string; password: string }) => Promise<void>;
@@ -26,6 +28,9 @@ export interface AuthSlice {
   logout: () => Promise<void>;
   joinFamily: (inviteCode: string, relation?: string) => Promise<{ message?: string }>;
   fetchFamilyMembers: () => Promise<void>;
+  fetchBabyMembers: (babyId: string) => Promise<void>;
+  grantBabyMember: (babyId: string, userId: string, role?: BabyMemberRole) => Promise<void>;
+  revokeBabyMember: (babyId: string, userId: string) => Promise<void>;
   selectBaby: (babyId: string) => Promise<void>;
   createFamilyInvite: (expiresInDays?: number) => Promise<{ inviteCode: string; expiresAt: string }>;
 }
@@ -123,6 +128,8 @@ function clearScopedData(set: any): void {
     aiTips: [],
     aiError: null,
     medicalReports: [],
+    babyMembers: [],
+    babyMembersSupported: false,
   });
 }
 
@@ -205,6 +212,8 @@ function applyIdentity(set: any, get: any, data: IdentityPayload, preferredFamil
     baby: next.baby,
     selectedBabyId: next.selectedBabyId,
     familyMembers: familyChanged ? [] : current.familyMembers,
+    babyMembers: babyChanged || familyChanged ? [] : current.babyMembers,
+    babyMembersSupported: babyChanged || familyChanged ? false : current.babyMembersSupported,
   });
   persistSelectedBaby(next.user?.id, next.selectedBabyId);
 }
@@ -220,6 +229,8 @@ export const createAuthSlice = (set: any, get: any): AuthSlice => ({
   babies: [],
   selectedBabyId: null,
   familyMembers: [],
+  babyMembers: [],
+  babyMembersSupported: false,
   authLoading: true,
 
   fetchUser: async () => {
@@ -352,6 +363,57 @@ export const createAuthSlice = (set: any, get: any): AuthSlice => ({
     } catch (e) {
       if (!isAuthError(e)) console.error("Failed to fetch family members:", e);
     }
+  },
+
+  fetchBabyMembers: async (babyId: string) => {
+    const selectedAtStart = get().selectedBabyId;
+    const userAtStart = get().user?.id;
+    const requestedBabyId = typeof babyId === "string" ? babyId.trim() : "";
+    try {
+      const data = await request<{ supported?: boolean; babyId?: string; members?: BabyMember[] }>(
+        requestedBabyId
+          ? `/api/baby/members?babyId=${encodeURIComponent(requestedBabyId)}`
+          : "/api/baby/members",
+      );
+      // A slow response from a previous baby must never repopulate the current
+      // baby’s permission panel.
+      if (get().user?.id !== userAtStart || get().selectedBabyId !== selectedAtStart) return;
+      if (requestedBabyId && get().selectedBabyId !== requestedBabyId) return;
+      if (requestedBabyId && data.babyId && data.babyId !== requestedBabyId) {
+        throw new Error("宝宝成员响应无效");
+      }
+      set({
+        babyMembersSupported: data.supported === true,
+        babyMembers: data.supported === true && requestedBabyId && Array.isArray(data.members) ? data.members : [],
+      });
+    } catch (e) {
+      if (!isAuthError(e)) console.error("Failed to fetch baby members:", e);
+      if (!requestedBabyId || get().selectedBabyId === requestedBabyId) {
+        set({ babyMembers: [], babyMembersSupported: false });
+      }
+    }
+  },
+
+  grantBabyMember: async (babyId: string, userId: string, role: BabyMemberRole = "member") => {
+    if (!babyId.trim() || !userId.trim()) throw new Error("宝宝和家庭成员不能为空");
+    await request(`/api/baby/members`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ babyId: babyId.trim(), userId: userId.trim(), role }),
+    });
+    await get().fetchBabyMembers(babyId.trim());
+  },
+
+  revokeBabyMember: async (babyId: string, userId: string) => {
+    if (!babyId.trim() || !userId.trim()) throw new Error("宝宝和家庭成员不能为空");
+    await request(`/api/baby/members`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ babyId: babyId.trim(), userId: userId.trim() }),
+    });
+    invalidateCache("user");
+    await get().fetchUser();
+    if (get().selectedBabyId === babyId.trim()) await get().fetchBabyMembers(babyId.trim());
   },
 
   selectBaby: async (babyId: string) => {

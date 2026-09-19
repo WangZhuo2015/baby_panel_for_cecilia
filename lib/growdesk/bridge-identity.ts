@@ -18,6 +18,17 @@ export interface ApiFamilyMember {
   relation?: string;
 }
 
+export type ApiBabyMemberRole = "admin" | "member" | "viewer";
+
+export interface ApiBabyMember {
+  userId: string;
+  babyId: string;
+  familyId: string;
+  role: ApiBabyMemberRole;
+  displayName: string;
+  joinedAt: string;
+}
+
 export type LegacyBaby = ReturnType<typeof legacyBaby>;
 
 export interface WebFamilyIdentity {
