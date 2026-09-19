@@ -57,7 +57,7 @@ test("F2 actual log PUT reads existing observations before merging a partial edi
 });
 
 const supplementState = { formula: { defaultFormulaId: "test_formula" }, supplements: [{ id: "test_supplement" }], vaccineSelections: { test_vaccine: true } };
-const plan = { babyId: "test_baby", planData: { date: "2026-09-17", name: "test_recipe", tags: [], ingredients: ["test_rice"], steps: [], supplementState }, updatedAt: "2026-09-17T00:00:00Z" };
+const plan = { id: "test_plan", createdAt: "2026-09-17T00:00:00Z", version: "7", babyId: "test_baby", planData: { date: "2026-09-17", name: "test_recipe", tags: [], ingredients: ["test_rice"], steps: [], supplementState }, updatedAt: "2026-09-17T00:00:00Z" };
 
 test("F5 saving a recipe merges unwrapped planData and preserves supplementState", async t => {
   let saved: any;
@@ -69,7 +69,11 @@ test("F5 saving a recipe merges unwrapped planData and preserves supplementState
   assert.equal(res.status, 201);
   assert.deepEqual(saved.planData.supplementState, supplementState);
   assert.deepEqual(saved.planData.ingredients, ["test_rice"]);
-  assert.equal(saved.planData.name, "test_new_recipe");
+  assert.equal(saved.baseVersion, "7");
+  assert.equal(saved.planData.name, "test_recipe", "old single recipe remains intact during history upgrade");
+  assert.deepEqual(saved.planData.webRecipes.map((r: any) => r.name), ["test_recipe", "test_new_recipe"]);
+  assert.equal(saved.planData.webRecipes[0].id, "test_plan");
+  assert.equal(saved.planData.webRecipes[0].createdAt, plan.createdAt);
 });
 
 test("F5 GET exposes recipe date and fields at legacy top level", async t => {
@@ -88,4 +92,19 @@ test("F5 failed read must not overwrite the saved supplement state", async t => 
   const res = await postPlan(request("/api/food/plans", { babyId: "test_baby", name: "test_recipe" }));
   assert.equal(res.status, 503);
   assert.equal(writes, 0);
+});
+
+test("food recipe concurrent-save conflict propagates instead of claiming a new recipe exists", async t => {
+  let writes = 0;
+  setup(t, (_url, init) => {
+    if (init?.method !== "PUT") return Response.json({ data: plan });
+    writes++;
+    const body = JSON.parse(String(init.body));
+    assert.equal(body.baseVersion, "7");
+    return Response.json({ error: { code: "VERSION_CONFLICT", message: "test_conflict" } }, { status: 409 });
+  });
+  const res = await postPlan(request("/api/food/plans", { babyId: "test_baby", name: "test_new_recipe" }));
+  assert.equal(res.status, 409);
+  assert.equal(writes, 1);
+  assert.equal((await res.json()).id, undefined);
 });

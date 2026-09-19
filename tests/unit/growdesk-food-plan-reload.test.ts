@@ -23,7 +23,7 @@ test('F5 food-page store reload retrieves the saved recipe for the selected baby
     const match = path.match(/\/api\/v1\/babies\/(test_baby(?:_second)?)\/food-plan$/);
     if (match) {
       upstreamReads.push(match[1]);
-      return Response.json({ data: { babyId: match[1], planData: { date: '2026-09-17', name: `test_recipe_${match[1]}` }, updatedAt: '2026-09-17T00:00:00Z' } });
+      return Response.json({ data: { id: `test_plan_${match[1]}`, version: "1", createdAt: "2026-09-17T00:00:00Z", babyId: match[1], planData: { date: '2026-09-17', name: `test_recipe_${match[1]}` }, updatedAt: '2026-09-17T00:00:00Z' } });
     }
     throw new Error('unexpected request: ' + path);
   });
