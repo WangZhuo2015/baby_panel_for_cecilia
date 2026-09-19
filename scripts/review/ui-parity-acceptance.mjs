@@ -112,7 +112,7 @@ const today = new Intl.DateTimeFormat("en-CA", {
   month: "2-digit",
   day: "2-digit",
 }).format(new Date());
-const report = { baseURL: parsed.origin, runId: runManifest.runId, buildProvenance, account: account.username, startedAt: new Date().toISOString(), steps: [], console: [], network: [], foodDiagnostic: {}, medicalDiagnostic: {}, sleepDiagnostic: {} };
+const report = { baseURL: parsed.origin, runId: runManifest.runId, buildProvenance, account: account.username, startedAt: new Date().toISOString(), steps: [], console: [], network: [], avatarDiagnostic: {}, foodDiagnostic: {}, growthDiagnostic: {}, medicalDiagnostic: {}, sleepDiagnostic: {} };
 
 const chromeExecutable = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE
   || "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
@@ -283,6 +283,132 @@ try {
     await shot("01-onboarded-dashboard");
   });
 
+  await step("baby-avatar-crop-upload-refresh", async () => {
+    const avatarEnabled = runManifest.storage?.s3Covered === true
+      && runManifest.storage?.driver === "owned-minio";
+    if (!avatarEnabled) {
+      report.avatarDiagnostic = {
+        status: "SKIP",
+        reason: "owned run manifest does not prove real MinIO/S3 coverage",
+        storage: runManifest.storage || null,
+      };
+      return;
+    }
+    report.avatarDiagnostic = { status: "RUNNING", storage: runManifest.storage };
+    await goto("/onboarding", "宝宝资料与头像");
+    await page.getByRole("button", { name: "保存修改" }).waitFor({ state: "visible" });
+    await page.waitForFunction(() => Array.from(document.querySelectorAll("button")).some((button) =>
+      button.textContent?.includes("保存修改") && !button.disabled));
+
+    const fixtureBuffer = Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+      "base64",
+    );
+    {
+      await page.locator('input[type="file"][accept="image/*"]').setInputFiles({
+        name: `e2e_avatar_${suffix}.png`,
+        mimeType: "image/png",
+        buffer: fixtureBuffer,
+      });
+      const cropImage = page.getByAltText("待裁剪头像");
+      await cropImage.waitFor({ state: "visible", timeout: 15_000 });
+      await page.waitForFunction(() => {
+        const image = document.querySelector('img[alt="待裁剪头像"]');
+        return image instanceof HTMLImageElement && image.complete && image.naturalWidth > 0 && image.naturalHeight > 0;
+      });
+      const avatarUploadPromise = page.waitForResponse((response) => response.request().method() === "POST"
+        && new URL(response.url()).pathname === "/api/baby/avatar");
+      const avatarFirstDownloadPromise = page.waitForResponse((response) => response.request().method() === "GET"
+        && /^\/api\/attachments\/[0-9a-f-]+$/i.test(new URL(response.url()).pathname));
+      await page.getByRole("button", { name: "确定裁剪头像" }).click();
+      const avatarUpload = await avatarUploadPromise;
+      const avatarBody = await avatarUpload.json().catch(() => null);
+      report.avatarDiagnostic.uploadStatus = avatarUpload.status();
+      report.avatarDiagnostic.attachmentId = avatarBody?.attachmentId || null;
+      report.avatarDiagnostic.avatarUrl = avatarBody?.avatarUrl || null;
+      if (avatarUpload.status() !== 200
+        || typeof avatarBody?.attachmentId !== "string"
+        || avatarBody?.avatarUrl !== `/api/attachments/${avatarBody.attachmentId}`) {
+        throw new Error(`avatar crop upload did not return a protected attachment: ${avatarUpload.status()} ${JSON.stringify(avatarBody)}`);
+      }
+      const avatarPath = avatarBody.avatarUrl;
+      const firstDownload = await avatarFirstDownloadPromise;
+      if (new URL(firstDownload.url()).pathname !== avatarPath) {
+        throw new Error(`avatar displayed a different protected attachment: ${firstDownload.url()}`);
+      }
+      const onboardingAvatar = page.getByAltText("宝宝头像", { exact: true });
+      await onboardingAvatar.waitFor({ state: "visible", timeout: 15_000 });
+      await page.waitForFunction((expectedPath) => {
+        const image = document.querySelector('img[alt="宝宝头像"]');
+        return image instanceof HTMLImageElement
+          && new URL(image.src).pathname === expectedPath
+          && image.complete && image.naturalWidth > 0 && image.naturalHeight > 0;
+      }, avatarPath);
+      const onboardingDimensions = await onboardingAvatar.evaluate((image) => ({
+        complete: image.complete,
+        naturalWidth: image.naturalWidth,
+        naturalHeight: image.naturalHeight,
+        src: image.getAttribute("src"),
+      }));
+      report.avatarDiagnostic.firstDisplay = {
+        status: firstDownload.status(),
+        contentType: firstDownload.headers()["content-type"] || null,
+        cacheControl: firstDownload.headers()["cache-control"] || null,
+        nosniff: firstDownload.headers()["x-content-type-options"] || null,
+        dimensions: onboardingDimensions,
+      };
+      if (firstDownload.status() !== 200
+        || !report.avatarDiagnostic.firstDisplay.contentType?.startsWith("image/jpeg")
+        || !report.avatarDiagnostic.firstDisplay.cacheControl?.includes("private")
+        || !report.avatarDiagnostic.firstDisplay.cacheControl?.includes("no-store")
+        || report.avatarDiagnostic.firstDisplay.nosniff !== "nosniff"
+        || !onboardingDimensions.complete || onboardingDimensions.naturalWidth < 1 || onboardingDimensions.naturalHeight < 1
+        || new URL(onboardingDimensions.src, parsed.origin).pathname !== avatarPath) {
+        throw new Error(`cropped avatar did not render through the protected BFF: ${JSON.stringify(report.avatarDiagnostic.firstDisplay)}`);
+      }
+      await shot("01-avatar-cropped-first-display");
+
+      await page.getByRole("button", { name: "保存修改" }).click();
+      await page.waitForURL((url) => url.pathname === "/", { timeout: 20_000 });
+      const refreshedDownloadPromise = page.waitForResponse((response) => response.request().method() === "GET"
+        && new URL(response.url()).pathname === avatarPath);
+      await page.reload({ waitUntil: "domcontentloaded" });
+      const refreshedDownload = await refreshedDownloadPromise;
+      const dashboardAvatar = page.getByAltText(account.baby, { exact: true }).first();
+      await dashboardAvatar.waitFor({ state: "visible", timeout: 15_000 });
+      await page.waitForFunction(({ expectedAlt, expectedPath }) => {
+        const image = Array.from(document.querySelectorAll("img")).find((item) => item.alt === expectedAlt
+          && new URL(item.src).pathname === expectedPath);
+        return image instanceof HTMLImageElement
+          && image.complete && image.naturalWidth > 0 && image.naturalHeight > 0;
+      }, { expectedAlt: account.baby, expectedPath: avatarPath });
+      const refreshedDimensions = await dashboardAvatar.evaluate((image) => ({
+        complete: image.complete,
+        naturalWidth: image.naturalWidth,
+        naturalHeight: image.naturalHeight,
+        src: image.getAttribute("src"),
+      }));
+      report.avatarDiagnostic.refreshedDisplay = { status: refreshedDownload.status(), dimensions: refreshedDimensions };
+      if (refreshedDownload.status() !== 200
+        || !refreshedDimensions.complete || refreshedDimensions.naturalWidth < 1 || refreshedDimensions.naturalHeight < 1
+        || new URL(refreshedDimensions.src, parsed.origin).pathname !== avatarPath) {
+        throw new Error(`protected avatar did not survive dashboard refresh: ${JSON.stringify(report.avatarDiagnostic.refreshedDisplay)}`);
+      }
+      const anonymousContext = await browser.newContext({ baseURL: parsed.origin });
+      try {
+        const anonymousResponse = await anonymousContext.request.get(avatarPath);
+        report.avatarDiagnostic.anonymousStatus = anonymousResponse.status();
+        if (![401, 403].includes(anonymousResponse.status())) {
+          throw new Error(`protected avatar was readable without a session: ${anonymousResponse.status()}`);
+        }
+      } finally {
+        await anonymousContext.close();
+      }
+      report.avatarDiagnostic.status = "PASS";
+      await shot("01-avatar-refreshed-protected");
+    }
+  });
+
   await step("create-second-isolated-family-fixture", async () => {
     const registration = await isolatedApi("/api/v1/auth/register", {
       method: "POST",
@@ -376,8 +502,15 @@ try {
 
   await step("diaper-create-refresh-delete", async () => {
     await goto("/records/diaper", "尿布记录");
-    await page.getByRole("button", { name: /便便/ }).first().click();
-    await page.getByPlaceholder("记录一下宝宝臀部情况或特殊细节...").fill(marks.diaper);
+    await page.waitForFunction(() => Array.from(document.querySelectorAll("button")).some((button) =>
+      button.textContent?.includes("保存记录") && !button.disabled));
+    const poopButton = page.locator("button").filter({ hasText: /^\s*💩\s*便便\s*$/ });
+    await poopButton.click();
+    const selectedPoopClasses = (await poopButton.getAttribute("class") || "").split(/\s+/);
+    if (!selectedPoopClasses.includes("bg-primary")) throw new Error("diaper poop type was not selected by the UI");
+    const diaperNotes = page.getByPlaceholder("记录一下宝宝臀部情况或特殊细节...");
+    await diaperNotes.fill(marks.diaper);
+    if (await diaperNotes.inputValue() !== marks.diaper) throw new Error("diaper notes did not retain the entered marker");
     await page.getByRole("button", { name: "保存记录" }).click();
     await page.waitForURL((url) => url.pathname === "/", { timeout: 20_000 });
     await visibleText(marks.diaper);
@@ -519,18 +652,135 @@ try {
   });
 
   await step("growth-historical-create-refresh-delete", async () => {
+    const growthImageEnabled = runManifest.storage?.s3Covered === true
+      && runManifest.storage?.driver === "owned-minio"
+      && runManifest.externalAi?.realProviderCovered === false;
+    report.growthDiagnostic.imageScenario = growthImageEnabled
+      ? { status: "RUNNING", storage: runManifest.storage, externalAi: runManifest.externalAi }
+      : {
+          status: "SKIP",
+          reason: "owned run manifest does not prove real MinIO/S3 coverage and virtual external AI isolation",
+          storage: runManifest.storage || null,
+          externalAi: runManifest.externalAi || null,
+        };
     await goto("/growth/add", "添加测量记录");
+    await page.waitForFunction(() => Array.from(document.querySelectorAll("button")).some((button) =>
+      button.textContent?.includes("保存测量记录") && !button.disabled));
+    let protectedGrowthImagePath = null;
+    if (growthImageEnabled) {
+      await page.getByRole("button", { name: /拍照识别/ }).click();
+      const fixtureBuffer = Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+        "base64",
+      );
+      const growthOcrPromise = page.waitForResponse((response) => response.request().method() === "POST"
+        && new URL(response.url()).pathname === "/api/growth/ocr");
+      await page.locator('input[type="file"][accept="image/*"]:not([capture])').setInputFiles({
+        name: `e2e_growth_${suffix}.png`,
+        mimeType: "image/png",
+        buffer: fixtureBuffer,
+      });
+      const growthOcr = await growthOcrPromise;
+      const growthOcrBody = await growthOcr.json().catch(() => null);
+      Object.assign(report.growthDiagnostic.imageScenario, {
+        ocrStatus: growthOcr.status(),
+        attachmentId: growthOcrBody?.attachmentId || null,
+        imageUrl: growthOcrBody?.imageUrl || null,
+        ocrRecognitionQualityCovered: false,
+      });
+      if (growthOcr.status() !== 200
+        || typeof growthOcrBody?.attachmentId !== "string"
+        || growthOcrBody?.imageUrl !== `/api/attachments/${growthOcrBody.attachmentId}`) {
+        throw new Error(`growth OCR did not archive the browser-selected image: ${growthOcr.status()} ${JSON.stringify(growthOcrBody)}`);
+      }
+      protectedGrowthImagePath = growthOcrBody.imageUrl;
+      const growthPreview = page.getByAltText("测量照片预览");
+      await growthPreview.waitFor({ state: "visible", timeout: 15_000 });
+      const previewDimensions = await growthPreview.evaluate((image) => ({
+        complete: image.complete,
+        naturalWidth: image.naturalWidth,
+        naturalHeight: image.naturalHeight,
+      }));
+      report.growthDiagnostic.imageScenario.previewDimensions = previewDimensions;
+      if (!previewDimensions.complete || previewDimensions.naturalWidth < 1 || previewDimensions.naturalHeight < 1) {
+        throw new Error(`growth selected image did not render a valid preview: ${JSON.stringify(previewDimensions)}`);
+      }
+    }
+    // The isolated virtual OCR intentionally supplies no measurements. Enter
+    // the historical values through the real form after OCR completes.
     await page.locator('input[type="date"]').fill("2026-09-18");
     await page.getByPlaceholder("例: 7.35").fill("7.42");
     await page.getByPlaceholder("例: 67.2").fill("67.8");
     await page.getByPlaceholder("例: 42.1").fill("42.3");
+    const growthCreatePromise = page.waitForResponse((response) => response.request().method() === "POST"
+      && new URL(response.url()).pathname === "/api/growth");
     await page.getByRole("button", { name: "保存测量记录" }).click();
+    const growthCreate = await growthCreatePromise;
+    const growthCreatePayload = growthCreate.request().postDataJSON();
+    report.growthDiagnostic.createStatus = growthCreate.status();
+    report.growthDiagnostic.createdImageUrl = growthCreatePayload?.imageUrl || null;
+    if (growthCreate.status() !== 201) throw new Error(`growth create returned ${growthCreate.status()}`);
+    if (protectedGrowthImagePath && growthCreatePayload?.imageUrl !== protectedGrowthImagePath) {
+      throw new Error(`growth create did not persist the OCR attachment URL: ${JSON.stringify(growthCreatePayload?.imageUrl)}`);
+    }
     await page.waitForURL((url) => url.pathname === "/growth", { timeout: 20_000 });
     await visibleText("7.42");
     await reloadAndSee("7.42");
+    if (protectedGrowthImagePath) {
+      await page.getByText("有图", { exact: true }).first().waitFor({ state: "visible", timeout: 15_000 });
+      const protectedDownloadPromise = page.waitForResponse((response) => response.request().method() === "GET"
+        && new URL(response.url()).pathname === protectedGrowthImagePath);
+      await page.getByRole("button", { name: "编辑 2026-09-18 生长记录" }).click();
+      const editDialog = page.getByRole("dialog", { name: "编辑生长记录" });
+      await editDialog.waitFor({ state: "visible", timeout: 15_000 });
+      const protectedDownload = await protectedDownloadPromise;
+      const savedGrowthImage = editDialog.getByAltText("已保存的生长测量照片，点击查看原图");
+      await savedGrowthImage.waitFor({ state: "visible", timeout: 15_000 });
+      const savedDimensions = await savedGrowthImage.evaluate((image) => ({
+        complete: image.complete,
+        naturalWidth: image.naturalWidth,
+        naturalHeight: image.naturalHeight,
+        src: image.getAttribute("src"),
+      }));
+      report.growthDiagnostic.imageScenario.firstEditDisplay = {
+        status: protectedDownload.status(),
+        contentType: protectedDownload.headers()["content-type"] || null,
+        cacheControl: protectedDownload.headers()["cache-control"] || null,
+        nosniff: protectedDownload.headers()["x-content-type-options"] || null,
+        dimensions: savedDimensions,
+      };
+      const firstEditDisplay = report.growthDiagnostic.imageScenario.firstEditDisplay;
+      if (protectedDownload.status() !== 200
+        || !firstEditDisplay.contentType?.startsWith("image/png")
+        || !firstEditDisplay.cacheControl?.includes("private")
+        || !firstEditDisplay.cacheControl?.includes("no-store")
+        || firstEditDisplay.nosniff !== "nosniff"
+        || !savedDimensions.complete || savedDimensions.naturalWidth < 1 || savedDimensions.naturalHeight < 1
+        || new URL(savedDimensions.src, parsed.origin).pathname !== protectedGrowthImagePath) {
+        throw new Error(`persisted growth photo did not render through the protected BFF: ${JSON.stringify(firstEditDisplay)}`);
+      }
+      await shot("05-growth-protected-image-edit");
+      const editedWeight = editDialog.getByPlaceholder("例: 7.35");
+      await editedWeight.fill("7.43");
+      const growthUpdatePromise = page.waitForResponse((response) => response.request().method() === "PATCH"
+        && new URL(response.url()).pathname === "/api/growth");
+      await editDialog.getByRole("button", { name: "保存修改" }).click();
+      const growthUpdate = await growthUpdatePromise;
+      const growthUpdatePayload = growthUpdate.request().postDataJSON();
+      report.growthDiagnostic.updateStatus = growthUpdate.status();
+      report.growthDiagnostic.updatedImageUrl = growthUpdatePayload?.imageUrl || null;
+      if (growthUpdate.status() !== 200 || growthUpdatePayload?.imageUrl !== protectedGrowthImagePath) {
+        throw new Error(`growth edit did not preserve the protected image: ${growthUpdate.status()} ${JSON.stringify(growthUpdatePayload?.imageUrl)}`);
+      }
+      await editDialog.waitFor({ state: "detached", timeout: 15_000 });
+      await visibleText("7.43");
+      await reloadAndSee("7.43");
+      await page.getByText("有图", { exact: true }).first().waitFor({ state: "visible", timeout: 15_000 });
+      report.growthDiagnostic.imageScenario.status = "PASS";
+    }
     await page.getByRole("button", { name: /删除 2026-09-18 生长记录/ }).click();
     await page.reload({ waitUntil: "domcontentloaded" });
-    if (await page.getByText("7.42", { exact: false }).count()) throw new Error("deleted growth measurement returned after refresh");
+    if (await page.getByText(protectedGrowthImagePath ? "7.43" : "7.42", { exact: false }).count()) throw new Error("deleted growth measurement returned after refresh");
     await shot("05-growth-delete-persisted");
   });
 
@@ -592,6 +842,17 @@ try {
 
   await step("medical-create-refresh-delete", async () => {
     report.medicalDiagnostic.attempts = [];
+    const medicalImageEnabled = runManifest.storage?.s3Covered === true
+      && runManifest.storage?.driver === "owned-minio"
+      && runManifest.externalAi?.realProviderCovered === false;
+    report.medicalDiagnostic.imageScenario = medicalImageEnabled
+      ? { status: "RUNNING", storage: runManifest.storage }
+      : {
+          status: "SKIP",
+          reason: "owned run manifest does not prove real MinIO/S3 coverage and virtual external AI isolation",
+          storage: runManifest.storage || null,
+          externalAi: runManifest.externalAi || null,
+        };
     for (let attempt = 1; attempt <= 3; attempt += 1) {
       const expectedTitle = `${marks.medical}_${attempt}`;
       const diagnostic = { expectedTitle };
@@ -599,6 +860,54 @@ try {
       await goto("/health/medical/add", "录入化验 / 体检单");
       const medicalTitle = page.getByPlaceholder("如：末梢血常规化验单 / 6月龄体检表");
       await medicalTitle.waitFor({ state: "visible" });
+      await page.waitForFunction(() => {
+        const fieldset = document.querySelector("fieldset");
+        return fieldset instanceof HTMLFieldSetElement && !fieldset.disabled;
+      });
+      let protectedImagePath = null;
+      if (attempt === 1 && medicalImageEnabled) {
+        const imageDiagnostic = report.medicalDiagnostic.imageScenario;
+        imageDiagnostic.externalAi = runManifest.externalAi;
+        const fixtureBuffer = Buffer.from(
+          "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+          "base64",
+        );
+        const ocrResponsePromise = page.waitForResponse((response) =>
+          response.request().method() === "POST"
+          && new URL(response.url()).pathname === "/api/medical/ocr");
+        await page.locator('input[type="file"][accept="image/*"]:not([capture])').setInputFiles({
+          name: `e2e_medical_${suffix}.png`,
+          mimeType: "image/png",
+          buffer: fixtureBuffer,
+        });
+        const ocrResponse = await ocrResponsePromise;
+        const ocrBody = await ocrResponse.json().catch(() => null);
+        imageDiagnostic.ocrStatus = ocrResponse.status();
+        imageDiagnostic.ocrAttachmentId = ocrBody?.attachmentId || null;
+        imageDiagnostic.ocrImageUrl = ocrBody?.imageUrl || null;
+        imageDiagnostic.ocrRecognitionQualityCovered = false;
+        if (ocrResponse.status() !== 200
+          || typeof ocrBody?.attachmentId !== "string"
+          || typeof ocrBody?.imageUrl !== "string") {
+          throw new Error(`medical OCR did not archive the browser-selected image: ${ocrResponse.status()} ${JSON.stringify(ocrBody)}`);
+        }
+        protectedImagePath = new URL(ocrBody.imageUrl, parsed.origin).pathname;
+        if (protectedImagePath !== `/api/attachments/${ocrBody.attachmentId}`) {
+          throw new Error(`medical OCR returned inconsistent protected attachment identity: ${JSON.stringify(ocrBody)}`);
+        }
+        await page.getByAltText("单据预览").waitFor({ state: "visible", timeout: 15_000 });
+        const previewDimensions = await page.getByAltText("单据预览").evaluate((image) => ({
+          complete: image.complete,
+          naturalWidth: image.naturalWidth,
+          naturalHeight: image.naturalHeight,
+        }));
+        imageDiagnostic.previewDimensions = previewDimensions;
+        if (!previewDimensions.complete || previewDimensions.naturalWidth < 1 || previewDimensions.naturalHeight < 1) {
+          throw new Error(`medical selected image did not render a valid preview: ${JSON.stringify(previewDimensions)}`);
+        }
+      }
+      // OCR is allowed to prefill fields. Re-enter the test values through the UI
+      // after it completes so the persisted report assertions remain deterministic.
       await medicalTitle.fill(expectedTitle);
       await medicalTitle.blur();
       diagnostic.afterTitleBlur = await medicalTitle.inputValue();
@@ -612,18 +921,100 @@ try {
       if (diagnostic.afterOtherFields !== expectedTitle) {
         throw new Error(`medical title ${attempt} was lost after filling later fields: ${JSON.stringify(diagnostic.afterOtherFields)}`);
       }
+      let fallbackUploadResponse = null;
+      const captureFallbackUpload = (response) => {
+        if (response.request().method() === "POST" && new URL(response.url()).pathname === "/api/medical/upload") {
+          fallbackUploadResponse = response;
+        }
+      };
+      if (protectedImagePath) page.on("response", captureFallbackUpload);
       const medicalPost = page.waitForRequest((request) => request.method() === "POST" && new URL(request.url()).pathname === "/api/medical/reports");
       await page.getByRole("button", { name: "确认保存到健康档案" }).click();
       const medicalPayload = (await medicalPost).postDataJSON();
+      if (protectedImagePath) page.off("response", captureFallbackUpload);
       diagnostic.postedTitle = medicalPayload?.title;
       diagnostic.postedBabyId = typeof medicalPayload?.babyId === "string" && medicalPayload.babyId.length > 0;
       if (diagnostic.postedTitle !== expectedTitle) {
         throw new Error(`medical POST title ${attempt} differed from the controlled input: ${JSON.stringify(diagnostic.postedTitle)}`);
       }
+      if (protectedImagePath) {
+        report.medicalDiagnostic.imageScenario.fallbackMedicalUploadObserved = Boolean(fallbackUploadResponse);
+        if (fallbackUploadResponse) {
+          throw new Error(`medical save unexpectedly uploaded the OCR-archived image a second time: ${fallbackUploadResponse.status()}`);
+        }
+        if (medicalPayload?.imageUrl !== report.medicalDiagnostic.imageScenario.ocrImageUrl) {
+          throw new Error(`medical report did not persist the OCR attachment URL: ${JSON.stringify(medicalPayload?.imageUrl)}`);
+        }
+      }
       await page.waitForURL(/\/health\/medical/, { timeout: 20_000 });
       await visibleText(expectedTitle);
       await reloadAndSee(expectedTitle);
+      const firstProtectedDownload = protectedImagePath
+        ? page.waitForResponse((response) => response.request().method() === "GET"
+          && new URL(response.url()).pathname === protectedImagePath)
+        : null;
       await page.getByText(expectedTitle, { exact: false }).first().click();
+      if (firstProtectedDownload && protectedImagePath) {
+        const response = await firstProtectedDownload;
+        const image = page.getByAltText(expectedTitle, { exact: true });
+        await image.waitFor({ state: "visible", timeout: 15_000 });
+        const dimensions = await image.evaluate((element) => ({
+          complete: element.complete,
+          naturalWidth: element.naturalWidth,
+          naturalHeight: element.naturalHeight,
+          src: element.getAttribute("src"),
+        }));
+        const imageDiagnostic = report.medicalDiagnostic.imageScenario;
+        imageDiagnostic.firstDownload = {
+          status: response.status(),
+          contentType: response.headers()["content-type"] || null,
+          cacheControl: response.headers()["cache-control"] || null,
+          nosniff: response.headers()["x-content-type-options"] || null,
+          dimensions,
+        };
+        if (response.status() !== 200
+          || !imageDiagnostic.firstDownload.contentType?.startsWith("image/png")
+          || !imageDiagnostic.firstDownload.cacheControl?.includes("private")
+          || !imageDiagnostic.firstDownload.cacheControl?.includes("no-store")
+          || imageDiagnostic.firstDownload.nosniff !== "nosniff"
+          || !dimensions.complete || dimensions.naturalWidth < 1 || dimensions.naturalHeight < 1) {
+          throw new Error(`protected medical image first display failed: ${JSON.stringify(imageDiagnostic.firstDownload)}`);
+        }
+        await shot("07-medical-protected-image-first-display");
+        await page.getByRole("button", { name: "完成", exact: true }).click();
+        const refreshedDownload = page.waitForResponse((nextResponse) => nextResponse.request().method() === "GET"
+          && new URL(nextResponse.url()).pathname === protectedImagePath);
+        await page.reload({ waitUntil: "domcontentloaded" });
+        await visibleText(expectedTitle);
+        await page.getByText(expectedTitle, { exact: false }).first().click();
+        const refreshedResponse = await refreshedDownload;
+        const refreshedImage = page.getByAltText(expectedTitle, { exact: true });
+        await refreshedImage.waitFor({ state: "visible", timeout: 15_000 });
+        const refreshedDimensions = await refreshedImage.evaluate((element) => ({
+          complete: element.complete,
+          naturalWidth: element.naturalWidth,
+          naturalHeight: element.naturalHeight,
+          src: element.getAttribute("src"),
+        }));
+        imageDiagnostic.refreshedDownload = { status: refreshedResponse.status(), dimensions: refreshedDimensions };
+        if (refreshedResponse.status() !== 200
+          || !refreshedDimensions.complete || refreshedDimensions.naturalWidth < 1 || refreshedDimensions.naturalHeight < 1
+          || refreshedDimensions.src !== dimensions.src) {
+          throw new Error(`protected medical image did not survive refresh: ${JSON.stringify(imageDiagnostic.refreshedDownload)}`);
+        }
+        const anonymousContext = await browser.newContext({ baseURL: parsed.origin });
+        try {
+          const anonymousResponse = await anonymousContext.request.get(protectedImagePath);
+          imageDiagnostic.anonymousStatus = anonymousResponse.status();
+          if (![401, 403].includes(anonymousResponse.status())) {
+            throw new Error(`protected medical image was readable without a session: ${anonymousResponse.status()}`);
+          }
+        } finally {
+          await anonymousContext.close();
+        }
+        imageDiagnostic.status = "PASS";
+        await shot("07-medical-protected-image-refreshed");
+      }
       await page.getByRole("button", { name: /删除报告/ }).click();
       await page.reload({ waitUntil: "domcontentloaded" });
       if (await page.getByText(expectedTitle, { exact: false }).count()) throw new Error(`deleted medical report ${attempt} returned after refresh`);
