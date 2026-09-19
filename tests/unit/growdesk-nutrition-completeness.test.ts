@@ -43,6 +43,7 @@ test("nutrition refuses an upstream failure instead of returning an empty health
 
 test("nutrition includes every page and converts bottle milk through the legacy adapter", async () => {
   const record = { id: "test_feeding", babyId: "test_baby", familyId: "test_family", feedingType: "bottle", occurredAt: "2026-09-19T01:00:00.000Z", amountMl: "120", leftMinutes: null, rightMinutes: null, spitUp: false, formulaProductId: null, notes: null, source: "ui_manual", sourceAgent: null, version: "1", createdAt: "2026-09-19T01:00:00.000Z", updatedAt: "2026-09-19T01:00:00.000Z" } as feeding.GrowDeskFeedingRecord;
+  const later = { ...record, id: "test_later", occurredAt: "2026-09-19T02:00:00.000Z", amountMl: "140" };
   const seen: string[] = [];
   const api = route((async (endpoint: string) => {
     const url = new URL(endpoint, "https://test.invalid"); seen.push(endpoint);
@@ -50,14 +51,14 @@ test("nutrition includes every page and converts bottle milk through the legacy 
     if (url.pathname.endsWith("/records/feeding")) {
       return url.searchParams.has("cursor")
         ? { ok: true, status: 200, data: [record], page: { nextCursor: null } }
-        : { ok: true, status: 200, data: [], page: { nextCursor: "test_page2" } };
+        : { ok: true, status: 200, data: [later], page: { nextCursor: "test_page2" } };
     }
     return { ok: true, status: 200, data: [], page: { nextCursor: null } };
   }) as protocol.BridgeFetch);
   const response = await api.GET(request());
   assert.equal(response.status, 200);
   const body = await response.json();
-  const expected = engine.calculateDailyNutrition({ date: "2026-09-19", babyAgeMonths: body.babyAgeMonths, feedings: [feeding.fromGrowDeskFeedingRecord(record)], supplements: [], foodLogs: [], formulaProductsMap: {}, supplementProductsMap: {} });
+  const expected = engine.calculateDailyNutrition({ date: "2026-09-19", babyAgeMonths: body.babyAgeMonths, feedings: [feeding.fromGrowDeskFeedingRecord(record), feeding.fromGrowDeskFeedingRecord(later)], supplements: [], foodLogs: [], formulaProductsMap: {}, supplementProductsMap: {} });
   assert.deepEqual(body.analysis, JSON.parse(JSON.stringify(expected)));
   assert.ok(seen.some(url => url.includes("cursor=test_page2")));
 });

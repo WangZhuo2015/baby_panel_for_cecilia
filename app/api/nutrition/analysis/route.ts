@@ -81,10 +81,11 @@ export async function GET(request: Request) {
         });
       }
 
-      const adaptedAllFeedings = rawFeedings.map(fromGrowDeskFeedingRecord);
+      const adaptedAllFeedings = rawFeedings.map(fromGrowDeskFeedingRecord)
+        .sort((a, b) => a.timestamp.localeCompare(b.timestamp));
       const adaptedAllSupplements = rawSupps.map((r) =>
         fromGrowDeskSupplementRecordEnriched(r, allKnownSupplements)
-      );
+      ).sort((a, b) => `${a.date}T${a.time}`.localeCompare(`${b.date}T${b.time}`));
 
       const adaptedAllFoodLogs = rawFoods.map((raw) => {
         const food = fromGrowDeskFoodRecord(raw);
@@ -93,7 +94,7 @@ export async function GET(request: Request) {
           foods: raw.foodItemIds, portion: food.portion || "most",
           acceptance: food.acceptance ?? 5, babyState: food.babyState || "normal",
         };
-      });
+      }).sort((a, b) => `${a.date}T${a.time}`.localeCompare(`${b.date}T${b.time}`));
 
       if (days === 1) {
         const { start, end } = getLocalDayUtcRange(date);
