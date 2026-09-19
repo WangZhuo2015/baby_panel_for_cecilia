@@ -6,6 +6,7 @@ import { activeChatRunManager } from "@/lib/agent";
 import { GROWDESK_CONFIG } from "@/lib/config";
 import { resolveBffSession } from "@/lib/growdesk/session";
 import { bffAiSessionStore } from "@/lib/growdesk/ai-sessions";
+import { verifyBffCsrf } from "@/lib/growdesk/csrf";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -167,6 +168,10 @@ export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  if (GROWDESK_CONFIG.enabled) {
+    const csrf = verifyBffCsrf(request, { enforceInTest: true });
+    if (csrf) return csrf;
+  }
   const { id } = await params;
   const body = await request.json().catch(() => ({}));
   const title = typeof body.title === "string" ? body.title.trim().slice(0, 50) : undefined;
@@ -219,6 +224,10 @@ export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  if (GROWDESK_CONFIG.enabled) {
+    const csrf = verifyBffCsrf(request, { enforceInTest: true });
+    if (csrf) return csrf;
+  }
   const { id } = await params;
 
   if (GROWDESK_CONFIG.enabled) {

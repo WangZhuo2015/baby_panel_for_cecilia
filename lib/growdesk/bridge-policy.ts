@@ -10,6 +10,7 @@ export const BRIDGED_METHODS: Readonly<Record<string, readonly string[]>> = {
   "/api/development/warning-signs": ["GET"],
   "/api/food/feeding-guidelines": ["GET"],
   "/api/auth/login": ["POST"],
+  "/api/auth/register": ["POST"],
   "/api/auth/logout": ["POST"],
   "/api/auth/me": ["GET"],
   "/api/baby": ["GET", "POST", "PUT"],
@@ -46,6 +47,7 @@ export const BRIDGED_METHODS: Readonly<Record<string, readonly string[]>> = {
   "/api/user/tokens": ["GET", "POST"],
 };
 export function isBridgedMethod(pathname: string, method: string): boolean {
+  if (/^\/api\/ai\/sessions\/[a-f0-9-]{36}$/i.test(pathname)) return ["GET", "PATCH", "DELETE"].includes(method.toUpperCase());
   if (/^\/api\/books\/[^/]+$/.test(pathname)) return method.toUpperCase() === "PATCH";
   if (/^\/api\/medical\/reports\/[a-f0-9-]{36}$/i.test(pathname)) return ["GET", "PUT", "PATCH", "DELETE"].includes(method.toUpperCase());
   if (/^\/api\/attachments\/[a-f0-9-]{36}$/i.test(pathname)) return method.toUpperCase() === "GET";

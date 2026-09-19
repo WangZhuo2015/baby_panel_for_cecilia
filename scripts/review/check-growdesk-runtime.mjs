@@ -90,7 +90,8 @@ try {
   });
   assert.equal(pushSub.status, 200);
   assert.equal((await pushSub.json()).success, true);
-  assert.equal((await call('/api/auth/register', { method: 'POST' })).status, 501);
+  // Registration is bridged now; missing Origin must reach CSRF rejection, not the migration fence.
+  assert.equal((await call('/api/auth/register', { method: 'POST' })).status, 403);
   assert.equal((await call('/api/baby', { method: 'PUT', headers: { cookie, origin: 'https://test_attacker.invalid' }, body: '{}' })).status, 403);
   outage = true;
   assert.equal((await call('/api/auth/me', { headers: { cookie } })).status, 503);

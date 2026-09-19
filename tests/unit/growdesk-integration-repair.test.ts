@@ -160,7 +160,7 @@ test("migration policy checks the HTTP method, not just a filename marker", asyn
   assert.equal(isBridgedMethod("/api/medical/reports", "POST"), true);
   assert.equal(isBridgedMethod("/api/medical/reports", "DELETE"), false);
   assert.equal(isBridgedMethod("/api/medical/reports/test_report", "DELETE"), false);
-  assert.equal(isBridgedMethod("/api/auth/register", "POST"), false);
+  assert.equal(isBridgedMethod("/api/auth/register", "POST"), true);
   assert.equal(isBridgedMethod("/mcp", "POST"), false);
 });
 test("24:00 is rejected instead of silently changing the recorded date", () => assert.throws(() => isoTimestamp("2026-09-13T24:00:00Z"), isStatus(400)));

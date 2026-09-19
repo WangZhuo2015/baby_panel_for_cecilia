@@ -7,6 +7,7 @@ import { resolveBffSession } from "@/lib/growdesk/session";
 import { bffAiSessionStore } from "@/lib/growdesk/ai-sessions";
 import { loadWebBaby } from "@/lib/growdesk/bridge-identity";
 import { growdeskFetch } from "@/lib/growdesk/client";
+import { verifyBffCsrf } from "@/lib/growdesk/csrf";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -111,6 +112,8 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   if (GROWDESK_CONFIG.enabled) {
+    const csrf = verifyBffCsrf(request, { enforceInTest: true });
+    if (csrf) return csrf;
     const bffSession = await resolveBffSession(request);
     if (!bffSession) {
       return NextResponse.json({ error: "Unauthorized: 会话无效或已过期" }, { status: 401 });
