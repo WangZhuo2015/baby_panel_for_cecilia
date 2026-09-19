@@ -13,7 +13,7 @@ import {
   type GrowDeskGrowthRecord,
 } from "@/lib/growdesk/growth-compat";
 import { loadWebBaby } from "@/lib/growdesk/bridge-identity";
-import { wireVersion } from "@/lib/growdesk/bridge-protocol";
+import { BridgeError, bridgeErrorResponse, wireVersion } from "@/lib/growdesk/bridge-protocol";
 import crypto from "node:crypto";
 
 export async function GET(request: Request) {
@@ -60,6 +60,7 @@ export async function GET(request: Request) {
     const data = await records.getGrowthMeasurements(ctx, { limit: searchParams.get("limit") || undefined });
     return NextResponse.json(data);
   } catch (e) {
+    if (e instanceof BridgeError) return bridgeErrorResponse(e);
     if (e instanceof ValidationError) return NextResponse.json({ error: e.message }, { status: 400 });
     console.error("GET /api/growth error:", e);
     return NextResponse.json({ error: "Failed to fetch growth measurements" }, { status: 500 });
@@ -125,6 +126,7 @@ export async function POST(request: Request) {
     });
     return NextResponse.json(rec, { status: 201 });
   } catch (e) {
+    if (e instanceof BridgeError) return bridgeErrorResponse(e);
     if (e instanceof ValidationError) return NextResponse.json({ error: (e as Error).message }, { status: 400 });
     console.error("POST /api/growth error:", e);
     return NextResponse.json({ error: "Failed to create growth measurement" }, { status: 500 });
@@ -200,6 +202,7 @@ export async function DELETE(request: Request) {
     await records.deleteRecord({ userId: auth.user.id, babyId: rec.babyId }, "growth", id);
     return NextResponse.json({ success: true, id });
   } catch (e) {
+    if (e instanceof BridgeError) return bridgeErrorResponse(e);
     if (e instanceof ValidationError) return NextResponse.json({ error: e.message }, { status: 400 });
     if (e instanceof NotFoundError) return NextResponse.json({ error: e.message }, { status: 404 });
     if (e instanceof ForbiddenError) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -256,6 +259,7 @@ async function handleUpdate(request: Request) {
 
     return NextResponse.json({ error: "Not implemented in local mode" }, { status: 501 });
   } catch (e: any) {
+    if (e instanceof BridgeError) return bridgeErrorResponse(e);
     console.error("UPDATE /api/growth error:", e);
     return NextResponse.json({ error: e?.message || "Failed to update growth measurement" }, { status: 500 });
   }
