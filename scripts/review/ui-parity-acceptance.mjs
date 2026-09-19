@@ -673,21 +673,25 @@ try {
         "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
         "base64",
       );
-      const growthOcrPromise = page.waitForResponse((response) => response.request().method() === "POST"
-        && new URL(response.url()).pathname === "/api/growth/ocr");
       const growthGalleryInput = page.getByTestId("growth-ocr-gallery-input");
       if (await growthGalleryInput.count() !== 1) {
         throw new Error(`expected exactly one growth OCR gallery input, found ${await growthGalleryInput.count()}`);
       }
+      const growthGalleryButton = page.getByRole("button", { name: "从相册选择", exact: true });
+      if (await growthGalleryButton.count() !== 1) {
+        throw new Error(`expected exactly one growth OCR gallery button, found ${await growthGalleryButton.count()}`);
+      }
       const [growthFileChooser] = await Promise.all([
         page.waitForEvent("filechooser"),
-        page.getByRole("button", { name: "从相册选择", exact: true }).click(),
+        growthGalleryButton.click(),
       ]);
-      await growthFileChooser.setFiles({
+      const growthOcrPromise = page.waitForResponse((response) => response.request().method() === "POST"
+        && new URL(response.url()).pathname === "/api/growth/ocr");
+      await Promise.all([growthOcrPromise, growthFileChooser.setFiles({
         name: `e2e_growth_${suffix}.png`,
         mimeType: "image/png",
         buffer: fixtureBuffer,
-      });
+      })]);
       const growthOcr = await growthOcrPromise;
       const growthOcrBody = await growthOcr.json().catch(() => null);
       Object.assign(report.growthDiagnostic.imageScenario, {
