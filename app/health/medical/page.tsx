@@ -178,7 +178,7 @@ export default function MedicalReportsPage() {
                       alt="化验单缩略图"
                       width={320}
                       height={96}
-                      unoptimized={job.imageUrl.startsWith("data:") || job.imageUrl.startsWith("blob:")}
+                      unoptimized={job.imageUrl.startsWith("data:") || job.imageUrl.startsWith("blob:") || job.imageUrl.startsWith("/api/attachments/")}
                       className="mt-2 w-full h-24 object-cover rounded-xl opacity-80"
                     />
                   )}
@@ -427,7 +427,7 @@ export default function MedicalReportsPage() {
                       alt={selectedReport.title}
                       width={400}
                       height={144}
-                      unoptimized={selectedReport.imageUrl.startsWith("data:") || selectedReport.imageUrl.startsWith("blob:")}
+                      unoptimized={selectedReport.imageUrl.startsWith("data:") || selectedReport.imageUrl.startsWith("blob:") || selectedReport.imageUrl.startsWith("/api/attachments/")}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform"
                     />
                     <div className="absolute inset-0 bg-black/20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">

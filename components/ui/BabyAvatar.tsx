@@ -38,6 +38,7 @@ export function BabyAvatar({
   const isExternalOrBlob =
     src.startsWith("data:") ||
     src.startsWith("blob:") ||
+    src.startsWith("/api/attachments/") ||
     src.startsWith("http://") ||
     src.startsWith("https://");
 

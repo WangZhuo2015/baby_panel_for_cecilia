@@ -232,7 +232,7 @@ export function GrowthForm({
                     alt="测量照片预览"
                     width={144}
                     height={144}
-                    unoptimized={imagePreview.startsWith("data:") || imagePreview.startsWith("blob:")}
+                    unoptimized={imagePreview.startsWith("data:") || imagePreview.startsWith("blob:") || imagePreview.startsWith("/api/attachments/")}
                     className="w-full h-full object-cover"
                   />
                 </div>
