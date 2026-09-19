@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { Apple, AlertTriangle, Info, Leaf, Search, X, Ban, ShieldAlert, Sprout } from 'lucide-react'
 import { AppHeader, CuteCard, SectionTitle, QuickAiButton } from '@/components/ui'
 import DataVersionBadge from '@/components/ui/DataVersionBadge'
+import { useBabyStore } from '@/stores/useBabyStore'
 
 /* ── Types ────────────────────────────────────────────────── */
 interface TextureByAge {
@@ -129,6 +130,7 @@ function FoodBadges({ item }: { item: FoodItem }) {
 
 /* ── Component ────────────────────────────────────────────── */
 export default function FoodLibraryPage() {
+  const familyId = useBabyStore((state) => state.family?.id)
   const [items, setItems] = useState<FoodItem[]>([])
   const [guidelines, setGuidelines] = useState<FeedingGuideline[]>([])
   const [loading, setLoading] = useState(true)
@@ -139,10 +141,19 @@ export default function FoodLibraryPage() {
   const [detailItem, setDetailItem] = useState<FoodItem | null>(null)
 
   useEffect(() => {
+    let cancelled = false
+    setItems([])
+    setDetailItem(null)
+    setLoading(Boolean(familyId))
     async function fetchData() {
+      if (!familyId) {
+        setLoading(false)
+        return
+      }
       try {
+        const itemsPath = `/api/food/items?familyId=${encodeURIComponent(familyId)}`
         const [itemsRes, guidelinesRes] = await Promise.all([
-          fetch('/api/food/items'),
+          fetch(itemsPath),
           fetch('/api/food/feeding-guidelines'),
         ])
 
@@ -158,16 +169,18 @@ export default function FoodLibraryPage() {
           guidelinesData = Array.isArray(json) ? json : json.data || json.guidelines || []
         }
 
+        if (cancelled) return
         setItems(itemsData)
         setGuidelines(guidelinesData)
       } catch (err: any) {
-        setError(err.message || '加载失败')
+        if (!cancelled) setError(err.message || '加载失败')
       } finally {
-        setLoading(false)
+        if (!cancelled) setLoading(false)
       }
     }
     fetchData()
-  }, [])
+    return () => { cancelled = true }
+  }, [familyId])
 
   /* Choking risk items — shown prominently at top */
   const chokingRiskItems = items.filter(f => f.chokingRisk === true)
@@ -204,11 +217,15 @@ export default function FoodLibraryPage() {
   const handleRefresh = async () => {
     if (refreshing) return
     setRefreshing(true)
+    const refreshFamilyId = familyId
     try {
+      if (!refreshFamilyId) return
+      const itemsPath = `/api/food/items?familyId=${encodeURIComponent(refreshFamilyId)}`
       const [itemsRes, guidelinesRes] = await Promise.all([
-        fetch('/api/food/items'),
+        fetch(itemsPath),
         fetch('/api/food/feeding-guidelines'),
       ])
+      if (useBabyStore.getState().family?.id !== refreshFamilyId) return
       if (itemsRes.ok) {
         const json = await itemsRes.json()
         setItems(Array.isArray(json) ? json : json.data || json.items || [])

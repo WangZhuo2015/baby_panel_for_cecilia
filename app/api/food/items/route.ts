@@ -6,10 +6,12 @@ import { GROWDESK_CONFIG } from "@/lib/config";
 import { resolveBffSession } from "@/lib/growdesk/session";
 import { verifyBffCsrf } from "@/lib/growdesk/csrf";
 import { growdeskFetch } from "@/lib/growdesk/client";
+import { compareLegacyFoodItems, fromGrowDeskFoodLibraryItem } from "@/lib/growdesk/food-library-compat";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const status = searchParams.get("status"); // tried, to_try, or all
+  const requestedFamilyId = searchParams.get("familyId");
 
   try {
     if (GROWDESK_CONFIG.enabled) {
@@ -17,7 +19,8 @@ export async function GET(request: Request) {
       if (!bffSession) {
         return NextResponse.json({ error: "Unauthorized: 会话无效或已过期" }, { status: 401 });
       }
-      const res = await growdeskFetch<any[]>("/api/v1/food/items", {
+      const upstreamQuery = requestedFamilyId ? `?familyId=${encodeURIComponent(requestedFamilyId)}` : "";
+      const res = await growdeskFetch<any[]>(`/api/v1/food/items${upstreamQuery}`, {
         method: "GET",
         accessToken: bffSession.accessToken,
       });
@@ -28,18 +31,7 @@ export async function GET(request: Request) {
         );
       }
       const rawList = Array.isArray(res.data) ? res.data : (res.data as any)?.data || [];
-      const parsedList = rawList.map((item: any) => ({
-        ...item,
-        foodId: item.foodId ?? item.id,
-        recommendedFromMonth: item.recommendedFromMonth ?? item.recommendedAgeMonths ?? 6,
-        status: item.familyStatus ? (item.familyStatus.tried ? "tried" : "to_try") : (item.status ?? "to_try"),
-        firstAddedDate: item.firstAddedDate ?? null,
-        acceptance: item.acceptance ?? 0,
-        preparation: Array.isArray(item.preparation) ? item.preparation : [],
-        nutrition: Array.isArray(item.nutrition) ? item.nutrition : [],
-        textureByAge: Array.isArray(item.textureByAge) ? item.textureByAge : [],
-        sourceRefs: Array.isArray(item.sourceRefs) ? item.sourceRefs : [],
-      }));
+      const parsedList = rawList.map(fromGrowDeskFoodLibraryItem).sort(compareLegacyFoodItems);
       const filtered = status && status !== "all"
         ? parsedList.filter((item: any) => item.status === status)
         : parsedList;
@@ -105,10 +97,14 @@ export async function POST(request: Request) {
       }
 
       const body = await request.json().catch(() => ({}));
+      const familyId = typeof body.familyId === "string" && body.familyId.trim()
+        ? body.familyId.trim()
+        : undefined;
       const res = await growdeskFetch("/api/v1/food/items", {
         method: "POST",
         accessToken: bffSession.accessToken,
         body: {
+          ...(familyId ? { familyId } : {}),
           name: body.name,
           category: body.category || "other",
           recommendedAgeMonths: Number(body.recommendedFromMonth ?? 6),

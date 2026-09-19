@@ -57,10 +57,11 @@ export function FoodLogForm({
 
   const foodItems = useBabyStore((s) => s.foodItems) ?? [];
   const fetchFoodItems = useBabyStore((s) => s.fetchFoodItems);
+  const familyId = useBabyStore((s) => s.family?.id);
 
   useEffect(() => {
     fetchFoodItems("tried");
-  }, [fetchFoodItems]);
+  }, [fetchFoodItems, familyId]);
 
   const triedFoods = foodItems.filter((item) => item.status === "tried");
 
@@ -115,12 +116,17 @@ export function FoodLogForm({
       showToast("请输入食材名称");
       return;
     }
+    if (!familyId) {
+      showToast("请先选择家庭");
+      return;
+    }
     setAddingFood(true);
     try {
       const res = await fetch("/api/food/items", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          familyId,
           name,
           icon: newFoodIcon,
           category: "other",
@@ -130,13 +136,14 @@ export function FoodLogForm({
       });
       if (!res.ok) throw new Error("创建失败");
       const created = await res.json();
+      if (useBabyStore.getState().family?.id !== familyId) return;
       setSelectedFoods((prev) =>
         prev.includes(created.name) ? prev : [...prev, created.name]
       );
       setShowAddFood(false);
       setNewFoodName("");
       showToast("已添加到食材库 ✅");
-      fetchFoodItems("tried");
+      await fetchFoodItems("tried", true);
     } catch {
       showToast("添加失败，请重试");
     } finally {

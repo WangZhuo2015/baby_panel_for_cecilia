@@ -27,6 +27,8 @@ export interface GrowthSlice {
   warningSigns: DevelopmentWarningSign[];
   activities: ActivityRecommendation[];
   weather: WeatherData | null;
+  /** Internal scope marker used to clear stale food-library rows on family switch. */
+  foodItemsScopeFamilyId?: string;
   aiTips: string[];
   aiError: string | null;
   fetchGrowthMeasurements: (force?: boolean) => Promise<void>;
@@ -54,6 +56,7 @@ export const createGrowthSlice = (set: any, get: any): GrowthSlice => ({
   vaccineData: null,
   vaccines: [],
   foodItems: [],
+  foodItemsScopeFamilyId: undefined,
   feedingGuidelines: [],
   foodPlans: [],
   books: [],
@@ -108,14 +111,25 @@ export const createGrowthSlice = (set: any, get: any): GrowthSlice => ({
   },
 
   fetchFoodItems: async (status?: string, force?: boolean) => {
-    const key = `foodItems:${status || ''}`;
+    const familyId = get().family?.id || undefined;
+    // Do not fall back to whichever family the backend happens to enumerate
+    // while identity is still loading. The family dependency will rerun this
+    // fetch once the authenticated selection is available.
+    if (!familyId) return;
+    const key = `foodItems:${familyId || ''}:${status || ''}`;
+    if (get().foodItemsScopeFamilyId !== undefined && get().foodItemsScopeFamilyId !== familyId) {
+      set({ foodItems: [], foodItemsScopeFamilyId: undefined });
+    }
     if (!force && get().foodItems.length > 0 && isFresh(key)) return;
     if (force) invalidateCache(key);
     return dedup(key, async () => {
       try {
-        const params = status ? `?status=${status}` : "";
+        const params = toQuery({ status, familyId });
         const data = await request<FoodItem[]>(`/api/food/items${params}`);
-        set({ foodItems: data || [] });
+        // A family switch may happen while the request is in flight. Do not
+        // let the previous family's response repopulate the current picker.
+        if ((get().family?.id || undefined) !== familyId) return;
+        set({ foodItems: data || [], foodItemsScopeFamilyId: familyId });
         markFetched(key);
       } catch (e) { if (!isAuthError(e)) console.error("Failed to fetch food items:", e); }
     });
