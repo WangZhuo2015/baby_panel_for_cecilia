@@ -10,7 +10,7 @@ import { decodeNotes } from "./food-compat";
 export interface GrowDeskTimelineEntry {
   id: string;
   babyId: string;
-  entityType: "feeding" | "sleep" | "diaper" | "food" | "supplement" | "growth";
+  entityType: "feeding" | "sleep" | "diaper" | "food" | "supplement" | "growth" | "medical" | "vaccine";
   entityId: string;
   occurredAt: string;
   summary: string;
@@ -97,6 +97,8 @@ const TYPE_LABELS: Record<string, string> = {
   food: "辅食",
   supplement: "补剂",
   growth: "生长测量",
+  medical: "医疗记录",
+  vaccine: "疫苗接种",
 };
 
 const TYPE_ICONS: Record<string, string> = {
@@ -106,6 +108,8 @@ const TYPE_ICONS: Record<string, string> = {
   food: "🥣",
   supplement: "💊",
   growth: "📏",
+  medical: "🩺",
+  vaccine: "💉",
 };
 
 export function fromGrowDeskTimelineEntry(

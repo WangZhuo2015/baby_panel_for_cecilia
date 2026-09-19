@@ -2,12 +2,12 @@ import { BridgeError, type BridgeFetch, pathId, requireData, wireVersion } from 
 
 export interface TimelineDetailReference {
   babyId: string;
-  entityType: "feeding" | "sleep" | "diaper" | "food" | "supplement" | "growth";
+  entityType: "feeding" | "sleep" | "diaper" | "food" | "supplement" | "growth" | "medical" | "vaccine";
   entityId: string;
   version: string;
 }
 
-type DetailKind = Exclude<TimelineDetailReference["entityType"], "growth">;
+type DetailKind = Exclude<TimelineDetailReference["entityType"], "growth" | "medical" | "vaccine">;
 export type TimelineDetailRecord = Record<string, unknown> & {
   id: string;
   babyId: string;
@@ -118,8 +118,7 @@ export async function fetchTimelineDetailMaps(
     try { pathId(entry.entityId); } catch { throw invalidRecord(); }
     // Older backends can expose persisted projections outside the care UI.
     // They have no editable care details; unknown kinds still fail closed below.
-    const entityType: string = entry.entityType;
-    if (entry.entityType === "growth" || entityType === "vaccine" || entityType === "medical") continue;
+    if (entry.entityType === "growth" || entry.entityType === "vaccine" || entry.entityType === "medical") continue;
     const bucket = wanted.get(entry.entityType);
     if (!bucket) throw invalidRecord();
     const version = upstreamVersion(entry.version);
