@@ -668,7 +668,7 @@ try {
       button.textContent?.includes("保存测量记录") && !button.disabled));
     let protectedGrowthImagePath = null;
     if (growthImageEnabled) {
-      await page.getByRole("button", { name: /拍照识别/ }).click();
+      await page.getByRole("tab", { name: /拍照识别/ }).click();
       const fixtureBuffer = Buffer.from(
         "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
         "base64",
