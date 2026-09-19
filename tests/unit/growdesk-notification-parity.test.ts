@@ -63,7 +63,7 @@ test("GrowDesk notification parity keeps family scope and only attributes suppor
         foodItemIds: ["food_test_item"],
         portionDescription: "少量",
         reaction: "normal",
-        notes: null,
+        notes: '[growdesk-web-food:v1]{"notes":null,"observations":{"hasAbnormal":true,"abnormalNotes":"test_rash"}}',
       })],
       growth: [recordBase("growth_test", {
         measurementDate: "2026-09-19",
@@ -86,6 +86,7 @@ test("GrowDesk notification parity keeps family scope and only attributes suppor
 
   const food = items.find(item => item.id === "family-food-food_test");
   const growth = items.find(item => item.id === "family-growth-growth_test");
+  assert.match(food?.detail || "", /异常: test_rash/);
   assert.equal(food?.actorId, null, "food has no canonical actor field");
   assert.equal(food?.actorLabel, "家人", "legacy response labels unattributed records as family");
   assert.equal(growth?.actorId, null, "growth has no canonical actor field");
@@ -251,4 +252,9 @@ test("GrowDesk notification parity propagates canonical list failures", async ()
     () => fetchGrowDeskNotificationItems(fetchApi, "token_test", "user_test_notification"),
     (error: unknown) => error instanceof BridgeError && error.status === 503 && error.code === "UPSTREAM_UNAVAILABLE",
   );
+});
+
+test("supplement notification hides transport product tags and preserves legacy dose formatting", () => {
+  const items = buildFamilyRecordNotifications({ feeding: [], sleep: [], diaper: [], food: [], growth: [], supplement: [recordBase("test_supp", { supplementName: "test_vitamin", amount: "1.5 滴", notes: "[productId:test_product] test_note" })] }, scope, new Map(), clock, nowMs);
+  assert.equal(items[0]?.detail, "test_vitamin 1.5滴 · 备注: test_note");
 });

@@ -10,6 +10,8 @@ import {
 import { dayBoundsInTimeZone } from "./record-list";
 import { fetchCompleteList } from "./paged-list";
 import { fromGrowDeskNotification } from "./notifications";
+import { decodeNotes } from "./food-compat";
+import { extractProductIdFromNotes } from "./nutrition-compat";
 import { readLegacyPendingVaccines, readPendingPlan } from "./vaccine-pending-compat";
 
 type JsonObject = Record<string, unknown>;
@@ -293,7 +295,8 @@ function recordDetail(kind: string, record: JsonObject, clock: FamilyClock): str
         : Array.isArray(record.foodItemIds) ? record.foodItemIds : [];
     const names = foods.filter(value => typeof value === "string").join("、") || "辅食";
     const portion = optionalText(record.portionDescription) || optionalText(record.portion) || "正常";
-    const abnormal = optionalText(record.abnormalNotes);
+    const decoded = decodeNotes(optionalText(record.notes));
+    const abnormal = optionalText(record.abnormalNotes ?? decoded.observations.abnormalNotes);
     return `${names} · 份量: ${portion}${abnormal ? ` · 异常: ${abnormal}` : ""}`;
   }
   if (kind === "growth") {
@@ -306,9 +309,9 @@ function recordDetail(kind: string, record: JsonObject, clock: FamilyClock): str
   }
   const product = isObject(record.product) ? record.product : null;
   const name = optionalText(record.supplementName) || optionalText(record.productName) || optionalText(product?.name) || "营养补剂";
-  const amount = optionalText(record.amount) || optionalText(record.dose);
+  const amount = (optionalText(record.amount) || optionalText(record.dose))?.replace(/^(\d+(?:\.\d+)?)\s+(?=\S)/, "$1");
   const unit = optionalText(record.unitName) || "";
-  const notes = optionalText(record.notes);
+  const notes = extractProductIdFromNotes(optionalText(record.notes)).cleanNotes;
   return `${name}${amount ? ` ${amount}${unit}` : ""}${notes ? ` · 备注: ${notes}` : ""}`;
 }
 
