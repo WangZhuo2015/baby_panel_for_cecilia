@@ -53,7 +53,13 @@ test("point events use [start, end), including exact start and excluding exact e
     { id: "test_end", occurredAt: "2026-09-13T15:00:00.000Z" },
   ];
   for (const kind of ["feeding", "diaper", "timeline"] as const) {
-    const result = await fetchLegacyRecordList<RecordFixture>(fixture(() => page(rows)), "test_token", babyId, new URLSearchParams({ date: "2026-09-13" }), kind);
+    const result = await fetchLegacyRecordList<RecordFixture>(
+      fixture(path => path.includes("/records/sleep") ? page([]) : page(rows)),
+      "test_token",
+      babyId,
+      new URLSearchParams({ date: "2026-09-13" }),
+      kind,
+    );
     assert.deepEqual(result.map(row => row.id), ["test_start", "test_last"]);
   }
 });

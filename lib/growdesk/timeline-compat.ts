@@ -47,6 +47,8 @@ export interface TimelineEnrichmentContext {
   formulaProducts?: Map<string, any> | Record<string, any>;
   supplementProducts?: Map<string, any> | Record<string, any>;
   memberNames?: Map<string, string> | Record<string, string>;
+  /** UTC start of the requested family-local calendar day. */
+  dayStartMs?: number;
 }
 
 function lookup<T = any>(container: Map<string, T> | Record<string, T> | undefined, id: string | null | undefined): T | undefined {
@@ -123,8 +125,8 @@ export function fromGrowDeskTimelineEntry(
     throw new BridgeError(502, "UPSTREAM_INVALID_RECORD", "GrowDesk 返回了不完整的时间轴记录");
   }
   const entityId = entry.entityId || entry.id;
-  const time = formatIsoToLocalTime(occurredAt);
-  const sortMs = date.getTime();
+  let time = formatIsoToLocalTime(occurredAt);
+  let sortMs = date.getTime();
 
   if (!context) {
     return {
@@ -260,6 +262,15 @@ export function fromGrowDeskTimelineEntry(
       const m = durationMin % 60;
       const durationText = h > 0 ? `${h}小时${m > 0 ? `${m}分` : ""}` : `${m}分钟`;
       let d = endStr ? `${durationText}（${startStr}–${endStr}）` : `开始于 ${startStr}`;
+      // The legacy service keeps the complete interval and duration, but
+      // anchors an overnight item at the selected day's local midnight so it
+      // remains visible in the requested timeline and sorts with that day.
+      const isOvernight = Number.isFinite(context.dayStartMs) && startMs < context.dayStartMs!;
+      if (isOvernight) {
+        time = "00:00";
+        sortMs = context.dayStartMs!;
+        title = "跨夜睡眠 (接昨日)";
+      }
       if (sleep.nightWakingCount > 0) d += ` · 夜醒 ${sleep.nightWakingCount}次`;
       if (sleep.notes) d += ` · ${sleep.notes}`;
       detail = d;

@@ -12,7 +12,7 @@ import {
   type TimelineEnrichmentContext,
 } from "@/lib/growdesk/timeline-compat";
 import { fetchTimelineDetailMaps } from "@/lib/growdesk/timeline-details";
-import { fetchLegacyRecordList } from "@/lib/growdesk/record-list";
+import { familyDayBounds, fetchLegacyRecordList } from "@/lib/growdesk/record-list";
 import { loadWebBaby } from "@/lib/growdesk/bridge-identity";
 import { extractSupplementStateFromFoodPlan } from "@/lib/growdesk/nutrition-compat";
 
@@ -55,6 +55,10 @@ export async function GET(request: Request) {
       if (list.length === 0) {
         return NextResponse.json([], { headers: { "cache-control": "no-store" } });
       }
+      const dateParam = searchParams.get("date");
+      const dayBounds = dateParam
+        ? await familyDayBounds(growdeskFetch, token, babyId, dateParam)
+        : undefined;
 
       const baby = await loadWebBaby(growdeskFetch, token, babyId);
       if (!baby?.familyId) {
@@ -102,6 +106,7 @@ export async function GET(request: Request) {
         formulaProducts: formulaProductsMap,
         supplementProducts: supplementProductsMap,
         memberNames,
+        dayStartMs: dayBounds?.start.getTime(),
       };
       return NextResponse.json(fromGrowDeskTimelineResponse(list, context), {
         headers: { "cache-control": "no-store" },

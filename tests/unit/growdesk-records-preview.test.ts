@@ -37,6 +37,7 @@ test("record list helper consumes every canonical page for all timeline record k
         ? ok([{ id: "test_food_old", recordDate: "2026-09-12" }], "test_next")
         : ok([{ id: "test_food_today", recordDate: "2026-09-13" }])) as BridgeResult<T>;
     }
+    if (path.includes("/records/sleep")) return ok([]) as BridgeResult<T>;
     return (page === 1
       ? ok([{ id: "test_timeline_old", entityId: "test_timeline_old", occurredAt: "2026-09-12T14:59:59Z", babyId, entityType: "feeding", summary: "old", version: "1" }], "test_next")
       : ok([{ id: "test_timeline_today", entityId: "test_timeline_today", occurredAt: "2026-09-12T15:00:00Z", babyId, entityType: "diaper", summary: "today", version: "2" }])) as BridgeResult<T>;
