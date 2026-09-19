@@ -39,6 +39,7 @@ export interface FlushOptions {
   activeUserId?: string | null;
   activeFamilyId?: string | null;
   activeBabyId?: string | null;
+  isCurrentIdentity?: () => boolean;
 }
 
 export interface FlushResult {
@@ -241,6 +242,10 @@ export async function flushOutbox(options?: FlushOptions): Promise<FlushResult |
   };
 
   for (const item of allItems) {
+    // Session cookies are read by fetch at send time. Stop before every
+    // request if the UI identity no longer matches the scope captured by the
+    // caller; leave this and all remaining drafts untouched.
+    if (options?.isCurrentIdentity && !options.isCurrentIdentity()) break;
     // 1. 账号隔离：属于其他用户的草稿绝不代发
     if (item.userId && activeUserId && item.userId !== activeUserId) {
       result.skippedOtherUser += 1;

@@ -428,4 +428,63 @@ test("Issue #2: Outbox Identity Isolation & Replay Protection", async (t) => {
       globalThis.fetch = originalFetch;
     }
   });
+
+  await t.test("9. Identity switching during the first replay prevents a second queued request", async () => {
+    mockStore.data.clear();
+    await enqueueOutbox({ clientId: "switch-first", url: "/api/records/feeding", body: { babyId: "baby_a" }, createdAt: 1, userId: "user_a", familyId: "fam_a", babyId: "baby_a" });
+    await enqueueOutbox({ clientId: "switch-second", url: "/api/records/diaper", body: { babyId: "baby_a" }, createdAt: 2, userId: "user_a", familyId: "fam_a", babyId: "baby_a" });
+    const originalFetch = globalThis.fetch;
+    let resolveFirst!: (response: Response) => void;
+    let markFirstStarted!: () => void;
+    const firstStarted = new Promise<void>(resolve => { markFirstStarted = resolve; });
+    const sent: string[] = [];
+    globalThis.fetch = ((url: string | URL | Request) => {
+      sent.push(String(url));
+      markFirstStarted();
+      return new Promise<Response>(resolve => { resolveFirst = resolve; });
+    }) as typeof fetch;
+    let current = true;
+
+    try {
+      const flushing = flushOutbox({
+        activeUserId: "user_a", activeFamilyId: "fam_a", activeBabyId: "baby_a",
+        isCurrentIdentity: () => current,
+      });
+      await firstStarted;
+      current = false;
+      resolveFirst(Response.json({ ok: true }));
+      const result = await flushing;
+
+      assert.deepEqual(sent, ["/api/records/feeding"]);
+      assert.equal(result.flushed, 1);
+      assert.deepEqual((await listPending()).map(item => item.clientId), ["switch-second"]);
+    } finally {
+      globalThis.fetch = originalFetch;
+      await removePending("switch-first");
+      await removePending("switch-second");
+    }
+  });
+
+  await t.test("10. A stale identity before replay sends no queued request", async () => {
+    mockStore.data.clear();
+    await enqueueOutbox({ clientId: "stale-before", url: "/api/records/feeding", body: { babyId: "baby_a" }, createdAt: 1, userId: "user_a", familyId: "fam_a", babyId: "baby_a" });
+    const originalFetch = globalThis.fetch;
+    let sent = false;
+    globalThis.fetch = (async () => {
+      sent = true;
+      return Response.json({ ok: true });
+    }) as typeof fetch;
+    try {
+      const result = await flushOutbox({
+        activeUserId: "user_a", activeFamilyId: "fam_a", activeBabyId: "baby_a",
+        isCurrentIdentity: () => false,
+      });
+      assert.equal(sent, false);
+      assert.equal(result.flushed, 0);
+      assert.deepEqual((await listPending()).map(item => item.clientId), ["stale-before"]);
+    } finally {
+      globalThis.fetch = originalFetch;
+      await removePending("stale-before");
+    }
+  });
 });

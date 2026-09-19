@@ -1,9 +1,10 @@
 "use client";
 
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useRef, useState, useCallback } from "react";
 import { CloudOff, CloudUpload, AlertTriangle, Download, Trash2, CheckCircle } from "lucide-react";
 import { listPending, flushOutbox, claimOrphanEntries, removePending, type OutboxEntry } from "@/lib/outbox";
 import { useBabyStore } from "@/stores/useBabyStore";
+import { matchesReplayIdentity, resolveReplayIdentity } from "@/lib/outbox-replay-identity";
 
 /**
  * 全局在线/待同步状态指示器：
@@ -18,6 +19,7 @@ export const OfflineBanner: React.FC = () => {
   const [orphans, setOrphans] = useState<OutboxEntry[]>([]);
   const [flushing, setFlushing] = useState(false);
   const [showDetail, setShowDetail] = useState(false);
+  const flushingRef = useRef(false);
 
   const user = useBabyStore((s) => s.user);
   const family = useBabyStore((s) => s.family);
@@ -35,19 +37,26 @@ export const OfflineBanner: React.FC = () => {
   }, [user?.id]);
 
   const triggerFlush = useCallback(async () => {
-    if (!user?.id) return;
+    if (flushingRef.current) return;
+    flushingRef.current = true;
     setFlushing(true);
     try {
+      const identity = await resolveReplayIdentity(useBabyStore.getState);
+      if (!identity) return;
+      const ownedItems = await listPending({ userId: identity.userId });
+      if (ownedItems.length === 0 || !matchesReplayIdentity(useBabyStore.getState, identity)) return;
       await flushOutbox({
-        activeUserId: user.id,
-        activeFamilyId: family?.id,
-        activeBabyId: baby?.id,
+        activeUserId: identity.userId,
+        activeFamilyId: identity.familyId,
+        activeBabyId: identity.babyId,
+        isCurrentIdentity: () => matchesReplayIdentity(useBabyStore.getState, identity),
       });
     } finally {
+      flushingRef.current = false;
       setFlushing(false);
       await refreshCount();
     }
-  }, [user?.id, family?.id, baby?.id, refreshCount]);
+  }, [refreshCount]);
 
   useEffect(() => {
     setOnline(navigator.onLine);
@@ -72,7 +81,7 @@ export const OfflineBanner: React.FC = () => {
   // 定时周期重放
   useEffect(() => {
     const i = window.setInterval(async () => {
-      if (navigator.onLine && pending > 0 && user?.id) {
+      if (navigator.onLine) {
         await triggerFlush();
       } else {
         await refreshCount();
