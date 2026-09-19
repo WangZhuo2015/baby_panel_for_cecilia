@@ -11,6 +11,7 @@ import { toGrowDeskFeedingCreatePayload, toGrowDeskFeedingUpdatePayload, fromGro
 const apiBaby: ApiBaby = { id: "test_baby_a", familyId: "test_family_a", name: "test_child", birthDate: "2026-01-02", gender: "girl", avatarUrl: null, gestationalWeeks: 38, gestationalDays: 2, createdAt: "2026-01-02T00:00:00Z", updatedAt: "2026-01-02T00:00:00Z" };
 const family = { id: "test_family_a", name: "test_home", timeZone: "Asia/Tokyo", createdAt: "2026-01-02T00:00:00Z", updatedAt: "2026-01-02T00:00:00Z" };
 const user = { id: "test_user_a", username: "test_caregiver", displayName: "test_caregiver" };
+const familyMember = { id: "test_family_member_a", userId: user.id, familyId: family.id, role: "admin", username: user.username, displayName: user.displayName, relation: "parent", joinedAt: "2026-01-02T00:00:00Z" };
 function fake(handler: (path: string, options: Parameters<BridgeFetch>[1]) => BridgeResult<unknown> | Promise<BridgeResult<unknown>>): BridgeFetch {
   return (async <T>(path: string, options: Parameters<BridgeFetch>[1]) => await handler(path, options) as BridgeResult<T>) as BridgeFetch;
 }
@@ -18,7 +19,7 @@ function ok(data: unknown, cursor?: string | null): BridgeResult<unknown> {
   return { ok: true, status: 200, data, ...(cursor !== undefined ? { page: { nextCursor: cursor } } : {}) };
 }
 function fail(status: number): BridgeResult<unknown> { return { ok: false, status, error: { code: `TEST_${status}`, message: "test upstream error" } }; }
-const baseFetch = fake(path => path === "/api/v1/families" ? ok([family]) : path.endsWith("/babies") ? ok([apiBaby]) : path.includes("/babies/") ? ok(apiBaby) : ok(family));
+const baseFetch = fake(path => path === "/api/v1/families" ? ok([family]) : path.endsWith("/members") ? ok([familyMember]) : path.endsWith("/babies") ? ok([apiBaby]) : path.includes("/babies/") ? ok(apiBaby) : ok(family));
 const isStatus = (n: number) => (error: unknown) => error instanceof BridgeError && error.status === n;
 
 for (const value of [undefined, null, ""]) test(`version is required: ${String(value)}`, () => assert.throws(() => wireVersion(value), isStatus(428)));
@@ -71,7 +72,34 @@ test("me restores login through BFF session without legacy cookies", async () =>
   const endpoints = createIdentityEndpoints({ fetchApi: baseFetch, resolveSession: async () => ({ accessToken: "test_new_token", user }), verifyCsrf: () => null });
   const response = await endpoints.me(new Request("https://test.invalid/api/auth/me"));
   assert.equal(response.status, 200); assert.equal(response.headers.get("cache-control"), "no-store");
-  const data = await response.json(); assert.equal(data.user.username, "test_caregiver"); assert.equal(data.baby.nickname, "test_child"); assert.equal(data.accessToken, undefined);
+  const data = await response.json(); assert.equal(data.user.username, "test_caregiver"); assert.equal(data.baby.nickname, "test_child"); assert.deepEqual(data.membership, { role: "admin", relation: "parent" }); assert.equal(data.accessToken, undefined);
+});
+
+test("BFF family members preserve canonical member identity and role", async () => {
+  const endpoints = createIdentityEndpoints({ fetchApi: baseFetch, resolveSession: async () => ({ accessToken: "test_token", user }), verifyCsrf: () => null });
+  const response = await endpoints.familyMembers(new Request("https://test.invalid/api/family/members"));
+  assert.equal(response.status, 200);
+  assert.deepEqual((await response.json()).members, [{
+    id: familyMember.id,
+    userId: familyMember.userId,
+    familyId: familyMember.familyId,
+    username: familyMember.username,
+    displayName: familyMember.displayName,
+    role: familyMember.role,
+    relation: familyMember.relation,
+    joinedAt: familyMember.joinedAt,
+  }]);
+});
+
+test("BFF auth.me does not fabricate membership when canonical family membership omits the principal", async () => {
+  const endpoints = createIdentityEndpoints({
+    fetchApi: fake(path => path.endsWith("/members") ? ok([{ ...familyMember, userId: "test_other_user" }]) : baseFetch(path, undefined)),
+    resolveSession: async () => ({ accessToken: "test_token", user }),
+    verifyCsrf: () => null,
+  });
+  const response = await endpoints.me(new Request("https://test.invalid/api/auth/me"));
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).membership, null);
 });
 test("me outage is 502, not a false logout", async () => {
   const endpoints = createIdentityEndpoints({ fetchApi: baseFetch, resolveSession: async () => { throw new BridgeError(502, "UPSTREAM_UNAVAILABLE", "test outage"); }, verifyCsrf: () => null });

@@ -15,6 +15,7 @@ import {
   type ApiBabyMemberRole,
   type LegacyBaby,
   accessibleFamily,
+  loadFamilyMembers,
   loadFamilyBabies,
   loadWebIdentity,
   loadWebBaby,
@@ -105,14 +106,28 @@ function identityResponse(identity: Awaited<ReturnType<typeof loadWebIdentity>>)
   };
 }
 
+const FAMILY_MEMBER_ROLES = new Set(["admin", "member", "viewer"]);
+
 function mapMember(member: ApiFamilyMember, familyId: string): Record<string, unknown> {
-  if (!member || typeof member !== "object" || typeof member.userId !== "string" || typeof member.displayName !== "string") {
+  if (
+    !member ||
+    typeof member !== "object" ||
+    typeof member.id !== "string" ||
+    typeof member.userId !== "string" ||
+    member.familyId !== familyId ||
+    !FAMILY_MEMBER_ROLES.has(member.role) ||
+    typeof member.username !== "string" ||
+    typeof member.displayName !== "string" ||
+    typeof member.relation !== "string" ||
+    !member.relation.trim() ||
+    typeof member.joinedAt !== "string"
+  ) {
     throw new BridgeError(502, "UPSTREAM_INVALID_RESPONSE", "GrowDesk 成员响应无效");
   }
   return {
-    id: `${familyId}:${member.userId}`,
+    id: member.id,
     userId: member.userId,
-    familyId,
+    familyId: member.familyId,
     username: member.username,
     displayName: member.displayName,
     role: member.role,
@@ -155,7 +170,19 @@ export function createIdentityEndpoints(deps: EndpointDependencies) {
           return json({ user: null, family: null, baby: null, families: [], babies: [], membership: null });
         }
         const identity = await loadWebIdentity(deps.fetchApi, session.accessToken);
-        return json({ user: session.user, ...identityResponse(identity), membership: null });
+        let membership: { role: string; relation: string } | null = null;
+        if (identity.family) {
+          const members = await loadFamilyMembers(deps.fetchApi, session.accessToken, identity.family);
+          const current = members.find(member => member.userId === session.user.id);
+          if (current) {
+            const mapped = mapMember(current, identity.family.id);
+            membership = {
+              role: String(mapped.role),
+              relation: String(mapped.relation),
+            };
+          }
+        }
+        return json({ user: session.user, ...identityResponse(identity), membership });
       } catch (error) {
         return bridgeErrorResponse(error);
       }
@@ -289,11 +316,7 @@ export function createIdentityEndpoints(deps: EndpointDependencies) {
         if (!session) throw new BridgeError(401, "UNAUTHORIZED", "会话无效或已过期");
         const requestedId = new URL(request.url).searchParams.get("familyId") ?? undefined;
         const family = await accessibleFamily(deps.fetchApi, session.accessToken, requestedId);
-        const members = requireData(await deps.fetchApi<ApiFamilyMember[]>(
-          `/api/v1/families/${pathId(family.id)}/members`,
-          { accessToken: session.accessToken },
-        ));
-        if (!Array.isArray(members)) throw new BridgeError(502, "UPSTREAM_INVALID_RESPONSE", "GrowDesk 成员列表格式错误");
+        const members = await loadFamilyMembers(deps.fetchApi, session.accessToken, family);
         return json({
           family: legacyFamily(family),
           members: members.map(member => mapMember(member, family.id)),

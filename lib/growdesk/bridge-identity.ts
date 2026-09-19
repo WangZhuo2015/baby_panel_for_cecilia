@@ -9,13 +9,14 @@ export interface ApiFamily {
 }
 
 export interface ApiFamilyMember {
+  id: string;
   userId: string;
   familyId: string;
   role: string;
+  username: string;
   displayName: string;
+  relation: string;
   joinedAt: string;
-  username?: string;
-  relation?: string;
 }
 
 export type ApiBabyMemberRole = "admin" | "member" | "viewer";
@@ -56,6 +57,10 @@ async function arrayData<T>(promise: Promise<BridgeResult<T[]>>): Promise<T[]> {
 export async function loadFamilyBabies(fetchApi: BridgeFetch, token: string, family: ApiFamily): Promise<LegacyBaby[]> {
   const babies = await arrayData(fetchApi<ApiBaby[]>(`/api/v1/families/${pathId(family.id)}/babies`, { accessToken: token }));
   return babies.map(legacyBaby);
+}
+
+export async function loadFamilyMembers(fetchApi: BridgeFetch, token: string, family: ApiFamily): Promise<ApiFamilyMember[]> {
+  return arrayData(fetchApi<ApiFamilyMember[]>(`/api/v1/families/${pathId(family.id)}/members`, { accessToken: token }));
 }
 
 /** Every listed baby has already been filtered by the API's BabyMember authorization. */
