@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { GROWDESK_CONFIG } from "../../lib/config";
-import { fromGrowDeskGrowthRecord, type GrowDeskGrowthRecord } from "../../lib/growdesk/growth-compat";
+import { fromGrowDeskGrowthRecord, transformWhoPercentilesForLegacy, type GrowDeskGrowthRecord } from "../../lib/growdesk/growth-compat";
 import { GET as chart } from "../../app/api/growth/chart/route";
 import { GET as measurements } from "../../app/api/growth/route";
 
@@ -11,7 +11,7 @@ const record: GrowDeskGrowthRecord = { id: "test_growth", babyId: BABY, familyId
 const request = (path: string) => new Request(`https://test.invalid${path}`, { headers: { cookie: `${GROWDESK_CONFIG.cookieName}=${"b".repeat(64)}` } });
 
 // Simulated HTTP boundary only: no database, server, or external API access.
-function setup(t: any) {
+function setup(t: any, babyStatus = 200) {
   const previous = process.env.GROWDESK_ENABLED;
   process.env.GROWDESK_ENABLED = "true";
   t.after(() => { if (previous === undefined) delete process.env.GROWDESK_ENABLED; else process.env.GROWDESK_ENABLED = previous; });
@@ -20,6 +20,7 @@ function setup(t: any) {
     const path = new URL(url).pathname;
     calls.push(path);
     if (path === "/api/v1/auth/bff/session") return Response.json({ data: { accessToken: "test_token", user: { id: "test_user" } } });
+    if (path === `/api/v1/babies/${BABY}` && babyStatus !== 200) return Response.json({ error: { code: "UNAVAILABLE", message: "test baby unavailable" } }, { status: babyStatus });
     if (path === `/api/v1/babies/${BABY}`) return Response.json({ data: { id: BABY, familyId: "test_family", name: "test_baby", birthDate: "2026-01-31", gender: "boy", version: "1" } });
     if (path === `/api/v1/babies/${BABY}/growth-chart`) return Response.json({ data: { measurements: [record], whoPercentiles: {} } });
     if (path === `/api/v1/babies/${BABY}/growth-measurements`) return Response.json({ data: [record] });
@@ -71,4 +72,22 @@ test("growth page scopes chart requests to auth selection and reloads when selec
   assert.match(source, /URLSearchParams\(\{ babyId: selectedBabyId \}\)/);
   assert.match(source, /if \(!res\.ok\)/, "HTTP errors must not be parsed as successful chart data");
   assert.match(source, /\[selectedBabyId\]/, "the shared chart loader must depend on baby selection");
+});
+
+
+test("canonical monthAge produces an ordered shared month axis and aligned percentile values", () => {
+  const point = (monthAge: number) => ({ monthAge, p3: "1", p15: "2", p50: String(monthAge + 3), p85: "4", p97: "5" });
+  const result = transformWhoPercentilesForLegacy({ weightForAge: [point(2), point(0)], heightForAge: [point(0), point(2)], headCircumferenceForAge: [point(2), point(0)] });
+  assert.deepEqual(result.months, [0, 2]);
+  assert.deepEqual(result.weight.P50, [3, 5]);
+  assert.deepEqual(result.height.P50, [3, 5]);
+  assert.throws(() => transformWhoPercentilesForLegacy({ weightForAge: [point(0)], heightForAge: [point(1)] }), /月龄不一致/);
+  assert.throws(() => transformWhoPercentilesForLegacy({ weightForAge: [{ ...point(0), monthAge: -1 }] }), /有效月龄/);
+});
+
+test("chart propagates baby read failure instead of inventing gender and birth date", async t => {
+  setup(t, 503);
+  const response = await chart(request(`/api/growth/chart?babyId=${BABY}`));
+  assert.equal(response.status, 503);
+  assert.equal((await response.json()).whoPercentiles, undefined);
 });

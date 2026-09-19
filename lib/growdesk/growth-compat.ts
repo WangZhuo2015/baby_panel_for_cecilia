@@ -1,4 +1,4 @@
-import { wireVersion } from "./bridge-protocol";
+import { BridgeError, wireVersion } from "./bridge-protocol";
 import { calculateAge } from "../age";
 import { isValidDateStr } from "../date";
 
@@ -43,7 +43,8 @@ export interface GrowDeskGrowthRecord {
 }
 
 export interface GrowDeskWhoPercentilePoint {
-  month: number;
+  monthAge?: number;
+  month?: number;
   p3: string;
   p15: string;
   p50: string;
@@ -155,7 +156,7 @@ export function transformWhoSeriesToLegacy(points?: GrowDeskWhoPercentilePoint[]
   if (!Array.isArray(points) || points.length === 0) {
     return { P97: [], P85: [], P50: [], P15: [], P3: [] };
   }
-  const sorted = [...points].sort((a, b) => a.month - b.month);
+  const sorted = [...points].sort((a, b) => percentileMonth(a) - percentileMonth(b));
   return {
     P97: sorted.map((p) => Number(p.p97)),
     P85: sorted.map((p) => Number(p.p85)),
@@ -165,12 +166,28 @@ export function transformWhoSeriesToLegacy(points?: GrowDeskWhoPercentilePoint[]
   };
 }
 
+function percentileMonth(point: GrowDeskWhoPercentilePoint): number {
+  const month = point.monthAge ?? point.month;
+  if (typeof month !== "number" || !Number.isInteger(month) || month < 0) {
+    throw new BridgeError(502, "UPSTREAM_INVALID_RECORD", "GrowDesk 生长标准缺少有效月龄");
+  }
+  return month;
+}
+
 export function transformWhoPercentilesForLegacy(data?: {
   weightForAge?: GrowDeskWhoPercentilePoint[];
   heightForAge?: GrowDeskWhoPercentilePoint[];
   headCircumferenceForAge?: GrowDeskWhoPercentilePoint[];
-}): Record<string, LegacyPercentileData> {
+}): LegacyGrowthStandardSet {
+  const series = [data?.weightForAge, data?.heightForAge, data?.headCircumferenceForAge];
+  const months = (series.find(points => points?.length) ?? []).map(percentileMonth).sort((a, b) => a - b);
+  for (const points of series) {
+    if (points?.length && JSON.stringify(points.map(percentileMonth).sort((a, b) => a - b)) !== JSON.stringify(months)) {
+      throw new BridgeError(502, "UPSTREAM_INVALID_RECORD", "GrowDesk 生长标准月龄不一致");
+    }
+  }
   return {
+    months,
     weight: transformWhoSeriesToLegacy(data?.weightForAge),
     height: transformWhoSeriesToLegacy(data?.heightForAge),
     headCircumference: transformWhoSeriesToLegacy(data?.headCircumferenceForAge),

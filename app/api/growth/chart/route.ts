@@ -11,6 +11,7 @@ import {
   transformWhoPercentilesForLegacy,
 } from "@/lib/growdesk/growth-compat";
 import { loadWebBaby } from "@/lib/growdesk/bridge-identity";
+import { BridgeError, bridgeErrorResponse } from "@/lib/growdesk/bridge-protocol";
 
 export async function GET(request: Request) {
   try {
@@ -42,18 +43,12 @@ export async function GET(request: Request) {
 
       const chartData = res.data?.data || res.data || {};
       const rawMeasurements = Array.isArray(chartData.measurements) ? chartData.measurements : [];
-      let birthDate: string | undefined;
-      let babyGender = "female";
-      try {
-        const baby = await loadWebBaby(growdeskFetch, bffSession.accessToken, requestedBabyId);
-        birthDate = baby?.birthDate;
-        if (baby?.gender === "boy" || (baby as any)?.gender === "male") babyGender = "male";
-      } catch {
-        // Fallback to default
-      }
+      const baby = await loadWebBaby(growdeskFetch, bffSession.accessToken, requestedBabyId);
+      const birthDate = baby?.birthDate;
+      const babyGender = baby?.gender === "boy" || (baby as any)?.gender === "male" ? "male" : "female";
 
       const transformedPercentiles = transformWhoPercentilesForLegacy(chartData.whoPercentiles);
-      const hasPoints = Object.values(transformedPercentiles).some((s) => s.P50 && s.P50.length > 0);
+      const hasPoints = transformedPercentiles.months.length > 0;
       const whoPercentiles = hasPoints ? transformedPercentiles : getWhoStandard(babyGender);
 
       return NextResponse.json({
@@ -94,6 +89,7 @@ export async function GET(request: Request) {
       gender,
     });
   } catch (error) {
+    if (error instanceof BridgeError) return bridgeErrorResponse(error);
     console.error("GET /api/growth/chart error:", error);
     return NextResponse.json(
       { error: "Failed to fetch chart data" },
