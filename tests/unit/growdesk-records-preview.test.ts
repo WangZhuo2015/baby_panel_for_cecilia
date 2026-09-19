@@ -24,18 +24,18 @@ test("record list helper consumes every canonical page for all timeline record k
     const page = path.includes("cursor=test_next") ? 2 : 1;
     if (path.includes("/records/feeding")) {
       return (page === 1
-        ? ok([{ id: "test_feed_1", occurredAt: "2026-09-12T15:00:00Z" }], "test_next")
-        : ok([{ id: "test_feed_2", occurredAt: "2026-09-13T00:00:00Z" }])) as BridgeResult<T>;
+        ? ok([{ id: "test_feed_1", babyId, occurredAt: "2026-09-12T15:00:00Z" }], "test_next")
+        : ok([{ id: "test_feed_2", babyId, occurredAt: "2026-09-13T00:00:00Z" }])) as BridgeResult<T>;
     }
     if (path.includes("/records/diaper")) {
       return (page === 1
-        ? ok([{ id: "test_diaper_1", occurredAt: "2026-09-12T14:59:59Z" }], "test_next")
-        : ok([{ id: "test_diaper_2", occurredAt: "2026-09-12T15:00:00Z" }])) as BridgeResult<T>;
+        ? ok([{ id: "test_diaper_1", babyId, occurredAt: "2026-09-12T14:59:59Z" }], "test_next")
+        : ok([{ id: "test_diaper_2", babyId, occurredAt: "2026-09-12T15:00:00Z" }])) as BridgeResult<T>;
     }
     if (path.includes("/records/food")) {
       return (page === 1
-        ? ok([{ id: "test_food_old", recordDate: "2026-09-12" }], "test_next")
-        : ok([{ id: "test_food_today", recordDate: "2026-09-13" }])) as BridgeResult<T>;
+        ? ok([{ id: "test_food_old", babyId, recordDate: "2026-09-12" }], "test_next")
+        : ok([{ id: "test_food_today", babyId, recordDate: "2026-09-13" }])) as BridgeResult<T>;
     }
     if (path.includes("/records/sleep")) return ok([]) as BridgeResult<T>;
     return (page === 1
@@ -61,9 +61,9 @@ test("sleep date filter uses overlap boundaries and keeps active intervals", asy
     if (path === `/api/v1/babies/${babyId}`) return ok(baby) as BridgeResult<T>;
     if (path === `/api/v1/families/${familyId}`) return ok({ timeZone: "Asia/Tokyo" }) as BridgeResult<T>;
     return ok([
-      { id: "test_sleep_overlap", startedAt: "2026-09-12T14:00:00Z", endedAt: "2026-09-12T16:00:00Z" },
-      { id: "test_sleep_boundary", startedAt: "2026-09-13T14:59:00Z", endedAt: "2026-09-13T15:00:00Z" },
-      { id: "test_sleep_active", startedAt: "2026-09-13T14:59:00Z", endedAt: null },
+      { id: "test_sleep_overlap", babyId, startedAt: "2026-09-12T14:00:00Z", endedAt: "2026-09-12T16:00:00Z" },
+      { id: "test_sleep_boundary", babyId, startedAt: "2026-09-13T14:59:00Z", endedAt: "2026-09-13T15:00:00Z" },
+      { id: "test_sleep_active", babyId, startedAt: "2026-09-13T14:59:00Z", endedAt: null },
     ]) as BridgeResult<T>;
   }) as BridgeFetch;
   const result = await fetchLegacyRecordList<TestRecord>(fetchApi, "test_token", babyId, new URLSearchParams({ date: "2026-09-13" }), "sleep");

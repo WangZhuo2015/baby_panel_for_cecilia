@@ -23,7 +23,55 @@ import {
 import { PRESET_SUPPLEMENT_PRODUCTS } from "@/lib/nutrition/presets";
 import crypto from "node:crypto";
 import { fetchCompleteList } from "@/lib/growdesk/paged-list";
-import { BridgeError, bridgeErrorResponse, requireData, pathId } from "@/lib/growdesk/bridge-protocol";
+import { BridgeError, bridgeErrorResponse, isoTimestamp, requireData, pathId } from "@/lib/growdesk/bridge-protocol";
+
+function requireUpstreamObject(value: unknown, label: string): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new BridgeError(502, "UPSTREAM_INVALID_RECORD", `GrowDesk 返回了无效的${label}`);
+  }
+  return value as Record<string, unknown>;
+}
+
+function requireScopedFoodPlan(value: unknown, babyId: string): Record<string, unknown> {
+  const plan = requireUpstreamObject(value, "辅食计划");
+  if (plan.babyId !== babyId) {
+    throw new BridgeError(502, "UPSTREAM_SCOPE_MISMATCH", "GrowDesk 返回了其他宝宝的辅食计划");
+  }
+  return plan;
+}
+
+function requireScopedFormula(value: unknown, familyId: string): GrowDeskFormulaProduct {
+  const product = requireUpstreamObject(value, "配方奶产品");
+  if (product.familyId !== familyId) {
+    throw new BridgeError(502, "UPSTREAM_SCOPE_MISMATCH", "GrowDesk 返回了其他家庭的配方奶产品");
+  }
+  return product as unknown as GrowDeskFormulaProduct;
+}
+
+function requireScopedTimedRecord(
+  value: unknown,
+  babyId: string,
+  familyId: string,
+  label: string,
+): Record<string, unknown> {
+  const record = requireUpstreamObject(value, label);
+  if (record.babyId !== babyId || record.familyId !== familyId) {
+    throw new BridgeError(502, "UPSTREAM_SCOPE_MISMATCH", `GrowDesk 返回了其他宝宝或家庭的${label}`);
+  }
+  try {
+    // The compatibility mapper has a legacy fallback for malformed times. A
+    // canonical response must never reach that fallback or become a fabricated
+    // successful record.
+    isoTimestamp(record.occurredAt);
+  } catch {
+    throw new BridgeError(502, "UPSTREAM_INVALID_TIMESTAMP", `GrowDesk 返回了无效的${label}时间`);
+  }
+  return record;
+}
+
+function requireScopedSupplementRecord(value: unknown, babyId: string, familyId: string): GrowDeskSupplementRecord {
+  return requireScopedTimedRecord(value, babyId, familyId, "补剂记录") as unknown as GrowDeskSupplementRecord;
+}
 
 export async function GET(request: Request) {
   try {
@@ -61,7 +109,8 @@ export async function GET(request: Request) {
         }),
       ]);
 
-      const planData = requireData(fpRes)?.planData;
+      const planData = requireScopedFoodPlan(requireData(fpRes), babyId).planData;
+      const scopedList = rawList.map((record) => requireScopedSupplementRecord(record, babyId, baby.familyId));
       const suppState = extractSupplementStateFromFoodPlan(planData);
       const allKnownProducts: SupplementProduct[] = [
         ...suppState.supplementProducts,
@@ -72,7 +121,7 @@ export async function GET(request: Request) {
         })),
       ];
 
-      let records = rawList.map((r) => fromGrowDeskSupplementRecordEnriched(r, allKnownProducts));
+      let records = scopedList.map((r) => fromGrowDeskSupplementRecordEnriched(r, allKnownProducts));
 
       if (date) {
         records = records.filter((r) => r.date === date);
@@ -212,7 +261,10 @@ export async function POST(request: Request) {
         fetchCompleteList<GrowDeskSupplementRecord>(growdeskFetch, bffSession.accessToken, `/api/v1/babies/${pathId(babyId)}/records/supplement`),
       ]);
 
-      const planData = requireData(fpRes)?.planData;
+      const planData = requireScopedFoodPlan(requireData(fpRes), babyId).planData;
+      const scopedFormulas = rawFormulas.map((formula) => requireScopedFormula(formula, familyId));
+      const scopedFeedings = rawFeedings.map((feeding) => requireScopedTimedRecord(feeding, babyId, familyId, "喂养记录"));
+      const scopedTodaySupps = rawTodaySupps.map((record) => requireScopedSupplementRecord(record, babyId, familyId));
       const suppState = extractSupplementStateFromFoodPlan(planData);
       const allKnownProducts: SupplementProduct[] = [
         ...suppState.supplementProducts,
@@ -240,12 +292,12 @@ export async function POST(request: Request) {
       const ageSummary = calculateAge(baby.birthDate);
       const babyAgeMonths = ageSummary.months;
 
-      const adaptedSuppRecords = rawTodaySupps
+      const adaptedSuppRecords = scopedTodaySupps
         .map((r) => fromGrowDeskSupplementRecordEnriched(r, allKnownProducts))
         .filter((r) => r.date === date);
 
       const formulaMap: Record<string, FormulaProduct> = {};
-      for (const rawF of rawFormulas) {
+      for (const rawF of scopedFormulas) {
         formulaMap[rawF.id] = fromGrowDeskFormulaProduct(rawF, {
           defaultFormulaId: suppState.defaultFormulaId,
           customNutrients: suppState.customFormulaNutrients?.[rawF.id],
@@ -253,7 +305,7 @@ export async function POST(request: Request) {
       }
 
       const { start: dayStart, end: dayEnd } = getLocalDayUtcRange(date);
-      const adaptedFeedings = rawFeedings
+      const adaptedFeedings = scopedFeedings
         .filter((f: any) => f.occurredAt >= dayStart && f.occurredAt < dayEnd)
         .map((f: any) => ({
           id: f.id,
@@ -320,7 +372,10 @@ export async function POST(request: Request) {
         );
       }
 
-      const createdEnriched = fromGrowDeskSupplementRecordEnriched(res.data, allKnownProducts);
+      const createdEnriched = fromGrowDeskSupplementRecordEnriched(
+        requireScopedSupplementRecord(res.data, babyId, familyId),
+        allKnownProducts,
+      );
 
       return NextResponse.json(
         {

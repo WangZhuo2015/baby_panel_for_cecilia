@@ -25,7 +25,7 @@ const record = (id: string, occurredAt: string) => ({ id, babyId: "test_baby", f
 test("supplement history filters a requested old date after fetching every page", async t => {
   let pages = 0;
   setup(t, url => {
-    if (url.pathname.endsWith("/food-plan")) return Response.json({ data: { planData: {} } });
+    if (url.pathname.endsWith("/food-plan")) return Response.json({ data: { babyId: "test_baby", planData: {} } });
     assert.ok(url.pathname.endsWith("/records/supplement")); pages++;
     return url.searchParams.has("cursor")
       ? Response.json({ data: [record("test_old", "2026-09-17T01:00:00.000Z")], page: { nextCursor: null } })
@@ -36,6 +36,71 @@ test("supplement history filters a requested old date after fetching every page"
   assert.deepEqual((await response.json()).records.map((r: any) => r.id), ["test_old"]);
   assert.equal(pages, 2);
 });
+
+for (const [label, override, code] of [
+  ["foreign baby", { babyId: "test_other_baby" }, "UPSTREAM_SCOPE_MISMATCH"],
+  ["foreign family", { familyId: "test_other_family" }, "UPSTREAM_SCOPE_MISMATCH"],
+  ["invalid occurredAt", { occurredAt: "not-a-timestamp" }, "UPSTREAM_INVALID_TIMESTAMP"],
+] as const) {
+  test(`supplement history fails closed on ${label}`, async t => {
+    setup(t, url => {
+      if (url.pathname.endsWith("/food-plan")) return Response.json({ data: { babyId: "test_baby", planData: {} } });
+      assert.ok(url.pathname.endsWith("/records/supplement"));
+      return Response.json({ data: [{ ...record("test_bad", "2026-09-17T01:00:00.000Z"), ...override }], page: { nextCursor: null } });
+    });
+    const response = await GET(request());
+    assert.equal(response.status, 502);
+    assert.equal((await response.json()).code, code);
+  });
+}
+
+test("supplement POST rejects a feeding row from another family before writing", async t => {
+  let writes = 0;
+  setup(t, (url, init) => {
+    if (init?.method === "POST") {
+      writes++;
+      return Response.json({ data: record("test_created", "2026-09-17T01:00:00.000Z") }, { status: 201 });
+    }
+    if (url.pathname.endsWith("/food-plan")) return Response.json({ data: { babyId: "test_baby", planData: {} } });
+    if (url.pathname.includes("/nutrition/products")) return Response.json({ data: [], page: { nextCursor: null } });
+    if (url.pathname.endsWith("/records/feeding")) {
+      return Response.json({ data: [{
+        id: "test_foreign_feeding",
+        babyId: "test_baby",
+        familyId: "test_other_family",
+        occurredAt: "2026-09-17T01:00:00.000Z",
+      }], page: { nextCursor: null } });
+    }
+    if (url.pathname.endsWith("/records/supplement")) return Response.json({ data: [], page: { nextCursor: null } });
+    throw new Error(`Unexpected test upstream path: ${url.pathname}`);
+  });
+  const response = await POST(request({ babyId: "test_baby", supplementName: "test_supplement", date: "2026-09-17", dose: 1 }));
+  assert.equal(response.status, 502);
+  assert.equal((await response.json()).code, "UPSTREAM_SCOPE_MISMATCH");
+  assert.equal(writes, 0);
+});
+
+test("supplement POST rejects an invalid supplement timestamp before writing", async t => {
+  let writes = 0;
+  setup(t, (url, init) => {
+    if (init?.method === "POST") {
+      writes++;
+      return Response.json({ data: record("test_created", "2026-09-17T01:00:00.000Z") }, { status: 201 });
+    }
+    if (url.pathname.endsWith("/food-plan")) return Response.json({ data: { babyId: "test_baby", planData: {} } });
+    if (url.pathname.includes("/nutrition/products")) return Response.json({ data: [], page: { nextCursor: null } });
+    if (url.pathname.endsWith("/records/feeding")) return Response.json({ data: [], page: { nextCursor: null } });
+    if (url.pathname.endsWith("/records/supplement")) {
+      return Response.json({ data: [{ ...record("test_bad", "2026-09-17T01:00:00.000Z"), occurredAt: "not-a-timestamp" }], page: { nextCursor: null } });
+    }
+    throw new Error(`Unexpected test upstream path: ${url.pathname}`);
+  });
+  const response = await POST(request({ babyId: "test_baby", supplementName: "test_supplement", date: "2026-09-17", dose: 1 }));
+  assert.equal(response.status, 502);
+  assert.equal((await response.json()).code, "UPSTREAM_INVALID_TIMESTAMP");
+  assert.equal(writes, 0);
+});
+
 test("supplement guard fails closed on incomplete upstream data before writing", async t => {
   let writes = 0;
   setup(t, (_url, init) => {

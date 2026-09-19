@@ -13,6 +13,7 @@ export type LegacyRecordKind = "feeding" | "sleep" | "diaper" | "food" | "timeli
 
 export interface DatedRecord {
   id?: string | null;
+  babyId?: string | null;
   occurredAt?: string | null;
   startedAt?: string | null;
   endedAt?: string | null;
@@ -186,6 +187,9 @@ export async function fetchLegacyRecordList<T extends DatedRecord>(
     for (const item of items) {
       if (!item || typeof item !== "object" || Array.isArray(item)) {
         throw new BridgeError(502, "UPSTREAM_INVALID_RECORD", "GrowDesk 返回了无效的记录");
+      }
+      if (item.babyId !== babyId) {
+        throw new BridgeError(502, "UPSTREAM_SCOPE_MISMATCH", "GrowDesk 返回了其他宝宝的记录");
       }
       let include = true;
       if (kind === "food") {

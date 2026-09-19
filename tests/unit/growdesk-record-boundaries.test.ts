@@ -47,10 +47,10 @@ test("nonexistent calendar days and invalid IANA zones fail explicitly", () => {
 
 test("point events use [start, end), including exact start and excluding exact end", async () => {
   const rows = [
-    { id: "test_before", occurredAt: "2026-09-12T14:59:59.999Z" },
-    { id: "test_start", occurredAt: "2026-09-12T15:00:00.000Z" },
-    { id: "test_last", occurredAt: "2026-09-13T14:59:59.999Z" },
-    { id: "test_end", occurredAt: "2026-09-13T15:00:00.000Z" },
+    { id: "test_before", babyId, occurredAt: "2026-09-12T14:59:59.999Z" },
+    { id: "test_start", babyId, occurredAt: "2026-09-12T15:00:00.000Z" },
+    { id: "test_last", babyId, occurredAt: "2026-09-13T14:59:59.999Z" },
+    { id: "test_end", babyId, occurredAt: "2026-09-13T15:00:00.000Z" },
   ];
   for (const kind of ["feeding", "diaper", "timeline"] as const) {
     const result = await fetchLegacyRecordList<RecordFixture>(
@@ -66,12 +66,12 @@ test("point events use [start, end), including exact start and excluding exact e
 
 test("sleep includes overlapping intervals but not intervals merely touching the day", async () => {
   const rows = [
-    { id: "test_ends_at_start", startedAt: "2026-09-12T14:00:00Z", endedAt: "2026-09-12T15:00:00Z" },
-    { id: "test_straddles", startedAt: "2026-09-12T14:59:00Z", endedAt: "2026-09-12T15:01:00Z" },
-    { id: "test_ends_at_end", startedAt: "2026-09-13T14:59:00Z", endedAt: "2026-09-13T15:00:00Z" },
-    { id: "test_starts_at_end", startedAt: "2026-09-13T15:00:00Z", endedAt: "2026-09-13T16:00:00Z" },
-    { id: "test_active", startedAt: "2026-09-12T14:00:00Z", endedAt: null },
-    { id: "test_future_active", startedAt: "2026-09-13T15:00:00Z", endedAt: null },
+    { id: "test_ends_at_start", babyId, startedAt: "2026-09-12T14:00:00Z", endedAt: "2026-09-12T15:00:00Z" },
+    { id: "test_straddles", babyId, startedAt: "2026-09-12T14:59:00Z", endedAt: "2026-09-12T15:01:00Z" },
+    { id: "test_ends_at_end", babyId, startedAt: "2026-09-13T14:59:00Z", endedAt: "2026-09-13T15:00:00Z" },
+    { id: "test_starts_at_end", babyId, startedAt: "2026-09-13T15:00:00Z", endedAt: "2026-09-13T16:00:00Z" },
+    { id: "test_active", babyId, startedAt: "2026-09-12T14:00:00Z", endedAt: null },
+    { id: "test_future_active", babyId, startedAt: "2026-09-13T15:00:00Z", endedAt: null },
   ];
   const result = await fetchLegacyRecordList<RecordFixture>(fixture(() => page(rows)), "test_token", babyId, new URLSearchParams({ date: "2026-09-13" }), "sleep");
   assert.deepEqual(result.map(row => row.id), ["test_straddles", "test_ends_at_end", "test_active"]);
@@ -82,8 +82,8 @@ test("date filtering consumes later pages before applying an explicit result lim
   const fetchApi = fixture(path => {
     paths.push(path);
     return path.includes("cursor=")
-      ? page([{ id: "test_match", occurredAt: "2026-09-12T15:00:00Z" }])
-      : page([{ id: "test_newer", occurredAt: "2026-09-13T15:00:00Z" }], "test_cursor+/=");
+      ? page([{ id: "test_match", babyId, occurredAt: "2026-09-12T15:00:00Z" }])
+      : page([{ id: "test_newer", babyId, occurredAt: "2026-09-13T15:00:00Z" }], "test_cursor+/=");
   });
   const result = await fetchLegacyRecordList<RecordFixture>(fetchApi, "test_token", babyId, new URLSearchParams({ date: "2026-09-13", limit: "1" }), "feeding");
   assert.deepEqual(result.map(row => row.id), ["test_match"]);
@@ -93,8 +93,8 @@ test("date filtering consumes later pages before applying an explicit result lim
 test("unfiltered legacy history spans more than the canonical page size", async () => {
   let calls = 0;
   const fetchApi = fixture(() => ++calls === 1
-    ? page(Array.from({ length: 200 }, (_, index) => ({ id: `test_feed_${index}`, occurredAt: "2026-09-13T00:00:00Z" })), "test_next")
-    : page([{ id: "test_feed_200", occurredAt: "2026-09-12T00:00:00Z" }]));
+    ? page(Array.from({ length: 200 }, (_, index) => ({ id: `test_feed_${index}`, babyId, occurredAt: "2026-09-13T00:00:00Z" })), "test_next")
+    : page([{ id: "test_feed_200", babyId, occurredAt: "2026-09-12T00:00:00Z" }]));
   const result = await fetchLegacyRecordList<RecordFixture>(fetchApi, "test_token", babyId, new URLSearchParams(), "feeding");
   assert.equal(result.length, 201);
   assert.equal(calls, 2);
@@ -109,22 +109,29 @@ test("a full scan cap fails rather than returning a partial historical day", asy
 test("late upstream errors remain errors, even after useful records were collected", async () => {
   let calls = 0;
   await assert.rejects(fetchLegacyRecordList(fixture(() => ++calls === 1
-    ? page([{ occurredAt: "2026-09-13T00:00:00Z" }], "test_next")
+    ? page([{ babyId, occurredAt: "2026-09-13T00:00:00Z" }], "test_next")
     : { ok: false, status: 403, error: { code: "TEST_REVOKED", message: "test_revoked" } }), "test_token", babyId, new URLSearchParams(), "feeding"), matches("TEST_REVOKED", 403));
 });
 
 for (const [kind, data, code] of [
   ["feeding", [null], "UPSTREAM_INVALID_RECORD"],
-  ["feeding", [{ occurredAt: "2026-09-13T12:00" }], "UPSTREAM_INVALID_TIMESTAMP"],
-  ["feeding", [{ occurredAt: "2026-02-30T12:00:00Z" }], "UPSTREAM_INVALID_TIMESTAMP"],
-  ["food", [{ recordDate: null }], "UPSTREAM_INVALID_DATE"],
-  ["food", [{ recordDate: "2026-02-30" }], "UPSTREAM_INVALID_DATE"],
-  ["sleep", [{ startedAt: "2026-09-13T02:00:00Z", endedAt: "2026-09-13T01:00:00Z" }], "UPSTREAM_INVALID_INTERVAL"],
+  ["feeding", [{ babyId, occurredAt: "2026-09-13T12:00" }], "UPSTREAM_INVALID_TIMESTAMP"],
+  ["feeding", [{ babyId, occurredAt: "2026-02-30T12:00:00Z" }], "UPSTREAM_INVALID_TIMESTAMP"],
+  ["food", [{ babyId, recordDate: null }], "UPSTREAM_INVALID_DATE"],
+  ["food", [{ babyId, recordDate: "2026-02-30" }], "UPSTREAM_INVALID_DATE"],
+  ["sleep", [{ babyId, startedAt: "2026-09-13T02:00:00Z", endedAt: "2026-09-13T01:00:00Z" }], "UPSTREAM_INVALID_INTERVAL"],
 ] as const) {
   test(`malformed upstream ${kind} fails as 502: ${code} ${JSON.stringify(data)}`, async () => {
     await assert.rejects(fetchLegacyRecordList(fixture(() => page(data)), "test_token", babyId, new URLSearchParams(), kind), matches(code, 502));
   });
 }
+
+test("record list rejects a row from another baby before applying date filters", async () => {
+  await assert.rejects(
+    fetchLegacyRecordList(fixture(() => page([{ id: "test_foreign_record", babyId: "test_other_baby", occurredAt: "2026-09-13T12:00:00Z" }])), "test_token", babyId, new URLSearchParams(), "feeding"),
+    matches("UPSTREAM_SCOPE_MISMATCH", 502),
+  );
+});
 
 test("bad limits and legacy cursors fail before upstream access", async () => {
   const noFetch: BridgeFetch = async () => { throw new Error("Unexpected upstream access"); };
