@@ -15,6 +15,7 @@ export interface LegacyDiaperRecord {
   notes: string | null;
   source?: string;
   sourceAgent?: string | null;
+  recordedById?: string | null;
   version?: string;
   baseVersion?: string;
   createdAt: string;
@@ -32,6 +33,7 @@ export interface GrowDeskDiaperRecord {
   notes: string | null;
   source: string;
   sourceAgent: string | null;
+  recordedByUserId?: string | null;
   version: string;
   createdAt: string;
   updatedAt: string;
@@ -78,6 +80,7 @@ export function fromGrowDeskDiaperRecord(rec: GrowDeskDiaperRecord): LegacyDiape
     notes: rec.notes,
     source: rec.source,
     sourceAgent: rec.sourceAgent,
+    recordedById: rec.recordedByUserId ?? null,
     version,
     baseVersion: version,
     createdAt: rec.createdAt,
