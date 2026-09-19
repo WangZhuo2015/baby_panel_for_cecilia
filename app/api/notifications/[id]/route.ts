@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { GROWDESK_CONFIG } from "@/lib/config";
 import { resolveBffSession } from "@/lib/growdesk/session";
 import { growdeskFetch } from "@/lib/growdesk/client";
-import { bffNotificationStore } from "@/lib/growdesk/notifications";
+import { bridgeErrorResponse, BridgeError, pathId, requireData } from "@/lib/growdesk/bridge-protocol";
+import { verifyBffCsrf } from "@/lib/growdesk/csrf";
 import { requireAuth } from "@/lib/api-helpers";
 
 export async function POST(
@@ -15,20 +16,24 @@ export async function POST(
   }
 
   if (GROWDESK_CONFIG.enabled) {
+    const csrfErr = verifyBffCsrf(request);
+    if (csrfErr) return csrfErr;
+
     const bffSession = await resolveBffSession(request);
     if (!bffSession) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     try {
-      await growdeskFetch(`/api/v1/notifications/${id}/read`, {
+      const result = await growdeskFetch(`/api/v1/notifications/${pathId(id)}/read`, {
         method: "POST",
         accessToken: bffSession.accessToken,
       });
-    } catch {}
-
-    bffNotificationStore.markAsRead(bffSession.user.id, id);
-    return NextResponse.json({ success: true });
+      requireData(result);
+      return NextResponse.json({ success: true });
+    } catch (error) {
+      return bridgeErrorResponse(error);
+    }
   }
 
   const auth = await requireAuth(request);
@@ -58,9 +63,11 @@ export async function DELETE(
     if (!bffSession) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-
-    bffNotificationStore.deleteNotification(bffSession.user.id, id);
-    return NextResponse.json({ success: true });
+    return bridgeErrorResponse(new BridgeError(
+      501,
+      "NOTIFICATION_DELETE_UNSUPPORTED",
+      "GrowDesk 通知暂不支持服务端删除；daily/vaccine 等派生提醒仅支持浏览器本地清除",
+    ));
   }
 
   const auth = await requireAuth(request);
