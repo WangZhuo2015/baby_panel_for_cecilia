@@ -6,9 +6,12 @@ export async function fetchCompleteList<T>(fetchApi: BridgeFetch, token: string,
   const seen = new Set<string>();
   let cursor: string | null = null;
   for (let page = 0; page < 100; page++) {
-    const params = new URLSearchParams({ limit: "100" });
+    const target = new URL(endpoint, "http://growdesk.invalid");
+    const params = target.searchParams;
+    params.set("limit", "100");
     if (cursor) params.set("cursor", cursor);
-    const response = await fetchApi<T[]>(`${endpoint}?${params}`, { accessToken: token });
+    else params.delete("cursor");
+    const response = await fetchApi<T[]>(`${target.pathname}?${params}`, { accessToken: token });
     const data = requireData(response);
     if (!Array.isArray(data) || !response.page || !(response.page.nextCursor === null || typeof response.page.nextCursor === "string")) {
       throw new BridgeError(502, "UPSTREAM_INVALID_PAGE", "GrowDesk 分页响应无效");

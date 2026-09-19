@@ -13,6 +13,7 @@ import {
 } from "@/lib/growdesk/timeline-compat";
 import { fetchTimelineDetailMaps } from "@/lib/growdesk/timeline-details";
 import { familyDayBounds, fetchLegacyRecordList } from "@/lib/growdesk/record-list";
+import { fetchCompleteList } from "@/lib/growdesk/paged-list";
 import { getLocalDateStr } from "@/lib/date";
 import { loadWebBaby } from "@/lib/growdesk/bridge-identity";
 import { extractSupplementStateFromFoodPlan } from "@/lib/growdesk/nutrition-compat";
@@ -74,7 +75,7 @@ export async function GET(request: Request) {
 
       const [details, formulaProducts, planData, members] = await Promise.all([
         fetchTimelineDetailMaps(growdeskFetch, token, babyId, list),
-        hasFeeding ? listData(`${familyPath}/nutrition/products`, token) : Promise.resolve([]),
+        hasFeeding ? fetchCompleteList<Record<string, unknown>>(growdeskFetch, token, `${familyPath}/nutrition/products?includeArchived=true`) : Promise.resolve([]),
         hasSupplement ? supplementPlanData(babyId, token) : Promise.resolve({}),
         listData(`${familyPath}/members`, token),
       ]);
