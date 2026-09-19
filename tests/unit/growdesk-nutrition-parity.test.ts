@@ -158,6 +158,7 @@ test("SH-04NUTRITION: Nutrition Parity & Compat Unit Tests", async (t) => {
       occurredAt: "2026-09-14T01:30:00.000Z", // 09:30 Shanghai
       amount: "1 滴",
       notes: "[productId:ostelin_vd3] 早餐后服用",
+      recordedByUserId: "user_test_member",
       version: "1",
       createdAt: "2026-09-14T01:30:00.000Z",
       updatedAt: "2026-09-14T01:30:00.000Z",
@@ -171,6 +172,7 @@ test("SH-04NUTRITION: Nutrition Parity & Compat Unit Tests", async (t) => {
     assert.equal(enriched.date, "2026-09-14");
     assert.equal(enriched.time, "09:30");
     assert.equal(enriched.notes, "早餐后服用");
+    assert.equal(enriched.recordedById, "user_test_member");
     assert.equal(enriched.product?.name, "Ostelin 婴幼儿小太阳 Vitamin D3 滴剂");
   });
 

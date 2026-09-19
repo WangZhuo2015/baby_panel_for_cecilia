@@ -40,6 +40,7 @@ export interface GrowDeskSupplementRecord {
   occurredAt: string;
   amount: string | null;
   notes: string | null;
+  recordedByUserId?: string | null;
   version: string;
   createdAt: string;
   updatedAt: string;
@@ -312,6 +313,7 @@ export function fromGrowDeskSupplementRecordEnriched(
     dose,
     unitName: unitName || fallbackProduct.unitName,
     notes: cleanNotes,
+    recordedById: raw.recordedByUserId ?? null,
     createdAt: raw.createdAt,
   };
 }
