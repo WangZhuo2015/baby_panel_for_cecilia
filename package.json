@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "postbuild": "mkdir -p .next/standalone/public && cp -r public/* .next/standalone/public/ 2>/dev/null || true; mkdir -p .next/standalone/.next && cp -r .next/static .next/standalone/.next/static 2>/dev/null || true",
+    "postbuild": "node scripts/prepare-standalone.mjs",
     "deploy": "next build && sudo systemctl restart baby-panel",
     "restart": "sudo systemctl restart baby-panel",
     "start": "next start",
