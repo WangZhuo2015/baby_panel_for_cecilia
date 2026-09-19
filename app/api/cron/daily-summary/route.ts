@@ -1,29 +1,9 @@
 import { NextResponse } from "next/server";
-import { getClientIp } from "@/lib/rate-limit";
 import { runDailySummaryCron } from "@/lib/cron/daily-summary";
 import { isValidDateStr } from "@/lib/date";
+import { verifyCronAuth } from "@/lib/cron/auth";
 
 export const maxDuration = 300;
-
-function verifyCronAuth(request: Request): boolean {
-  const cronSecret = process.env.CRON_SECRET;
-
-  // 1. If CRON_SECRET is configured in environment, it MUST strictly be validated
-  if (cronSecret) {
-    const authHeader = request.headers.get("authorization");
-    if (authHeader === `Bearer ${cronSecret}`) return true;
-
-    const url = new URL(request.url);
-    if (url.searchParams.get("secret") === cronSecret) return true;
-
-    return false;
-  }
-
-  // 2. If no CRON_SECRET is configured, only allow loopback requests (systemd timer / localhost curl)
-  const ip = getClientIp(request);
-  const isLocal = ip === "127.0.0.1" || ip === "::1" || ip === "::ffff:127.0.0.1";
-  return isLocal;
-}
 
 export async function GET(request: Request) {
   if (!verifyCronAuth(request)) {

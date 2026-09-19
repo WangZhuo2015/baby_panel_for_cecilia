@@ -32,7 +32,7 @@ export async function GET(request: Request) {
         ...item,
         foodId: item.foodId ?? item.id,
         recommendedFromMonth: item.recommendedFromMonth ?? item.recommendedAgeMonths ?? 6,
-        status: item.status ?? "to_try",
+        status: item.familyStatus ? (item.familyStatus.tried ? "tried" : "to_try") : (item.status ?? "to_try"),
         firstAddedDate: item.firstAddedDate ?? null,
         acceptance: item.acceptance ?? 0,
         preparation: Array.isArray(item.preparation) ? item.preparation : [],
@@ -112,7 +112,12 @@ export async function POST(request: Request) {
           name: body.name,
           category: body.category || "other",
           recommendedAgeMonths: Number(body.recommendedFromMonth ?? 6),
-          allergens: body.allergens || [],
+          // Legacy allergen lists have no severity: conservatively map nonempty
+          // lists to high; absent/empty lists to low. Explicit valid risk wins.
+          allergenRisk: ["low", "medium", "high"].includes(body.allergenRisk)
+            ? body.allergenRisk : (Array.isArray(body.allergens) && body.allergens.length > 0 ? "high" : "low"),
+          // Legacy "create as tried" flows mark the new item tried immediately.
+          ...(body.status === "tried" ? { tried: true } : {}),
         },
       });
 

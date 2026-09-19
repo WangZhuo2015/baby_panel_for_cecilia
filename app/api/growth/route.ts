@@ -47,7 +47,8 @@ export async function GET(request: Request) {
         );
       }
       const rawList = Array.isArray(res.data) ? res.data : (res.data as any)?.data || [];
-      return NextResponse.json(rawList.map(fromGrowDeskGrowthRecord));
+      const baby = await loadWebBaby(growdeskFetch, bffSession.accessToken, babyId);
+      return NextResponse.json(rawList.map((record: GrowDeskGrowthRecord) => fromGrowDeskGrowthRecord(record, baby?.birthDate)));
     }
 
     const auth = await requireAuth(request);

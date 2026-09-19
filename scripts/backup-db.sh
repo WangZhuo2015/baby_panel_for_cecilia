@@ -12,6 +12,19 @@ REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 if [ -n "${1:-}" ]; then
   DB="$1"
+elif [ -n "${DATABASE_URL:-}" ]; then
+  # 支持从环境变量 DATABASE_URL 解析数据库路径（如测试环境 file:./dev_test.db）
+  DB_RAW="${DATABASE_URL#file:}"
+  DB_RAW="${DB_RAW%%\?*}"
+  if [ -f "$DB_RAW" ]; then
+    DB="$DB_RAW"
+  elif [ -f "$REPO_ROOT/$DB_RAW" ]; then
+    DB="$REPO_ROOT/$DB_RAW"
+  elif [ -f "$REPO_ROOT/prod.db" ]; then
+    DB="$REPO_ROOT/prod.db"
+  else
+    DB="$REPO_ROOT/dev.db"
+  fi
 elif [ -f "$REPO_ROOT/prod.db" ]; then
   DB="$REPO_ROOT/prod.db"
 else
@@ -24,7 +37,7 @@ case "$DB" in
 esac
 
 DEST_DIR="$REPO_ROOT/backups"
-KEEP=14
+KEEP="${BACKUP_KEEP:-14}"
 
 if [ ! -f "$DB" ]; then
   echo "❌ 数据库不存在: $DB" >&2
@@ -51,6 +64,17 @@ PY
 chmod 600 "$DEST"
 
 # 按文件名排序保留最近 KEEP 份（文件名内嵌时间戳，避免 mtime 时钟回拨误删）
-ls -1 "$DEST_DIR"/"$(basename "${DB%.db}")_"*.db 2>/dev/null | sort | head -n -"$KEEP" | xargs -r rm --
+PRUNE_TARGETS=$(ls -1 "$DEST_DIR"/"$(basename "${DB%.db}")_"*.db 2>/dev/null | sort | head -n -"$KEEP" || true)
+if [ -n "$PRUNE_TARGETS" ]; then
+  echo "$PRUNE_TARGETS" | while IFS= read -r f; do
+    if [ -n "$f" ] && [ -f "$f" ]; then
+      rm -f "$f"
+      echo "🧹 清理过期历史备份: $(basename "$f")"
+    fi
+  done
+fi
 
-echo "✅ 已备份: $DEST"
+TOTAL_COUNT=$(ls -1 "$DEST_DIR"/"$(basename "${DB%.db}")_"*.db 2>/dev/null | wc -l)
+FILE_SIZE=$(du -h "$DEST" | cut -f1)
+
+echo "✅ 已备份: $DEST ($FILE_SIZE)，当前库保留 ${TOTAL_COUNT} 份快照 (保留上限: 最近 ${KEEP} 份)"

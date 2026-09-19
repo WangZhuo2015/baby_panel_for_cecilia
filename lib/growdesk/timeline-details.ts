@@ -116,7 +116,10 @@ export async function fetchTimelineDetailMaps(
   for (const entry of entries) {
     if (!entry || entry.babyId !== babyId || !entry.entityId) throw invalidRecord();
     try { pathId(entry.entityId); } catch { throw invalidRecord(); }
-    if (entry.entityType === "growth") continue;
+    // Older backends can expose persisted projections outside the care UI.
+    // They have no editable care details; unknown kinds still fail closed below.
+    const entityType: string = entry.entityType;
+    if (entry.entityType === "growth" || entityType === "vaccine" || entityType === "medical") continue;
     const bucket = wanted.get(entry.entityType);
     if (!bucket) throw invalidRecord();
     const version = upstreamVersion(entry.version);

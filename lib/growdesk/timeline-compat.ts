@@ -5,6 +5,7 @@ if (typeof window !== "undefined") {
 import { BridgeError, isoTimestamp, wireVersion } from "./bridge-protocol";
 import { formatIsoToLocalTime, getLocalDateStr } from "@/lib/date";
 import { getFeedingEffectiveMl } from "@/lib/nutrition/breastmilk";
+import { decodeNotes } from "./food-compat";
 
 export interface GrowDeskTimelineEntry {
   id: string;
@@ -341,8 +342,9 @@ export function fromGrowDeskTimelineEntry(
       else if (typeof food.foods === "string") {
         try { foodList = JSON.parse(food.foods); } catch {}
       }
+      const decoded = decodeNotes(food.notes || null);
       let d = foodList.length > 0 ? foodList.join("、") : (entry.summary || "辅食餐点");
-      if (food.notes) d += ` · ${food.notes}`;
+      if (decoded.notes) d += ` · ${decoded.notes}`;
       detail = d;
 
       rawRecord = {
@@ -351,11 +353,11 @@ export function fromGrowDeskTimelineEntry(
         time: food.time || time,
         foods: foodList,
         portion: food.portion || food.portionDescription || null,
-        acceptance: food.acceptance || null,
-        babyState: food.babyState || null,
-        hasAbnormal: Boolean(food.hasAbnormal),
-        abnormalNotes: food.abnormalNotes || null,
-        notes: food.notes || null,
+        acceptance: food.acceptance ?? decoded.observations.acceptance ?? null,
+        babyState: food.babyState ?? decoded.observations.babyState ?? null,
+        hasAbnormal: Boolean(food.hasAbnormal ?? decoded.observations.hasAbnormal),
+        abnormalNotes: food.abnormalNotes ?? decoded.observations.abnormalNotes ?? null,
+        notes: decoded.notes || null,
         source: food.source || "ui_manual",
         sourceAgent: food.sourceAgent || null,
         version: wireVersion(food.version || entry.version),

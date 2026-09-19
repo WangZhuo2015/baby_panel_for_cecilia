@@ -42,14 +42,18 @@ export const BRIDGED_METHODS: Readonly<Record<string, readonly string[]>> = {
   "/api/agent/voice": ["POST"],
   "/api/agent/voice/logs": ["GET"],
   "/api/ai/sessions": ["GET", "POST"],
-  "/api/ai/chat": ["POST"],
+  "/api/ai/chat": ["GET", "POST"],
+  "/api/ai/chat/cancel": ["POST"],
   "/api/ai/daily-summary": ["GET", "POST"],
   "/api/ai/tips": ["GET"],
   "/api/ai/jobs": ["GET", "POST"],
   "/api/user/tokens": ["GET", "POST"],
 };
 export function isBridgedMethod(pathname: string, method: string): boolean {
-  if (/^\/api\/ai\/sessions\/[a-f0-9-]{36}$/i.test(pathname)) return ["GET", "PATCH", "DELETE"].includes(method.toUpperCase());
+  // Dynamic session-item handlers implement GET/PATCH/DELETE (POST stays 404-ish upstream).
+  if (/^\/api\/ai\/sessions\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(pathname)) {
+    return ["GET", "PATCH", "DELETE"].includes(method.toUpperCase());
+  }
   if (/^\/api\/books\/[^/]+$/.test(pathname)) return method.toUpperCase() === "PATCH";
   if (/^\/api\/medical\/reports\/[a-f0-9-]{36}$/i.test(pathname)) return ["GET", "PUT", "PATCH", "DELETE"].includes(method.toUpperCase());
   if (/^\/api\/attachments\/[a-f0-9-]{36}$/i.test(pathname)) return method.toUpperCase() === "GET";

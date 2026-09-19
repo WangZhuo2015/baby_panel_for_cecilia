@@ -82,7 +82,7 @@ interface BabyStore {
   login: (data: { username: string; password: string }) => Promise<void>;
   register: (data: { username: string; password: string; displayName?: string; inviteCode?: string; relation?: string }) => Promise<void>;
   logout: () => Promise<void>;
-  joinFamily: (inviteCode: string, relation?: string) => Promise<void>;
+  joinFamily: (inviteCode: string, relation?: string) => Promise<{ message?: string }>;
   fetchFamilyMembers: () => Promise<void>;
   selectBaby: (babyId: string) => Promise<void>;
   createFamilyInvite: (expiresInDays?: number) => Promise<{ inviteCode: string; expiresAt: string }>;

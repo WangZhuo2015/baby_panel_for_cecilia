@@ -1,0 +1,11 @@
+[Unit]
+Description=Baby Panel Database Daily Backup Scheduled Timer (03:00 CST / 19:00 UTC)
+
+[Timer]
+# 每天北京时间凌晨 03:00 执行（UTC 19:00）
+OnCalendar=*-*-* 19:00:00 UTC
+# 机器休眠或关机错过时间时，开机自动立即补跑一次
+Persistent=true
+
+[Install]
+WantedBy=timers.target

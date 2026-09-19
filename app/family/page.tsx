@@ -127,8 +127,8 @@ export default function FamilyPage() {
     }
     setJoining(true);
     try {
-      await joinFamily(joinCode.trim());
-      showToast("成功加入家庭！");
+      const result = await joinFamily(joinCode.trim());
+      showToast(result.message || "成功加入家庭！");
       setJoinCode("");
     } catch (err: any) {
       showToast(err?.message || "加入家庭失败，请检查邀请码");

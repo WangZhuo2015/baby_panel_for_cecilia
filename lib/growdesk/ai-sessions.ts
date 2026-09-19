@@ -2,7 +2,15 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { GROWDESK_CONFIG } from "@/lib/config";
-import { growdeskFetch } from "./client";
+import { growdeskFetch, type GrowDeskFetchOptions } from "./client";
+import { BridgeError, requireData } from "./bridge-protocol";
+
+const SESSION_PATH = "/api/v1/web/ai/sessions";
+async function remote<T>(pathname: string, accessToken: string | undefined, options: GrowDeskFetchOptions = {}): Promise<T> {
+  if (!accessToken) throw new BridgeError(401, "SESSION_REQUIRED", "GrowDesk 会话凭证缺失");
+  return requireData(await growdeskFetch<T>(pathname, { ...options, accessToken }));
+}
+
 
 export interface BffAiChatMessage {
   id: string;
@@ -79,11 +87,20 @@ class BffAiSessionStore {
   }
 
   public async createSession(input: CreateAiSessionInput, accessToken?: string): Promise<BffAiSession> {
+    if (GROWDESK_CONFIG.enabled) {
+      return remote<BffAiSession>(SESSION_PATH, accessToken || input.accessToken, {
+        method: "POST",
+        body: {
+          babyId: input.babyId || null,
+          title: input.title?.trim().slice(0, 50) || "新对话",
+          contextType: input.contextType?.trim() || "general",
+        },
+      });
+    }
     this.ensureLoaded();
 
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
-    const token = accessToken || input.accessToken;
     const session: BffAiSession = {
       id,
       userId: input.userId,
@@ -95,28 +112,6 @@ class BffAiSessionStore {
       messages: [],
     };
 
-    // If GrowDesk server is configured and accessToken is present, try remote session create
-    if (token) {
-      try {
-        const res = await growdeskFetch<{ id: string; userId: string; babyId: string | null; title: string }>(
-          "/api/v1/ai/sessions",
-          {
-            method: "POST",
-            accessToken: token,
-            body: {
-              babyId: session.babyId,
-              title: session.title,
-            },
-          }
-        );
-        if (res.ok && res.data?.id) {
-          session.id = res.data.id;
-        }
-      } catch {
-        // Fallback to local generated id
-      }
-    }
-
     this.sessions.set(session.id, session);
     this.persist();
     return session;
@@ -126,35 +121,15 @@ class BffAiSessionStore {
     userId: string,
     options: ListAiSessionsOptions = {}
   ): Promise<{ total: number; sessions: Array<BffAiSession & { messageCount: number; lastMessage: any | null }> }> {
-    this.ensureLoaded();
-
-    // If GrowDesk server is available and accessToken is provided, query remote sessions
-    if (options.accessToken) {
-      try {
-        const queryParams = new URLSearchParams();
-        if (options.limit) queryParams.set("limit", String(options.limit));
-        const res = await growdeskFetch<Array<{ id: string; userId: string; babyId: string | null; title: string; createdAt: string; updatedAt: string }>>(
-          `/api/v1/ai/sessions?${queryParams.toString()}`,
-          { accessToken: options.accessToken }
-        );
-        if (res.ok && Array.isArray(res.data)) {
-          for (const item of res.data) {
-            if (!this.sessions.has(item.id)) {
-              this.sessions.set(item.id, {
-                id: item.id,
-                userId: item.userId || userId,
-                babyId: item.babyId,
-                title: item.title,
-                contextType: "general",
-                createdAt: item.createdAt,
-                updatedAt: item.updatedAt,
-                messages: [],
-              });
-            }
-          }
-        }
-      } catch {}
+    if (GROWDESK_CONFIG.enabled) {
+      const query = new URLSearchParams();
+      if (options.babyId) query.set("babyId", options.babyId);
+      if (options.contextType) query.set("contextType", options.contextType);
+      if (options.limit !== undefined) query.set("limit", String(options.limit));
+      if (options.offset !== undefined) query.set("offset", String(options.offset));
+      return remote(`${SESSION_PATH}${query.size ? `?${query}` : ""}`, options.accessToken);
     }
+    this.ensureLoaded();
 
     let all = Array.from(this.sessions.values()).filter((s) => s.userId === userId);
     if (options.babyId) {
@@ -195,41 +170,17 @@ class BffAiSessionStore {
     userId: string,
     optionsOrToken: string | { babyId?: string | null; contextType?: string | null; accessToken?: string } = {}
   ): Promise<BffAiSession | null> {
-    this.ensureLoaded();
     const options = typeof optionsOrToken === "string" ? { accessToken: optionsOrToken } : optionsOrToken;
-
-    let session = this.sessions.get(sessionId);
-
-    // If not found locally, try fetching messages from GrowDesk
-    if (!session && options.accessToken) {
+    if (GROWDESK_CONFIG.enabled) {
       try {
-        const res = await growdeskFetch<Array<{ id: string; role: string; content: string; createdAt: string }>>(
-          `/api/v1/ai/sessions/${sessionId}/messages`,
-          { accessToken: options.accessToken }
-        );
-        if (res.ok && Array.isArray(res.data)) {
-          const now = new Date().toISOString();
-          session = {
-            id: sessionId,
-            userId,
-            babyId: options.babyId || null,
-            title: "对话",
-            contextType: options.contextType || "general",
-            createdAt: now,
-            updatedAt: now,
-            messages: res.data.map((m) => ({
-              id: m.id,
-              sessionId,
-              role: m.role as any,
-              content: m.content,
-              createdAt: m.createdAt,
-            })),
-          };
-          this.sessions.set(sessionId, session);
-          this.persist();
-        }
-      } catch {}
+        return await remote<BffAiSession>(`${SESSION_PATH}/${encodeURIComponent(sessionId)}`, options.accessToken);
+      } catch (error) {
+        if (error instanceof BridgeError && error.status === 404) return null;
+        throw error;
+      }
     }
+    this.ensureLoaded();
+    const session = this.sessions.get(sessionId);
 
     if (!session || session.userId !== userId) {
       return null;
@@ -242,8 +193,18 @@ class BffAiSessionStore {
     sessionId: string,
     userId: string,
     title: string,
-    _accessToken?: string
+    accessToken?: string
   ): Promise<BffAiSession | null> {
+    if (GROWDESK_CONFIG.enabled) {
+      try {
+        return await remote<BffAiSession>(`${SESSION_PATH}/${encodeURIComponent(sessionId)}`, accessToken, {
+          method: "PATCH", body: { title: title.trim().slice(0, 50) || "新对话" },
+        });
+      } catch (error) {
+        if (error instanceof BridgeError && error.status === 404) return null;
+        throw error;
+      }
+    }
     this.ensureLoaded();
     const session = this.sessions.get(sessionId);
     if (!session || session.userId !== userId) {
@@ -258,8 +219,16 @@ class BffAiSessionStore {
   public async deleteSession(
     sessionId: string,
     userId: string,
-    _accessToken?: string
+    accessToken?: string
   ): Promise<boolean> {
+    if (GROWDESK_CONFIG.enabled) {
+      try {
+        return (await remote<{ deleted: boolean }>(`${SESSION_PATH}/${encodeURIComponent(sessionId)}`, accessToken, { method: "DELETE" })).deleted;
+      } catch (error) {
+        if (error instanceof BridgeError && error.status === 404) return false;
+        throw error;
+      }
+    }
     this.ensureLoaded();
     const session = this.sessions.get(sessionId);
     if (!session || session.userId !== userId) {
@@ -280,8 +249,13 @@ class BffAiSessionStore {
       toolsJson?: string | null;
       id?: string;
     },
-    _accessToken?: string
+    accessToken?: string
   ): Promise<BffAiChatMessage | null> {
+    if (GROWDESK_CONFIG.enabled) {
+      return remote<BffAiChatMessage>(`${SESSION_PATH}/${encodeURIComponent(sessionId)}/messages`, accessToken, {
+        method: "POST", body: { ...message, id: message.id || crypto.randomUUID() },
+      });
+    }
     this.ensureLoaded();
     const session = this.sessions.get(sessionId);
     if (!session || session.userId !== userId) {

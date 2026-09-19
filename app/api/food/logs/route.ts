@@ -170,11 +170,14 @@ export async function PUT(request: Request) {
       const babyId = body.babyId;
       if (typeof id !== "string" || !id) return NextResponse.json({ error: "请提供要修改的记录 ID" }, { status: 400 });
       if (typeof babyId !== "string" || !babyId) return NextResponse.json({ error: "请提供 babyId" }, { status: 400 });
+      // Read before a notes/observation patch so omitted legacy observations survive.
+      // The caller's baseVersion still guards the subsequent write against races.
+      const existing = await fetchRecordDetail<GrowDeskFoodRecord>(growdeskFetch, bffSession.accessToken, babyId, id, "food");
       const res = await growdeskFetch<GrowDeskFoodRecord>(recordPath("food", babyId, id), {
         method: "PATCH",
         accessToken: bffSession.accessToken,
         idempotencyKey: idempotencyKey(body, request),
-        body: toGrowDeskFoodUpdatePayload(body),
+        body: toGrowDeskFoodUpdatePayload(body, existing),
       });
       const data = requireWriteData(res, "Failed to update food log record");
       return NextResponse.json(fromGrowDeskFoodRecord(data));

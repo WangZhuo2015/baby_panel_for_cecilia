@@ -42,11 +42,11 @@ export async function GET(request: Request) {
 
       const chartData = res.data?.data || res.data || {};
       const rawMeasurements = Array.isArray(chartData.measurements) ? chartData.measurements : [];
-      const legacyMeasurements = rawMeasurements.map(fromGrowDeskGrowthRecord);
-
+      let birthDate: string | undefined;
       let babyGender = "female";
       try {
         const baby = await loadWebBaby(growdeskFetch, bffSession.accessToken, requestedBabyId);
+        birthDate = baby?.birthDate;
         if (baby?.gender === "boy" || (baby as any)?.gender === "male") babyGender = "male";
       } catch {
         // Fallback to default
@@ -57,7 +57,7 @@ export async function GET(request: Request) {
       const whoPercentiles = hasPoints ? transformedPercentiles : getWhoStandard(babyGender);
 
       return NextResponse.json({
-        measurements: legacyMeasurements,
+        measurements: rawMeasurements.map((record: Parameters<typeof fromGrowDeskGrowthRecord>[0]) => fromGrowDeskGrowthRecord(record, birthDate)),
         whoPercentiles,
         monthLabels: WHO_MONTHS,
         gender: babyGender,

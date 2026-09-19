@@ -73,6 +73,23 @@ test("detail scans stop as soon as all requested IDs are found", async () => {
   assert.equal(result.feedings.size, 1);
 });
 
+test("care detail resolution skips persisted medical/vaccine projections and preserves all six care kinds", async () => {
+  const kinds = ["feeding", "sleep", "diaper", "food", "supplement", "growth"] as const;
+  const calls: string[] = [];
+  const maps = await fetchTimelineDetailMaps(api(path => {
+    const kind = new URL(path, "https://test.invalid").pathname.split("/").at(-1)!;
+    calls.push(kind);
+    return page([record(`test_${kind}`)]);
+  }), TOKEN, BABY, [
+    ...kinds.map(kind => reference(`test_${kind}`, kind)),
+    ...["vaccine", "medical"].map(kind => ({ ...reference(`test_${kind}`), entityType: kind } as TimelineDetailReference)),
+  ]);
+  assert.deepEqual(calls.sort(), ["diaper", "feeding", "food", "sleep", "supplement"]);
+  for (const map of Object.values(maps)) assert.equal(map.size, 1);
+  await assert.rejects(fetchTimelineDetailMaps(api(() => page([])), TOKEN, BABY,
+    [{ ...reference(), entityType: "unknown" } as unknown as TimelineDetailReference]), code("UPSTREAM_INVALID_RECORD", 502));
+});
+
 test("empty timelines and growth-only timelines do not make unrelated detail calls", async () => {
   const fetchApi = api(() => { throw new Error("Unexpected upstream call"); });
   const empty = await fetchTimelineDetailMaps(fetchApi, TOKEN, BABY, []);

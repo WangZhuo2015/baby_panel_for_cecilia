@@ -1,4 +1,6 @@
 import { wireVersion } from "./bridge-protocol";
+import { calculateAge } from "../age";
+import { isValidDateStr } from "../date";
 
 if (typeof window !== "undefined") {
   throw new Error("This module can only be loaded on the server.");
@@ -8,6 +10,8 @@ export interface LegacyGrowthRecord {
   id: string;
   babyId: string;
   date: string;
+  ageInMonths?: number;
+  ageLabel?: string;
   weight?: number | null;
   weightKg?: number | null;
   height?: number | null;
@@ -120,13 +124,16 @@ export function toGrowDeskGrowthUpdatePayload(body: Record<string, unknown>) {
   return payload;
 }
 
-export function fromGrowDeskGrowthRecord(rec: GrowDeskGrowthRecord): LegacyGrowthRecord {
+export function fromGrowDeskGrowthRecord(rec: GrowDeskGrowthRecord, birthDate?: string): LegacyGrowthRecord {
   const weight = rec.weightKg !== null ? Number(rec.weightKg) : null;
   const height = rec.heightCm !== null ? Number(rec.heightCm) : null;
   const head = rec.headCircumferenceCm !== null ? Number(rec.headCircumferenceCm) : null;
   const version = wireVersion(rec.version);
+  const age = birthDate && isValidDateStr(birthDate.slice(0, 10)) && isValidDateStr(rec.measurementDate)
+    ? calculateAge(birthDate, rec.measurementDate) : undefined;
 
   return {
+    ...(age ? { ageInMonths: age.months, ageLabel: age.label } : {}),
     id: rec.id,
     babyId: rec.babyId,
     date: rec.measurementDate,

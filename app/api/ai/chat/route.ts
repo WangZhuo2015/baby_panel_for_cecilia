@@ -7,6 +7,9 @@ import { archiveText } from "@/lib/archive";
 import { GROWDESK_CONFIG } from "@/lib/config";
 import { resolveBffSession } from "@/lib/growdesk/session";
 import { bffAiSessionStore } from "@/lib/growdesk/ai-sessions";
+import { growdeskFetch } from "@/lib/growdesk/client";
+import { loadWebBaby } from "@/lib/growdesk/bridge-identity";
+import { BridgeError } from "@/lib/growdesk/bridge-protocol";
 import {
   buildAgentSystemPrompt,
   createLlmBackend,
@@ -60,8 +63,12 @@ function toHistory(messages: { role?: string; content?: unknown }[]): AgentMessa
 
 export async function GET(request: Request) {
   try {
-    const auth = await requireAuth(request);
-    if (auth.errorResponse) return auth.errorResponse;
+    const bffSession = GROWDESK_CONFIG.enabled ? await resolveBffSession(request) : null;
+    if (GROWDESK_CONFIG.enabled && !bffSession) {
+      return NextResponse.json({ error: "Unauthorized: 会话无效或已过期" }, { status: 401 });
+    }
+    const auth = bffSession ? { user: bffSession.user } : await requireAuth(request);
+    if ("errorResponse" in auth && auth.errorResponse) return auth.errorResponse;
     const { user } = auth;
 
     const url = new URL(request.url);
@@ -71,9 +78,7 @@ export async function GET(request: Request) {
     }
 
     let session: any = null;
-    if (GROWDESK_CONFIG.enabled) {
-      const bffSession = await resolveBffSession(request);
-      if (!bffSession) return NextResponse.json({ error: "Unauthorized: 会话无效或已过期" }, { status: 401 });
+    if (bffSession) {
       session = await bffAiSessionStore.getSession(sessionId, user.id, bffSession.accessToken);
     } else {
       session = await prisma.aiChatSession.findFirst({
@@ -166,6 +171,7 @@ export async function GET(request: Request) {
       tools: isOwnerRun ? activeRun!.toolTraces : [],
     });
   } catch (err) {
+    if (err instanceof BridgeError) return NextResponse.json({ error: err.message }, { status: err.status });
     console.error("GET /api/ai/chat exception:", err);
     return NextResponse.json({ error: "获取会话状态失败" }, { status: 500 });
   }
@@ -173,8 +179,12 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const auth = await requireAuth(request);
-    if (auth.errorResponse) return auth.errorResponse;
+    const bffSession = GROWDESK_CONFIG.enabled ? await resolveBffSession(request) : null;
+    if (GROWDESK_CONFIG.enabled && !bffSession) {
+      return NextResponse.json({ error: "Unauthorized: 会话无效或已过期" }, { status: 401 });
+    }
+    const auth = bffSession ? { user: bffSession.user } : await requireAuth(request);
+    if ("errorResponse" in auth && auth.errorResponse) return auth.errorResponse;
     const { user } = auth;
 
     const ip = getClientIp(request);
@@ -220,9 +230,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "消息总长度超出限制" }, { status: 400 });
     }
 
-    const babyResult = await requireBaby(user.id, babyId);
-    if (babyResult.errorResponse) return babyResult.errorResponse;
+    const babyResult = bffSession
+      ? { baby: await loadWebBaby(growdeskFetch, bffSession.accessToken, babyId) }
+      : await requireBaby(user.id, babyId);
+    if ("errorResponse" in babyResult && babyResult.errorResponse) return babyResult.errorResponse;
     const targetBaby = babyResult.baby;
+    if (!targetBaby) return NextResponse.json({ error: "请先添加宝宝信息" }, { status: 404 });
 
     const rawImages: unknown = body.images ?? body.image;
     const imageList: string[] = Array.isArray(rawImages)
@@ -245,12 +258,6 @@ export async function POST(request: Request) {
 
     if (promptText) {
       void archiveText("input_text", promptText).catch(() => {});
-    }
-
-    let bffSession: any = null;
-    if (GROWDESK_CONFIG.enabled) {
-      bffSession = await resolveBffSession(request);
-      if (!bffSession) return NextResponse.json({ error: "Unauthorized: 会话无效或已过期" }, { status: 401 });
     }
 
     // 1. Session Persistence Setup
@@ -435,6 +442,7 @@ export async function POST(request: Request) {
 
     return new Response(stream, { headers: sseHeaders() });
   } catch (error) {
+    if (error instanceof BridgeError) return NextResponse.json({ error: error.message }, { status: error.status });
     console.error("POST /api/ai/chat exception:", error);
     const errText =
       "网络连接暂时超时，请稍后重新提问。若宝宝身体有明显不适，请以专业医生诊断为准。";

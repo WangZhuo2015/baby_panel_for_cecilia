@@ -30,8 +30,12 @@ export async function GET(request: Request) {
           { status: res.status },
         );
       }
-      const plan = res.data?.data || res.data;
-      return NextResponse.json(Array.isArray(plan) ? plan : (plan ? [plan] : []));
+      // growdeskFetch already unwraps the envelope; recipe fields live in planData.
+      const plan = res.data;
+      const data = plan?.planData;
+      const date = searchParams.get("date");
+      const recipe = data?.date ? { ...data, babyId: plan.babyId, updatedAt: plan.updatedAt } : null;
+      return NextResponse.json(recipe && (!date || recipe.date === date) ? [recipe] : []);
     }
 
     const auth = await requireAuth(request);
@@ -100,7 +104,12 @@ export async function POST(request: Request) {
         method: "GET",
         accessToken: bffSession.accessToken,
       });
-      const existingData = (existingRes.ok && existingRes.data?.data?.planData) || {};
+      // Do not replace a plan after a failed read: supplement state may exist.
+      if (!existingRes.ok) return NextResponse.json({ error: existingRes.error?.message || "Failed to fetch food plan" }, { status: existingRes.status });
+      const existingData = existingRes.data?.planData;
+      if (!existingData || typeof existingData !== "object" || Array.isArray(existingData)) {
+        return NextResponse.json({ error: "Invalid food plan response" }, { status: 502 });
+      }
       const mergedPlanData = {
         ...existingData,
         ...body,
