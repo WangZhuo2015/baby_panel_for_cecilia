@@ -98,6 +98,7 @@ export const createGrowthSlice = (set: any, get: any): GrowthSlice => ({
       try {
         const query = toQuery({ category: category && category !== "all" ? category : undefined, babyId });
         const data = await request<MedicalReport[]>(`/api/medical/reports${query}`);
+        if (get().baby?.id !== babyId) return;
         set({ medicalReports: data || [] });
         markFetched(key);
       } catch (e) {
@@ -143,6 +144,7 @@ export const createGrowthSlice = (set: any, get: any): GrowthSlice => ({
       try {
         const params = toQuery({ babyId, date });
         const data = await request<FoodPlan[]>(`/api/food/plans${params}`);
+        if (get().baby?.id !== babyId) return;
         set({ foodPlans: data || [] });
         markFetched(key);
       } catch (e) { if (!isAuthError(e)) console.error("Failed to fetch food plans:", e); }
