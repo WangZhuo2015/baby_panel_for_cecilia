@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAuth, requireBaby } from "@/lib/api-helpers";
 import { prisma } from "@/lib/prisma";
-import { getLocalDateStr, isValidDateStr, getLocalDayUtcRange, addDays, formatIsoToLocalTime } from "@/lib/date";
+import { getLocalDateStr, isValidDateStr, getLocalDayUtcRange, addDays } from "@/lib/date";
 import { calculateAge } from "@/lib/age";
 import { calculateDailyNutrition, calculateMultiDayNutritionTrend } from "@/lib/nutrition/engine";
 import type { FormulaProduct, SupplementProduct, NutrientsMap, SupplementRecord } from "@/types/nutrition";
@@ -17,6 +17,10 @@ import {
   type GrowDeskFormulaProduct,
   type GrowDeskSupplementRecord,
 } from "@/lib/growdesk/nutrition-compat";
+import { fetchCompleteList } from "@/lib/growdesk/paged-list";
+import { requireData, bridgeErrorResponse } from "@/lib/growdesk/bridge-protocol";
+import { fromGrowDeskFeedingRecord, type GrowDeskFeedingRecord } from "@/lib/growdesk/feeding-compat";
+import { fromGrowDeskFoodRecord, type GrowDeskFoodRecord } from "@/lib/growdesk/food-compat";
 import { PRESET_SUPPLEMENT_PRODUCTS } from "@/lib/nutrition/presets";
 
 export async function GET(request: Request) {
@@ -43,31 +47,16 @@ export async function GET(request: Request) {
       const ageSummary = calculateAge(baby.birthDate);
       const babyAgeMonths = ageSummary.months;
 
-      // Concurrently fetch all dependencies from GrowDesk Server
-      const [formulasRes, fpRes, feedingsRes, suppsRes, foodsRes] = await Promise.all([
-        growdeskFetch<any>(`/api/v1/families/${familyId}/nutrition/products?limit=50`, {
-          method: "GET",
-          accessToken: bffSession.accessToken,
-        }),
-        growdeskFetch<any>(`/api/v1/babies/${babyId}/food-plan`, {
-          method: "GET",
-          accessToken: bffSession.accessToken,
-        }),
-        growdeskFetch<any>(`/api/v1/babies/${babyId}/records/feeding?limit=200`, {
-          method: "GET",
-          accessToken: bffSession.accessToken,
-        }),
-        growdeskFetch<any>(`/api/v1/babies/${babyId}/records/supplement?limit=200`, {
-          method: "GET",
-          accessToken: bffSession.accessToken,
-        }),
-        growdeskFetch<any>(`/api/v1/babies/${babyId}/records/food?limit=200`, {
-          method: "GET",
-          accessToken: bffSession.accessToken,
-        }),
+      // Statistics require the complete history, including records beyond the first page.
+      const token = bffSession.accessToken;
+      const [rawFormulas, fpRes, rawFeedings, rawSupps, rawFoods] = await Promise.all([
+        fetchCompleteList<GrowDeskFormulaProduct>(growdeskFetch, token, `/api/v1/families/${familyId}/nutrition/products`),
+        growdeskFetch<{ planData?: unknown }>(`/api/v1/babies/${babyId}/food-plan`, { accessToken: token }),
+        fetchCompleteList<GrowDeskFeedingRecord>(growdeskFetch, token, `/api/v1/babies/${babyId}/records/feeding`),
+        fetchCompleteList<GrowDeskSupplementRecord>(growdeskFetch, token, `/api/v1/babies/${babyId}/records/supplement`),
+        fetchCompleteList<GrowDeskFoodRecord>(growdeskFetch, token, `/api/v1/babies/${babyId}/records/food`),
       ]);
-
-      const planData = (fpRes.ok && (fpRes.data?.data?.planData || fpRes.data?.planData)) || {};
+      const planData = requireData(fpRes)?.planData || {};
       const suppState = extractSupplementStateFromFoodPlan(planData);
 
       const allKnownSupplements: SupplementProduct[] = [
@@ -84,11 +73,6 @@ export async function GET(request: Request) {
         supplementProductsMap[sp.id] = sp;
       }
 
-      const rawFormulas: GrowDeskFormulaProduct[] = formulasRes.ok && formulasRes.data
-        ? Array.isArray(formulasRes.data)
-          ? formulasRes.data
-          : formulasRes.data.data || []
-        : [];
       const formulaProductsMap: Record<string, FormulaProduct> = {};
       for (const rawF of rawFormulas) {
         formulaProductsMap[rawF.id] = fromGrowDeskFormulaProduct(rawF, {
@@ -97,54 +81,19 @@ export async function GET(request: Request) {
         });
       }
 
-      const rawFeedings = feedingsRes.ok && feedingsRes.data
-        ? Array.isArray(feedingsRes.data)
-          ? feedingsRes.data
-          : feedingsRes.data.data || []
-        : [];
-      const adaptedAllFeedings: FeedingRecord[] = rawFeedings.map((f: any) => ({
-        id: f.id,
-        timestamp: f.occurredAt,
-        type: f.feedingType as any,
-        amountMl: f.amountMl ? Number(f.amountMl) : null,
-        leftMinutes: f.leftMinutes,
-        rightMinutes: f.rightMinutes,
-        spitUp: f.spitUp,
-        notes: f.notes || undefined,
-        formulaProductId: f.formulaProductId,
-      }));
-
-      const rawSupps: GrowDeskSupplementRecord[] = suppsRes.ok && suppsRes.data
-        ? Array.isArray(suppsRes.data)
-          ? suppsRes.data
-          : suppsRes.data.data || []
-        : [];
+      const adaptedAllFeedings = rawFeedings.map(fromGrowDeskFeedingRecord);
       const adaptedAllSupplements = rawSupps.map((r) =>
         fromGrowDeskSupplementRecordEnriched(r, allKnownSupplements)
       );
 
-      const rawFoods: any[] = foodsRes.ok && foodsRes.data
-        ? Array.isArray(foodsRes.data)
-          ? foodsRes.data
-          : foodsRes.data.data || []
-        : [];
-      const adaptedAllFoodLogs: Array<{
-        id: string;
-        date: string;
-        time: string;
-        foods: string[];
-        portion: string;
-        acceptance: number;
-        babyState: string;
-      }> = rawFoods.map((fl: any) => ({
-        id: fl.id,
-        date: fl.recordDate,
-        time: fl.occurredAt ? formatIsoToLocalTime(fl.occurredAt) : "12:00",
-        foods: fl.foodItemIds || [],
-        portion: fl.portionDescription || "most",
-        acceptance: 5,
-        babyState: "normal",
-      }));
+      const adaptedAllFoodLogs = rawFoods.map((raw) => {
+        const food = fromGrowDeskFoodRecord(raw);
+        return {
+          id: food.id, date: food.date, time: food.time || "12:00",
+          foods: raw.foodItemIds, portion: food.portion || "most",
+          acceptance: food.acceptance ?? 5, babyState: food.babyState || "normal",
+        };
+      });
 
       if (days === 1) {
         const { start, end } = getLocalDayUtcRange(date);
@@ -465,6 +414,7 @@ export async function GET(request: Request) {
       });
     }
   } catch (error: any) {
+    if (GROWDESK_CONFIG.enabled) return bridgeErrorResponse(error);
     console.error("GET /api/nutrition/analysis error:", error);
     return NextResponse.json({ error: "获取营养分析数据失败" }, { status: 500 });
   }
