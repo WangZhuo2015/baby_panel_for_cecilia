@@ -200,8 +200,7 @@ export function fromGrowDeskTimelineEntry(
         d += `${formulaPart}${breastPart > 0 ? ` + 亲喂约${breastPart}ml (共约${effectiveMl}ml)` : ""}`;
       } else if (feedType === "formula") {
         d += formulaProductName ? `配方${amount}ml (${formulaProductName})` : (amount > 0 ? `${amount}ml` : "");
-      } else if (feedType === "bottle_breast") {
-        d += amount > 0 ? `母乳${amount}ml` : "母乳瓶喂";
+
       } else if (amount > 0) {
         d += `${feedType === "breast" ? "约" : ""}${amount}ml`;
       } else if (effectiveMl > 0) {
@@ -444,5 +443,7 @@ export function fromGrowDeskTimelineResponse(
 ): LegacyTimelineItem[] {
   const list = Array.isArray(raw) ? raw : raw?.data;
   if (!Array.isArray(list)) throw new BridgeError(502, "UPSTREAM_INVALID_PAGE", "GrowDesk 未返回有效的时间轴数据");
-  return list.map(item => fromGrowDeskTimelineEntry(item, context));
+  const typeOrder: Record<string, number> = { feeding: 0, sleep: 1, diaper: 2, food: 3, supplement: 4, growth: 5, medical: 6, vaccine: 7 };
+  return list.map(item => fromGrowDeskTimelineEntry(item, context))
+    .sort((a, b) => b.sortMs - a.sortMs || typeOrder[a.type] - typeOrder[b.type]);
 }

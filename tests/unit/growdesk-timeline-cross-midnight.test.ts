@@ -165,3 +165,16 @@ test("unfiltered timeline history keeps sleep projections instead of applying a 
   assert.deepEqual(result.map(item => item.id), ["test_timeline_overnight"]);
   assert.equal(calls.some(path => path.includes("/records/sleep")), false);
 });
+
+test("timeline preserves legacy category ordering at equal times and bottle amount wording", () => {
+  const occurredAt = "2026-09-19T01:00:00.000Z";
+  const entries = (["supplement", "diaper", "feeding"] as const).map(entityType => ({
+    id: `test_timeline_${entityType}`, entityId: `test_${entityType}`, babyId,
+    entityType, occurredAt, summary: `${entityType}: bottle`, version: "1",
+  }));
+  const result = fromGrowDeskTimelineResponse(entries, {
+    feedings: new Map([["test_feeding", { id: "test_feeding", type: "bottle", amountMl: "30", occurredAt, notes: "test_note" }]]),
+  });
+  assert.deepEqual(result.map(item => item.type), ["feeding", "diaper", "supplement"]);
+  assert.equal(result[0]?.detail, "30ml · test_note");
+});
