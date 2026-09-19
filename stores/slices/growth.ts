@@ -44,6 +44,7 @@ export interface GrowthSlice {
   fetchWeather: (lat?: number, lon?: number, city?: string, force?: boolean) => Promise<void>;
   fetchAiTips: (force?: boolean) => Promise<void>;
   addGrowthMeasurement: (measurement: Partial<GrowthMeasurement>) => Promise<void>;
+  updateGrowthMeasurement: (id: string, patch: Partial<GrowthMeasurement>) => Promise<void>;
   deleteGrowthMeasurement: (id: string) => Promise<void>;
   addMedicalReport: (report: Partial<MedicalReport> & { growthData?: any }) => Promise<MedicalReport>;
   deleteMedicalReport: (id: string) => Promise<void>;
@@ -304,6 +305,92 @@ export const createGrowthSlice = (set: any, get: any): GrowthSlice => ({
         throw new Error("当前离线，记录已保存，联网后自动同步 ⏳");
       }
       console.error("Failed to add growth measurement:", e); throw e;
+    }
+  },
+
+  updateGrowthMeasurement: async (id: string, patch: Partial<GrowthMeasurement>) => {
+    const state = get();
+    const selectedBabyId = typeof state.selectedBabyId === "string" ? state.selectedBabyId.trim() : "";
+    const babyId = typeof state.baby?.id === "string" ? state.baby.id.trim() : "";
+    const familyId = typeof state.family?.id === "string" ? state.family.id.trim() : "";
+    const userId = typeof state.user?.id === "string" ? state.user.id.trim() : "";
+    if (!userId || !familyId || !babyId || (selectedBabyId && selectedBabyId !== babyId)) {
+      throw new Error("宝宝或账号正在切换，请稍后重试");
+    }
+    if (state.baby?.familyId && state.baby.familyId !== familyId) {
+      throw new Error("宝宝所属家庭正在切换，请稍后重试");
+    }
+
+    const existing = state.growthMeasurements.find((record: GrowthMeasurement) => record.id === id);
+    if (!existing) throw new Error("未找到指定的生长记录，请刷新后重试");
+    if (existing.babyId && existing.babyId !== babyId) {
+      throw new Error("生长记录不属于当前宝宝");
+    }
+    if (existing.familyId && existing.familyId !== familyId) {
+      throw new Error("生长记录不属于当前家庭");
+    }
+    const requestedBabyId = patch.babyId == null ? babyId : String(patch.babyId).trim();
+    const requestedFamilyId = patch.familyId == null ? familyId : String(patch.familyId).trim();
+    if (!requestedBabyId || requestedBabyId !== babyId) {
+      throw new Error("生长记录不属于当前宝宝");
+    }
+    if (!requestedFamilyId || requestedFamilyId !== familyId) {
+      throw new Error("生长记录不属于当前家庭");
+    }
+    // The caller must provide the version captured when editing began. Taking
+    // the current cached row's version here could turn a stale form into an
+    // update against a newer server record after a background refresh.
+    const baseVersion = patch.baseVersion ?? patch.version;
+    if (baseVersion === undefined || baseVersion === null || baseVersion === "") {
+      throw new Error("请刷新记录后重试，缺少原记录版本");
+    }
+    const identity = { userId, familyId, babyId };
+    const {
+      id: _ignoredId,
+      babyId: _ignoredBabyId,
+      familyId: _ignoredFamilyId,
+      version: _ignoredVersion,
+      baseVersion: _ignoredBaseVersion,
+      createdAt: _ignoredCreatedAt,
+      updatedAt: _ignoredUpdatedAt,
+      ...editablePatch
+    } = patch;
+
+    try {
+      const updated = await request<GrowthMeasurement>("/api/growth", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...editablePatch,
+          id,
+          babyId,
+          baseVersion: String(baseVersion),
+        }),
+      });
+
+      // A slow response from the previous baby/account must never enter the
+      // newly selected scope. The server response is still allowed to fail the
+      // request, but it cannot mutate the current store after a switch.
+      const current = get();
+      if (current.user?.id !== identity.userId
+        || current.family?.id !== identity.familyId
+        || current.baby?.id !== identity.babyId
+        || (current.selectedBabyId && current.selectedBabyId !== identity.babyId)) return;
+      if (!updated || updated.id !== id || (updated.babyId && updated.babyId !== identity.babyId)) {
+        throw new Error("生长记录响应无效，请刷新后重试");
+      }
+
+      invalidateCache("growthMeasurements");
+      set((currentState: any) => ({
+        growthMeasurements: currentState.growthMeasurements
+          .map((record: GrowthMeasurement) => record.id === id ? updated : record)
+          .sort((a: GrowthMeasurement, b: GrowthMeasurement) => new Date(b.date).getTime() - new Date(a.date).getTime()),
+      }));
+    } catch (e) {
+      // Preserve 401/403/409 and upstream validation messages for the page to
+      // display; swallowing these would make an edit look successfully saved.
+      console.error("Failed to update growth measurement:", e);
+      throw e;
     }
   },
 

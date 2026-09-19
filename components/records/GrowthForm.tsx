@@ -15,6 +15,8 @@ import {
   CircleDot,
   TrendingUp,
   RefreshCw,
+  Eye,
+  Trash2,
 } from "lucide-react";
 import { CuteButton } from "@/components/ui/CuteButton";
 import { CuteInput } from "@/components/ui/CuteInput";
@@ -336,6 +338,58 @@ export function GrowthForm({
             </div>
           </CuteCard>
         </>
+      )}
+
+      {isEdit && (
+        <div data-testid="growth-photo-editor">
+          <CuteCard className="p-4">
+            <div className="flex items-center justify-between gap-3 mb-3">
+            <div>
+              <p className="text-xs font-bold text-text-primary">测量照片</p>
+              <p className="text-[11px] text-text-muted mt-0.5">查看或移除这次测量的照片</p>
+            </div>
+            {imagePreview && <span className="text-[10px] text-primary bg-primary-soft px-2 py-1 rounded-full">已保存</span>}
+            </div>
+            {imagePreview ? (
+              <div className="space-y-3">
+              <a
+                href={imagePreview}
+                target="_blank"
+                rel="noreferrer"
+                aria-label="查看生长照片"
+                data-testid="growth-photo-view"
+                className="block w-full rounded-2xl overflow-hidden border border-primary/20 bg-primary-light/20 focus:outline-none focus:ring-2 focus:ring-primary/40"
+              >
+                <Image
+                  src={imagePreview}
+                  alt="已保存的生长测量照片，点击查看原图"
+                  width={640}
+                  height={420}
+                  unoptimized
+                  className="w-full max-h-64 object-contain"
+                />
+                <span className="flex items-center justify-center gap-1.5 py-2 text-xs font-medium text-primary">
+                  <Eye size={14} /> 查看原图
+                </span>
+              </a>
+              <button
+                type="button"
+                onClick={() => {
+                  setImagePreview(null);
+                  setUploadedImageUrl(null);
+                }}
+                aria-label="清除生长照片"
+                data-testid="growth-photo-clear"
+                className="w-full py-2.5 rounded-xl border border-red-200 text-red-600 hover:bg-red-50 text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer btn-press"
+              >
+                <Trash2 size={14} /> 清除照片
+              </button>
+              </div>
+            ) : (
+              <p className="text-center py-4 text-xs text-text-muted bg-primary-light/20 rounded-2xl">当前没有测量照片</p>
+            )}
+          </CuteCard>
+        </div>
       )}
 
       {/* Manual / Verified Fields */}

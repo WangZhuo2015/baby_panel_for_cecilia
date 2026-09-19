@@ -122,6 +122,7 @@ interface BabyStore {
   addDiaperRecord: (record: Partial<DiaperRecord>) => Promise<void>;
   addFoodLogRecord: (record: Partial<FoodLogRecord>) => Promise<void>;
   addGrowthMeasurement: (measurement: Partial<GrowthMeasurement>) => Promise<void>;
+  updateGrowthMeasurement: (id: string, patch: Partial<GrowthMeasurement>) => Promise<void>;
   deleteGrowthMeasurement: (id: string) => Promise<void>;
   addMedicalReport: (report: Partial<MedicalReport> & { growthData?: any }) => Promise<MedicalReport>;
   deleteMedicalReport: (id: string) => Promise<void>;

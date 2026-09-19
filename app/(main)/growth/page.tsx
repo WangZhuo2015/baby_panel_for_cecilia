@@ -18,6 +18,8 @@ import {
   TrendingUp,
   ChevronDown,
   ChevronUp,
+  Pencil,
+  X,
 } from "lucide-react";
 import dynamic from "next/dynamic";
 import { useBabyStore } from "@/stores/useBabyStore";
@@ -31,6 +33,9 @@ import { WhoPercentileChips } from "@/components/growth/WhoPercentileCard";
 import { getWhoMetricsForBaby } from "@/lib/who-growth-standards";
 import { BabyAvatar } from "@/components/ui/BabyAvatar";
 import { isWorkbenchViewport } from "@/lib/responsive";
+import { useToast } from "@/components/ui/Toast";
+import { GrowthForm } from "@/components/records/GrowthForm";
+import type { GrowthMeasurement } from "@/types";
 
 const GrowthLineChart = dynamic(() => import("@/components/growth/GrowthLineChart"), {
   ssr: false,
@@ -43,14 +48,31 @@ const GrowthLineChart = dynamic(() => import("@/components/growth/GrowthLineChar
 
 type GrowthTab = "weight" | "height" | "head";
 
+type GrowthEditScope = {
+  userId: string;
+  familyId: string;
+  babyId: string;
+};
+
+function hasObservedGrowthVersion(measurement: GrowthMeasurement): boolean {
+  const version = measurement.baseVersion ?? measurement.version;
+  return (typeof version === "string" && /^[1-9]\d*$/.test(version))
+    || (typeof version === "number" && Number.isSafeInteger(version) && version > 0);
+}
+
 export default function GrowthPage() {
   const router = useRouter();
   const baby = useBabyStore((s) => s.baby);
   const selectedBabyId = useBabyStore((s) => s.selectedBabyId);
+  const userId = useBabyStore((s) => s.user?.id ?? null);
+  const familyId = useBabyStore((s) => s.family?.id ?? null);
+  const babyIdsKey = useBabyStore((s) => s.babies.map((item) => item.id).join(","));
   const age = baby ? calculateAge(baby.birthDate) : { months: 0, days: 0, label: "0月0天" };
   const measurements = useBabyStore((s) => s.growthMeasurements);
   const fetchGrowthMeasurements = useBabyStore((s) => s.fetchGrowthMeasurements);
+  const updateGrowthMeasurement = useBabyStore((s) => s.updateGrowthMeasurement);
   const deleteGrowthMeasurement = useBabyStore((s) => s.deleteGrowthMeasurement);
+  const { showToast } = useToast();
 
   const [activeTab, setActiveTab] = useState<GrowthTab>("weight");
   const [showAllMeasurements, setShowAllMeasurements] = useState(false);
@@ -255,6 +277,29 @@ export default function GrowthPage() {
   };
 
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [editingMeasurement, setEditingMeasurement] = useState<GrowthMeasurement | null>(null);
+  const [editingScope, setEditingScope] = useState<GrowthEditScope | null>(null);
+  const [editingSaving, setEditingSaving] = useState(false);
+
+  useEffect(() => {
+    // Closing an editor on scope changes prevents a previous baby's record or
+    // photo from remaining visible while the new baby's list is loading.
+    setEditingMeasurement(null);
+    setEditingScope(null);
+    setEditingSaving(false);
+  }, [selectedBabyId, userId, familyId, babyIdsKey]);
+
+  useEffect(() => {
+    if (!editingMeasurement) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !editingSaving) {
+        setEditingMeasurement(null);
+        setEditingScope(null);
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [editingMeasurement, editingSaving]);
 
   const handleDeleteMeasurement = async (id: string, date: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -267,6 +312,89 @@ export default function GrowthPage() {
       alert("删除失败，请重试");
     } finally {
       setDeletingId(null);
+    }
+  };
+
+  const handleOpenEditMeasurement = (measurement: GrowthMeasurement, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const scope = useBabyStore.getState();
+    if (!selectedBabyId || !scope.user?.id || !scope.family?.id || !hasObservedGrowthVersion(measurement)) {
+      showToast("当前模式暂不支持编辑这条生长记录");
+      return;
+    }
+    if ((measurement.babyId && measurement.babyId !== selectedBabyId)
+      || (measurement.familyId && measurement.familyId !== scope.family.id)) {
+      showToast("生长记录不属于当前宝宝，请刷新后重试");
+      return;
+    }
+    setEditingScope({ userId: scope.user.id, familyId: scope.family.id, babyId: selectedBabyId });
+    setEditingMeasurement(measurement);
+  };
+
+  const handleSaveEdit = async (data: {
+    date: string;
+    weightKg?: number;
+    heightCm?: number;
+    headCircumferenceCm?: number;
+    imageUrl?: string | null;
+  }) => {
+    const measurement = editingMeasurement;
+    const editScope = editingScope;
+    if (!measurement || !editScope) {
+      showToast("宝宝信息尚未加载完成，请刷新后重试");
+      return;
+    }
+    const currentBeforeSave = useBabyStore.getState();
+    if (currentBeforeSave.user?.id !== editScope.userId
+      || currentBeforeSave.family?.id !== editScope.familyId
+      || currentBeforeSave.baby?.id !== editScope.babyId
+      || currentBeforeSave.selectedBabyId !== editScope.babyId) {
+      setEditingMeasurement(null);
+      setEditingScope(null);
+      showToast("宝宝或账号正在切换，请稍后重试");
+      return;
+    }
+    const snapshotBabyId = measurement.babyId ?? editScope.babyId;
+    const snapshotBaseVersion = measurement.baseVersion ?? measurement.version;
+    if (snapshotBabyId !== editScope.babyId || !hasObservedGrowthVersion(measurement) || snapshotBaseVersion == null) {
+      showToast("请刷新记录后重试，缺少原记录版本");
+      return;
+    }
+    setEditingSaving(true);
+    try {
+      await updateGrowthMeasurement(measurement.id, {
+        ...data,
+        babyId: snapshotBabyId,
+        familyId: editScope.familyId,
+        baseVersion: snapshotBaseVersion,
+      });
+      const scope = useBabyStore.getState();
+      if (scope.user?.id !== editScope.userId
+        || scope.family?.id !== editScope.familyId
+        || scope.selectedBabyId !== editScope.babyId
+        || scope.baby?.id !== editScope.babyId) {
+        setEditingMeasurement(null);
+        setEditingScope(null);
+        return;
+      }
+      await loadChart();
+      setEditingMeasurement(null);
+      setEditingScope(null);
+      showToast("生长记录已更新 📈");
+    } catch (error) {
+      const scope = useBabyStore.getState();
+      if (scope.user?.id !== editScope.userId
+        || scope.family?.id !== editScope.familyId
+        || scope.selectedBabyId !== editScope.babyId
+        || scope.baby?.id !== editScope.babyId) {
+        setEditingMeasurement(null);
+        setEditingScope(null);
+        return;
+      }
+      const message = error instanceof Error ? error.message : "保存失败，请重试";
+      showToast(message === "请求失败 (501)" ? "当前本地模式暂不支持编辑生长记录" : message);
+    } finally {
+      setEditingSaving(false);
     }
   };
 
@@ -506,6 +634,17 @@ export default function GrowthPage() {
                           )}
                           <button
                             type="button"
+                            onClick={(e) => handleOpenEditMeasurement(m, e)}
+                            disabled={!hasObservedGrowthVersion(m)}
+                            aria-label={`编辑 ${m.date} 生长记录`}
+                            data-testid={`growth-history-edit-${m.id}`}
+                            title={hasObservedGrowthVersion(m) ? "编辑此条记录" : "当前模式暂不支持编辑"}
+                            className="p-1 rounded-lg text-text-muted hover:text-primary hover:bg-primary-soft/60 transition-colors cursor-pointer disabled:opacity-35 disabled:cursor-not-allowed"
+                          >
+                            <Pencil size={13} />
+                          </button>
+                          <button
+                            type="button"
                             onClick={(e) => handleDeleteMeasurement(m.id, m.date, e)}
                             disabled={deletingId === m.id}
                             aria-label={`删除 ${m.date} 生长记录`}
@@ -598,6 +737,59 @@ export default function GrowthPage() {
           </CuteCard>
         </div>
       </div>
+
+      {editingMeasurement && (
+        <div
+          className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-xs animate-fade-in"
+          onClick={() => {
+            if (!editingSaving) {
+              setEditingMeasurement(null);
+              setEditingScope(null);
+            }
+          }}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="growth-edit-title"
+        >
+          <div
+            className="w-full sm:max-w-md bg-white dark:bg-card text-text-primary rounded-t-[28px] sm:rounded-[28px] max-h-[92dvh] flex flex-col shadow-2xl border border-primary/20 animate-slide-up"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-divider/60 shrink-0">
+              <div>
+                <h2 id="growth-edit-title" className="text-base font-bold text-text-primary">编辑生长记录</h2>
+                <p className="text-[11px] text-text-muted mt-0.5">{editingMeasurement.date} · {baby?.nickname || "宝宝"}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingMeasurement(null);
+                  setEditingScope(null);
+                }}
+                disabled={editingSaving}
+                autoFocus
+                aria-label="关闭生长记录编辑"
+                className="w-8 h-8 rounded-full flex items-center justify-center text-text-muted hover:bg-primary-soft/40 btn-press disabled:opacity-40"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="px-5 py-4 overflow-y-auto overscroll-contain flex-1 pb-[max(20px,env(safe-area-inset-bottom))]">
+              <GrowthForm
+                key={`${editingMeasurement.id}:${editingMeasurement.version ?? editingMeasurement.baseVersion ?? ""}`}
+                mode="edit"
+                initialData={editingMeasurement}
+                onSubmit={handleSaveEdit}
+                onCancel={() => {
+                  setEditingMeasurement(null);
+                  setEditingScope(null);
+                }}
+                saving={editingSaving}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

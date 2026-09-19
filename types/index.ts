@@ -103,6 +103,8 @@ export interface DiaperRecord {
 // ===== Growth Types =====
 export interface GrowthMeasurement {
   id: string;
+  babyId?: string;
+  familyId?: string;
   date: string;
   ageInMonths: number;
   ageLabel: string;
@@ -113,6 +115,10 @@ export interface GrowthMeasurement {
   imageUrl?: string | null;
   source?: string | null;
   sourceAgent?: string | null;
+  version?: string | number;
+  baseVersion?: string | number;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 // ===== Food Types =====
