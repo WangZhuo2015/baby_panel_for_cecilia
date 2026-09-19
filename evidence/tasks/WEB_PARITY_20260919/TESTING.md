@@ -62,3 +62,13 @@ The checkpoint above identifies a tested artifact, not whatever future code happ
 - Subsequent outbox, scope, notification-detail, and actor fixes need a fresh artifact and fresh HTTP/UI/golden runs. Focused test results do not change the round 13 result.
 - A separate cloud importer audit found that `identity-v1` materializes identity only and archives the business rows without promoting them to runtime tables. Business import and field/count reconciliation remain production cutover blockers; the synthetic paired golden fixture does not prove that ETL.
 - No production deployment or production data mutation has occurred.
+
+
+## Checkpoint: round 15b (2026-09-19 UTC)
+
+- Candidate build `NwwyYMFNqZuQ5J7CIt1vq`, source `dda4239aefbdacd1b769866cac1cd3e9b2dffbcc` plus recorded changes; artifact SHA-256 `f66a3270172256bef3a4adaa37e702a6433b182b2203069206cc22842785b7db`.
+- Web units: 609 passed (`/tmp/growdesk-web-full-unit-round15.log`).
+- Owned backend: 201 main, 13 care regression, 10 AI, infrastructure and identity import passed. Real MinIO signed PUT, checksum/size verification, authenticated content, cross-family denial, private objects and physical deletion passed. `/tmp/growdesk-owned-s3-ui-round15.log` exited 0 and removed owned resources.
+- Sol low browser acceptance: 16/16 passed. Offline feeding was queued while disconnected, automatically uploaded on reconnect, present exactly once after refresh and removed through the UI. Expected offline failures remain recorded; unexpected console/page/network errors are zero. See `ui/20260919200928045-ui-parity-report.json`.
+- The browser stack in this checkpoint still used the mock attachment driver; separate API MinIO coverage does not establish browser image upload acceptance. That is the next explicit lane.
+- The last strict golden remains round 13: 9 exact PASS / 22 FAIL, pending regeneration. UI success does not waive strict API differences or missing historical ETL. No production deployment or production mutation occurred.

@@ -98,6 +98,7 @@ const fixture = {
 const marks = {
   feeding: `e2e_feed_${suffix}`,
   feedingEdited: `e2e_feed_edit_${suffix}`,
+  offlineFeeding: `e2e_offline_feed_${suffix}`,
   diaper: `e2e_diaper_${suffix}`,
   sleep: `e2e_sleep_${suffix}`,
   food: `test_food_${suffix.slice(-8)}`,
@@ -106,12 +107,12 @@ const marks = {
   medical: `e2e_medical_${suffix}`,
 };
 const today = new Intl.DateTimeFormat("en-CA", {
-  timeZone: "America/Los_Angeles",
+  timeZone: "Asia/Shanghai",
   year: "numeric",
   month: "2-digit",
   day: "2-digit",
 }).format(new Date());
-const report = { baseURL: parsed.origin, runId: runManifest.runId, buildProvenance, account: account.username, startedAt: new Date().toISOString(), steps: [], console: [], network: [], foodDiagnostic: {}, medicalDiagnostic: {} };
+const report = { baseURL: parsed.origin, runId: runManifest.runId, buildProvenance, account: account.username, startedAt: new Date().toISOString(), steps: [], console: [], network: [], foodDiagnostic: {}, medicalDiagnostic: {}, sleepDiagnostic: {} };
 
 const chromeExecutable = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE
   || "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
@@ -124,13 +125,73 @@ const browser = await chromium.launch({
 });
 const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, baseURL: parsed.origin });
 const page = await context.newPage();
+let expectedNetworkPhase = null;
+const offlineReadPaths = new Set([
+  "/api/records/daily-summary",
+  "/api/ai/daily-summary",
+  "/api/records/timeline",
+  "/api/records/feeding",
+  "/api/records/sleep",
+  "/api/records/diaper",
+  "/api/food/logs",
+  "/api/growth",
+  "/api/medical/reports",
+  "/api/app-config",
+  "/api/agent/voice/logs",
+  "/api/auth/me",
+  "/api/weather",
+]);
+const offlineConsolePrefixes = new Map([
+  ["Failed to fetch daily summary:", "/api/records/daily-summary"],
+  ["Failed to fetch AI daily summary:", "/api/ai/daily-summary"],
+  ["Failed to fetch timeline:", "/api/records/timeline"],
+  ["Failed to fetch feeding records:", "/api/records/feeding"],
+  ["Failed to fetch sleep records:", "/api/records/sleep"],
+  ["Failed to fetch diaper records:", "/api/records/diaper"],
+  ["Failed to fetch food log records:", "/api/food/logs"],
+  ["Failed to fetch growth measurements:", "/api/growth"],
+  ["Failed to fetch medical reports:", "/api/medical/reports"],
+  ["Failed to fetch weather:", "/api/weather"],
+]);
+const unmatchedOfflineResourceFailures = [];
 page.on("console", (msg) => {
-  if (["error", "warning"].includes(msg.type())) report.console.push({ type: msg.type(), text: msg.text(), url: page.url() });
+  if (!["error", "warning"].includes(msg.type())) return;
+  const item = { type: msg.type(), text: msg.text(), url: page.url(), locationUrl: msg.location().url || null };
+  if (expectedNetworkPhase === "offline-window" && msg.type() === "error") {
+    const relatedPath = Array.from(offlineConsolePrefixes).find(([prefix]) => msg.text().startsWith(prefix))?.[1];
+    if (relatedPath) {
+      Object.assign(item, { expectedCandidate: "offline-read-503", relatedPath });
+    } else if (msg.text() === "Failed to load resource: the server responded with a status of 503 ()") {
+      const relatedUrl = unmatchedOfflineResourceFailures.shift();
+      if (relatedUrl) Object.assign(item, { expectedCandidate: "offline-read-503", relatedUrl });
+    } else if (msg.text() === "Failed to load resource: net::ERR_INTERNET_DISCONNECTED") {
+      Object.assign(item, { expectedCandidate: "offline-submit" });
+    }
+  }
+  report.console.push(item);
 });
 page.on("pageerror", (error) => report.console.push({ type: "pageerror", text: error.message, url: page.url() }));
-page.on("requestfailed", (request) => report.network.push({ method: request.method(), url: request.url(), error: request.failure()?.errorText }));
+page.on("requestfailed", (request) => {
+  const requestPath = new URL(request.url()).pathname;
+  const expected = expectedNetworkPhase === "offline-window"
+    && request.method() === "POST"
+    && requestPath === "/api/records/feeding"
+    ? "offline-submit"
+    : undefined;
+  report.network.push({ method: request.method(), url: request.url(), error: request.failure()?.errorText, ...(expected ? { expected } : {}) });
+});
 page.on("response", (response) => {
-  if (response.status() >= 400) report.network.push({ method: response.request().method(), url: response.url(), status: response.status() });
+  if (response.status() < 400) return;
+  const method = response.request().method();
+  const responsePath = new URL(response.url()).pathname;
+  const expected = expectedNetworkPhase === "offline-window"
+    && method === "GET"
+    && response.status() === 503
+    && (offlineReadPaths.has(responsePath) || new URL(response.url()).searchParams.has("_rsc"))
+    ? "offline-read-503"
+    : undefined;
+  if (expected) unmatchedOfflineResourceFailures.push(response.url());
+  report.network.push({ method, url: response.url(), status: response.status(), ...(expected ? { expected } : {}) });
 });
 page.on("dialog", async (dialog) => dialog.accept());
 
@@ -266,6 +327,53 @@ try {
     await shot("02-feeding-edited-persisted");
   });
 
+  await step("offline-feeding-outbox-sync-delete", async () => {
+    await goto("/records/feeding", "记录喂养");
+    await page.getByPlaceholder("如：吃得很香 / 拍嗝顺畅 / 换了新奶嘴").fill(marks.offlineFeeding);
+    try {
+      expectedNetworkPhase = "offline-window";
+      await context.setOffline(true);
+      await page.getByRole("button", { name: "保存喂养记录" }).click();
+      await visibleText("当前离线，记录已保存，联网后自动同步", 10_000);
+      // An offline save is deliberately surfaced as a retained draft error, so
+      // the form stays put. Open the cached main shell through normal browser
+      // navigation to inspect its global OfflineBanner.
+      await page.getByRole("button", { name: "返回" }).click();
+      await page.waitForURL((url) => url.pathname === "/", { timeout: 20_000 });
+      const offlineStatus = page.getByRole("status").filter({ hasText: /当前离线|1\s*条记录待同步/ }).first();
+      await offlineStatus.waitFor({ state: "visible", timeout: 10_000 });
+      report.offlineDiagnostic = { bannerText: (await offlineStatus.innerText()).trim() };
+      await shot("02-offline-feeding-pending-sync");
+
+      const replay = page.waitForResponse((response) =>
+        response.request().method() === "POST"
+          && new URL(response.url()).pathname === "/api/records/feeding"
+          && response.status() === 201,
+      { timeout: 75_000 });
+      await context.setOffline(false);
+      expectedNetworkPhase = null;
+      await replay;
+    } finally {
+      expectedNetworkPhase = null;
+      await context.setOffline(false).catch(() => {});
+    }
+
+    await goto("/", marks.offlineFeeding);
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await visibleText(marks.offlineFeeding);
+    const synced = page.getByText(marks.offlineFeeding, { exact: false });
+    const syncedCount = await synced.count();
+    if (syncedCount !== 1) throw new Error(`offline feeding replay produced ${syncedCount} visible records; expected exactly 1`);
+    await shot("02-offline-feeding-synced-once");
+    await clickRecord(marks.offlineFeeding);
+    await page.getByRole("button", { name: "删除这条记录" }).click();
+    await synced.first().waitFor({ state: "detached", timeout: 15_000 });
+    await page.reload({ waitUntil: "domcontentloaded" });
+    if (await page.getByText(marks.offlineFeeding, { exact: false }).count()) {
+      throw new Error("deleted offline feeding returned after refresh");
+    }
+  });
+
   await step("diaper-create-refresh-delete", async () => {
     await goto("/records/diaper", "尿布记录");
     await page.getByRole("button", { name: /便便/ }).first().click();
@@ -296,8 +404,28 @@ try {
     }
     await page.locator('input[type="date"]').fill(today);
     await page.getByPlaceholder("如：哄睡顺畅 / 易惊醒 / 换了睡袋").fill(marks.sleep);
+    const sleepPost = page.waitForResponse((response) => response.request().method() === "POST"
+      && new URL(response.url()).pathname === "/api/records/sleep", { timeout: 20_000 });
+    const sleepTimeline = page.waitForResponse((response) => response.request().method() === "GET"
+      && new URL(response.url()).pathname === "/api/records/timeline", { timeout: 20_000 }).catch(() => null);
     await page.getByRole("button", { name: "保存睡眠记录" }).click();
+    const postedSleep = await sleepPost;
+    report.sleepDiagnostic.postStatus = postedSleep.status();
+    report.sleepDiagnostic.postPayload = postedSleep.request().postDataJSON();
     await page.waitForURL((url) => url.pathname === "/", { timeout: 20_000 });
+    const timelineResponse = await sleepTimeline;
+    if (timelineResponse) {
+      report.sleepDiagnostic.timelineUrl = timelineResponse.url();
+      report.sleepDiagnostic.timelineStatus = timelineResponse.status();
+      const timelineBody = await timelineResponse.json().catch(() => null);
+      const rows = Array.isArray(timelineBody) ? timelineBody : [];
+      report.sleepDiagnostic.timelineSleepRows = rows.filter((row) => row?.type === "sleep").map((row) => ({
+        id: row.id,
+        time: row.time,
+        detail: row.detail,
+        notes: row.rawRecord?.notes,
+      }));
+    }
     await visibleText(marks.sleep);
     await reloadAndSee(marks.sleep);
     await clickRecord(marks.sleep);
@@ -604,8 +732,34 @@ try {
   });
 
   await step("network-and-console-health", async () => {
-    const failedResponses = report.network.filter((item) => Number(item.status) >= 400);
-    const consoleErrors = report.console.filter((item) => item.type === "error" || item.type === "pageerror");
+    const failedResponses = report.network.filter((item) =>
+      (Number(item.status) >= 400 || item.error)
+      && item.expected !== "offline-submit"
+      && item.expected !== "offline-read-503");
+    const consoleErrors = report.console.filter((item) => {
+      if (item.type !== "error" && item.type !== "pageerror") return false;
+      if (item.expectedCandidate === "offline-read-503") {
+        const evidenced = report.network.some((networkItem) => networkItem.expected === "offline-read-503"
+          && (item.relatedUrl ? networkItem.url === item.relatedUrl : new URL(networkItem.url).pathname === item.relatedPath));
+        if (evidenced) {
+          item.expected = "offline-read-503";
+          return false;
+        }
+      }
+      if (item.expectedCandidate === "offline-submit") {
+        const locationPath = item.locationUrl ? new URL(item.locationUrl).pathname : null;
+        const evidenced = locationPath === "/api/records/feeding" && report.network.some((networkItem) =>
+          networkItem.expected === "offline-submit"
+          && networkItem.method === "POST"
+          && new URL(networkItem.url).pathname === locationPath
+          && networkItem.error?.includes("ERR_INTERNET_DISCONNECTED"));
+        if (evidenced) {
+          item.expected = "offline-submit";
+          return false;
+        }
+      }
+      return true;
+    });
     if (failedResponses.length || consoleErrors.length) {
       throw new Error(`${failedResponses.length} HTTP failures and ${consoleErrors.length} console/page errors were observed; see report details`);
     }
