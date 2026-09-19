@@ -175,10 +175,6 @@ function readPrivateJson(filePath, label) {
   return parsed;
 }
 
-function sha256File(filePath) {
-  return createHash("sha256").update(readFileSync(filePath)).digest("hex");
-}
-
 function parseOrigin(value, label) {
   if (typeof value !== "string" || !value) fail(`${label}_INVALID`);
   let parsed;
@@ -486,9 +482,15 @@ async function run(args) {
   if (args.mode !== "collect" && args.mode !== "compare") fail("MODE_REQUIRED");
   if (typeof args.manifest !== "string" || typeof args.output !== "string") fail("MANIFEST_AND_OUTPUT_REQUIRED");
   const manifestPath = assertPrivateFile(args.manifest, "MANIFEST");
-  const manifestTextHash = sha256File(manifestPath);
   const manifest = readPrivateJson(manifestPath, "MANIFEST");
   const manifestInfo = validateManifest(manifest);
+  // Bind the fixture and requested contract, not ephemeral ports or login cookies.
+  // Every new connection still passes validateManifest's local-only checks.
+  const manifestTextHash = createHash("sha256").update(JSON.stringify({
+    schemaVersion: manifest.schemaVersion, sourceGitSha: manifest.sourceGitSha,
+    fixtureSha: manifest.fixtureSha, tenant: manifest.tenant,
+    context: manifestInfo.context, endpoints: manifestInfo.endpoints,
+  })).digest("hex");
   manifestInfo.sourceGitSha = manifest.sourceGitSha;
   manifestInfo.fixtureSha = manifest.fixtureSha;
   if (resolve(args.output) === resolve(manifestPath)) fail("OUTPUT_CANNOT_REPLACE_MANIFEST");

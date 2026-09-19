@@ -266,3 +266,26 @@ test("default endpoint catalog covers the requested parity domains and dynamic b
   assert.ok(module.DEFAULT_ENDPOINTS.some((endpoint: { query: Record<string, unknown> }) => endpoint.query.date === "{{date}}"));
   assert.ok(module.DEFAULT_ENDPOINTS.every((endpoint: { path: string }) => endpoint.path.startsWith("/api/")));
 });
+
+test("a frozen golden survives fresh isolated ports and cookies but rejects changed fixture identity", async () => {
+  const legacy = await startFixture("same");
+  const newer = await startFixture("same");
+  const files = tempFiles();
+  try {
+    writeManifest(files.manifest, manifest(legacy.origin, newer.origin));
+    assert.equal((await run(collectArgs(files))).status, 0);
+    const freshLegacy = await startFixture("same");
+    const freshNew = await startFixture("same");
+    const next = manifest(freshLegacy.origin, freshNew.origin);
+    next.headers.legacy.cookie = "test_fresh_legacy_cookie";
+    next.headers.new.cookie = "test_fresh_new_cookie";
+    writeManifest(files.manifest, next);
+    const result = await run(compareArgs(files));
+    assert.equal(result.status, 0, result.stderr);
+    next.fixtureSha = "e".repeat(64);
+    writeManifest(files.manifest, next);
+    const changed = await run(compareArgs(files));
+    assert.notEqual(changed.status, 0);
+    assert.match(changed.stderr, /GOLDEN_FIXTURE_SHA_MISMATCH/);
+  } finally { rmSync(files.directory, { recursive: true, force: true }); }
+});
