@@ -65,7 +65,9 @@ export const createGrowthSlice = (set: any, get: any): GrowthSlice => ({
 
   fetchGrowthMeasurements: async (force?: boolean) => {
     if (!get().user && !get().authLoading) return;
+    if (!get().baby?.id) await get().fetchBaby();
     const babyId = get().baby?.id;
+    if (!babyId) return;
     const key = `growthMeasurements:${babyId || ''}`;
     if (!force && get().growthMeasurements.length > 0 && isFresh(key)) return;
     if (force) invalidateCache(key);
@@ -85,7 +87,9 @@ export const createGrowthSlice = (set: any, get: any): GrowthSlice => ({
 
   fetchMedicalReports: async (category?: string, force?: boolean) => {
     if (!get().user && !get().authLoading) return;
+    if (!get().baby?.id) await get().fetchBaby();
     const babyId = get().baby?.id;
+    if (!babyId) return;
     const key = `medicalReports:${babyId || ''}:${category || ''}`;
     if (!force && get().medicalReports.length > 0 && isFresh(key)) return;
     if (force) invalidateCache(key);
@@ -128,7 +132,9 @@ export const createGrowthSlice = (set: any, get: any): GrowthSlice => ({
   },
 
   fetchFoodPlans: async (date?: string, force?: boolean) => {
+    if (!get().baby?.id) await get().fetchBaby();
     const babyId = get().baby?.id;
+    if (!babyId) return;
     const key = `foodPlans:${babyId || ''}:${date || ''}`;
     if (!force && isFresh(key)) return;
     if (force) invalidateCache(key);

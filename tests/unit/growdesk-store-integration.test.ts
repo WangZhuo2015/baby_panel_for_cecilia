@@ -45,3 +45,50 @@ test("baby read and update use the selected baby explicitly", async (t) => {
   assert.equal(JSON.parse(String(calls[1]!.init?.body)).babyId, "test_baby_selected");
   invalidateCache();
 });
+
+test("cold record loads await the authorized baby before issuing scoped requests", async (t) => {
+  invalidateCache();
+  const state = store(); state.baby = null;
+  const urls: string[] = [];
+  t.mock.method(globalThis, "fetch", async (url: string) => {
+    urls.push(url);
+    if (url.startsWith("/api/baby")) return Response.json({ id: "test_baby_loaded" });
+    assert.equal(new URL(url, "http://localhost").searchParams.get("babyId"), "test_baby_loaded");
+    return Response.json([]);
+  });
+  await Promise.all([state.fetchFeedingRecords(), state.fetchSleepRecords(), state.fetchDiaperRecords(), state.fetchFoodLogRecords(), state.fetchDailySummary(), state.fetchTimeline()]);
+  assert.equal(urls.filter(url => url.startsWith("/api/baby")).length, 1);
+  assert.equal(urls.length, 7);
+  invalidateCache();
+});
+
+test("a late record response cannot overwrite a newly selected baby", async (t) => {
+  invalidateCache();
+  const state = store();
+  let resolve!: (value: Response) => void;
+  t.mock.method(globalThis, "fetch", () => new Promise<Response>(done => { resolve = done; }));
+  const pending = state.fetchFeedingRecords();
+  state.baby = { id: "test_other_baby" };
+  state.feedingRecords = [{ id: "test_other_record" }];
+  resolve(Response.json([{ id: "test_old_record" }]));
+  await pending;
+  assert.deepEqual(state.feedingRecords, [{ id: "test_other_record" }]);
+  invalidateCache();
+});
+
+test("saving a new baby invalidates the cached empty identity", async (t) => {
+  invalidateCache();
+  const state = store(); state.baby = null;
+  let saved = false;
+  const baby = { id: "test_new_baby", nickname: "test_new_name", birthDate: "2026-01-01", familyId: "test_family" };
+  t.mock.method(globalThis, "fetch", async (_url: string, init?: RequestInit) => {
+    if (init?.method === "POST") { saved = true; return Response.json(baby); }
+    return Response.json({ user: state.user, family: { id: "test_family", name: "test_family" }, baby: saved ? baby : null });
+  });
+  await state.fetchUser();
+  await state.saveBaby({ nickname: baby.nickname, birthDate: baby.birthDate, gender: "female" });
+  await state.fetchUser();
+  assert.equal(state.babies[0]?.id, baby.id);
+  assert.equal(state.baby?.id, baby.id);
+  invalidateCache();
+});

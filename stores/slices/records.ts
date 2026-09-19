@@ -52,10 +52,13 @@ export const createRecordsSlice = (set: any, get: any): RecordsSlice => ({
     if (!get().user && !get().authLoading) return;
     if (!force && get().baby && isFresh('baby')) return;
     if (force) invalidateCache('baby');
+    const selectedId = get().baby?.id;
+    const userId = get().user?.id;
     return dedup('baby', async () => {
       try {
-        const data = await request<Baby>(`/api/baby${toQuery({ babyId: get().baby?.id })}`);
-        if (data) set({ baby: data });
+        const data = await request<Baby>(`/api/baby${toQuery({ babyId: selectedId })}`);
+        if (get().user?.id !== userId || get().baby?.id !== selectedId) return;
+        set({ baby: data ?? null });
         markFetched('baby');
       } catch (e) {
         if (!isAuthError(e)) console.error("Failed to fetch baby:", e);
@@ -73,6 +76,7 @@ export const createRecordsSlice = (set: any, get: any): RecordsSlice => ({
       });
       set({ baby: updated });
       invalidateCache('baby');
+      invalidateCache('user');
     } catch (e) {
       console.error("Failed to save baby:", e);
       throw e;
@@ -81,7 +85,9 @@ export const createRecordsSlice = (set: any, get: any): RecordsSlice => ({
 
   fetchFeedingRecords: async (date?: string, force?: boolean) => {
     if (!get().user && !get().authLoading) return;
+    if (!get().baby?.id) await get().fetchBaby();
     const babyId = get().baby?.id;
+    if (!babyId) return;
     const key = `feedingRecords:${babyId || ''}:${date || ''}`;
     if (!force && get().feedingRecords.length > 0 && isFresh(key)) return;
     if (force) invalidateCache(key);
@@ -89,6 +95,7 @@ export const createRecordsSlice = (set: any, get: any): RecordsSlice => ({
       try {
         const query = toQuery({ date, babyId });
         const data = await request<FeedingRecord[]>(`/api/records/feeding${query}`);
+        if (get().baby?.id !== babyId) return;
         set({ feedingRecords: data || [] });
         markFetched(key);
       } catch (e) {
@@ -99,7 +106,9 @@ export const createRecordsSlice = (set: any, get: any): RecordsSlice => ({
 
   fetchSleepRecords: async (force?: boolean) => {
     if (!get().user && !get().authLoading) return;
+    if (!get().baby?.id) await get().fetchBaby();
     const babyId = get().baby?.id;
+    if (!babyId) return;
     const key = `sleepRecords:${babyId || ''}`;
     if (!force && get().sleepRecords.length > 0 && isFresh(key)) return;
     if (force) invalidateCache(key);
@@ -107,6 +116,7 @@ export const createRecordsSlice = (set: any, get: any): RecordsSlice => ({
       try {
         const query = toQuery({ babyId });
         const data = await request<SleepRecord[]>(`/api/records/sleep${query}`);
+        if (get().baby?.id !== babyId) return;
         set({ sleepRecords: data || [] });
         markFetched(key);
       } catch (e) {
@@ -117,7 +127,9 @@ export const createRecordsSlice = (set: any, get: any): RecordsSlice => ({
 
   fetchDiaperRecords: async (force?: boolean) => {
     if (!get().user && !get().authLoading) return;
+    if (!get().baby?.id) await get().fetchBaby();
     const babyId = get().baby?.id;
+    if (!babyId) return;
     const key = `diaperRecords:${babyId || ''}`;
     if (!force && get().diaperRecords.length > 0 && isFresh(key)) return;
     if (force) invalidateCache(key);
@@ -125,6 +137,7 @@ export const createRecordsSlice = (set: any, get: any): RecordsSlice => ({
       try {
         const query = toQuery({ babyId });
         const data = await request<DiaperRecord[]>(`/api/records/diaper${query}`);
+        if (get().baby?.id !== babyId) return;
         set({ diaperRecords: data || [] });
         markFetched(key);
       } catch (e) {
@@ -135,7 +148,9 @@ export const createRecordsSlice = (set: any, get: any): RecordsSlice => ({
 
   fetchFoodLogRecords: async (date?: string, force?: boolean) => {
     if (!get().user && !get().authLoading) return;
+    if (!get().baby?.id) await get().fetchBaby();
     const babyId = get().baby?.id;
+    if (!babyId) return;
     const key = `foodLogRecords:${babyId || ''}:${date || ''}`;
     if (!force && get().foodLogRecords.length > 0 && isFresh(key)) return;
     if (force) invalidateCache(key);
@@ -143,6 +158,7 @@ export const createRecordsSlice = (set: any, get: any): RecordsSlice => ({
       try {
         const query = toQuery({ date, babyId });
         const data = await request<FoodLogRecord[]>(`/api/food/logs${query}`);
+        if (get().baby?.id !== babyId) return;
         set({ foodLogRecords: data || [] });
         markFetched(key);
       } catch (e) {
@@ -153,7 +169,9 @@ export const createRecordsSlice = (set: any, get: any): RecordsSlice => ({
 
   fetchDailySummary: async (date?: string, force?: boolean) => {
     if (!get().user && !get().authLoading) return;
+    if (!get().baby?.id) await get().fetchBaby();
     const babyId = get().baby?.id;
+    if (!babyId) return;
     const key = `dailySummary:${babyId || ''}:${date || ''}`;
     if (!force && get().dailySummary && isFresh(key)) return;
     if (force) invalidateCache(key);
@@ -161,6 +179,7 @@ export const createRecordsSlice = (set: any, get: any): RecordsSlice => ({
       try {
         const query = toQuery({ date, babyId });
         const data = await request<DailySummary>(`/api/records/daily-summary${query}`);
+        if (get().baby?.id !== babyId) return;
         set({ dailySummary: data });
         markFetched(key);
       } catch (e) {
@@ -171,7 +190,9 @@ export const createRecordsSlice = (set: any, get: any): RecordsSlice => ({
 
   fetchTimeline: async (date?: string, force?: boolean) => {
     if (!get().user && !get().authLoading) return;
+    if (!get().baby?.id) await get().fetchBaby();
     const babyId = get().baby?.id;
+    if (!babyId) return;
     const key = `timeline:${babyId || ''}:${date || ''}`;
     if (!force && get().timeline.length > 0 && isFresh(key)) return;
     if (force) invalidateCache(key);
@@ -179,6 +200,7 @@ export const createRecordsSlice = (set: any, get: any): RecordsSlice => ({
       try {
         const query = toQuery({ date, babyId });
         const data = await request<TimelineEntry[]>(`/api/records/timeline${query}`);
+        if (get().baby?.id !== babyId) return;
         set({ timeline: data || [] });
         markFetched(key);
       } catch (e) {
@@ -189,7 +211,9 @@ export const createRecordsSlice = (set: any, get: any): RecordsSlice => ({
 
   fetchAiDailySummary: async (date?: string, force?: boolean) => {
     if (!get().user && !get().authLoading) return null;
+    if (!get().baby?.id) await get().fetchBaby();
     const babyId = get().baby?.id;
+    if (!babyId) return null;
     const key = `aiDailySummary:${babyId || ''}:${date || ''}`;
     if (!force && get().aiDailySummary && get().aiDailySummary.date === (date || getLocalDateStr()) && isFresh(key)) {
       return get().aiDailySummary;
@@ -200,6 +224,7 @@ export const createRecordsSlice = (set: any, get: any): RecordsSlice => ({
       try {
         const query = toQuery({ date, babyId, force: force ? "1" : undefined });
         const res = await request<{ summary: AiDailySummaryResult }>(`/api/ai/daily-summary${query}`);
+        if (get().baby?.id !== babyId) return null;
         if (res?.summary) {
           set({ aiDailySummary: res.summary, aiDailySummaryLoading: false, aiDailySummaryError: null });
           markFetched(key);
@@ -229,8 +254,9 @@ export const createRecordsSlice = (set: any, get: any): RecordsSlice => ({
     invalidateCache("foodLogRecords");
     invalidateCache("growthMeasurements");
     invalidateCache("medicalReports");
+    await get().fetchBaby(true);
+    if (!get().baby?.id) return;
     await Promise.allSettled([
-      get().fetchBaby(true),
       get().fetchDailySummary(date, true),
       get().fetchAiDailySummary(date, true),
       get().fetchTimeline(date, true),
