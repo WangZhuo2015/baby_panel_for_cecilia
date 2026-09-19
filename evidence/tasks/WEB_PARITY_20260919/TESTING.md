@@ -50,3 +50,15 @@ Do not promote a candidate while strict comparison or required browser flows are
 - No production database or port 3088 was used. No production deployment has occurred in this task checkpoint.
 
 The checkpoint above identifies a tested artifact, not whatever future code happens to be in the branch. Subsequent fixes require a new build and matching acceptance evidence.
+
+
+## Checkpoint: round 13 (2026-09-19 UTC; acceptance still failing)
+
+- Candidate standalone: build `LpdfHzfCLpIlcZRQTSmIA`, source `da213b2f29057e286dd6bae65df10c9bf14c2c52` with recorded uncommitted changes; artifact SHA-256 `739e233104290029039f84821c1e83ecb4c83432c34867a4acdccff97c5ba939`.
+- Web unit suite: 590 passed, zero failed before the later scope and outbox fixes. This is not a test count for the current working tree.
+- Owned backend main suite: 200 passed; infrastructure, identity import, care (13), and AI contract (10) suites also passed. New real HTTP recipe-history and pending-vaccine assertions completed before the strict golden assertion failed the run.
+- Strict golden: 31 successful HTTP responses, 9 exact PASS / 22 FAIL. Recipe history now exactly matches; notifications have the same 16-item count and six remaining field differences. Added fields, reference IDs, and missing metadata remain differences, not waived failures.
+- Browser acceptance was extended from 15 to 16 flows to include an actual offline feeding save and reconnect. Round 13 did **not** pass: the saved draft lacked authenticated user ownership and appeared as an orphan, so automatic upload was not proven. A sleep timeline refresh assertion also failed despite the new sleep appearing in the sleep card. See `ui/20260919193210304-ui-parity-report.json`.
+- Subsequent outbox, scope, notification-detail, and actor fixes need a fresh artifact and fresh HTTP/UI/golden runs. Focused test results do not change the round 13 result.
+- A separate cloud importer audit found that `identity-v1` materializes identity only and archives the business rows without promoting them to runtime tables. Business import and field/count reconciliation remain production cutover blockers; the synthetic paired golden fixture does not prove that ETL.
+- No production deployment or production data mutation has occurred.
