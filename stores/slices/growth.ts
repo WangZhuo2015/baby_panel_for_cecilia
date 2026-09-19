@@ -1,4 +1,5 @@
 "use client";
+import { recordWriteContext } from "@/lib/growdesk/record-write-context";
 import { enqueueOutbox, isRetryableSubmitError } from "@/lib/outbox";
 import { isFresh, markFetched, invalidateCache, dedup, toQuery } from "./helpers";
 import { request, isAuthError } from "./helpers";
@@ -261,7 +262,9 @@ export const createGrowthSlice = (set: any, get: any): GrowthSlice => ({
 
   addGrowthMeasurement: async (measurement) => {
     const clientId = crypto.randomUUID();
-    const payload = { ...measurement, clientId };
+    const scope = get();
+    const babyId = scope.baby?.id;
+    const payload = { ...measurement, babyId, clientId };
     try {
       const newMeasurement = await request<GrowthMeasurement>("/api/growth", {
         method: "POST",
@@ -269,6 +272,7 @@ export const createGrowthSlice = (set: any, get: any): GrowthSlice => ({
         body: JSON.stringify(payload),
       });
       invalidateCache("growthMeasurements");
+      if (get().baby?.id !== babyId) return;
       set((state: any) => ({ growthMeasurements: [...state.growthMeasurements, newMeasurement].sort((a: any,b:any)=> new Date(b.date).getTime()-new Date(a.date).getTime()) }));
     } catch (e) {
       if (isRetryableSubmitError(e)) {
@@ -277,9 +281,9 @@ export const createGrowthSlice = (set: any, get: any): GrowthSlice => ({
           url: "/api/growth",
           body: payload as any,
           createdAt: Date.now(),
-          userId: get().user?.id,
-          familyId: get().family?.id,
-          babyId: get().baby?.id,
+          userId: scope.user?.id,
+          familyId: scope.family?.id,
+          babyId,
         });
         throw new Error("当前离线，记录已保存，联网后自动同步 ⏳");
       }
@@ -289,7 +293,8 @@ export const createGrowthSlice = (set: any, get: any): GrowthSlice => ({
 
   deleteGrowthMeasurement: async (id: string) => {
     try {
-      await request<{ success: boolean; id: string }>(`/api/growth?id=${id}`, { method: "DELETE" });
+      const context = recordWriteContext(get(), "growth", id);
+      await request<{ success: boolean; id: string }>(`/api/growth${toQuery({ id, babyId: context.babyId, baseVersion: context.baseVersion === undefined ? undefined : String(context.baseVersion) })}`, { method: "DELETE" });
       invalidateCache("growthMeasurements");
       set((state: any) => ({
         growthMeasurements: state.growthMeasurements.filter((m: any) => m.id !== id),
