@@ -37,6 +37,63 @@ test("growth compat supplies calendar month ages including month-end and year bo
   }
 });
 
+test("growth compat preserves current-date legacy history through the controlled whitelist", () => {
+  const imported: GrowDeskGrowthRecord = {
+    ...record,
+    measurementDate: "2026-09-18",
+    legacyDate: "2026-09-18",
+    legacyAgeInMonths: 99,
+    legacyAgeLabel: "旧档案月龄",
+    legacyPercentile: 75,
+    legacyClientId: "test_growth_legacy_client",
+    legacyRecordedById: "test_growth_recorder",
+    legacySource: "ui_manual",
+    legacySourceAgent: "test_growth_agent",
+  };
+
+  const result = fromGrowDeskGrowthRecord(imported, "2026-01-31");
+  assert.equal(result.ageInMonths, 99, "same legacy date must retain the archived age");
+  assert.equal(result.ageLabel, "旧档案月龄");
+  assert.equal(result.percentile, 75);
+  assert.equal(result.clientId, "test_growth_legacy_client");
+  assert.equal(result.recordedById, "test_growth_recorder");
+  assert.equal(result.source, "ui_manual");
+  assert.equal(result.sourceAgent, "test_growth_agent");
+  assert.equal("legacyMetadata" in result, false, "raw importer metadata must stay private");
+});
+
+test("growth compat recalculates changed dates and drops stale legacy percentile", () => {
+  const imported: GrowDeskGrowthRecord = {
+    ...record,
+    measurementDate: "2026-10-18",
+    legacyDate: "2026-09-18",
+    legacyAgeInMonths: 99,
+    legacyAgeLabel: "旧档案月龄",
+    legacyPercentile: 75,
+    legacyClientId: "test_growth_legacy_client",
+    legacyRecordedById: "test_growth_recorder",
+    legacySource: "ui_manual",
+    legacySourceAgent: "test_growth_agent",
+  };
+
+  const result = fromGrowDeskGrowthRecord(imported, "2026-01-31");
+  assert.equal(result.ageInMonths, 8, "changed measurement date must use the current birth-date calculation");
+  assert.notEqual(result.ageLabel, "旧档案月龄");
+  assert.equal("percentile" in result, false, "a percentile for the old date must not be displayed");
+  assert.equal(result.clientId, "test_growth_legacy_client");
+  assert.equal(result.source, "ui_manual");
+});
+
+test("growth compat keeps non-imported records on the existing projection", () => {
+  const result = fromGrowDeskGrowthRecord(record, "2026-01-31");
+  assert.equal(result.ageInMonths, 6);
+  assert.equal("percentile" in result, false);
+  assert.equal("clientId" in result, false);
+  assert.equal("recordedById" in result, false);
+  assert.equal("source" in result, false);
+  assert.equal("sourceAgent" in result, false);
+});
+
 test("chart route requires an explicit selected baby before any chart read", async t => {
   const calls = setup(t);
   const response = await chart(request("/api/growth/chart"));

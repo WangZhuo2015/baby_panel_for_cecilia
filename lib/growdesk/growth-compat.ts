@@ -20,7 +20,10 @@ export interface LegacyGrowthRecord {
   headCircumferenceCm?: number | null;
   notes?: string | null;
   imageUrl?: string | null;
-  source?: string;
+  percentile?: number | null;
+  clientId?: string | null;
+  recordedById?: string | null;
+  source?: string | null;
   sourceAgent?: string | null;
   version?: string | number;
   baseVersion?: string | number;
@@ -41,6 +44,15 @@ export interface GrowDeskGrowthRecord {
   version: string;
   createdAt: string;
   updatedAt: string;
+  /** Read-only projection of the imported GrowthMeasurement metadata. */
+  legacyDate?: string | null;
+  legacyAgeInMonths?: number | null;
+  legacyAgeLabel?: string | null;
+  legacyPercentile?: number | null;
+  legacyClientId?: string | null;
+  legacyRecordedById?: string | null;
+  legacySource?: string | null;
+  legacySourceAgent?: string | null;
 }
 
 export interface GrowDeskWhoPercentilePoint {
@@ -144,16 +156,46 @@ export function toGrowDeskGrowthUpdatePayload(body: Record<string, unknown>) {
   return payload;
 }
 
+function validLegacyDate(value: unknown): value is string {
+  return typeof value === "string" && isValidDateStr(value);
+}
+
+function validLegacyAge(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0;
+}
+
+function validLegacyPercentile(value: unknown): value is number {
+  return validLegacyAge(value) && value <= 100;
+}
+
 export function fromGrowDeskGrowthRecord(rec: GrowDeskGrowthRecord, birthDate?: string): LegacyGrowthRecord {
   const weight = rec.weightKg !== null ? Number(rec.weightKg) : null;
   const height = rec.heightCm !== null ? Number(rec.heightCm) : null;
   const head = rec.headCircumferenceCm !== null ? Number(rec.headCircumferenceCm) : null;
   const version = wireVersion(rec.version);
-  const age = birthDate && isValidDateStr(birthDate.slice(0, 10)) && isValidDateStr(rec.measurementDate)
-    ? calculateAge(birthDate, rec.measurementDate) : undefined;
+  const hasLegacyProjection = validLegacyDate(rec.legacyDate);
+  const legacyDateMatchesMeasurement = hasLegacyProjection && validLegacyDate(rec.measurementDate)
+    && rec.legacyDate === rec.measurementDate;
+  const historicalAge = legacyDateMatchesMeasurement && validLegacyAge(rec.legacyAgeInMonths) && typeof rec.legacyAgeLabel === "string"
+    ? { months: rec.legacyAgeInMonths, label: rec.legacyAgeLabel }
+    : undefined;
+  const age = historicalAge ?? (birthDate && isValidDateStr(birthDate.slice(0, 10)) && isValidDateStr(rec.measurementDate)
+    ? calculateAge(birthDate, rec.measurementDate) : undefined);
+  const historicalPercentile = legacyDateMatchesMeasurement
+    ? (validLegacyPercentile(rec.legacyPercentile) ? rec.legacyPercentile : null)
+    : undefined;
 
   return {
     ...(age ? { ageInMonths: age.months, ageLabel: age.label } : {}),
+    ...(legacyDateMatchesMeasurement ? { percentile: historicalPercentile } : {}),
+    ...(hasLegacyProjection
+      ? {
+          clientId: rec.legacyClientId ?? null,
+          recordedById: rec.legacyRecordedById ?? null,
+          source: rec.legacySource ?? null,
+          sourceAgent: rec.legacySourceAgent ?? null,
+        }
+      : {}),
     id: rec.id,
     babyId: rec.babyId,
     date: rec.measurementDate,
