@@ -192,6 +192,42 @@ test("Issue #2: Outbox Identity Isolation & Replay Protection", async (t) => {
     }
   });
 
+  await t.test("3b. Switching babies does not replay another baby's pending draft", async () => {
+    const babyAItem: OutboxEntry = {
+      clientId: "client-id-baby-a-1",
+      url: "/api/records/feeding",
+      body: { babyId: "baby_a", type: "formula" },
+      createdAt: Date.now(),
+      userId: "user_a",
+      familyId: "fam_a",
+      babyId: "baby_a",
+    };
+    await enqueueOutbox(babyAItem);
+
+    const origFetch = globalThis.fetch;
+    let attempted = false;
+    (globalThis as any).fetch = async () => {
+      attempted = true;
+      return { ok: true, status: 200, json: async () => ({}) };
+    };
+
+    try {
+      const res = await flushOutbox({
+        activeUserId: "user_a",
+        activeFamilyId: "fam_a",
+        activeBabyId: "baby_b",
+      });
+
+      assert.equal(res.flushed, 0);
+      assert.equal(res.skippedOtherScope, 1);
+      assert.equal(attempted, false);
+      assert.equal((await listPending()).some((item) => item.clientId === babyAItem.clientId), true);
+    } finally {
+      globalThis.fetch = origFetch;
+      await removePending(babyAItem.clientId);
+    }
+  });
+
   await t.test("4. 409 Conflict: draft is NEVER deleted, preserved with status: conflict and error details", async () => {
     const conflictItem: OutboxEntry = {
       clientId: "client-id-conflict-1",
