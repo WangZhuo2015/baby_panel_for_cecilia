@@ -3,6 +3,7 @@ import { resolveBffSession } from "./session";
 import { verifyBffCsrf } from "./csrf";
 import { creationFamilyId } from "./bridge-identity";
 import { BridgeError, requireData, bridgeErrorResponse, pathId } from "./bridge-protocol";
+import { fromGrowDeskBook, compareLegacyBookTitles } from "./book-compat";
 export async function bookBridge(request: Request, id?: string) {
   try {
     const csrf = verifyBffCsrf(request); if (csrf) return csrf;
@@ -16,11 +17,11 @@ export async function bookBridge(request: Request, id?: string) {
         familyId, ...(body.isFavorite !== undefined ? { isFavorite: body.isFavorite } : {}), ...(body.readCount !== undefined ? { readCount: body.readCount } : {}), ...(body.status !== undefined ? { status: body.status } : {}), ...(body.baseVersion !== undefined ? { baseVersion: String(body.baseVersion) } : {}),
       } }));
       const details = result.book?.details || result.book || {};
-      return Response.json(details);
+      return Response.json(fromGrowDeskBook(details));
     }
     const rawResult = requireData(await growdeskFetch<any>(`/api/v1/books?${new URLSearchParams({ familyId })}`, { accessToken: session.accessToken }));
     const list: Array<{ details?: Record<string, unknown> } & Record<string, unknown>> = Array.isArray(rawResult) ? rawResult : (rawResult?.data || []);
-    const books = list.map(book => book.details || book);
+    const books = list.map(fromGrowDeskBook).sort(compareLegacyBookTitles);
     return Response.json(books.filter(book => query.get("tab") === "favorites" ? book.isFavorite : query.get("tab") === "read" ? Number(book.readCount) > 0 : true));
   } catch (error) { return bridgeErrorResponse(error); }
 }
