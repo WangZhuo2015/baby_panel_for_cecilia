@@ -9,6 +9,7 @@ import type {
   SupplementRecord,
   NutrientsMap,
 } from "@/types/nutrition";
+import { BridgeError } from "./bridge-protocol";
 import { PRESET_FORMULA_PRODUCTS, PRESET_SUPPLEMENT_PRODUCTS } from "@/lib/nutrition/presets";
 import { getLocalDateStr, formatIsoToLocalTime, localTimeToUtcIso, isValidDateStr } from "@/lib/date";
 
@@ -20,6 +21,12 @@ export interface GrowDeskFormulaProduct {
   stage: string | null;
   scoopGrams: string | null;
   waterMlPerScoop: string | null;
+  reconstitutionRatio?: string | null;
+  servingSizeUnit?: string;
+  nutrientsJson?: unknown;
+  notes?: string | null;
+  isActive?: boolean;
+  isDefault?: boolean;
   isArchived: boolean;
   createdAt: string;
   updatedAt: string;
@@ -137,19 +144,26 @@ export function fromGrowDeskFormulaProduct(
 
   const scoopWeightG = raw.scoopGrams ? Number(raw.scoopGrams) : preset?.scoopWeightG ?? 4.3;
   const waterPerScoopMl = raw.waterMlPerScoop ? Number(raw.waterMlPerScoop) : preset?.waterPerScoopMl ?? 30.0;
-  const reconstitutionRatio =
-    waterPerScoopMl > 0 ? Number((scoopWeightG / waterPerScoopMl).toFixed(4)) : preset?.reconstitutionRatio ?? 0.135;
+  const reconstitutionRatio = raw.reconstitutionRatio != null ? Number(raw.reconstitutionRatio)
+    : waterPerScoopMl > 0 ? Number((scoopWeightG / waterPerScoopMl).toFixed(4)) : preset?.reconstitutionRatio ?? 0.135;
 
-  const nutrients: NutrientsMap =
-    options?.customNutrients && Object.keys(options.customNutrients).length > 0
-      ? options.customNutrients
-      : (preset?.nutrients as NutrientsMap) || {};
+  const nutrientSource = options?.customNutrients !== undefined ? options.customNutrients
+    : raw.nutrientsJson !== undefined ? raw.nutrientsJson : preset?.nutrients;
+  let nutrients: NutrientsMap = {};
+  if (nutrientSource !== null && nutrientSource !== undefined) {
+    let decoded: unknown = nutrientSource;
+    if (typeof decoded === "string") {
+      try { decoded = JSON.parse(decoded); } catch { throw new BridgeError(502, "INVALID_NUTRIENTS", "奶粉营养数据格式无效"); }
+    }
+    if (!decoded || typeof decoded !== "object" || Array.isArray(decoded)) throw new BridgeError(502, "INVALID_NUTRIENTS", "奶粉营养数据格式无效");
+    nutrients = decoded as NutrientsMap;
+  }
 
   const stage = raw.stage ? parseInt(raw.stage, 10) || null : preset?.stage ?? null;
 
   const isDefault = options?.defaultFormulaId
     ? options.defaultFormulaId === raw.id
-    : Boolean(options?.isFirstActive && !raw.isArchived);
+    : raw.isDefault !== undefined ? raw.isDefault : Boolean(options?.isFirstActive && !raw.isArchived);
 
   return {
     id: raw.id,
@@ -160,10 +174,10 @@ export function fromGrowDeskFormulaProduct(
     scoopWeightG: Number.isFinite(scoopWeightG) && scoopWeightG > 0 ? scoopWeightG : 4.3,
     waterPerScoopMl: Number.isFinite(waterPerScoopMl) && waterPerScoopMl > 0 ? waterPerScoopMl : 30.0,
     reconstitutionRatio: Number.isFinite(reconstitutionRatio) && reconstitutionRatio > 0 ? reconstitutionRatio : 0.135,
-    servingSizeUnit: preset?.servingSizeUnit || "per_100g",
+    servingSizeUnit: raw.servingSizeUnit || preset?.servingSizeUnit || "per_100g",
     nutrients,
-    notes: preset?.notes || null,
-    isActive: !raw.isArchived,
+    notes: raw.notes !== undefined ? raw.notes : preset?.notes || null,
+    isActive: !raw.isArchived && (raw.isActive ?? true),
     isDefault,
     createdAt: raw.createdAt,
     updatedAt: raw.updatedAt,

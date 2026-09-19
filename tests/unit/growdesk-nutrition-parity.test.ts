@@ -398,3 +398,16 @@ test("SH-04NUTRITION: Nutrition Parity & Compat Unit Tests", async (t) => {
     assert.equal(trendSummary.dailyTrends[0].formulaMl, 150);
   });
 });
+
+test("canonical persisted formula metadata takes precedence over guessed presets", () => {
+  const raw = { id: "test_formula_persisted", familyId: "test_family", brand: "test_brand", name: "test_formula", stage: "2", scoopGrams: "5", waterMlPerScoop: "30", reconstitutionRatio: "0.2", servingSizeUnit: "per_100ml", nutrientsJson: { energy: { amount: 73, unit: "kcal" } }, notes: "test_actual_notes", isActive: false, isDefault: true, isArchived: false, createdAt: "2026-09-19T00:00:00Z", updatedAt: "2026-09-19T00:00:00Z" };
+  const product = fromGrowDeskFormulaProduct(raw);
+  assert.deepEqual(product.nutrients, raw.nutrientsJson);
+  assert.equal(product.reconstitutionRatio, 0.2);
+  assert.equal(product.servingSizeUnit, "per_100ml");
+  assert.equal(product.notes, raw.notes);
+  assert.equal(product.isActive, false);
+  assert.equal(product.isDefault, true);
+  assert.deepEqual(fromGrowDeskFormulaProduct(raw, { customNutrients: {} }).nutrients, {}, "an explicitly empty nutrient override must stay empty");
+  assert.throws(() => fromGrowDeskFormulaProduct({ ...raw, nutrientsJson: "invalid" }), /格式无效/);
+});
