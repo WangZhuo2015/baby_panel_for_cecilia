@@ -25,6 +25,8 @@ function hashDirectory(directory, prefix) {
 }
 hashDirectory(resolve(standalone, ".next/server"), "server");
 hashDirectory(resolve(standalone, ".next/static"), "static");
+artifactHash.update("server.js\0").update(readFileSync(resolve(standalone, "server.js"))).update("\0");
+if (existsSync(resolve(standalone, "public"))) hashDirectory(resolve(standalone, "public"), "public");
 writeFileSync(resolve(standalone, "build-provenance.json"), JSON.stringify({
   schemaVersion: 1,
   sourceGitSha: execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim(),
