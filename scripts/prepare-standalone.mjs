@@ -12,6 +12,10 @@ cpSync(resolve(root, ".next/static"), resolve(standalone, ".next/static"), { rec
 if (existsSync(resolve(root, "public"))) {
   cpSync(resolve(root, "public"), resolve(standalone, "public"), { recursive: true });
 }
+mkdirSync(resolve(standalone, "data"), { recursive: true });
+for (const name of ["01_sources.json", "02_vaccines.json", "03_milestones.json", "04_foods.json", "05_books.json", "06_activities.json"]) {
+  cpSync(resolve(root, "data", name), resolve(standalone, "data", name));
+}
 
 // Identify the tested build even when source edits continue during acceptance.
 const artifactHash = createHash("sha256");
@@ -27,6 +31,7 @@ hashDirectory(resolve(standalone, ".next/server"), "server");
 hashDirectory(resolve(standalone, ".next/static"), "static");
 artifactHash.update("server.js\0").update(readFileSync(resolve(standalone, "server.js"))).update("\0");
 if (existsSync(resolve(standalone, "public"))) hashDirectory(resolve(standalone, "public"), "public");
+hashDirectory(resolve(standalone, "data"), "data");
 writeFileSync(resolve(standalone, "build-provenance.json"), JSON.stringify({
   schemaVersion: 1,
   sourceGitSha: execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim(),
