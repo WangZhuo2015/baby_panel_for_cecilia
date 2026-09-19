@@ -1,0 +1,10 @@
+{
+  "status": "PASS",
+  "independentFreshRuns": 2,
+  "endpointCount": 31,
+  "sourceGitSha": "0b3e87c202b7420cb2ad2e1ee5d24cab3ceea156",
+  "fixtureSha": "096d61d4d5f4ede9688c6315a0da3be07ddccab071c79a3d5a10f10c632d51d8",
+  "canonicalEndpointJSONSha256": "c105ea34fb2d42911a572bd9551885d9c30d171680b2223cf014ff91bb8c87b7",
+  "comparison": "Full endpoint objects including HTTP status, response JSON, IDs, strings and array order; no response fields excluded. Only runtime collection provenance is outside endpoint data.",
+  "note": "Candidate parity remains FAIL; this evidence verifies repeatability of legacy golden only."
+}
