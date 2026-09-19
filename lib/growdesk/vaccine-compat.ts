@@ -145,6 +145,15 @@ export function loadFullVaccineKnowledge(regionCode = "CN-JS") {
     let feeType = v.programType === "national_immunization_program" ? "free" : "paid";
     let appliedOverride: any = null;
 
+    // The legacy seed flattened these nested source fields into the Vaccine
+    // row. Keep both representations available: the nested values are the
+    // source of truth, while the aliases are still consumed by the old Web
+    // UI and its API response shape.
+    const catchUpSupported = v.catchUp?.supported ?? false;
+    const catchUpRules = Array.isArray(v.catchUp?.rules) ? v.catchUp.rules : [];
+    const sourceRefs = Array.isArray(v.sourceRefs) ? v.sourceRefs : [];
+    const product = v.product && typeof v.product === "object" ? v.product : null;
+
     const regionalOverrides = v.regionalProgramOverrides || v.regionalOverrides || [];
     if (Array.isArray(regionalOverrides)) {
       const override = regionalOverrides.find((o: any) => o.regionCode === regionCode);
@@ -170,6 +179,9 @@ export function loadFullVaccineKnowledge(regionCode = "CN-JS") {
     }
 
     return {
+      // Preserve every source-level field so adding a knowledge field does
+      // not silently make it disappear at the Web compatibility boundary.
+      ...v,
       id: v.id,
       vaccineId: v.id,
       name: v.name,
@@ -182,7 +194,9 @@ export function loadFullVaccineKnowledge(regionCode = "CN-JS") {
       chinaNational: v.chinaNational,
       regionalOverride: appliedOverride,
       diseases: Array.isArray(v.diseases) ? v.diseases : [],
-      catchUpRules: v.catchUpRules || null,
+      catchUp: v.catchUp ?? null,
+      catchUpSupported,
+      catchUpRules,
       substitutionRules: v.substitutionRules || null,
       contraindications: v.contraindications || null,
       precautions: v.precautions || null,
@@ -190,16 +204,37 @@ export function loadFullVaccineKnowledge(regionCode = "CN-JS") {
       regionalOverrides,
       regimenOptions: v.regimenOptions || null,
       notes: v.notes || null,
+      targetPopulation: v.targetPopulation ?? null,
+      policyEffectiveDate: v.policyEffectiveDate ?? null,
+      policyVersion: v.policyVersion ?? null,
+      routineHealthyChildOption: v.routineHealthyChildOption ?? true,
+      manualReviewRequired: v.manualReviewRequired ?? false,
+      marketStatus: v.marketStatus ?? null,
+      product,
+      productBrandName: product?.brandName ?? null,
+      productManufacturer: product?.manufacturer ?? null,
+      productApprovalNumber: product?.approvalNumber ?? null,
+      jiangsuNotes: v.jiangsuNotes ?? null,
+      suzhouNotes: v.suzhouNotes ?? null,
+      simultaneousVaccination: v.simultaneousVaccination ?? null,
+      sourceRefsJson: sourceRefs,
       doses: doses.map((d: any) => ({
+        // Keep any future source fields and expose the legacy seed's parsed
+        // sourceRefsJson alias alongside the original sourceRefs array.
+        ...d,
         doseNumber: d.doseNumber,
         doseLabel: d.doseLabel || `第${d.doseNumber}剂`,
-        recommendedAgeMonths: d.recommendedAgeMonths,
-        minimumAgeDays: d.minimumAgeDays,
-        recommendedAgeMaxMonths: d.recommendedAgeMaxMonths,
-        minimumIntervalDaysFromPrevious: d.minimumIntervalDaysFromPrevious,
-        route: d.route,
-        site: d.site,
-        notes: d.notes,
+        recommendedAgeMonths: d.recommendedAgeMonths ?? null,
+        minimumAgeDays: d.minimumAgeDays ?? null,
+        maximumAgeDays: d.maximumAgeDays ?? null,
+        recommendedAgeMaxMonths: d.recommendedAgeMaxMonths ?? null,
+        minimumIntervalDaysFromPrevious: d.minimumIntervalDaysFromPrevious ?? null,
+        maximumIntervalDaysFromPrevious: d.maximumIntervalDaysFromPrevious ?? null,
+        route: d.route ?? null,
+        site: d.site ?? null,
+        doseVolumeMl: d.doseVolumeMl ?? null,
+        notes: d.notes ?? null,
+        sourceRefsJson: Array.isArray(d.sourceRefs) ? d.sourceRefs : [],
       })),
     };
   });
