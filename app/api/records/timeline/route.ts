@@ -13,6 +13,7 @@ import {
 } from "@/lib/growdesk/timeline-compat";
 import { fetchTimelineDetailMaps } from "@/lib/growdesk/timeline-details";
 import { familyDayBounds, fetchLegacyRecordList } from "@/lib/growdesk/record-list";
+import { getLocalDateStr } from "@/lib/date";
 import { loadWebBaby } from "@/lib/growdesk/bridge-identity";
 import { extractSupplementStateFromFoodPlan } from "@/lib/growdesk/nutrition-compat";
 
@@ -51,6 +52,9 @@ export async function GET(request: Request) {
       const babyId = searchParams.get("babyId");
       if (!babyId) return NextResponse.json({ error: "请提供 babyId" }, { status: 400 });
       const token = bffSession.accessToken;
+      // The legacy public timeline defaults to today; an omitted date must not
+      // silently become all historical records. Explicit dates retain family bounds.
+      if (!searchParams.get("date")) searchParams.set("date", getLocalDateStr());
       const list = await fetchLegacyRecordList<GrowDeskTimelineEntry>(growdeskFetch, token, babyId, searchParams, "timeline");
       if (list.length === 0) {
         return NextResponse.json([], { headers: { "cache-control": "no-store" } });
