@@ -15,7 +15,7 @@
     "pretest": "DATABASE_URL=\"file:./dev_test.db\" prisma migrate deploy",
     "test": "npm run test:unit && npm run test:ai",
     "pretest:unit": "DATABASE_URL=\"file:./dev_test.db\" prisma migrate deploy",
-    "test:unit": "tsx --env-file=.env.test --test tests/unit/*.test.ts lib/date.test.ts lib/vaccine.test.ts lib/nutrition/engine.test.ts",
+    "test:unit": "tsx --env-file=.env.test --test --test-concurrency=1 tests/unit/*.test.ts lib/date.test.ts lib/vaccine.test.ts lib/nutrition/engine.test.ts",
     "test:api": "tsx --env-file=.env.test --test tests/api/*.test.ts",
     "test:api:server": "bash scripts/test-api.sh",
     "test:e2e": "bash scripts/test-e2e.sh",
