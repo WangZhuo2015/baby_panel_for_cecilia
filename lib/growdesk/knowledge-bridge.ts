@@ -122,12 +122,17 @@ export function projectLegacyKnowledgeItem(kind: KnowledgeKind, source: Knowledg
   };
 }
 
-/** Keep the legacy route's assessment-age ordering without rewriting source order within an age. */
+/** Legacy SQLite scans its (assessmentAgeMonths, category) index for this list. */
 export function sortLegacyMilestones(items: KnowledgeItem[]): KnowledgeItem[] {
   return [...items].sort((a, b) => {
     const ageA = typeof a.assessmentAgeMonths === "number" ? a.assessmentAgeMonths : Number.POSITIVE_INFINITY;
     const ageB = typeof b.assessmentAgeMonths === "number" ? b.assessmentAgeMonths : Number.POSITIVE_INFINITY;
-    return ageA - ageB;
+    const byAge = ageA - ageB;
+    if (byAge && Number.isFinite(byAge)) return byAge;
+    if (ageA !== ageB) return ageA < ageB ? -1 : 1;
+    const categoryA = String(a.category ?? "");
+    const categoryB = String(b.category ?? "");
+    return categoryA < categoryB ? -1 : categoryA > categoryB ? 1 : 0;
   });
 }
 

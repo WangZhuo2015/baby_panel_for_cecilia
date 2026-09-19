@@ -102,8 +102,8 @@ test("knowledge bridge restores milestone flattened fields and assessment orderi
 
   const ordered = sortLegacyMilestones([
     { id: "late", assessmentAgeMonths: 4 },
-    { id: "early-a", assessmentAgeMonths: 2 },
-    { id: "early-b", assessmentAgeMonths: 2 },
+    { id: "early-b", assessmentAgeMonths: 2, category: "social_emotional" },
+    { id: "early-a", assessmentAgeMonths: 2, category: "cognitive" },
   ]);
   assert.deepEqual(ordered.map((item) => item.id), ["early-a", "early-b", "late"]);
 });
