@@ -13,6 +13,7 @@ export interface LegacyDiaperRecord {
   poopColor: string | null;
   poopConsistency: string | null;
   notes: string | null;
+  clientId?: string | null;
   source?: string;
   sourceAgent?: string | null;
   recordedById?: string | null;
@@ -78,6 +79,7 @@ export function fromGrowDeskDiaperRecord(rec: GrowDeskDiaperRecord): LegacyDiape
     poopColor: rec.poopColor,
     poopConsistency: rec.poopConsistency,
     notes: rec.notes,
+    clientId: null,
     source: rec.source,
     sourceAgent: rec.sourceAgent,
     recordedById: rec.recordedByUserId ?? null,

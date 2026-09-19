@@ -184,10 +184,20 @@ export function fromGrowDeskGrowthRecord(rec: GrowDeskGrowthRecord, birthDate?: 
   const historicalPercentile = legacyDateMatchesMeasurement
     ? (validLegacyPercentile(rec.legacyPercentile) ? rec.legacyPercentile : null)
     : undefined;
+  const defaultLegacyMetadata = !hasLegacyProjection
+    ? {
+        percentile: null,
+        clientId: null,
+        recordedById: null,
+        source: "ui_manual" as const,
+        sourceAgent: null,
+      }
+    : {};
 
   return {
     ...(age ? { ageInMonths: age.months, ageLabel: age.label } : {}),
     ...(legacyDateMatchesMeasurement ? { percentile: historicalPercentile } : {}),
+    ...defaultLegacyMetadata,
     ...(hasLegacyProjection
       ? {
           clientId: rec.legacyClientId ?? null,

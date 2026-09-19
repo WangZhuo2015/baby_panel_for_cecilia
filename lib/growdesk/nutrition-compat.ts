@@ -313,6 +313,9 @@ export function fromGrowDeskSupplementRecordEnriched(
     dose,
     unitName: unitName || fallbackProduct.unitName,
     notes: cleanNotes,
+    // The canonical supplement record has no persisted client id. Keep the
+    // legacy null slot without inventing a client identity.
+    clientId: null,
     recordedById: raw.recordedByUserId ?? null,
     createdAt: raw.createdAt,
   };

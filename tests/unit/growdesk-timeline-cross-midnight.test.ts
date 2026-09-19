@@ -109,10 +109,10 @@ test("timeline date filtering retains an overlapping sleep projection from the p
   assert.deepEqual(result.map(item => item.id), [
     "test_timeline_overnight",
     "test_timeline_today",
-    "test_timeline_growth",
     "test_timeline_medical",
     "test_timeline_vaccine",
   ]);
+  assert.equal(result.some(item => item.entityType === "growth"), false, "legacy timeline must keep growth on the dedicated growth page");
   assert.ok(calls.some(path => path.includes(`/babies/${babyId}/records/sleep`)), "timeline filtering must inspect sleep intervals");
 });
 
@@ -164,6 +164,25 @@ test("unfiltered timeline history keeps sleep projections instead of applying a 
 
   assert.deepEqual(result.map(item => item.id), ["test_timeline_overnight"]);
   assert.equal(calls.some(path => path.includes("/records/sleep")), false);
+});
+
+test("legacy timeline filters growth entries without changing canonical timeline rows", async () => {
+  const fetchApi: BridgeFetch = (async <T>(path: string) => {
+    if (path.includes(`/babies/${babyId}/timeline`)) {
+      return page([timelineRows[3]!, timelineRows[4]!]) as BridgeResult<T>;
+    }
+    throw new Error(`Unexpected test upstream path: ${path}`);
+  }) as BridgeFetch;
+
+  const result = await fetchLegacyRecordList<typeof timelineRows[number]>(
+    fetchApi,
+    "test_token",
+    babyId,
+    new URLSearchParams(),
+    "timeline",
+  );
+
+  assert.deepEqual(result.map(item => item.id), ["test_timeline_medical"]);
 });
 
 test("timeline preserves legacy category ordering at equal times and bottle amount wording", () => {

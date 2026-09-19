@@ -84,14 +84,14 @@ test("growth compat recalculates changed dates and drops stale legacy percentile
   assert.equal(result.source, "ui_manual");
 });
 
-test("growth compat keeps non-imported records on the existing projection", () => {
+test("growth compat supplies explicit legacy defaults for non-imported records", () => {
   const result = fromGrowDeskGrowthRecord(record, "2026-01-31");
   assert.equal(result.ageInMonths, 6);
-  assert.equal("percentile" in result, false);
-  assert.equal("clientId" in result, false);
-  assert.equal("recordedById" in result, false);
-  assert.equal("source" in result, false);
-  assert.equal("sourceAgent" in result, false);
+  assert.equal(result.percentile, null);
+  assert.equal(result.clientId, null);
+  assert.equal(result.recordedById, null);
+  assert.equal(result.source, "ui_manual");
+  assert.equal(result.sourceAgent, null);
 });
 
 test("chart route requires an explicit selected baby before any chart read", async t => {

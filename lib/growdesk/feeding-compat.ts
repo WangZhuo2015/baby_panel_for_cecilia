@@ -5,7 +5,8 @@ export interface LegacyFeedingRecord {
   id: string; babyId: string; type: "breast" | "bottle_breast" | "formula" | "mixed";
   timestamp: string; amountMl: number | null; leftMinutes: number | null; rightMinutes: number | null;
   spitUp: boolean; formulaProductId?: string | null; notes: string | null;
-  source?: string; sourceAgent?: string | null; recordedById?: string | null; version: string; baseVersion: string;
+  clientId?: string | null; source?: string; sourceAgent?: string | null; recordedById?: string | null;
+  version: string; baseVersion: string;
   createdAt: string; updatedAt: string;
 }
 export interface GrowDeskFeedingRecord {
@@ -86,6 +87,7 @@ export function fromGrowDeskFeedingRecord(rec: GrowDeskFeedingRecord): LegacyFee
     timestamp: rec.occurredAt, amountMl: rec.amountMl === null ? null : Number(rec.amountMl),
     leftMinutes: rec.leftMinutes, rightMinutes: rec.rightMinutes, spitUp: rec.spitUp,
     formulaProductId: rec.formulaProductId, notes: rec.notes, source: rec.source, sourceAgent: rec.sourceAgent, recordedById: rec.recordedByUserId ?? null,
+    clientId: null,
     version, baseVersion: version, createdAt: rec.createdAt, updatedAt: rec.updatedAt,
   };
 }

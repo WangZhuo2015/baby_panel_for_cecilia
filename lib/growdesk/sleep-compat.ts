@@ -17,6 +17,7 @@ export interface LegacySleepRecord {
   nightWakingCount?: number;
   quality?: string | null;
   notes?: string | null;
+  clientId?: string | null;
   source?: string;
   sourceAgent?: string | null;
   recordedById?: string | null;
@@ -102,6 +103,7 @@ export function fromGrowDeskSleepRecord(rec: GrowDeskSleepRecord): LegacySleepRe
     endedAt: rec.endedAt,
     nightWakingCount: rec.nightWakingCount,
     notes: rec.notes,
+    clientId: null,
     source: rec.source,
     sourceAgent: rec.sourceAgent,
     recordedById: rec.recordedByUserId ?? null,

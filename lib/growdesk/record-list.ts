@@ -213,7 +213,10 @@ export async function fetchLegacyRecordList<T extends DatedRecord>(
         const occurredAt = parseInstant(item.occurredAt);
         include = !date || (occurredAt >= dayStart! && occurredAt < dayEnd!);
       }
-      if (include) out.push(item);
+      // Growth measurements have their own page in the old PWA and were not
+      // part of its timeline. Keep this filter at the legacy list boundary;
+      // the canonical timeline/iOS projection remains growth-capable.
+      if (include && !(kind === "timeline" && item.entityType === "growth")) out.push(item);
       if (explicit && out.length >= limit) return out.slice(0, limit);
       if (out.length > MAX_SCAN_ITEMS) throw new BridgeError(503, "HISTORY_SCAN_LIMIT", "记录量超出兼容接口上限，未返回截断数据");
     }
