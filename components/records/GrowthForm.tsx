@@ -41,7 +41,7 @@ export interface GrowthFormProps {
     weightKg?: number;
     heightCm?: number;
     headCircumferenceCm?: number;
-    imageUrl?: string;
+    imageUrl?: string | null;
   }) => Promise<void>;
   onCancel?: () => void;
   saving?: boolean;
@@ -86,6 +86,14 @@ export function GrowthForm({
 
   const handleOcrUpload = async (file: File | null | undefined) => {
     if (!file) return;
+    const startingScope = useBabyStore.getState();
+    const uploadBabyId = startingScope.baby?.id;
+    const uploadFamilyId = startingScope.family?.id;
+    const uploadUserId = startingScope.user?.id;
+    if (!uploadBabyId || !uploadFamilyId || !uploadUserId) {
+      showToast("请等待宝宝信息加载完成后再上传");
+      return;
+    }
     if (!file.type.startsWith("image/")) {
       showToast("请选择图片文件");
       return;
@@ -109,6 +117,7 @@ export function GrowthForm({
 
       const formData = new FormData();
       formData.append("image", compressed);
+      formData.append("babyId", uploadBabyId);
       const res = await fetch("/api/growth/ocr", {
         method: "POST",
         body: formData,
@@ -120,6 +129,12 @@ export function GrowthForm({
       if (!res.ok) {
         setOcrError(data.error || "识别未能提取到有效数据，请手动核对录入");
         return;
+      }
+      const currentScope = useBabyStore.getState();
+      if (currentScope.user?.id !== uploadUserId || currentScope.family?.id !== uploadFamilyId || currentScope.baby?.id !== uploadBabyId) {
+        setImagePreview(null);
+        setUploadedImageUrl(null);
+        throw new Error("宝宝或账号已切换，请为当前宝宝重新上传照片");
       }
       if (data.date) setDate(data.date);
       if (data.weightKg != null) setWeight(String(data.weightKg));
@@ -156,7 +171,7 @@ export function GrowthForm({
         weightKg: weight ? parseFloat(weight) : undefined,
         heightCm: height ? parseFloat(height) : undefined,
         headCircumferenceCm: head ? parseFloat(head) : undefined,
-        imageUrl: uploadedImageUrl || undefined,
+        imageUrl: uploadedImageUrl || null,
       });
     } finally {
       setInternalSaving(false);

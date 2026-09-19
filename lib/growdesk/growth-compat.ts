@@ -19,6 +19,7 @@ export interface LegacyGrowthRecord {
   headCircumference?: number | null;
   headCircumferenceCm?: number | null;
   notes?: string | null;
+  imageUrl?: string | null;
   source?: string;
   sourceAgent?: string | null;
   version?: string | number;
@@ -73,6 +74,24 @@ function toDecimalStr(val: unknown, precision: number): string | null {
   return isNaN(num) ? null : num.toFixed(precision);
 }
 
+function growthAttachmentId(body: Record<string, unknown>): string | null {
+  const parse = (value: unknown): string | null => {
+    if (value === undefined || value === null || value === "") return null;
+    if (typeof value !== "string") throw new BridgeError(400, "INVALID_ATTACHMENT", "请重新上传测量照片");
+    const id = value.replace(/^\/api\/attachments\//, "");
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+      throw new BridgeError(400, "INVALID_ATTACHMENT", "请重新上传测量照片");
+    }
+    return id;
+  };
+  const fromId = parse(body.attachmentId);
+  const fromUrl = parse(body.imageUrl);
+  if (body.attachmentId !== undefined && body.imageUrl !== undefined && fromId !== fromUrl) {
+    throw new BridgeError(400, "INVALID_ATTACHMENT", "测量照片引用不一致");
+  }
+  return body.attachmentId !== undefined ? fromId : fromUrl;
+}
+
 export function toGrowDeskGrowthCreatePayload(body: Record<string, unknown>) {
   const measurementDate = String(body.measurementDate || body.date || new Date().toISOString().slice(0, 10));
 
@@ -85,7 +104,7 @@ export function toGrowDeskGrowthCreatePayload(body: Record<string, unknown>) {
     weightKg: toDecimalStr(weightRaw, 2),
     heightCm: toDecimalStr(heightRaw, 1),
     headCircumferenceCm: toDecimalStr(headRaw, 1),
-    attachmentId: body.attachmentId ? String(body.attachmentId) : null,
+    attachmentId: growthAttachmentId(body),
     notes: body.notes ? String(body.notes).trim() : null,
   };
 }
@@ -114,8 +133,8 @@ export function toGrowDeskGrowthUpdatePayload(body: Record<string, unknown>) {
     payload.headCircumferenceCm = toDecimalStr(headRaw, 1);
   }
 
-  if (body.attachmentId !== undefined) {
-    payload.attachmentId = body.attachmentId ? String(body.attachmentId) : null;
+  if (body.attachmentId !== undefined || body.imageUrl !== undefined) {
+    payload.attachmentId = growthAttachmentId(body);
   }
 
   if (body.notes !== undefined) {
@@ -145,6 +164,7 @@ export function fromGrowDeskGrowthRecord(rec: GrowDeskGrowthRecord, birthDate?: 
     headCircumference: head,
     headCircumferenceCm: head,
     notes: rec.notes,
+    imageUrl: rec.attachmentId ? `/api/attachments/${encodeURIComponent(rec.attachmentId)}` : null,
     version,
     baseVersion: version,
     createdAt: rec.createdAt,

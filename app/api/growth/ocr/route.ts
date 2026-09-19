@@ -58,7 +58,7 @@ export async function POST(request: Request) {
           method: "POST",
           accessToken: session.accessToken,
           body: {
-            purpose: "medical_report",
+            purpose: "growth_photo",
             mimeType: mime,
             byteSize: bytes.length,
             sha256,
