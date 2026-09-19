@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Baby, Sparkles, Camera } from "lucide-react";
 import { AppHeader } from "@/components/ui/AppHeader";
@@ -21,6 +21,18 @@ export default function OnboardingPage() {
   const { showToast } = useToast();
   const baby = useBabyStore((s) => s.baby);
   const family = useBabyStore((s) => s.family);
+  const families = useBabyStore((s) => s.families);
+  const [selectedFamilyId, setSelectedFamilyId] = useState("");
+  const targetFamilyId = baby?.familyId || (families.length === 1
+    ? families[0].id
+    : families.find((item) => item.id === selectedFamilyId)?.id);
+  const selectedFamilyRef = useRef(targetFamilyId);
+  selectedFamilyRef.current = targetFamilyId;
+
+  const handleFamilyChange = (v: string) => {
+    setSelectedFamilyId(v);
+    setAvatarUrl(null);
+  };
   const fetchBaby = useBabyStore((s) => s.fetchBaby);
   const fetchUser = useBabyStore((s) => s.fetchUser);
   const saveBaby = useBabyStore((s) => s.saveBaby);
@@ -84,14 +96,24 @@ export default function OnboardingPage() {
 
   const handleCropComplete = async (croppedBlob: Blob) => {
     setIsCropModalOpen(false);
+    if (!baby && !targetFamilyId) {
+      showToast("请先选择宝宝所属家庭", "error");
+      return;
+    }
+    const uploadFamilyId = targetFamilyId;
     setAvatarUploading(true);
     try {
       const formData = new FormData();
       formData.append("file", croppedBlob, "avatar.jpg");
+      if (baby) formData.append("babyId", baby.id);
+      else if (targetFamilyId) formData.append("familyId", targetFamilyId);
       const res = await fetch("/api/baby/avatar", { method: "POST", body: formData });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         throw new Error(data.error || "头像上传失败");
+      }
+      if (typeof selectedFamilyRef !== "undefined" && selectedFamilyRef && selectedFamilyRef.current !== uploadFamilyId) {
+        return;
       }
       setAvatarUrl(data.avatarUrl);
       useBabyStore.getState().fetchBaby();
@@ -117,12 +139,17 @@ export default function OnboardingPage() {
     try {
       const gAge = gestationalAge ? parseInt(gestationalAge, 10) : undefined;
       const isNewBaby = !baby;
+      if (isNewBaby && !targetFamilyId) {
+        showToast("请选择宝宝所属家庭", "error");
+        return;
+      }
       await saveBaby({
         nickname: name,
         birthDate,
         gender,
         gestationalAge: Number.isFinite(gAge) ? gAge : undefined,
         avatarUrl: avatarUrl || undefined,
+        ...(targetFamilyId ? { familyId: targetFamilyId } : {}),
       });
 
       if (isNewBaby) {
@@ -210,6 +237,21 @@ export default function OnboardingPage() {
               </div>
             </div>
           </FormSection>
+
+          {/* Family selection (only when membership is ambiguous) */}
+          {!baby && families.length !== 1 && (
+            <FormSection title="宝宝所属家庭">
+              <SegmentControl
+                options={families.map((item) => ({ value: item.id, label: item.name }))}
+                value={targetFamilyId || ""}
+                onChange={handleFamilyChange}
+                scrollable
+              />
+              <p className="text-[10px] text-text-muted pl-1 mt-1">
+                您已加入多个家庭，请选择新宝宝记入哪一个
+              </p>
+            </FormSection>
+          )}
 
           {/* Nickname */}
           <FormSection title="宝宝昵称">

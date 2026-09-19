@@ -24,7 +24,7 @@ export interface AuthSlice {
   login: (data: { username: string; password: string }) => Promise<void>;
   register: (data: { username: string; password: string; displayName?: string; inviteCode?: string; relation?: string }) => Promise<void>;
   logout: () => Promise<void>;
-  joinFamily: (inviteCode: string, relation?: string) => Promise<void>;
+  joinFamily: (inviteCode: string, relation?: string) => Promise<{ message?: string }>;
   fetchFamilyMembers: () => Promise<void>;
   selectBaby: (babyId: string) => Promise<void>;
   createFamilyInvite: (expiresInDays?: number) => Promise<{ inviteCode: string; expiresAt: string }>;
@@ -327,8 +327,11 @@ export const createAuthSlice = (set: any, get: any): AuthSlice => ({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ inviteCode, relation }),
     });
-    applyIdentity(set, get, identityRequest(data), data.family?.id);
+    // Joining changes membership, not the authenticated account. The join
+    // response intentionally contains no user field.
+    applyIdentity(set, get, { ...identityRequest(data), user: get().user }, data.family?.id);
     await get().fetchFamilyMembers();
+    return { message: data.message };
   },
 
   fetchFamilyMembers: async () => {

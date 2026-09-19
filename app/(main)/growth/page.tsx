@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
   Plus,
@@ -46,6 +46,7 @@ type GrowthTab = "weight" | "height" | "head";
 export default function GrowthPage() {
   const router = useRouter();
   const baby = useBabyStore((s) => s.baby);
+  const selectedBabyId = useBabyStore((s) => s.selectedBabyId);
   const age = baby ? calculateAge(baby.birthDate) : { months: 0, days: 0, label: "0月0天" };
   const measurements = useBabyStore((s) => s.growthMeasurements);
   const fetchGrowthMeasurements = useBabyStore((s) => s.fetchGrowthMeasurements);
@@ -60,16 +61,34 @@ export default function GrowthPage() {
   });
   const [monthLabels, setMonthLabels] = useState<number[]>([]);
 
+  const [chartError, setChartError] = useState<string | null>(null);
+  const loadChart = useCallback(async () => {
+    if (!selectedBabyId) return;
+    try {
+      const query = new URLSearchParams({ babyId: selectedBabyId });
+      const res = await fetch(`/api/growth/chart?${query}`);
+      if (!res.ok) throw new Error("生长曲线加载失败，请重试");
+      const data = await res.json();
+      // A late response for a previous baby must not replace the active chart.
+      if (useBabyStore.getState().selectedBabyId !== selectedBabyId) return;
+      if (data.whoPercentiles) setWhoPercentiles(data.whoPercentiles);
+      if (data.monthLabels) setMonthLabels(data.monthLabels);
+      setChartError(null);
+    } catch {
+      if (useBabyStore.getState().selectedBabyId !== selectedBabyId) return;
+      setMonthLabels([]);
+      setChartError("生长曲线加载失败，请重试");
+    }
+  }, [selectedBabyId]);
+
   useEffect(() => {
+    setWhoPercentiles({ weight: {}, height: {}, headCircumference: {} });
+    setMonthLabels([]);
+    setChartError(null);
+    if (!selectedBabyId) return;
     fetchGrowthMeasurements();
-    fetch("/api/growth/chart")
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.whoPercentiles) setWhoPercentiles(data.whoPercentiles);
-        if (data.monthLabels) setMonthLabels(data.monthLabels);
-      })
-      .catch(() => {});
-  }, [fetchGrowthMeasurements]);
+    void loadChart();
+  }, [fetchGrowthMeasurements, selectedBabyId, loadChart]);
 
   const tabs = [
     { value: "weight", label: "⚖️ 体重" },
@@ -228,13 +247,7 @@ export default function GrowthPage() {
     try {
       await Promise.all([
         fetchGrowthMeasurements(true),
-        fetch("/api/growth/chart")
-          .then((res) => res.json())
-          .then((data) => {
-            if (data.whoPercentiles) setWhoPercentiles(data.whoPercentiles);
-            if (data.monthLabels) setMonthLabels(data.monthLabels);
-          })
-          .catch(() => {}),
+        loadChart(),
       ]);
     } finally {
       setTimeout(() => setRefreshing(false), 500);
@@ -249,13 +262,7 @@ export default function GrowthPage() {
     setDeletingId(id);
     try {
       await deleteGrowthMeasurement(id);
-      fetch("/api/growth/chart")
-        .then((res) => res.json())
-        .then((data) => {
-          if (data.whoPercentiles) setWhoPercentiles(data.whoPercentiles);
-          if (data.monthLabels) setMonthLabels(data.monthLabels);
-        })
-        .catch(() => {});
+      await loadChart();
     } catch {
       alert("删除失败，请重试");
     } finally {
@@ -273,6 +280,7 @@ export default function GrowthPage() {
 
   return (
     <div className="px-4 pt-safe-6 pb-36 workbench:pb-12 max-w-md md:max-w-xl workbench:max-w-none lg:max-w-7xl mx-auto space-y-5">
+      {chartError && <p role="alert" className="text-sm text-text-secondary">{chartError}</p>}
       {/* Baby Header / Desktop Title */}
       <div className="flex items-center justify-between">
         {/* 移动端宝宝头像与信息卡片，PC与平板横屏工作台由左侧边栏统一承载 */}

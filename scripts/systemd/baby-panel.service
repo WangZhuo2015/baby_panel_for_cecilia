@@ -1,0 +1,21 @@
+[Unit]
+Description=Baby Panel for Cecilia (Next.js Application)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/Github/baby_panel_for_cecilia
+Environment=NODE_ENV=production
+Environment=PORT=3088
+Environment=HOSTNAME=127.0.0.1
+EnvironmentFile=/home/ubuntu/Github/baby_panel_for_cecilia/.env
+ExecStartPre=/bin/bash -c 'mkdir -p .next/standalone/public && cp -r public/* .next/standalone/public/ 2>/dev/null; cp -r .next/static .next/standalone/.next/static 2>/dev/null || true'
+ExecStart=/usr/bin/node .next/standalone/server.js
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

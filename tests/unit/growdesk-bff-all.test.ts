@@ -182,7 +182,8 @@ test("SH-08: Food Compat DTO Layer", async (t) => {
     });
 
     assert.equal(p.recordDate, "2026-09-12");
-    assert.equal(p.occurredAt, "2026-09-12T12:30:00.000Z");
+    // F4 fix: legacy wall clock is interpreted in the family zone (Asia/Shanghai), not UTC.
+    assert.equal(p.occurredAt, "2026-09-12T04:30:00.000Z");
     assert.equal(p.mealType, "lunch");
     assert.deepEqual(p.foodItemIds, ["food-carrot", "food-apple"]);
     assert.equal(p.portionDescription, "half bowl");
@@ -208,7 +209,8 @@ test("SH-08: Food Compat DTO Layer", async (t) => {
 
     assert.equal(rec.id, "food-rec-1");
     assert.equal(rec.date, "2026-09-12");
-    assert.equal(rec.time, "18:45");
+    // F4 fix: HH:mm is rendered in the family zone (Asia/Shanghai): 18:45Z = 02:45 +08.
+    assert.equal(rec.time, "02:45");
     assert.equal(rec.mealType, "dinner");
     assert.deepEqual(rec.foods, ["pumpkin", "oatmeal"]);
     assert.deepEqual(rec.foodNames, ["pumpkin", "oatmeal"]);

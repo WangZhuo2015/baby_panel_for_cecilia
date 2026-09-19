@@ -1,0 +1,10 @@
+[Unit]
+Description=Baby Panel Daily Summary Scheduled Cron Task
+After=network.target baby-panel.service
+
+[Service]
+Type=oneshot
+User=ubuntu
+WorkingDirectory=/home/ubuntu/Github/baby_panel_for_cecilia
+TimeoutStartSec=300
+ExecStart=/usr/bin/curl -fsS --max-time 300 -X POST http://127.0.0.1:3088/api/cron/daily-summary

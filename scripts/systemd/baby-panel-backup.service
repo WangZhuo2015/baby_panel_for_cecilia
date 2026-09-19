@@ -1,0 +1,12 @@
+[Unit]
+Description=Baby Panel Database Daily Backup
+After=network.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+WorkingDirectory=/home/ubuntu/Github/baby_panel_for_cecilia
+TimeoutStartSec=180
+ExecStart=/bin/bash /home/ubuntu/Github/baby_panel_for_cecilia/scripts/backup-db.sh
+StandardOutput=journal
+StandardError=journal

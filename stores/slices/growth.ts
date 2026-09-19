@@ -73,8 +73,10 @@ export const createGrowthSlice = (set: any, get: any): GrowthSlice => ({
       try {
         const query = toQuery({ babyId });
         const data = await request<GrowthMeasurement[]>(`/api/growth${query}`);
-        set({ growthMeasurements: data || [] });
-        markFetched(key);
+        if (get().baby?.id === babyId) {
+          set({ growthMeasurements: data || [] });
+          markFetched(key);
+        }
       } catch (e) {
         if (!isAuthError(e)) console.error("Failed to fetch growth measurements:", e);
       }
@@ -126,12 +128,13 @@ export const createGrowthSlice = (set: any, get: any): GrowthSlice => ({
   },
 
   fetchFoodPlans: async (date?: string, force?: boolean) => {
-    const key = `foodPlans:${date || ''}`;
+    const babyId = get().baby?.id;
+    const key = `foodPlans:${babyId || ''}:${date || ''}`;
     if (!force && isFresh(key)) return;
     if (force) invalidateCache(key);
     return dedup(key, async () => {
       try {
-        const params = date ? `?date=${date}` : "";
+        const params = toQuery({ babyId, date });
         const data = await request<FoodPlan[]>(`/api/food/plans${params}`);
         set({ foodPlans: data || [] });
         markFetched(key);

@@ -16,6 +16,10 @@ export interface LegacyFoodRecord {
   portion?: string | null;
   reaction?: string | null;
   notes?: string | null;
+  acceptance?: number;
+  babyState?: string;
+  hasAbnormal?: boolean;
+  abnormalNotes?: string;
   source?: string;
   sourceAgent?: string | null;
   version?: string;
@@ -42,6 +46,45 @@ export interface GrowDeskFoodRecord {
 
 const MEAL_TYPES = ["breakfast", "lunch", "dinner", "snack"] as const;
 const REACTIONS = ["like", "normal", "dislike"] as const;
+// Legacy food forms use the family wall clock. Until per-family zones are wired,
+// assume modern Asia/Shanghai (UTC+08:00), never the Node host's timezone.
+const FOOD_FAMILY_TIMEZONE = "Asia/Shanghai";
+const FOOD_FAMILY_UTC_OFFSET = "+08:00";
+const OBSERVATION_KEYS = ["acceptance", "babyState", "hasAbnormal", "abnormalNotes"] as const;
+const OBSERVATION_PREFIX = "[growdesk-web-food:v1]";
+
+// The backend has no observation fields. A versioned JSON notes envelope keeps
+// them losslessly alongside human notes; untagged/malformed notes stay literal.
+export function decodeNotes(notes: string | null): { notes: string | null; observations: Record<string, unknown> } {
+  if (notes?.startsWith(OBSERVATION_PREFIX)) {
+    try {
+      const data = JSON.parse(notes.slice(OBSERVATION_PREFIX.length));
+      if (data && (data.notes === null || typeof data.notes === "string") && data.observations && typeof data.observations === "object" && !Array.isArray(data.observations)) {
+        return { notes: data.notes, observations: Object.fromEntries(OBSERVATION_KEYS.filter(key => data.observations[key] !== undefined).map(key => [key, data.observations[key]])) };
+      }
+    } catch { /* Preserve malformed or user-authored prefix text verbatim. */ }
+  }
+  return { notes, observations: {} };
+}
+
+function encodeNotes(body: Record<string, unknown>, existingNotes: string | null = null): string | null {
+  const existing = decodeNotes(existingNotes);
+  const notes = body.notes === undefined ? existing.notes : optionalText(body.notes, "notes");
+  const observations = { ...existing.observations };
+  for (const key of OBSERVATION_KEYS) if (body[key] !== undefined) observations[key] = body[key];
+  if (!Object.keys(observations).length) return notes;
+  // Reject oversize data, never truncate or silently lose legacy observations.
+  return optionalText(OBSERVATION_PREFIX + JSON.stringify({ notes, observations }), "notes");
+}
+
+function inferredMealType(body: Record<string, unknown>): GrowDeskFoodRecord["mealType"] {
+  if (body.mealType !== undefined) return mealType(body.mealType);
+  // Compatibility rule: <11 breakfast, <15 lunch, <20 dinner, otherwise snack.
+  // Missing wall-clock time defaults to snack (not dependent on request time).
+  if (body.time === undefined || body.time === null || body.time === "") return "snack";
+  const hour = Number(legacyWallClock(body.time).slice(0, 2));
+  return hour < 11 ? "breakfast" : hour < 15 ? "lunch" : hour < 20 ? "dinner" : "snack";
+}
 
 function recordDate(body: Record<string, unknown>): string {
   return calendarDate(body.recordDate ?? body.date);
@@ -61,7 +104,7 @@ function portion(value: unknown): string | null {
 }
 
 function wallClockOccurredAt(date: string, time: unknown): string {
-  return `${date}T${legacyWallClock(time)}:00.000Z`;
+  return isoTimestamp(`${date}T${legacyWallClock(time)}:00${FOOD_FAMILY_UTC_OFFSET}`);
 }
 
 function createOccurredAt(body: Record<string, unknown>, date: string): string | null {
@@ -86,16 +129,16 @@ export function toGrowDeskFoodCreatePayload(body: Record<string, unknown>) {
   const rawFoods = body.foodItemIds !== undefined ? body.foodItemIds : body.foods;
   return {
     recordDate: date,
-    mealType: mealType(body.mealType),
+    mealType: inferredMealType(body),
     occurredAt: createOccurredAt(body, date),
     foodItemIds: foodItemIds(rawFoods),
     portionDescription: portion(body.portionDescription !== undefined ? body.portionDescription : body.portion),
     reaction: reaction(body.reaction),
-    notes: optionalText(body.notes, "notes"),
+    notes: encodeNotes(body),
   };
 }
 
-export function toGrowDeskFoodUpdatePayload(body: Record<string, unknown>) {
+export function toGrowDeskFoodUpdatePayload(body: Record<string, unknown>, existing?: GrowDeskFoodRecord) {
   const payload: Record<string, unknown> = { baseVersion: legacyVersion(body.baseVersion ?? body.version) };
   let date: string | undefined;
   if (body.recordDate !== undefined || body.date !== undefined) {
@@ -108,7 +151,7 @@ export function toGrowDeskFoodUpdatePayload(body: Record<string, unknown>) {
   if (body.foodItemIds !== undefined || body.foods !== undefined) payload.foodItemIds = foodItemIds(body.foodItemIds !== undefined ? body.foodItemIds : body.foods);
   if (body.portionDescription !== undefined || body.portion !== undefined) payload.portionDescription = portion(body.portionDescription !== undefined ? body.portionDescription : body.portion);
   if (body.reaction !== undefined) payload.reaction = reaction(body.reaction);
-  if (body.notes !== undefined) payload.notes = optionalText(body.notes, "notes");
+  if (body.notes !== undefined || OBSERVATION_KEYS.some(key => body[key] !== undefined)) payload.notes = encodeNotes(body, existing?.notes);
   return payload;
 }
 
@@ -116,7 +159,8 @@ export function fromGrowDeskFoodRecord(rec: GrowDeskFoodRecord): LegacyFoodRecor
   const version = wireVersion(rec.version);
   if (typeof rec.recordDate !== "string") throw new BridgeError(502, "UPSTREAM_INVALID_RECORD", "GrowDesk 返回了不完整的辅食记录");
   calendarDate(rec.recordDate);
-  const time = rec.occurredAt ? new Date(rec.occurredAt).toISOString().slice(11, 16) : null;
+  const time = rec.occurredAt ? new Intl.DateTimeFormat("en-GB", { timeZone: FOOD_FAMILY_TIMEZONE, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date(rec.occurredAt)) : null;
+  const decoded = decodeNotes(rec.notes);
   return {
     id: rec.id,
     babyId: rec.babyId,
@@ -127,7 +171,8 @@ export function fromGrowDeskFoodRecord(rec: GrowDeskFoodRecord): LegacyFoodRecor
     foodNames: rec.foodItemIds,
     portion: rec.portionDescription,
     reaction: rec.reaction,
-    notes: rec.notes,
+    ...decoded.observations,
+    notes: decoded.notes,
     version,
     baseVersion: version,
     createdAt: rec.createdAt,

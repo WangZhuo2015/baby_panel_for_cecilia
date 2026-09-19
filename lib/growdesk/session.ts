@@ -130,7 +130,7 @@ export async function registerBffSession(input: {
     }>("/api/v1/auth/register", {
       method: "POST",
       body: {
-        username: input.username,
+        username: input.username.trim().toLowerCase(),
         password: input.password,
         displayName: input.displayName,
         deviceLabel: "GrowDesk Web",
@@ -148,7 +148,7 @@ export async function registerBffSession(input: {
       method: "POST",
       body: {
         sessionSecretHash: hashSessionSecret(sessionSecret),
-        username: input.username,
+        username: input.username.trim().toLowerCase(),
         password: input.password,
         deviceLabel: "GrowDesk Web",
       },
@@ -210,7 +210,7 @@ export async function loginBffSession(username: string, password: string, device
   let created = false;
   try {
     const data = requireData(await growdeskFetch<{ accessToken: string; user: BffSessionUser }>("/api/v1/auth/bff/session", {
-      method: "POST", body: { sessionSecretHash: hashSessionSecret(sessionSecret), username, password, deviceLabel },
+      method: "POST", body: { sessionSecretHash: hashSessionSecret(sessionSecret), username: username.trim().toLowerCase(), password, deviceLabel },
     }));
     created = true;
     const identity = await loadWebIdentity(growdeskFetch, data.accessToken);

@@ -137,7 +137,8 @@ const TOOL_PROTOCOL = `
 export function buildAgentSystemPrompt(opts: {
   contextType?: string;
   contextDetail?: unknown;
-  baby: Baby;
+  /** Accepts the legacy Prisma Baby and the GrowDesk bridge baby (ISO date strings, optional familyId). */
+  baby: Omit<Baby, "createdAt" | "updatedAt"> & { createdAt?: Baby["createdAt"] | string; updatedAt?: Baby["updatedAt"] | string };
 }): string {
   const role = CONTEXT_ROLE_MAP[opts.contextType || "general"] || CONTEXT_ROLE_MAP.general;
   const baby = opts.baby;
