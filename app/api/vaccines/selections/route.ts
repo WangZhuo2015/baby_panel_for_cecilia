@@ -7,7 +7,30 @@ import { resolveBffSession } from "@/lib/growdesk/session";
 import { verifyBffCsrf } from "@/lib/growdesk/csrf";
 import { growdeskFetch } from "@/lib/growdesk/client";
 import { loadWebBaby } from "@/lib/growdesk/bridge-identity";
+import { BridgeError, bridgeErrorResponse, requireData } from "@/lib/growdesk/bridge-protocol";
+import { foodPlanWriteBody, readGrowDeskFoodPlan, type GrowDeskFoodPlanState } from "@/lib/growdesk/food-plan-state";
 import { buildVaccineSelections } from "@/lib/growdesk/vaccine-compat";
+
+function readFoodPlan(response: Awaited<ReturnType<typeof growdeskFetch>>, babyId: string): GrowDeskFoodPlanState {
+  return readGrowDeskFoodPlan(response, babyId);
+}
+
+function throwPartialFoodPlanMutation(error: unknown, vaccineId: string): never {
+  if (error instanceof BridgeError) {
+    const details = error.details && typeof error.details === "object" && !Array.isArray(error.details)
+      ? { ...(error.details as Record<string, unknown>) }
+      : error.details === undefined ? {} : { upstreamDetails: error.details };
+    throw new BridgeError(error.status, error.code, error.message, {
+      ...details,
+      partialMutation: true,
+      vaccineId,
+    });
+  }
+  throw new BridgeError(500, "PARTIAL_MUTATION", "疫苗记录已保存，但饮食计划同步失败", {
+    partialMutation: true,
+    vaccineId,
+  });
+}
 
 export async function GET(request: Request) {
   try {
@@ -29,13 +52,18 @@ export async function GET(request: Request) {
       const recRes = await growdeskFetch<any[]>(`/api/v1/babies/${babyId}/vaccines/records`, {
         accessToken: bffSession.accessToken,
       });
-      const records = Array.isArray(recRes.data) ? recRes.data : (recRes.data as any)?.data || [];
+      const recordsData = requireData(recRes);
+      const records = Array.isArray(recordsData) ? recordsData : [];
 
-      const planRes = await growdeskFetch<any>(`/api/v1/babies/${babyId}/food-plan`, {
+      const foodPlan = readFoodPlan(await growdeskFetch<any>(`/api/v1/babies/${babyId}/food-plan`, {
         accessToken: bffSession.accessToken,
-      });
-      const planData = planRes.data?.data?.planData || planRes.data?.planData || {};
-      const savedSelections = planData.vaccineSelections || {};
+      }), babyId);
+      const planData = foodPlan.planData;
+      const savedSelections = planData.vaccineSelections &&
+        typeof planData.vaccineSelections === "object" &&
+        !Array.isArray(planData.vaccineSelections)
+        ? planData.vaccineSelections as Record<string, { selected?: boolean; completed?: boolean }>
+        : {};
 
       const selections = buildVaccineSelections(records, savedSelections);
       return NextResponse.json(selections);
@@ -58,6 +86,7 @@ export async function GET(request: Request) {
 
     return NextResponse.json(selections);
   } catch (error) {
+    if (error instanceof BridgeError) return bridgeErrorResponse(error);
     console.error("GET /api/vaccines/selections error:", error);
     return NextResponse.json(
       { error: "Failed to fetch vaccine selections" },
@@ -93,7 +122,7 @@ export async function PUT(request: Request) {
       const dose = typeof doseNumber === "number" ? doseNumber : 1;
 
       if (completed === true) {
-        await growdeskFetch(`/api/v1/babies/${babyId}/vaccines/records`, {
+        requireData(await growdeskFetch(`/api/v1/babies/${babyId}/vaccines/records`, {
           method: "POST",
           accessToken: bffSession.accessToken,
           body: {
@@ -101,52 +130,61 @@ export async function PUT(request: Request) {
             administeredDate: getLocalDateStr(),
             notes: `第${dose}剂`,
           },
-        });
+        }));
       } else if (completed === false) {
         const recRes = await growdeskFetch<any[]>(`/api/v1/babies/${babyId}/vaccines/records`, {
           accessToken: bffSession.accessToken,
         });
-        const records = Array.isArray(recRes.data) ? recRes.data : (recRes.data as any)?.data || [];
+        const recordsData = requireData(recRes);
+        const records = Array.isArray(recordsData) ? recordsData : [];
         const existing = records.find(
           (r: any) =>
             (r.vaccineCode === vaccineId || r.notes?.includes(vaccineId)) &&
             (r.notes?.includes(`第${dose}剂`) || (!r.notes && dose === 1))
         );
         if (existing?.id) {
-          await growdeskFetch(`/api/v1/babies/${babyId}/vaccines/records/${existing.id}`, {
+          requireData(await growdeskFetch(`/api/v1/babies/${babyId}/vaccines/records/${existing.id}`, {
             method: "DELETE",
             accessToken: bffSession.accessToken,
-          });
+          }));
         }
       }
 
-      const planRes = await growdeskFetch<any>(`/api/v1/babies/${babyId}/food-plan`, {
-        accessToken: bffSession.accessToken,
-      });
-      const currentPlanData = planRes.data?.data?.planData || planRes.data?.planData || {};
-      const currentSelections = currentPlanData.vaccineSelections || {};
-      const key = `${vaccineId.trim()}-${dose}`;
-      currentSelections[key] = {
-        selected: selected !== undefined ? selected : currentSelections[key]?.selected ?? true,
-        completed: completed !== undefined ? completed : currentSelections[key]?.completed ?? false,
-      };
+      let savedSelection: { selected: boolean; completed: boolean };
+      try {
+        const foodPlan = readFoodPlan(await growdeskFetch<any>(`/api/v1/babies/${babyId}/food-plan`, {
+          accessToken: bffSession.accessToken,
+        }), babyId);
+        const currentSelections = foodPlan.planData.vaccineSelections &&
+          typeof foodPlan.planData.vaccineSelections === "object" &&
+          !Array.isArray(foodPlan.planData.vaccineSelections)
+          ? { ...(foodPlan.planData.vaccineSelections as Record<string, { selected?: boolean; completed?: boolean }>) }
+          : {};
+        const key = `${vaccineId.trim()}-${dose}`;
+        currentSelections[key] = {
+          selected: selected !== undefined ? Boolean(selected) : currentSelections[key]?.selected ?? true,
+          completed: completed !== undefined ? Boolean(completed) : currentSelections[key]?.completed ?? false,
+        };
 
-      await growdeskFetch(`/api/v1/babies/${babyId}/food-plan`, {
-        method: "PUT",
-        accessToken: bffSession.accessToken,
-        body: {
-          planData: {
-            ...currentPlanData,
+        requireData(await growdeskFetch(`/api/v1/babies/${babyId}/food-plan`, {
+          method: "PUT",
+          accessToken: bffSession.accessToken,
+          body: foodPlanWriteBody(foodPlan, {
+            ...foodPlan.planData,
             vaccineSelections: currentSelections,
-          },
-        },
-      });
+          }),
+        }));
+        savedSelection = currentSelections[key]! as { selected: boolean; completed: boolean };
+      } catch (error) {
+        if (completed === true || completed === false) throwPartialFoodPlanMutation(error, vaccineId.trim());
+        throw error;
+      }
 
       return NextResponse.json({
         vaccineId: vaccineId.trim(),
         doseNumber: dose,
-        selected: currentSelections[key].selected,
-        completed: currentSelections[key].completed,
+        selected: savedSelection.selected,
+        completed: savedSelection.completed,
       });
     }
 
@@ -255,6 +293,7 @@ export async function PUT(request: Request) {
 
     return NextResponse.json(result);
   } catch (error) {
+    if (error instanceof BridgeError) return bridgeErrorResponse(error);
     console.error("PUT /api/vaccines/selections error:", error);
     return NextResponse.json(
       { error: "Failed to save vaccine selection" },

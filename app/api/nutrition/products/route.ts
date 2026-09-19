@@ -7,7 +7,10 @@ import { GROWDESK_CONFIG } from "@/lib/config";
 import { resolveBffSession } from "@/lib/growdesk/session";
 import { verifyBffCsrf } from "@/lib/growdesk/csrf";
 import { growdeskFetch } from "@/lib/growdesk/client";
-import { loadWebIdentity } from "@/lib/growdesk/bridge-identity";
+import { loadWebBaby, loadWebIdentity } from "@/lib/growdesk/bridge-identity";
+import { BridgeError, bridgeErrorResponse, requireData } from "@/lib/growdesk/bridge-protocol";
+import { foodPlanWriteBody, readGrowDeskFoodPlan, type GrowDeskFoodPlanState } from "@/lib/growdesk/food-plan-state";
+import { fetchCompleteList } from "@/lib/growdesk/paged-list";
 import {
   fromGrowDeskFormulaProduct,
   toGrowDeskFormulaCreatePayload,
@@ -18,6 +21,27 @@ import {
 } from "@/lib/growdesk/nutrition-compat";
 import crypto from "node:crypto";
 
+function throwPartialFoodPlanMutation(error: unknown, resourceId: string): never {
+  if (error instanceof BridgeError) {
+    const details = error.details && typeof error.details === "object" && !Array.isArray(error.details)
+      ? { ...(error.details as Record<string, unknown>) }
+      : error.details === undefined ? {} : { upstreamDetails: error.details };
+    throw new BridgeError(error.status, error.code, error.message, {
+      ...details,
+      partialMutation: true,
+      resourceId,
+    });
+  }
+  throw new BridgeError(500, "PARTIAL_MUTATION", "产品已保存，但饮食计划同步失败", {
+    partialMutation: true,
+    resourceId,
+  });
+}
+
+function readFoodPlan(response: Awaited<ReturnType<typeof growdeskFetch>>, babyId: string): GrowDeskFoodPlanState {
+  return readGrowDeskFoodPlan(response, babyId);
+}
+
 export async function GET(request: Request) {
   try {
     if (GROWDESK_CONFIG.enabled) {
@@ -27,8 +51,13 @@ export async function GET(request: Request) {
       }
 
       const identity = await loadWebIdentity(growdeskFetch, bffSession.accessToken);
-      const familyId = identity.family?.id;
-      const babyId = identity.baby?.id;
+      const { searchParams } = new URL(request.url);
+      const requestedBabyId = searchParams.get("babyId");
+      const selectedBaby = requestedBabyId
+        ? await loadWebBaby(growdeskFetch, bffSession.accessToken, requestedBabyId)
+        : identity.baby;
+      const familyId = selectedBaby?.familyId || identity.family?.id;
+      const babyId = selectedBaby?.id || null;
 
       if (!familyId) {
         return NextResponse.json({
@@ -41,7 +70,6 @@ export async function GET(request: Request) {
         });
       }
 
-      const { searchParams } = new URL(request.url);
       const type = searchParams.get("type"); // 'formula' | 'supplement'
       const includeInactive = searchParams.get("includeInactive") === "true";
 
@@ -51,49 +79,42 @@ export async function GET(request: Request) {
       // Fetch food plan for defaultFormula and supplementProducts
       let foodPlanData: Record<string, unknown> = {};
       if (babyId) {
-        const fpRes = await growdeskFetch<any>(`/api/v1/babies/${babyId}/food-plan`, {
+        const foodPlan = readFoodPlan(await growdeskFetch<any>(`/api/v1/babies/${babyId}/food-plan`, {
           method: "GET",
           accessToken: bffSession.accessToken,
-        });
-        if (fpRes.ok && fpRes.data) {
-          foodPlanData = fpRes.data.data?.planData || fpRes.data.planData || {};
-        }
+        }), babyId);
+        foodPlanData = foodPlan.planData;
       }
       const suppState = extractSupplementStateFromFoodPlan(foodPlanData);
 
       if (!type || type === "formula") {
-        const res = await growdeskFetch<any>(`/api/v1/families/${familyId}/nutrition/products?limit=50`, {
-          method: "GET",
-          accessToken: bffSession.accessToken,
+        const rawList = await fetchCompleteList<GrowDeskFormulaProduct>(
+          growdeskFetch,
+          bffSession.accessToken,
+          `/api/v1/families/${familyId}/nutrition/products`,
+        );
+
+        let firstActiveSeen = false;
+        formulas = rawList.map((raw) => {
+          const isFirst = !firstActiveSeen && !raw.isArchived;
+          if (isFirst) firstActiveSeen = true;
+
+          return fromGrowDeskFormulaProduct(raw, {
+            defaultFormulaId: suppState.defaultFormulaId,
+            customNutrients: suppState.customFormulaNutrients?.[raw.id],
+            isFirstActive: isFirst,
+          });
         });
 
-        if (res.ok && res.data) {
-          const rawList: GrowDeskFormulaProduct[] = Array.isArray(res.data)
-            ? res.data
-            : res.data.data || [];
-
-          let firstActiveSeen = false;
-          formulas = rawList.map((raw) => {
-            const isFirst = !firstActiveSeen && !raw.isArchived;
-            if (isFirst) firstActiveSeen = true;
-
-            return fromGrowDeskFormulaProduct(raw, {
-              defaultFormulaId: suppState.defaultFormulaId,
-              customNutrients: suppState.customFormulaNutrients?.[raw.id],
-              isFirstActive: isFirst,
-            });
-          });
-
-          if (!includeInactive) {
-            formulas = formulas.filter((f) => f.isActive);
-          }
-
-          formulas.sort((a, b) => {
-            if (a.isDefault && !b.isDefault) return -1;
-            if (!a.isDefault && b.isDefault) return 1;
-            return 0;
-          });
+        if (!includeInactive) {
+          formulas = formulas.filter((f) => f.isActive);
         }
+
+        formulas.sort((a, b) => {
+          if (a.isDefault && !b.isDefault) return -1;
+          if (!a.isDefault && b.isDefault) return 1;
+          return 0;
+        });
       }
 
       if (!type || type === "supplement") {
@@ -192,6 +213,7 @@ export async function GET(request: Request) {
       },
     });
   } catch (error: any) {
+    if (error instanceof BridgeError) return bridgeErrorResponse(error);
     console.error("GET /api/nutrition/products error:", error);
     return NextResponse.json({ error: "获取产品库失败" }, { status: 500 });
   }
@@ -244,31 +266,34 @@ export async function POST(request: Request) {
 
         // If isDefault or custom nutrients provided, update food-plan
         if (babyId) {
-          const fpRes = await growdeskFetch<any>(`/api/v1/babies/${babyId}/food-plan`, {
-            method: "GET",
-            accessToken: bffSession.accessToken,
-          });
-          const existingPlanData = (fpRes.ok && (fpRes.data.data?.planData || fpRes.data.planData)) || {};
-          const suppState = extractSupplementStateFromFoodPlan(existingPlanData);
-
-          const shouldBeDefault = Boolean(body.isDefault) || !suppState.defaultFormulaId;
-          const patch: Partial<typeof suppState> = {};
-          if (shouldBeDefault) {
-            patch.defaultFormulaId = createdRaw.id;
-          }
-          if (body.nutrients && typeof body.nutrients === "object") {
-            patch.customFormulaNutrients = {
-              ...suppState.customFormulaNutrients,
-              [createdRaw.id]: body.nutrients,
-            };
-          }
-          if (Object.keys(patch).length > 0) {
-            const merged = mergeSupplementStateIntoFoodPlan(existingPlanData, patch);
-            await growdeskFetch(`/api/v1/babies/${babyId}/food-plan`, {
-              method: "PUT",
+          try {
+            const foodPlan = readFoodPlan(await growdeskFetch<any>(`/api/v1/babies/${babyId}/food-plan`, {
+              method: "GET",
               accessToken: bffSession.accessToken,
-              body: { planData: merged },
-            });
+            }), babyId);
+            const suppState = extractSupplementStateFromFoodPlan(foodPlan.planData);
+
+            const shouldBeDefault = Boolean(body.isDefault) || !suppState.defaultFormulaId;
+            const patch: Partial<typeof suppState> = {};
+            if (shouldBeDefault) {
+              patch.defaultFormulaId = createdRaw.id;
+            }
+            if (body.nutrients && typeof body.nutrients === "object") {
+              patch.customFormulaNutrients = {
+                ...suppState.customFormulaNutrients,
+                [createdRaw.id]: body.nutrients,
+              };
+            }
+            if (Object.keys(patch).length > 0) {
+              const merged = mergeSupplementStateIntoFoodPlan(foodPlan.planData, patch);
+              requireData(await growdeskFetch(`/api/v1/babies/${babyId}/food-plan`, {
+                method: "PUT",
+                accessToken: bffSession.accessToken,
+                body: foodPlanWriteBody(foodPlan, merged),
+              }));
+            }
+          } catch (error) {
+            throwPartialFoodPlanMutation(error, createdRaw.id);
           }
         }
 
@@ -309,23 +334,22 @@ export async function POST(request: Request) {
         };
 
         if (babyId) {
-          const fpRes = await growdeskFetch<any>(`/api/v1/babies/${babyId}/food-plan`, {
+          const foodPlan = readFoodPlan(await growdeskFetch<any>(`/api/v1/babies/${babyId}/food-plan`, {
             method: "GET",
             accessToken: bffSession.accessToken,
-          });
-          const existingPlanData = (fpRes.ok && (fpRes.data.data?.planData || fpRes.data.planData)) || {};
-          const suppState = extractSupplementStateFromFoodPlan(existingPlanData);
+          }), babyId);
+          const suppState = extractSupplementStateFromFoodPlan(foodPlan.planData);
 
           const updatedProducts = [...suppState.supplementProducts, newSupp];
-          const merged = mergeSupplementStateIntoFoodPlan(existingPlanData, {
+          const merged = mergeSupplementStateIntoFoodPlan(foodPlan.planData, {
             supplementProducts: updatedProducts,
           });
 
-          await growdeskFetch(`/api/v1/babies/${babyId}/food-plan`, {
+          requireData(await growdeskFetch(`/api/v1/babies/${babyId}/food-plan`, {
             method: "PUT",
             accessToken: bffSession.accessToken,
-            body: { planData: merged },
-          });
+            body: foodPlanWriteBody(foodPlan, merged),
+          }));
         }
 
         return NextResponse.json(newSupp, { status: 201 });
@@ -452,6 +476,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "type 必须为 formula 或 supplement" }, { status: 400 });
     }
   } catch (error: any) {
+    if (error instanceof BridgeError) return bridgeErrorResponse(error);
     console.error("POST /api/nutrition/products error:", error);
     return NextResponse.json({ error: "添加产品失败" }, { status: 500 });
   }
@@ -502,32 +527,36 @@ export async function PUT(request: Request) {
 
         const updatedRaw: GrowDeskFormulaProduct = res.data.data || res.data;
 
-        // Update defaultFormulaId or custom nutrients if provided
-        if (babyId) {
-          const fpRes = await growdeskFetch<any>(`/api/v1/babies/${babyId}/food-plan`, {
-            method: "GET",
-            accessToken: bffSession.accessToken,
-          });
-          const existingPlanData = (fpRes.ok && (fpRes.data.data?.planData || fpRes.data.planData)) || {};
-          const suppState = extractSupplementStateFromFoodPlan(existingPlanData);
+        // Update defaultFormulaId or custom nutrients if provided. The product
+        // PATCH has already committed, so a later plan failure is reported as a
+        // partial mutation instead of returning a false success.
+        const hasNutrientsPatch = body.nutrients && typeof body.nutrients === "object";
+        if (babyId && (body.isDefault !== undefined || hasNutrientsPatch)) {
+          try {
+            const foodPlan = readFoodPlan(await growdeskFetch<any>(`/api/v1/babies/${babyId}/food-plan`, {
+              method: "GET",
+              accessToken: bffSession.accessToken,
+            }), babyId);
+            const suppState = extractSupplementStateFromFoodPlan(foodPlan.planData);
 
-          const patch: Partial<typeof suppState> = {};
-          if (body.isDefault !== undefined) {
-            patch.defaultFormulaId = body.isDefault ? id : null;
-          }
-          if (body.nutrients && typeof body.nutrients === "object") {
-            patch.customFormulaNutrients = {
-              ...suppState.customFormulaNutrients,
-              [id]: body.nutrients,
-            };
-          }
-          if (Object.keys(patch).length > 0) {
-            const merged = mergeSupplementStateIntoFoodPlan(existingPlanData, patch);
-            await growdeskFetch(`/api/v1/babies/${babyId}/food-plan`, {
+            const patch: Partial<typeof suppState> = {};
+            if (body.isDefault !== undefined) {
+              patch.defaultFormulaId = body.isDefault ? id : null;
+            }
+            if (hasNutrientsPatch) {
+              patch.customFormulaNutrients = {
+                ...suppState.customFormulaNutrients,
+                [id]: body.nutrients,
+              };
+            }
+            const merged = mergeSupplementStateIntoFoodPlan(foodPlan.planData, patch);
+            requireData(await growdeskFetch(`/api/v1/babies/${babyId}/food-plan`, {
               method: "PUT",
               accessToken: bffSession.accessToken,
-              body: { planData: merged },
-            });
+              body: foodPlanWriteBody(foodPlan, merged),
+            }));
+          } catch (error) {
+            throwPartialFoodPlanMutation(error, id);
           }
         }
 
@@ -542,12 +571,11 @@ export async function PUT(request: Request) {
           return NextResponse.json({ error: "未找到指定的补剂档案" }, { status: 404 });
         }
 
-        const fpRes = await growdeskFetch<any>(`/api/v1/babies/${babyId}/food-plan`, {
+        const foodPlan = readFoodPlan(await growdeskFetch<any>(`/api/v1/babies/${babyId}/food-plan`, {
           method: "GET",
           accessToken: bffSession.accessToken,
-        });
-        const existingPlanData = (fpRes.ok && (fpRes.data.data?.planData || fpRes.data.planData)) || {};
-        const suppState = extractSupplementStateFromFoodPlan(existingPlanData);
+        }), babyId);
+        const suppState = extractSupplementStateFromFoodPlan(foodPlan.planData);
 
         const targetIdx = suppState.supplementProducts.findIndex((s) => s.id === id);
         if (targetIdx === -1) {
@@ -571,15 +599,15 @@ export async function PUT(request: Request) {
         const updatedList = [...suppState.supplementProducts];
         updatedList[targetIdx] = updatedSupp;
 
-        const merged = mergeSupplementStateIntoFoodPlan(existingPlanData, {
+        const merged = mergeSupplementStateIntoFoodPlan(foodPlan.planData, {
           supplementProducts: updatedList,
         });
 
-        await growdeskFetch(`/api/v1/babies/${babyId}/food-plan`, {
+        requireData(await growdeskFetch(`/api/v1/babies/${babyId}/food-plan`, {
           method: "PUT",
           accessToken: bffSession.accessToken,
-          body: { planData: merged },
-        });
+          body: foodPlanWriteBody(foodPlan, merged),
+        }));
 
         return NextResponse.json(updatedSupp);
       }
@@ -679,6 +707,7 @@ export async function PUT(request: Request) {
 
     return NextResponse.json({ error: "无效的产品类型" }, { status: 400 });
   } catch (error: any) {
+    if (error instanceof BridgeError) return bridgeErrorResponse(error);
     console.error("PUT /api/nutrition/products error:", error);
     return NextResponse.json({ error: "更新产品失败" }, { status: 500 });
   }
@@ -731,26 +760,25 @@ export async function DELETE(request: Request) {
         });
       } else if (type === "supplement") {
         if (babyId) {
-          const fpRes = await growdeskFetch<any>(`/api/v1/babies/${babyId}/food-plan`, {
+          const foodPlan = readFoodPlan(await growdeskFetch<any>(`/api/v1/babies/${babyId}/food-plan`, {
             method: "GET",
             accessToken: bffSession.accessToken,
-          });
-          const existingPlanData = (fpRes.ok && (fpRes.data.data?.planData || fpRes.data.planData)) || {};
-          const suppState = extractSupplementStateFromFoodPlan(existingPlanData);
+          }), babyId);
+          const suppState = extractSupplementStateFromFoodPlan(foodPlan.planData);
 
           const updatedProducts = suppState.supplementProducts.filter((s) => s.id !== id);
           const updatedSchedules = suppState.supplementSchedules.filter((s) => s.productId !== id);
 
-          const merged = mergeSupplementStateIntoFoodPlan(existingPlanData, {
+          const merged = mergeSupplementStateIntoFoodPlan(foodPlan.planData, {
             supplementProducts: updatedProducts,
             supplementSchedules: updatedSchedules,
           });
 
-          await growdeskFetch(`/api/v1/babies/${babyId}/food-plan`, {
+          requireData(await growdeskFetch(`/api/v1/babies/${babyId}/food-plan`, {
             method: "PUT",
             accessToken: bffSession.accessToken,
-            body: { planData: merged },
-          });
+            body: foodPlanWriteBody(foodPlan, merged),
+          }));
         }
 
         return NextResponse.json({ success: true, id });
@@ -840,6 +868,7 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ success: true, id });
     }
   } catch (error: any) {
+    if (error instanceof BridgeError) return bridgeErrorResponse(error);
     console.error("DELETE /api/nutrition/products error:", error);
     return NextResponse.json({ error: "删除产品失败" }, { status: 500 });
   }

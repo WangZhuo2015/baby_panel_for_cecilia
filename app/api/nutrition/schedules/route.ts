@@ -8,6 +8,8 @@ import { resolveBffSession } from "@/lib/growdesk/session";
 import { verifyBffCsrf } from "@/lib/growdesk/csrf";
 import { growdeskFetch } from "@/lib/growdesk/client";
 import { loadWebBaby } from "@/lib/growdesk/bridge-identity";
+import { BridgeError, bridgeErrorResponse, requireData } from "@/lib/growdesk/bridge-protocol";
+import { foodPlanWriteBody, readGrowDeskFoodPlan, type GrowDeskFoodPlanState } from "@/lib/growdesk/food-plan-state";
 import {
   extractSupplementStateFromFoodPlan,
   mergeSupplementStateIntoFoodPlan,
@@ -17,6 +19,10 @@ import {
 } from "@/lib/growdesk/nutrition-compat";
 import { PRESET_SUPPLEMENT_PRODUCTS } from "@/lib/nutrition/presets";
 import crypto from "node:crypto";
+
+function readFoodPlan(response: Awaited<ReturnType<typeof growdeskFetch>>, babyId: string): GrowDeskFoodPlanState {
+  return readGrowDeskFoodPlan(response, babyId);
+}
 
 export async function GET(request: Request) {
   try {
@@ -48,8 +54,8 @@ export async function GET(request: Request) {
         }),
       ]);
 
-      const planData = (foodPlanRes.ok && (foodPlanRes.data?.data?.planData || foodPlanRes.data?.planData)) || {};
-      const suppState = extractSupplementStateFromFoodPlan(planData);
+      const foodPlan = readFoodPlan(foodPlanRes, babyId);
+      const suppState = extractSupplementStateFromFoodPlan(foodPlan.planData);
 
       const allKnownProducts: SupplementProduct[] = [
         ...suppState.supplementProducts,
@@ -179,6 +185,7 @@ export async function GET(request: Request) {
       completedProductIds: Array.from(completedProductIds),
     });
   } catch (error: any) {
+    if (error instanceof BridgeError) return bridgeErrorResponse(error);
     console.error("GET /api/nutrition/schedules error:", error);
     return NextResponse.json({ error: "获取补剂计划失败" }, { status: 500 });
   }
@@ -218,12 +225,11 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "请选择补剂产品" }, { status: 400 });
       }
 
-      const fpRes = await growdeskFetch<any>(`/api/v1/babies/${babyId}/food-plan`, {
+      const foodPlan = readFoodPlan(await growdeskFetch<any>(`/api/v1/babies/${babyId}/food-plan`, {
         method: "GET",
         accessToken: bffSession.accessToken,
-      });
-      const existingPlanData = (fpRes.ok && (fpRes.data?.data?.planData || fpRes.data?.planData)) || {};
-      const suppState = extractSupplementStateFromFoodPlan(existingPlanData);
+      }), babyId);
+      const suppState = extractSupplementStateFromFoodPlan(foodPlan.planData);
 
       const allKnownProducts: SupplementProduct[] = [
         ...suppState.supplementProducts,
@@ -263,12 +269,12 @@ export async function POST(request: Request) {
         };
         const updatedList = [...suppState.supplementSchedules];
         updatedList[targetIdx] = scheduleToSave;
-        const merged = mergeSupplementStateIntoFoodPlan(existingPlanData, { supplementSchedules: updatedList });
-        await growdeskFetch(`/api/v1/babies/${babyId}/food-plan`, {
+        const merged = mergeSupplementStateIntoFoodPlan(foodPlan.planData, { supplementSchedules: updatedList });
+        requireData(await growdeskFetch(`/api/v1/babies/${babyId}/food-plan`, {
           method: "PUT",
           accessToken: bffSession.accessToken,
-          body: { planData: merged },
-        });
+          body: foodPlanWriteBody(foodPlan, merged),
+        }));
       } else {
         const existingIdx = suppState.supplementSchedules.findIndex((s) => s.productId === productId);
         if (existingIdx !== -1) {
@@ -286,12 +292,12 @@ export async function POST(request: Request) {
           };
           const updatedList = [...suppState.supplementSchedules];
           updatedList[existingIdx] = scheduleToSave;
-          const merged = mergeSupplementStateIntoFoodPlan(existingPlanData, { supplementSchedules: updatedList });
-          await growdeskFetch(`/api/v1/babies/${babyId}/food-plan`, {
+          const merged = mergeSupplementStateIntoFoodPlan(foodPlan.planData, { supplementSchedules: updatedList });
+          requireData(await growdeskFetch(`/api/v1/babies/${babyId}/food-plan`, {
             method: "PUT",
             accessToken: bffSession.accessToken,
-            body: { planData: merged },
-          });
+            body: foodPlanWriteBody(foodPlan, merged),
+          }));
         } else {
           isNew = true;
           scheduleToSave = {
@@ -310,12 +316,12 @@ export async function POST(request: Request) {
             updatedAt: nowIso,
           };
           const updatedList = [...suppState.supplementSchedules, scheduleToSave];
-          const merged = mergeSupplementStateIntoFoodPlan(existingPlanData, { supplementSchedules: updatedList });
-          await growdeskFetch(`/api/v1/babies/${babyId}/food-plan`, {
+          const merged = mergeSupplementStateIntoFoodPlan(foodPlan.planData, { supplementSchedules: updatedList });
+          requireData(await growdeskFetch(`/api/v1/babies/${babyId}/food-plan`, {
             method: "PUT",
             accessToken: bffSession.accessToken,
-            body: { planData: merged },
-          });
+            body: foodPlanWriteBody(foodPlan, merged),
+          }));
         }
       }
 
@@ -415,6 +421,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json(created, { status: 201 });
   } catch (error: any) {
+    if (error instanceof BridgeError) return bridgeErrorResponse(error);
     console.error("POST /api/nutrition/schedules error:", error);
     return NextResponse.json({ error: "保存补剂计划失败" }, { status: 500 });
   }
@@ -445,21 +452,20 @@ export async function DELETE(request: Request) {
       }
 
       const babyId = baby.id;
-      const fpRes = await growdeskFetch<any>(`/api/v1/babies/${babyId}/food-plan`, {
+      const foodPlan = readFoodPlan(await growdeskFetch<any>(`/api/v1/babies/${babyId}/food-plan`, {
         method: "GET",
         accessToken: bffSession.accessToken,
-      });
-      const existingPlanData = (fpRes.ok && (fpRes.data?.data?.planData || fpRes.data?.planData)) || {};
-      const suppState = extractSupplementStateFromFoodPlan(existingPlanData);
+      }), babyId);
+      const suppState = extractSupplementStateFromFoodPlan(foodPlan.planData);
 
       const updatedSchedules = suppState.supplementSchedules.filter((s) => s.id !== id);
-      const merged = mergeSupplementStateIntoFoodPlan(existingPlanData, { supplementSchedules: updatedSchedules });
+      const merged = mergeSupplementStateIntoFoodPlan(foodPlan.planData, { supplementSchedules: updatedSchedules });
 
-      await growdeskFetch(`/api/v1/babies/${babyId}/food-plan`, {
+      requireData(await growdeskFetch(`/api/v1/babies/${babyId}/food-plan`, {
         method: "PUT",
         accessToken: bffSession.accessToken,
-        body: { planData: merged },
-      });
+        body: foodPlanWriteBody(foodPlan, merged),
+      }));
 
       return NextResponse.json({ success: true, id });
     }
@@ -485,6 +491,7 @@ export async function DELETE(request: Request) {
     await prisma.supplementSchedule.delete({ where: { id } });
     return NextResponse.json({ success: true, id });
   } catch (error: any) {
+    if (error instanceof BridgeError) return bridgeErrorResponse(error);
     console.error("DELETE /api/nutrition/schedules error:", error);
     return NextResponse.json({ error: "删除计划失败" }, { status: 500 });
   }
