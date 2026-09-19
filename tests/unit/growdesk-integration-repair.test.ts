@@ -148,7 +148,7 @@ test("browser can use a matching timeline version without mixing record types", 
 
 test("unsupported reads cannot reach old authentication and falsely log out a BFF user", async () => {
   const { isBridgedMethod } = await import("../../lib/growdesk/bridge-policy");
-  for (const path of ["/api/ai/daily-summary", "/api/cron/daily-summary", "/api/unknown"]) {
+  for (const path of ["/api/cron/daily-summary", "/api/unknown"]) {
     assert.equal(isBridgedMethod(path, "GET"), false);
   }
   assert.equal(isBridgedMethod("/api/auth/me", "GET"), true);

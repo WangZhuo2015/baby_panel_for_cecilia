@@ -7,6 +7,8 @@ import { GROWDESK_CONFIG } from "@/lib/config";
 import { resolveBffSession } from "@/lib/growdesk/session";
 import { loadWebBaby } from "@/lib/growdesk/bridge-identity";
 import { growdeskFetch } from "@/lib/growdesk/client";
+import { BridgeError, bridgeErrorResponse } from "@/lib/growdesk/bridge-protocol";
+import { verifyBffCsrf } from "@/lib/growdesk/csrf";
 
 export const maxDuration = 120;
 
@@ -25,18 +27,7 @@ export async function GET(request: Request) {
         return NextResponse.json({ error: "日期格式无效，必须为 YYYY-MM-DD" }, { status: 400 });
       }
 
-      let baby: any = null;
-      if (requestedBabyId) {
-        const babyRes = await growdeskFetch<any>(`/api/v1/babies/${requestedBabyId}`, {
-          accessToken: bffSession.accessToken,
-        });
-        if (babyRes.ok && babyRes.data) {
-          baby = babyRes.data;
-        }
-      }
-      if (!baby) {
-        baby = await loadWebBaby(growdeskFetch, bffSession.accessToken);
-      }
+      const baby = await loadWebBaby(growdeskFetch, bffSession.accessToken, requestedBabyId);
       if (!baby) {
         return NextResponse.json({ error: "未找到宝宝档案" }, { status: 404 });
       }
@@ -88,6 +79,7 @@ export async function GET(request: Request) {
 
     return NextResponse.json({ summary });
   } catch (error: unknown) {
+    if (error instanceof BridgeError) return bridgeErrorResponse(error);
     console.error("GET /api/ai/daily-summary error:", error);
     const message = error instanceof Error ? error.message : "获取每日 AI 总结失败";
     return NextResponse.json(
@@ -100,6 +92,8 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     if (GROWDESK_CONFIG.enabled) {
+      const csrf = verifyBffCsrf(request, { enforceInTest: true });
+      if (csrf) return csrf;
       const bffSession = await resolveBffSession(request);
       if (!bffSession) return NextResponse.json({ error: "Unauthorized: 会话无效或已过期" }, { status: 401 });
       const body = await request.json().catch(() => ({}));
@@ -110,18 +104,7 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "日期格式无效，必须为 YYYY-MM-DD" }, { status: 400 });
       }
 
-      let baby: any = null;
-      if (requestedBabyId) {
-        const babyRes = await growdeskFetch<any>(`/api/v1/babies/${requestedBabyId}`, {
-          accessToken: bffSession.accessToken,
-        });
-        if (babyRes.ok && babyRes.data) {
-          baby = babyRes.data;
-        }
-      }
-      if (!baby) {
-        baby = await loadWebBaby(growdeskFetch, bffSession.accessToken);
-      }
+      const baby = await loadWebBaby(growdeskFetch, bffSession.accessToken, requestedBabyId);
       if (!baby) {
         return NextResponse.json({ error: "未找到宝宝档案" }, { status: 404 });
       }

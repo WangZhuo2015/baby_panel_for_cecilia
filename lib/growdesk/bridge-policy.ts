@@ -43,6 +43,8 @@ export const BRIDGED_METHODS: Readonly<Record<string, readonly string[]>> = {
   "/api/agent/voice/logs": ["GET"],
   "/api/ai/sessions": ["GET", "POST"],
   "/api/ai/chat": ["POST"],
+  "/api/ai/daily-summary": ["GET", "POST"],
+  "/api/ai/tips": ["GET"],
   "/api/ai/jobs": ["GET", "POST"],
   "/api/user/tokens": ["GET", "POST"],
 };
