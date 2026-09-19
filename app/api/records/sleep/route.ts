@@ -1,3 +1,4 @@
+import { legacyListQuery } from "@/lib/growdesk/legacy-list-query";
 import { NextResponse } from "next/server";
 import { requireAuth, requireBaby, getActiveBaby } from "@/lib/api-helpers";
 import * as records from "@/lib/records/service";
@@ -33,7 +34,7 @@ export async function GET(request: Request) {
         const record = await fetchRecordDetail<GrowDeskSleepRecord>(growdeskFetch, bffSession.accessToken, babyId, recordId, "sleep");
         return NextResponse.json(fromGrowDeskSleepRecord(record), { headers: { "cache-control": "no-store" } });
       }
-      const list = await fetchLegacyRecordList<GrowDeskSleepRecord>(growdeskFetch, bffSession.accessToken, babyId, searchParams, "sleep");
+      const list = await fetchLegacyRecordList<GrowDeskSleepRecord>(growdeskFetch, bffSession.accessToken, babyId, legacyListQuery(searchParams), "sleep");
       return NextResponse.json(list.map(fromGrowDeskSleepRecord), { headers: { "cache-control": "no-store" } });
     }
     const auth = await requireAuth(request);
