@@ -53,6 +53,32 @@ function isCurrentBaby(get: any, babyId: string): boolean {
   return loadedId === babyId && (!selectedId || selectedId === babyId);
 }
 
+export function verifiedOutboxIdentity(get: any): { userId: string; familyId: string; babyId: string } {
+  const state = get();
+  const userId = typeof state.user?.id === "string" ? state.user.id.trim() : "";
+  const familyId = typeof state.family?.id === "string" ? state.family.id.trim() : "";
+  const babyId = currentBabyId(get);
+  if (!userId || !familyId) {
+    throw new Error("身份尚未加载完成，请联网刷新后重试");
+  }
+  if (state.baby?.familyId && state.baby.familyId !== familyId) {
+    throw new Error("宝宝所属家庭正在切换，请稍后重试");
+  }
+  return { userId, familyId, babyId };
+}
+
+export function isCurrentWriteIdentity(
+  get: any,
+  identity: { userId: string; familyId: string; babyId: string },
+): boolean {
+  const state = get();
+  return state.user?.id === identity.userId
+    && state.family?.id === identity.familyId
+    && state.baby?.id === identity.babyId
+    && state.baby?.familyId === identity.familyId
+    && state.selectedBabyId === identity.babyId;
+}
+
 export const createRecordsSlice = (set: any, get: any): RecordsSlice => ({
   baby: null,
   feedingRecords: [],
@@ -308,14 +334,16 @@ export const createRecordsSlice = (set: any, get: any): RecordsSlice => ({
   },
 
   addFeedingRecord: async (record) => {
+    const identity = verifiedOutboxIdentity(get);
     const clientId = crypto.randomUUID();
-    const payload = { babyId: get().baby?.id, ...record, clientId };
+    const payload = { ...record, babyId: identity.babyId, clientId };
     try {
       const newRecord = (await request<FeedingRecord>("/api/records/feeding", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       })) as FeedingRecord;
+      if (!isCurrentWriteIdentity(get, identity)) return;
       invalidateCache("feedingRecords");
       invalidateCache("dailySummary");
       invalidateCache("timeline");
@@ -329,9 +357,7 @@ export const createRecordsSlice = (set: any, get: any): RecordsSlice => ({
           url: "/api/records/feeding",
           body: payload as any,
           createdAt: Date.now(),
-          userId: get().user?.id,
-          familyId: get().family?.id,
-          babyId: get().baby?.id,
+          ...identity,
         });
         throw new Error("当前离线，记录已保存，联网后自动同步 ⏳");
       }
@@ -341,14 +367,16 @@ export const createRecordsSlice = (set: any, get: any): RecordsSlice => ({
   },
 
   addSleepRecord: async (record) => {
+    const identity = verifiedOutboxIdentity(get);
     const clientId = crypto.randomUUID();
-    const payload = { babyId: get().baby?.id, ...record, clientId };
+    const payload = { ...record, babyId: identity.babyId, clientId };
     try {
       const newRecord = (await request<SleepRecord>("/api/records/sleep", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       })) as SleepRecord;
+      if (!isCurrentWriteIdentity(get, identity)) return;
       invalidateCache("sleepRecords");
       invalidateCache("dailySummary");
       invalidateCache("timeline");
@@ -362,9 +390,7 @@ export const createRecordsSlice = (set: any, get: any): RecordsSlice => ({
           url: "/api/records/sleep",
           body: payload as any,
           createdAt: Date.now(),
-          userId: get().user?.id,
-          familyId: get().family?.id,
-          babyId: get().baby?.id,
+          ...identity,
         });
         throw new Error("当前离线，记录已保存，联网后自动同步 ⏳");
       }
@@ -374,14 +400,16 @@ export const createRecordsSlice = (set: any, get: any): RecordsSlice => ({
   },
 
   addDiaperRecord: async (record) => {
+    const identity = verifiedOutboxIdentity(get);
     const clientId = crypto.randomUUID();
-    const payload = { babyId: get().baby?.id, ...record, clientId };
+    const payload = { ...record, babyId: identity.babyId, clientId };
     try {
       const newRecord = (await request<DiaperRecord>("/api/records/diaper", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       })) as DiaperRecord;
+      if (!isCurrentWriteIdentity(get, identity)) return;
       invalidateCache("diaperRecords");
       invalidateCache("dailySummary");
       invalidateCache("timeline");
@@ -395,9 +423,7 @@ export const createRecordsSlice = (set: any, get: any): RecordsSlice => ({
           url: "/api/records/diaper",
           body: payload as any,
           createdAt: Date.now(),
-          userId: get().user?.id,
-          familyId: get().family?.id,
-          babyId: get().baby?.id,
+          ...identity,
         });
         throw new Error("当前离线，记录已保存，联网后自动同步 ⏳");
       }
@@ -407,10 +433,9 @@ export const createRecordsSlice = (set: any, get: any): RecordsSlice => ({
   },
 
   addFoodLogRecord: async (record) => {
+    const identity = verifiedOutboxIdentity(get);
     const clientId = crypto.randomUUID();
-    const babyId = currentBabyId(get);
-    const userId = get().user?.id;
-    const familyId = get().family?.id;
+    const babyId = identity.babyId;
     const payload = { ...record, babyId, clientId };
     try {
       const newRecord = (await request<FoodLogRecord>("/api/food/logs", {
@@ -418,7 +443,7 @@ export const createRecordsSlice = (set: any, get: any): RecordsSlice => ({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       })) as FoodLogRecord;
-      if (!isCurrentBaby(get, babyId)) return;
+      if (!isCurrentWriteIdentity(get, identity)) return;
       invalidateCache("foodLogRecords");
       invalidateCache("foodPlans");
       invalidateCache("dailySummary");
@@ -433,9 +458,7 @@ export const createRecordsSlice = (set: any, get: any): RecordsSlice => ({
           url: "/api/food/logs",
           body: payload as any,
           createdAt: Date.now(),
-          userId,
-          familyId,
-          babyId,
+          ...identity,
         });
         throw new Error("当前离线，记录已保存，联网后自动同步 ⏳");
       }

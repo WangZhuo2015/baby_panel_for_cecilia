@@ -6,6 +6,7 @@ import { AppHeader } from "@/components/ui/AppHeader";
 import { useToast } from "@/components/ui/Toast";
 import { useBabyStore } from "@/stores/useBabyStore";
 import { SleepForm } from "@/components/records/SleepForm";
+import { useRecordIdentityReady } from "@/lib/hooks/useRecordIdentityReady";
 
 export function LiveSleepDuration({ startIso }: { startIso: string }) {
   const [sec, setSec] = useState(() =>
@@ -31,6 +32,7 @@ export default function SleepRecordPage() {
   const { showToast } = useToast();
   const addSleepRecord = useBabyStore((s) => s.addSleepRecord);
   const fetchSleepRecords = useBabyStore((s) => s.fetchSleepRecords);
+  const identityReady = useRecordIdentityReady();
 
   const [saving, setSaving] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -71,7 +73,7 @@ export default function SleepRecordPage() {
         <SleepForm
           mode="create"
           onSubmit={handleSubmit}
-          saving={saving}
+          saving={saving || !identityReady}
         />
       </div>
     </div>
