@@ -403,12 +403,11 @@ test("SH-08: Timeline Compat DTO Layer", async (t) => {
     ]);
 
     assert.equal(items.length, 2);
-    assert.equal(items[0].id, "feed-10");
-    assert.equal(items[0].title, "喂奶");
-    assert.equal(items[0].icon, "🍼");
-    assert.equal(items[1].id, "diaper-20");
-    assert.equal(items[1].title, "尿布");
-    assert.equal(items[1].icon, "🧷");
+    assert.deepEqual(items.map(item => item.id), ["diaper-20", "feed-10"], "legacy timeline is newest first");
+    assert.equal(items[1].title, "喂奶");
+    assert.equal(items[1].icon, "🍼");
+    assert.equal(items[0].title, "尿布");
+    assert.equal(items[0].icon, "🧷");
   });
 
   await t.test("fromGrowDeskTimelineResponse: enriches feeding with formula product and rawRecord", () => {
