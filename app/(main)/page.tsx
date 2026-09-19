@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
   Baby,
@@ -47,19 +47,32 @@ import { isWorkbenchViewport } from "@/lib/responsive";
 function NotificationBell() {
   const [unreadCount, setUnreadCount] = useState(0);
   const router = useRouter();
+  const baby = useBabyStore((s) => s.baby);
+  const notificationRequestGeneration = useRef(0);
 
   const fetchCount = useCallback(async () => {
+    const requestedBabyId = baby?.id ?? null;
+    const requestGeneration = ++notificationRequestGeneration.current;
     try {
-      const res = await fetch("/api/notifications");
+      const url = requestedBabyId
+        ? `/api/notifications?babyId=${encodeURIComponent(requestedBabyId)}`
+        : "/api/notifications";
+      const res = await fetch(url);
       if (res.ok) {
         const data = await res.json();
+        if (
+          requestGeneration !== notificationRequestGeneration.current
+          || (useBabyStore.getState().baby?.id ?? null) !== requestedBabyId
+        ) {
+          return;
+        }
         const list = Array.isArray(data) ? data : [];
         setUnreadCount(calculateUnreadCount(list));
       }
     } catch {
       // ignore
     }
-  }, []);
+  }, [baby?.id]);
 
   useEffect(() => {
     fetchCount();

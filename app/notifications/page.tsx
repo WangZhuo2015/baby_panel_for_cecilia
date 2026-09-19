@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
   Bell,
@@ -66,6 +66,7 @@ export default function NotificationsPage() {
   const [showInstallGuide, setShowInstallGuide] = useState(false);
   const [testingPush, setTestingPush] = useState(false);
   const [enablingPush, setEnablingPush] = useState(false);
+  const notificationRequestGeneration = useRef(0);
 
   const baby = useBabyStore((s) => s.baby);
   const { showToast } = useToast();
@@ -159,14 +160,22 @@ export default function NotificationsPage() {
   }, []);
 
   const fetchNotifications = useCallback(async () => {
+    const requestedBabyId = baby?.id ?? null;
+    const requestGeneration = ++notificationRequestGeneration.current;
     setLoading(true);
     try {
-      const url = baby?.id
-        ? `/api/notifications?babyId=${baby.id}`
+      const url = requestedBabyId
+        ? `/api/notifications?babyId=${encodeURIComponent(requestedBabyId)}`
         : "/api/notifications";
       const res = await fetch(url);
       if (res.ok) {
         const data = await res.json();
+        if (
+          requestGeneration !== notificationRequestGeneration.current
+          || (useBabyStore.getState().baby?.id ?? null) !== requestedBabyId
+        ) {
+          return;
+        }
         const visible = filterVisibleNotifications(Array.isArray(data) ? data : []);
         setNotifications(visible);
         if (visible.length > 0) {
@@ -178,7 +187,12 @@ export default function NotificationsPage() {
     } catch {
       // Offline fallback
     } finally {
-      setLoading(false);
+      if (
+        requestGeneration === notificationRequestGeneration.current
+        && (useBabyStore.getState().baby?.id ?? null) === requestedBabyId
+      ) {
+        setLoading(false);
+      }
     }
   }, [baby?.id]);
 
