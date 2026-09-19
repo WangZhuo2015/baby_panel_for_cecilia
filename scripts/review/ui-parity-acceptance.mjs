@@ -679,7 +679,11 @@ try {
       if (await growthGalleryInput.count() !== 1) {
         throw new Error(`expected exactly one growth OCR gallery input, found ${await growthGalleryInput.count()}`);
       }
-      await growthGalleryInput.setInputFiles({
+      const [growthFileChooser] = await Promise.all([
+        page.waitForEvent("filechooser"),
+        page.getByRole("button", { name: "从相册选择", exact: true }).click(),
+      ]);
+      await growthFileChooser.setFiles({
         name: `e2e_growth_${suffix}.png`,
         mimeType: "image/png",
         buffer: fixtureBuffer,
