@@ -1,4 +1,4 @@
-import { addMonths, diffCalendarDays, isValidDateStr } from "@/lib/date";
+import { isValidDateStr } from "@/lib/date";
 import type { NotificationItem } from "@/app/api/notifications/route";
 import {
   BridgeError,
@@ -10,6 +10,7 @@ import {
 import { dayBoundsInTimeZone } from "./record-list";
 import { fetchCompleteList } from "./paged-list";
 import { fromGrowDeskNotification } from "./notifications";
+import { readLegacyPendingVaccines, readPendingPlan } from "./vaccine-pending-compat";
 
 type JsonObject = Record<string, unknown>;
 
@@ -156,6 +157,16 @@ function validateCanonicalNotification(
   return { id, userId: ownerId, eventKey, title, body, data, createdAt };
 }
 
+export function legacyMemberLabel(relation: string, displayName: string, username = ""): string {
+  const relationNames: Record<string, string> = {
+    mother: "妈妈", father: "爸爸", grandparent: "长辈",
+    caregiver: "月嫂/阿姨", parent: "家长", other: "家人",
+  };
+  const relationLabel = relationNames[relation] || "家人";
+  const name = displayName || username;
+  return name ? `${relationLabel} (${name})` : relationLabel;
+}
+
 function memberMap(members: unknown[], familyId: string): Map<string, string> {
   const result = new Map<string, string>();
   for (const raw of members) {
@@ -165,7 +176,10 @@ function memberMap(members: unknown[], familyId: string): Map<string, string> {
     if (memberFamilyId !== familyId) {
       throw new BridgeError(502, "UPSTREAM_SCOPE_MISMATCH", "GrowDesk 返回了其他家庭的成员");
     }
-    result.set(userId, stringField(raw.displayName, "成员 displayName", true));
+    const displayName = stringField(raw.displayName, "成员 displayName", true);
+    const username = raw.username === undefined ? "" : stringField(raw.username, "成员 username", true);
+    const relation = raw.relation === undefined ? "other" : stringField(raw.relation, "成员 relation");
+    result.set(userId, legacyMemberLabel(relation, displayName, username));
   }
   return result;
 }
@@ -249,7 +263,12 @@ function optionalText(value: unknown): string | null {
 
 function recordDetail(kind: string, record: JsonObject, clock: FamilyClock): string {
   if (kind === "feeding") {
-    const type = optionalText(record.feedingType) || "喂奶";
+    const rawType = optionalText(record.feedingType);
+    const type = rawType === "breast"
+      ? `母乳 亲喂(左${optionalText(record.leftMinutes) || "0"}分/右${optionalText(record.rightMinutes) || "0"}分)`
+      : rawType === "bottle" || rawType === "bottle_breast"
+        ? "瓶喂母乳"
+        : rawType === "formula" ? "配方奶" : "喂奶";
     const amount = optionalText(record.amountMl);
     const notes = optionalText(record.notes);
     return `${type}${amount ? ` ${amount}ml` : ""}${notes ? ` · 备注: ${notes}` : ""}`;
@@ -269,10 +288,13 @@ function recordDetail(kind: string, record: JsonObject, clock: FamilyClock): str
     return `${type}${color ? ` (${color})` : ""}${notes ? ` · 备注: ${notes}` : ""}`;
   }
   if (kind === "food") {
-    const count = Array.isArray(record.foodItemIds) ? record.foodItemIds.length : 0;
-    const portion = optionalText(record.portionDescription) || "正常";
-    const reaction = optionalText(record.reaction);
-    return `食物 ${count} 项 · 份量: ${portion}${reaction ? ` · 反应: ${reaction}` : ""}`;
+    const foods = Array.isArray(record.foodNames) ? record.foodNames
+      : Array.isArray(record.foods) ? record.foods
+        : Array.isArray(record.foodItemIds) ? record.foodItemIds : [];
+    const names = foods.filter(value => typeof value === "string").join("、") || "辅食";
+    const portion = optionalText(record.portionDescription) || optionalText(record.portion) || "正常";
+    const abnormal = optionalText(record.abnormalNotes);
+    return `${names} · 份量: ${portion}${abnormal ? ` · 异常: ${abnormal}` : ""}`;
   }
   if (kind === "growth") {
     const metrics = [
@@ -282,19 +304,21 @@ function recordDetail(kind: string, record: JsonObject, clock: FamilyClock): str
     ].filter(Boolean).join(" · ");
     return metrics || "新增生长测量";
   }
-  const name = optionalText(record.supplementName) || "补剂打卡";
-  const amount = optionalText(record.amount);
+  const product = isObject(record.product) ? record.product : null;
+  const name = optionalText(record.supplementName) || optionalText(record.productName) || optionalText(product?.name) || "营养补剂";
+  const amount = optionalText(record.amount) || optionalText(record.dose);
+  const unit = optionalText(record.unitName) || "";
   const notes = optionalText(record.notes);
-  return `${name}${amount ? ` ${amount}` : ""}${notes ? ` · 备注: ${notes}` : ""}`;
+  return `${name}${amount ? ` ${amount}${unit}` : ""}${notes ? ` · 备注: ${notes}` : ""}`;
 }
 
 const RECORD_KINDS = [
-  { kind: "feeding", label: "喂奶记录", icon: "🍼", actor: true },
-  { kind: "sleep", label: "睡眠记录", icon: "😴", actor: true },
-  { kind: "diaper", label: "换尿布记录", icon: "🧷", actor: true },
-  { kind: "food", label: "辅食记录", icon: "🍚", actor: false },
-  { kind: "growth", label: "生长数据", icon: "📏", actor: false },
-  { kind: "supplement", label: "补剂打卡", icon: "💊", actor: false },
+  { kind: "feeding", label: "喂奶", updateLabel: "喂奶记录", icon: "🍼", limit: 10, idKind: "feeding" },
+  { kind: "sleep", label: "睡眠", updateLabel: "睡眠记录", icon: "😴", limit: 10, idKind: "sleep" },
+  { kind: "diaper", label: "换尿布", updateLabel: "换尿布记录", icon: "🧷", limit: 10, idKind: "diaper" },
+  { kind: "food", label: "辅食", updateLabel: "辅食记录", icon: "🍚", limit: 10, idKind: "food" },
+  { kind: "supplement", label: "补剂打卡", updateLabel: "补剂打卡", icon: "💊", limit: 5, idKind: "supp" },
+  { kind: "growth", label: "生长数据", updateLabel: "生长测量", icon: "📏", limit: 5, idKind: "growth" },
 ] as const;
 
 export function buildFamilyRecordNotifications(
@@ -307,6 +331,7 @@ export function buildFamilyRecordNotifications(
   const sinceMs = nowMs - 24 * 60 * 60 * 1000;
   const result: NotificationItem[] = [];
   for (const descriptor of RECORD_KINDS) {
+    const domainItems: NotificationItem[] = [];
     for (const raw of recordsByKind[descriptor.kind] || []) {
       const record = scopedRecord(raw, descriptor.label, scope);
       const times = recordTimes(record, descriptor.label);
@@ -325,26 +350,33 @@ export function buildFamilyRecordNotifications(
       let actorLabel: string | null = null;
       // recordedByUserId is authoritative only for creation. The canonical
       // record DTO has no updatedBy field, so an update must not be attributed.
-      if (action === "created" && descriptor.actor && record.recordedByUserId !== undefined && record.recordedByUserId !== null) {
+      if (action === "created" && record.recordedByUserId !== undefined && record.recordedByUserId !== null) {
         const recordedBy = stringField(record.recordedByUserId, `${descriptor.label} recordedByUserId`);
         if (members.has(recordedBy)) {
           actorId = recordedBy;
           actorLabel = members.get(recordedBy) || null;
         }
       }
-      const actorPrefix = actorLabel ? `${actorLabel} ` : "";
-      result.push({
-        id: `family-${descriptor.kind}-${record.id}-${action}`,
+      const legacyActorLabel = actorLabel || "家人";
+      domainItems.push({
+        id: action === "created" ? `family-${descriptor.idKind}-${record.id}` : `family-${descriptor.idKind}-${record.id}-updated`,
         type: "family",
-        title: `${descriptor.icon} ${actorPrefix}${action === "created" ? "记录了" : "修改了"}${descriptor.label}`,
+        title: action === "created"
+          ? `${descriptor.icon} ${legacyActorLabel} 记录了${descriptor.label}`
+          : `✏️ 修改了${descriptor.updateLabel}`,
         detail: recordDetail(descriptor.kind, record, clock),
         time: relativeTime(eventMs, nowMs),
         urgent: false,
         icon: descriptor.icon,
-        ...(actorId ? { actorId, actorLabel } : {}),
+        ...(action === "created" ? { actorId, actorLabel: legacyActorLabel } : {}),
         createdAt: eventMs,
       });
     }
+    domainItems.sort((a, b) => {
+      const byTime = (b.createdAt || 0) - (a.createdAt || 0);
+      return byTime || a.id.localeCompare(b.id);
+    });
+    result.push(...domainItems.slice(0, descriptor.limit));
   }
   return result.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)).slice(0, 20);
 }
@@ -355,33 +387,17 @@ function doseNumber(notes: unknown): number {
   return Number.isInteger(value) && value >= 1 ? value : 1;
 }
 
-function savedSelection(
-  value: unknown,
-  code: string,
-  dose: number,
-): { selected?: boolean; completed?: boolean } | undefined {
-  if (value === undefined || value === null) return undefined;
-  if (!isObject(value)) invalidResponse("GrowDesk 食物计划中的疫苗选择无效");
-  const planData = isObject(value.planData) ? value.planData : value;
-  const selections = planData.vaccineSelections;
-  if (selections === undefined || selections === null) return undefined;
-  if (!isObject(selections)) invalidResponse("GrowDesk 食物计划中的疫苗选择无效");
-  const selected = selections[`${code}-${dose}`];
-  if (selected === undefined || selected === null) return undefined;
-  if (!isObject(selected)) invalidResponse("GrowDesk 食物计划中的疫苗选择无效");
-  if (selected.selected !== undefined && typeof selected.selected !== "boolean") invalidResponse("GrowDesk 疫苗 selected 无效");
-  if (selected.completed !== undefined && typeof selected.completed !== "boolean") invalidResponse("GrowDesk 疫苗 completed 无效");
-  return selected as { selected?: boolean; completed?: boolean };
-}
-
 export function buildVaccineReminderNotifications(
-  schedule: unknown[],
+  _schedule: unknown[],
   records: JsonObject[],
   plan: unknown,
   scope: GrowDeskNotificationScope,
-  clock: FamilyClock,
+  _clock: FamilyClock,
   nowMs = Date.now(),
 ): NotificationItem[] {
+  // Canonical records only represent administered doses. They do not contain
+  // the legacy pending record's scheduledDate/isCompleted state, so deriving a
+  // reminder from the reference schedule would fabricate saved user data.
   const completed = new Set<string>();
   for (const raw of records) {
     const record = scopedRecord(raw, "疫苗", scope) as VaccineRecord;
@@ -389,40 +405,24 @@ export function buildVaccineReminderNotifications(
     dateField(record.administeredDate, "疫苗 administeredDate");
     completed.add(`${code}-${doseNumber(record.notes)}`);
   }
-
-  const birthDate = dateField(scope.birthDate, "宝宝 birthDate");
-  const result: NotificationItem[] = [];
-  const emitted = new Set<string>();
-  for (const raw of schedule) {
-    if (!isObject(raw)) invalidResponse("GrowDesk 返回了无效的疫苗计划");
-    const code = stringField(raw.vaccineCode, "疫苗计划 vaccineCode");
-    const name = stringField(raw.name, "疫苗计划 name");
-    const months = raw.recommendedAgeMonths;
-    const dose = raw.doseNumber;
-    if (typeof months !== "number" || !Number.isInteger(months) || months < 0) invalidResponse("GrowDesk 疫苗计划月龄无效");
-    if (typeof dose !== "number" || !Number.isInteger(dose) || dose < 1) invalidResponse("GrowDesk 疫苗计划剂次无效");
-    const key = `${code}-${dose}`;
-    if (emitted.has(key)) continue;
-    const selection = savedSelection(plan, code, dose);
-    if (completed.has(key) || selection?.completed === true || selection?.selected === false) continue;
-    const dueDate = addMonths(birthDate, months);
-    if (!isValidDateStr(dueDate)) invalidResponse("GrowDesk 疫苗计划日期无效");
-    const days = diffCalendarDays(clock.date, dueDate);
-    if (days > 7) continue;
-    const time = days < 0 ? `已过期 ${Math.abs(days)} 天` : days === 0 ? "今天" : `${days} 天后`;
-    result.push({
-      id: `vaccine-${code}-${dose}`,
-      type: "vaccine",
-      title: `💉 ${name} 第${dose}剂`,
-      detail: `计划接种日期：${dueDate}`,
-      time,
+  const pending = readLegacyPendingVaccines(readPendingPlan(plan, scope.babyId));
+  return pending.flatMap(record => {
+    const code = record.vaccineId || record.name;
+    if (completed.has(`${code}-${record.doseNumber}`)) return [];
+    const scheduledMs = Date.parse(record.scheduledDate);
+    const days = Math.ceil((scheduledMs - nowMs) / (24 * 60 * 60 * 1000));
+    if (days > 7) return [];
+    return [{
+      id: `vaccine-${record.id}`,
+      type: "vaccine" as const,
+      title: `💉 ${record.name} ${record.dose}`,
+      detail: `计划接种日期：${record.scheduledDate}`,
+      time: days < 0 ? `已过期 ${Math.abs(days)} 天` : days === 0 ? "今天" : `${days} 天后`,
       urgent: days <= 3,
       icon: "💉",
       createdAt: nowMs,
-    });
-    emitted.add(key);
-  }
-  return result;
+    }];
+  }).sort((a, b) => a.detail.localeCompare(b.detail));
 }
 
 export function buildDailyReminderNotifications(
@@ -454,25 +454,24 @@ export function buildDailyReminderNotifications(
   return result;
 }
 
-export function buildDataReleaseNotification(dataRelease: unknown, nowMs = Date.now()): NotificationItem | null {
+export function buildDataReleaseNotification(dataRelease: unknown, _nowMs = Date.now()): NotificationItem | null {
   if (dataRelease === undefined || dataRelease === null) return null;
   if (!isObject(dataRelease)) invalidResponse("GrowDesk 返回了无效的数据版本");
   const asOf = dataRelease.asOf === undefined || dataRelease.asOf === null ? "" : dateField(dataRelease.asOf, "数据版本 asOf");
-  const title = stringField(dataRelease.title, "数据版本标题");
+  stringField(dataRelease.title, "数据版本标题");
   const sources = Array.isArray(dataRelease.sources) ? dataRelease.sources : [];
   if (sources.length === 0) invalidResponse("GrowDesk 数据版本缺少来源");
   const firstSource = sources[0];
   if (!isObject(firstSource)) invalidResponse("GrowDesk 数据版本来源无效");
   const organization = stringField(firstSource.organization, "数据版本来源机构");
   return {
-    id: `data-release-${asOf || "current"}`,
+    id: `data-release-${dataRelease.id === undefined ? (asOf || "current") : stringField(dataRelease.id, "数据版本 id")}`,
     type: "data_release",
-    title: `📊 ${title}`,
+    title: "📊 数据版本更新",
     detail: `数据依据：${organization}${asOf ? ` · 数据核对日期：${asOf}` : ""}`,
     time: asOf || "刚刚",
     urgent: false,
     icon: "📊",
-    createdAt: nowMs,
   };
 }
 

@@ -9,6 +9,7 @@ import {
   buildFamilyRecordNotifications,
   buildVaccineReminderNotifications,
   fetchGrowDeskNotificationItems,
+  legacyMemberLabel,
   type FamilyClock,
   type GrowDeskNotificationScope,
 } from "../../lib/growdesk/notification-parity";
@@ -26,6 +27,10 @@ const clock: FamilyClock = {
   startMs: Date.parse("2026-09-18T16:00:00.000Z"),
   endMs: Date.parse("2026-09-19T16:00:00.000Z"),
 };
+const vaccinePlan = (planData: Record<string, unknown> = {}) => ({
+  babyId: scope.babyId, id: "plan_test", createdAt: "2026-09-18T00:00:00.000Z",
+  updatedAt: "2026-09-19T00:00:00.000Z", version: "1", planData,
+});
 
 function recordBase(id: string, extra: Record<string, unknown> = {}) {
   return {
@@ -75,16 +80,16 @@ test("GrowDesk notification parity keeps family scope and only attributes suppor
   );
 
   assert.equal(items.length, 3);
-  const feeding = items.find(item => item.id === "family-feeding-feed_test-created");
+  const feeding = items.find(item => item.id === "family-feeding-feed_test");
   assert.equal(feeding?.actorId, "user_test_member");
   assert.equal(feeding?.actorLabel, "测试家人");
 
-  const food = items.find(item => item.id === "family-food-food_test-created");
-  const growth = items.find(item => item.id === "family-growth-growth_test-created");
-  assert.equal(food?.actorId, undefined, "food has no canonical actor field");
-  assert.equal(food?.actorLabel, undefined, "food must not fabricate an actor label");
-  assert.equal(growth?.actorId, undefined, "growth has no canonical actor field");
-  assert.equal(growth?.actorLabel, undefined, "growth must not fabricate an actor label");
+  const food = items.find(item => item.id === "family-food-food_test");
+  const growth = items.find(item => item.id === "family-growth-growth_test");
+  assert.equal(food?.actorId, null, "food has no canonical actor field");
+  assert.equal(food?.actorLabel, "家人", "legacy response labels unattributed records as family");
+  assert.equal(growth?.actorId, null, "growth has no canonical actor field");
+  assert.equal(growth?.actorLabel, "家人", "legacy response labels unattributed records as family");
 
   assert.throws(
     () => buildFamilyRecordNotifications(
@@ -141,7 +146,7 @@ test("GrowDesk daily reminders include an overnight sleep interval", () => {
   assert.deepEqual(items.map(item => item.id), ["daily-food"]);
 });
 
-test("GrowDesk vaccine reminders derive due dates from canonical schedule and saved selections", () => {
+test("GrowDesk notification parity does not fabricate legacy vaccine records from a reference schedule", () => {
   const items = buildVaccineReminderNotifications(
     [
       { vaccineCode: "vaccine_due", name: "测试疫苗", recommendedAgeMonths: 6, doseNumber: 1, mandatory: true },
@@ -149,21 +154,17 @@ test("GrowDesk vaccine reminders derive due dates from canonical schedule and sa
       { vaccineCode: "vaccine_later", name: "稍后疫苗", recommendedAgeMonths: 7, doseNumber: 1, mandatory: true },
     ],
     [],
-    {
-      planData: {
+    vaccinePlan({
         vaccineSelections: {
           "vaccine_skipped-1": { selected: false, completed: false },
         },
-      },
-    },
+    }),
     scope,
     clock,
     nowMs,
   );
 
-  assert.deepEqual(items.map(item => item.id), ["vaccine-vaccine_due-1"]);
-  assert.equal(items[0]?.urgent, true);
-  assert.match(items[0]?.detail || "", /2026-09-19/);
+  assert.deepEqual(items, []);
 
   const completed = buildVaccineReminderNotifications(
     [{ vaccineCode: "vaccine_due", name: "测试疫苗", recommendedAgeMonths: 6, doseNumber: 1, mandatory: true }],
@@ -172,7 +173,7 @@ test("GrowDesk vaccine reminders derive due dates from canonical schedule and sa
       administeredDate: "2026-09-19",
       notes: "第1剂",
     })],
-    null,
+    vaccinePlan(),
     scope,
     clock,
     nowMs,
@@ -189,24 +190,54 @@ test("GrowDesk vaccine reminders derive due dates from canonical schedule and sa
       administeredDate: "2026-09-19",
       notes: "剂次: 第1剂",
     })],
-    null,
+    vaccinePlan(),
     scope,
     clock,
     nowMs,
   );
-  assert.deepEqual(secondDose.map(item => item.id), ["vaccine-vaccine_series-2"]);
+  assert.deepEqual(secondDose, []);
 });
 
-test("GrowDesk data release notification preserves canonical source metadata", () => {
+test("GrowDesk data release notification uses the legacy response shape", () => {
   const item = buildDataReleaseNotification({
+    id: "release_test",
     title: "儿童健康数据标准",
     asOf: "2026-09-01",
     sources: [{ organization: "测试卫生机构" }],
   }, nowMs);
 
-  assert.equal(item?.id, "data-release-2026-09-01");
+  assert.equal(item?.id, "data-release-release_test");
+  assert.equal(item?.title, "📊 数据版本更新");
+  assert.equal(item?.createdAt, undefined);
   assert.match(item?.detail || "", /测试卫生机构/);
   assert.match(item?.detail || "", /2026-09-01/);
+});
+
+test("GrowDesk family activity parity applies per-kind caps and stable equal-time ordering", () => {
+  const feedings = Array.from({ length: 25 }, (_, index) => recordBase(`feed_${String(index).padStart(2, "0")}`, {
+    feedingType: "formula",
+    amountMl: index + 1,
+    occurredAt: "2026-09-19T02:00:00.000Z",
+  })).reverse();
+  const items = buildFamilyRecordNotifications({
+    feeding: feedings,
+    sleep: [recordBase("sleep_test", { sleepType: "night", startedAt: "2026-09-18T20:00:00.000Z", endedAt: "2026-09-19T02:00:00.000Z" })],
+    diaper: [recordBase("diaper_test", { diaperType: "pee" })],
+    food: [], supplement: [], growth: [],
+  }, scope, new Map(), clock, nowMs);
+
+  assert.equal(items.filter(item => item.id.startsWith("family-feeding-")).length, 10);
+  assert.deepEqual(items.slice(0, 3).map(item => item.id), [
+    "family-feeding-feed_00", "family-feeding-feed_01", "family-feeding-feed_02",
+  ]);
+  assert.ok(items.some(item => item.id === "family-sleep-sleep_test"));
+  assert.ok(items.some(item => item.id === "family-diaper-diaper_test"));
+});
+
+test("GrowDesk family labels preserve legacy relation wording", () => {
+  assert.equal(legacyMemberLabel("parent", "测试成员"), "家长 (测试成员)");
+  assert.equal(legacyMemberLabel("mother", "", "test_user"), "妈妈 (test_user)");
+  assert.equal(legacyMemberLabel("unknown", ""), "家人");
 });
 
 test("GrowDesk notification parity propagates canonical list failures", async () => {
