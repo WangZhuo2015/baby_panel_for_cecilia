@@ -40,9 +40,23 @@ export async function downloadAttachment(request: Request, id: string) {
   try {
     const session = await resolveBffSession(request);
     if (!session) throw new BridgeError(401, "UNAUTHORIZED", "请先登录");
-    const data = requireData(await growdeskFetch<{ downloadUrl: string; mimeType: string }>(`/api/v1/attachments/${pathId(id)}/download-url`, { accessToken: session.accessToken }));
-    const response = await fetch(data.downloadUrl, { redirect: "error", signal: AbortSignal.timeout(30000) });
-    if (!response.ok) throw new BridgeError(502, "DOWNLOAD_FAILED", "附件暂时无法读取");
-    return new Response(response.body, { headers: { "content-type": data.mimeType, "cache-control": "private, no-store", "x-content-type-options": "nosniff", "content-security-policy": "default-src 'none'; sandbox" } });
+    const upstream = await growdeskFetch(`/api/v1/attachments/${pathId(id)}/content`, {
+      accessToken: session.accessToken,
+      responseType: "stream",
+    });
+    if (!upstream.ok) {
+      throw new BridgeError(upstream.status, upstream.error?.code || "UPSTREAM_ERROR", upstream.error?.message || "附件暂时无法读取", upstream.error?.details);
+    }
+    if (!upstream.response?.body) throw new BridgeError(502, "UPSTREAM_INVALID_RESPONSE", "附件内容响应为空");
+    const headers = new Headers({
+      "cache-control": "private, no-store",
+      "x-content-type-options": "nosniff",
+      "content-security-policy": "default-src 'none'; sandbox",
+    });
+    const contentType = upstream.response.headers.get("content-type");
+    const contentLength = upstream.response.headers.get("content-length");
+    if (contentType) headers.set("content-type", contentType);
+    if (contentLength) headers.set("content-length", contentLength);
+    return new Response(upstream.response.body, { headers });
   } catch (error) { return bridgeErrorResponse(error); }
 }

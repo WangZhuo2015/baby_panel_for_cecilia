@@ -11,6 +11,7 @@ export interface GrowDeskFetchOptions {
   accessToken?: string;
   idempotencyKey?: string;
   timeoutMs?: number;
+  responseType?: "json" | "stream";
 }
 
 export interface GrowDeskErrorPayload {
@@ -27,6 +28,8 @@ export interface GrowDeskResponse<T> {
   page?: { nextCursor: string | null };
   dataRelease?: Record<string, unknown>;
   error?: GrowDeskErrorPayload;
+  /** Present only for a successful responseType=stream request. */
+  response?: Response;
 }
 
 const FORBIDDEN_INCOMING_HEADERS = new Set([
@@ -50,7 +53,7 @@ export async function growdeskFetch<T>(
 
   const requestId = crypto.randomUUID();
   const headers: Record<string, string> = {
-    "accept": "application/json",
+    "accept": options.responseType === "stream" ? "*/*" : "application/json",
     "x-request-id": requestId,
   };
 
@@ -95,6 +98,13 @@ export async function growdeskFetch<T>(
     const isJson = contentType.includes("application/json");
 
     if (res.ok) {
+      if (options.responseType === "stream") {
+        return {
+          ok: true,
+          status: res.status,
+          response: res,
+        };
+      }
       if (!isJson) {
         return {
           ok: true,
