@@ -13,6 +13,7 @@ import { fromGrowDeskNotification } from "./notifications";
 import { decodeNotes } from "./food-compat";
 import { extractProductIdFromNotes } from "./nutrition-compat";
 import { readLegacyPendingVaccines, readPendingPlan } from "./vaccine-pending-compat";
+import { legacyDataReleaseId } from "./knowledge-legacy-id";
 
 type JsonObject = Record<string, unknown>;
 
@@ -468,7 +469,7 @@ export function buildDataReleaseNotification(dataRelease: unknown, _nowMs = Date
   if (!isObject(firstSource)) invalidResponse("GrowDesk 数据版本来源无效");
   const organization = stringField(firstSource.organization, "数据版本来源机构");
   return {
-    id: `data-release-${dataRelease.id === undefined ? (asOf || "current") : stringField(dataRelease.id, "数据版本 id")}`,
+    id: `data-release-${dataRelease.id === undefined ? legacyDataReleaseId() : stringField(dataRelease.id, "数据版本 id")}`,
     type: "data_release",
     title: "📊 数据版本更新",
     detail: `数据依据：${organization}${asOf ? ` · 数据核对日期：${asOf}` : ""}`,

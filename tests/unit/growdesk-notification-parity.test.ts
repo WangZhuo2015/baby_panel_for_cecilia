@@ -214,6 +214,16 @@ test("GrowDesk data release notification uses the legacy response shape", () => 
   assert.match(item?.detail || "", /2026-09-01/);
 });
 
+test("GrowDesk data release notification restores the legacy reference identity when canonical omits it", () => {
+  const item = buildDataReleaseNotification({
+    title: "儿童健康数据标准",
+    asOf: "2026-08-03",
+    sources: [{ organization: "测试卫生机构" }],
+  }, nowMs);
+
+  assert.equal(item?.id, "data-release-2b953bce-728c-5d10-8bac-4eb4faff4e2d");
+});
+
 test("GrowDesk family activity parity applies per-kind caps and stable equal-time ordering", () => {
   const feedings = Array.from({ length: 25 }, (_, index) => recordBase(`feed_${String(index).padStart(2, "0")}`, {
     feedingType: "formula",
