@@ -781,7 +781,7 @@ export function createMcpServer(principal: UserPrincipal, options?: { accessToke
             required: ["name"],
             properties: {
               name: { type: "string", description: "补剂全称" },
-              brand: { type: "string", description: "品牌名称，默认家庭自选" },
+              brand: { type: "string", description: "品牌名称，默认使用补剂名称" },
               dosageForm: { type: "string", enum: ["drops", "capsule", "liquid_ml", "sachet", "tablet"] },
               unitName: { type: "string", description: "单次计量单位，默认滴" },
               defaultDose: { type: "number", description: "单次推荐用量，默认1" },
@@ -2561,7 +2561,7 @@ export function createMcpServer(principal: UserPrincipal, options?: { accessToke
         }
         const suppName = String(args.name || "").trim();
         if (!suppName) throw new Error("请提供补剂名称");
-        const brand = String(args.brand || "家庭自选").trim() || "家庭自选";
+        const brand = String(args.brand || suppName).trim() || suppName;
         const dosageForm = String(args.dosageForm || "drops").trim();
         const unitName = String(args.unitName || "滴").trim() || "滴";
         const defaultDose = typeof args.defaultDose === "number" && Number.isFinite(args.defaultDose) && args.defaultDose > 0 ? args.defaultDose : 1;

@@ -564,7 +564,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           properties: {
             ...SESSION_PROP,
             name: { type: "string", description: "补剂全称" },
-            brand: { type: "string", description: "品牌名称，默认家庭自选" },
+            brand: { type: "string", description: "品牌名称，默认使用补剂名称" },
             dosageForm: { type: "string", enum: ["drops", "capsule", "liquid_ml", "sachet", "tablet"] },
             unitName: { type: "string", description: "单次计量单位，默认滴" },
             defaultDose: { type: "number", description: "单次推荐用量，默认1" },

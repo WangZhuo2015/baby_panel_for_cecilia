@@ -304,7 +304,7 @@ export function makeNutritionTools(ctx: {
     description: "在家庭档案库中建档或更新营养补充剂产品，无需同时记录一次服用。",
     parameters: Type.Object({
       name: Type.String({ description: "补剂全称" }),
-      brand: Type.Optional(Type.String({ description: "品牌名称，默认家庭自选" })),
+      brand: Type.Optional(Type.String({ description: "品牌名称，默认使用补剂名称" })),
       dosageForm: Type.Optional(Type.Union([
         Type.Literal("drops"), Type.Literal("capsule"), Type.Literal("liquid_ml"), Type.Literal("sachet"), Type.Literal("tablet"),
       ])),
@@ -318,7 +318,7 @@ export function makeNutritionTools(ctx: {
       const params = raw as Params;
       const name = String(params.name || "").trim();
       if (!name) fail("请输入补剂名称");
-      const brand = String(params.brand || "家庭自选").trim() || "家庭自选";
+      const brand = String(params.brand || name).trim() || name;
       const dosageForm = String(params.dosageForm || "drops").trim();
       const unitName = String(params.unitName || "滴").trim() || "滴";
       const defaultDose = typeof params.defaultDose === "number" && Number.isFinite(params.defaultDose) && params.defaultDose > 0 ? params.defaultDose : 1;

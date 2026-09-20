@@ -145,13 +145,16 @@ test("AI Tools: Direct invocation of agent tools", async (t) => {
   assert.ok(createSupplementTool, "create_supplement_product tool must exist");
   const createSupplementResult: any = await createSupplementTool.execute("call-11", {
     name: "test_ai_tool_DHA",
-    brand: "test_brand",
     dosageForm: "capsule",
     unitName: "粒",
     defaultDose: 1,
     nutrients: { dha: 100, "vitamin-d": { amount: 400.126, unit: "IU" } },
   });
   assert.ok(createSupplementResult.content[0].text.includes("test_ai_tool_DHA"));
+  const initiallySavedProduct = await prisma.supplementProduct.findFirstOrThrow({
+    where: { familyId: tenant.familyId, name: "test_ai_tool_DHA" },
+  });
+  assert.equal(initiallySavedProduct.brand, "test_ai_tool_DHA");
   await createSupplementTool.execute("call-11-update", {
     name: "test_ai_tool_DHA",
     brand: "test_brand_updated",
