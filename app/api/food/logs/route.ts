@@ -72,7 +72,7 @@ export async function POST(request: Request) {
         body: toGrowDeskFoodCreatePayload(body),
       });
       const data = requireWriteData(res, "Failed to create food log record");
-      return NextResponse.json(fromGrowDeskFoodRecord(data, request.headers.get("x-growdesk-representation") === "extended"), { status: 201 });
+      return NextResponse.json(fromGrowDeskFoodRecord(data), { status: 201 });
     }
     const auth = await requireAuth(request);
     if (auth.errorResponse) return auth.errorResponse;
@@ -182,7 +182,7 @@ export async function PUT(request: Request) {
         body: toGrowDeskFoodUpdatePayload(body, existing),
       });
       const data = requireWriteData(res, "Failed to update food log record");
-      return NextResponse.json(fromGrowDeskFoodRecord(data, request.headers.get("x-growdesk-representation") === "extended"));
+      return NextResponse.json(fromGrowDeskFoodRecord(data));
     }
     const auth = await requireAuth(request);
     if (auth.errorResponse) return auth.errorResponse;
