@@ -56,7 +56,7 @@ function opencodeApiKey(): string {
 function opencodeModelId(): string {
   const profile = getActiveLlmProfile();
   if (profile.model) return profile.model;
-  return process.env.AI_MODEL || "muse-spark-1.2-contributor";
+  return process.env.AI_MODEL || "Qwen3.8-Flash-Next";
 }
 
 function opencodeVisionModelId(): string {
@@ -64,7 +64,7 @@ function opencodeVisionModelId(): string {
   if (profile.visionModel && profile.visionModel !== "hermes-agent") return profile.visionModel;
   const v = process.env.AI_VISION_MODEL;
   if (v && v !== "hermes-agent") return v;
-  return "DeepSeek-V4.1-Flash";
+  return "Qwen3.8-Flash-Next";
 }
 
 export function listLlmBackends(): LlmBackendPublic[] {

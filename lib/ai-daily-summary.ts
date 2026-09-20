@@ -671,7 +671,7 @@ function formatCandidate(key: string, p: LlmProfile): CandidateProfile {
 
   let model = p.model;
   if (model === "hermes-agent" || (p.baseUrl.includes("opencode.ai") && model.includes("muse-spark"))) {
-    model = "DeepSeek-V4-Flash";
+    model = "Qwen3.8-Flash-Next";
   }
 
   return {
