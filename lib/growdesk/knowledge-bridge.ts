@@ -1,7 +1,14 @@
 import { growdeskFetch } from "./client";
 import { resolveBffSession } from "./session";
 import { BridgeError, requireData, bridgeErrorResponse } from "./bridge-protocol";
-import { legacyFeedingGuidelineId } from "./knowledge-legacy-id";
+import {
+  legacyActivityRecommendationId,
+  legacyDataReleaseId,
+  legacyDevelopmentMilestoneId,
+  legacyDevelopmentWarningSignId,
+  legacyFeedingGuidelineId,
+  legacySourceRefId,
+} from "./knowledge-legacy-id";
 
 export type KnowledgeKind = "milestones" | "activities" | "warning-signs" | "feeding-guidelines";
 type KnowledgeItem = Record<string, unknown>;
@@ -31,6 +38,41 @@ function jsonArrayField(item: KnowledgeItem, field: string): string {
   return JSON.stringify(arrayField(item, field));
 }
 
+function omitCanonicalFields(item: KnowledgeItem, fields: string[]): KnowledgeItem {
+  const result = { ...item };
+  for (const field of fields) delete result[field];
+  return result;
+}
+
+/** Project canonical release metadata into the old Prisma include shape. */
+export function projectLegacyDataRelease(source: unknown): KnowledgeItem | null {
+  if (!isRecord(source)) return null;
+  const rawSources = Array.isArray(source.sources) ? source.sources : [];
+  const projectedSources = rawSources
+    .filter(isRecord)
+    .map(sourceRef => {
+      const sourceId = typeof sourceRef.sourceId === "string" ? sourceRef.sourceId : sourceRef.id;
+      const legacyId = legacySourceRefId(sourceRef);
+      return {
+        ...sourceRef,
+        ...(legacyId ? { id: legacyId } : {}),
+        ...(typeof sourceId === "string" ? { sourceId } : {}),
+        dataReleaseId: legacyDataReleaseId(),
+      };
+    });
+  const projected: KnowledgeItem = {
+    ...source,
+    id: legacyDataReleaseId(),
+    sources: projectedSources,
+  };
+  delete projected.evidencePriority;
+  delete projected.nullPolicy;
+  // createdAt is preserved when the canonical API supplies it. The static
+  // release snapshot has no creation timestamp, so the adapter must not
+  // invent a golden-run timestamp.
+  return projected;
+}
+
 /**
  * Project canonical reference details into the legacy Web response shape.
  *
@@ -46,8 +88,9 @@ export function projectLegacyKnowledgeItem(kind: KnowledgeKind, source: Knowledg
   if (kind === "milestones") {
     const ageRange = isRecord(item.ageRange) ? item.ageRange : {};
     const criterion = isRecord(item.criterion) ? item.criterion : {};
-    return {
+    const projected = omitCanonicalFields({
       ...item,
+      ...(legacyDevelopmentMilestoneId(item) ? { id: legacyDevelopmentMilestoneId(item) } : {}),
       milestoneId: item.milestoneId ?? item.id ?? null,
       assessmentAgeMonths: item.assessmentAgeMonths ?? item.monthAge ?? null,
       ageRangeEarliestMonth: item.ageRangeEarliestMonth ?? ageRange.earliestMonth ?? null,
@@ -58,7 +101,8 @@ export function projectLegacyKnowledgeItem(kind: KnowledgeKind, source: Knowledg
       criterionDescription: item.criterionDescription ?? criterion.description ?? null,
       sourceRefsJson: JSON.stringify(sourceRefs),
       sourceRefs,
-    };
+    }, ["ageRange", "criterion", "monthAge"]);
+    return projected;
   }
 
   if (kind === "activities") {
@@ -68,8 +112,9 @@ export function projectLegacyKnowledgeItem(kind: KnowledgeKind, source: Knowledg
     const steps = arrayField(item, "steps");
     const safety = arrayField(item, "safety");
     const stopConditions = arrayField(item, "stopConditions");
-    return {
+    const projected = omitCanonicalFields({
       ...item,
+      ...(legacyActivityRecommendationId(item) ? { id: legacyActivityRecommendationId(item) } : {}),
       activityId: item.activityId ?? item.id ?? null,
       categoriesJson: JSON.stringify(categories),
       developmentGoalsJson: JSON.stringify(developmentGoals),
@@ -94,19 +139,22 @@ export function projectLegacyKnowledgeItem(kind: KnowledgeKind, source: Knowledg
       safety,
       stopConditions,
       sourceRefs,
-    };
+    }, ["content", "monthAge"]);
+    return projected;
   }
 
   if (kind === "warning-signs") {
-    return {
+    const projected = omitCanonicalFields({
       ...item,
+      ...(legacyDevelopmentWarningSignId(item) ? { id: legacyDevelopmentWarningSignId(item) } : {}),
       warningSignId: item.warningSignId ?? item.id ?? null,
       ageMonths: item.ageMonths ?? item.monthAge ?? null,
       description: item.description ?? item.signText ?? null,
       recommendedAction: item.recommendedAction ?? item.actionAdvice ?? null,
       sourceRefsJson: JSON.stringify(sourceRefs),
       sourceRefs,
-    };
+    }, ["actionAdvice", "monthAge", "signText"]);
+    return projected;
   }
 
   const legacyId = legacyFeedingGuidelineId(item);
@@ -151,6 +199,6 @@ export async function knowledgeBridge(request: Request, kind: KnowledgeKind) {
     const result = await growdeskFetch<Record<string, unknown>[]>(`${path}?${query}`, { accessToken: session.accessToken });
     const items = requireData(result).map(item => projectLegacyKnowledgeItem(kind, item));
     const orderedItems = kind === "milestones" ? sortLegacyMilestones(items) : items;
-    return Response.json(kind === "milestones" ? { milestones: orderedItems, dataRelease: result.dataRelease ?? null } : orderedItems);
+    return Response.json(kind === "milestones" ? { milestones: orderedItems, dataRelease: projectLegacyDataRelease(result.dataRelease) } : orderedItems);
   } catch (error) { return bridgeErrorResponse(error); }
 }

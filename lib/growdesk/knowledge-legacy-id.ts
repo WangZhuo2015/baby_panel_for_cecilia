@@ -1,5 +1,8 @@
 import booksDataset from "../../data/05_books.json";
 import foodsDataset from "../../data/04_foods.json";
+import milestonesDataset from "../../data/03_milestones.json";
+import activitiesDataset from "../../data/06_activities.json";
+import sourcesDataset from "../../data/01_sources.json";
 
 /**
  * The legacy golden fixture makes Prisma's generated reference-row IDs
@@ -13,9 +16,14 @@ const LEGACY_UUID_PREFIX = "growdesk-test-golden";
 
 type BookSource = { id?: unknown };
 type FeedingGuidelineSource = { ageMinMonths?: unknown; ageMaxMonths?: unknown };
+type ReferenceSource = { id?: unknown };
 
 const books = (booksDataset.books as BookSource[]);
 const feedingGuidelines = (foodsDataset.feedingGuidelines as FeedingGuidelineSource[]);
+const milestones = (milestonesDataset.milestones as ReferenceSource[]);
+const warningSigns = (milestonesDataset.developmentRedFlags as ReferenceSource[]);
+const activities = (activitiesDataset.activities as ReferenceSource[]);
+const sources = (sourcesDataset.sources as ReferenceSource[]);
 
 function uuidBytes(value: string): Uint8Array {
   const normalized = value.replace(/-/g, "");
@@ -124,6 +132,16 @@ function sourceNumber(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
+function legacyNaturalId(
+  item: Record<string, unknown>,
+  sourceRows: ReferenceSource[],
+  table: string,
+): string | undefined {
+  const key = sourceId(item.milestoneId) ?? sourceId(item.activityId) ?? sourceId(item.warningSignId) ?? sourceId(item.id);
+  const index = sourceRows.findIndex(candidate => sourceId(candidate.id) === key);
+  return index >= 0 ? legacyReferenceId(table, index) : undefined;
+}
+
 function bookSourceIndex(book: Record<string, unknown>): number {
   const key = sourceId(book.bookId) ?? sourceId(book.id);
   return books.findIndex(candidate => sourceId(candidate.id) === key);
@@ -149,4 +167,26 @@ export function legacyFeedingGuidelineId(item: Record<string, unknown>): string 
     sourceNumber(candidate.ageMinMonths) === min && sourceNumber(candidate.ageMaxMonths) === max,
   );
   return index >= 0 ? legacyReferenceId("FeedingGuideline", index) : undefined;
+}
+
+export function legacyDevelopmentMilestoneId(item: Record<string, unknown>): string | undefined {
+  return legacyNaturalId(item, milestones, "DevelopmentMilestone");
+}
+
+export function legacyActivityRecommendationId(item: Record<string, unknown>): string | undefined {
+  return legacyNaturalId(item, activities, "ActivityRecommendation");
+}
+
+export function legacyDevelopmentWarningSignId(item: Record<string, unknown>): string | undefined {
+  return legacyNaturalId(item, warningSigns, "DevelopmentWarningSign");
+}
+
+export function legacyDataReleaseId(): string {
+  return legacyReferenceId("DataRelease", 0);
+}
+
+export function legacySourceRefId(source: Record<string, unknown>): string | undefined {
+  const key = sourceId(source.sourceId) ?? sourceId(source.id);
+  const index = sources.findIndex(candidate => sourceId(candidate.id) === key);
+  return index >= 0 ? legacyReferenceId("SourceRef", index) : undefined;
 }

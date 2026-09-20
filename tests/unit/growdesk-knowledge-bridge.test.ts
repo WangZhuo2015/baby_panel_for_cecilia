@@ -4,10 +4,14 @@ import path from "node:path";
 import test from "node:test";
 
 import {
+  projectLegacyDataRelease,
   projectLegacyKnowledgeItem,
   sortLegacyMilestones,
 } from "../../lib/growdesk/knowledge-bridge";
-import { legacyReferenceId } from "../../lib/growdesk/knowledge-legacy-id";
+import {
+  legacyReferenceId,
+  legacySourceRefId,
+} from "../../lib/growdesk/knowledge-legacy-id";
 
 function readDataset<T>(fileName: string): T {
   return JSON.parse(fs.readFileSync(path.join(process.cwd(), "data", fileName), "utf8")) as T;
@@ -33,7 +37,7 @@ test("knowledge bridge preserves canonical details and restores activity JSON co
     },
   });
 
-  assert.equal(projected.id, "act_face_talk");
+  assert.equal(projected.id, legacyReferenceId("ActivityRecommendation", 0));
   assert.deepEqual(JSON.parse(String(projected.categoriesJson)), projected.categories);
   assert.deepEqual(JSON.parse(String(projected.developmentGoalsJson)), projected.developmentGoals);
   assert.deepEqual(JSON.parse(String(projected.materialsJson)), projected.materials);
@@ -60,9 +64,9 @@ test("knowledge bridge restores warning-sign and feeding-guideline JSON columns"
     sourceRefs: ["src_warning"],
   });
   assert.equal(warning.warningSignId, "rf_3m_01");
-  assert.equal(warning.monthAge, 3);
-  assert.equal(warning.signText, "对较大声音没有反应");
-  assert.equal(warning.actionAdvice, "咨询专业人员");
+  assert.equal("monthAge" in warning, false);
+  assert.equal("signText" in warning, false);
+  assert.equal("actionAdvice" in warning, false);
   assert.equal(warning.description, "对较大声音没有反应");
   assert.equal(warning.recommendedAction, "咨询专业人员");
   assert.equal(warning.sourceRefsJson, '["src_warning"]');
@@ -114,6 +118,9 @@ test("knowledge bridge restores milestone flattened fields and assessment orderi
   assert.equal(projected.criterionThreshold, "约75%");
   assert.equal(projected.criterionDescription, "多数儿童");
   assert.equal(projected.sourceRefsJson, '["src_cdc"]');
+  assert.equal("ageRange" in projected, false);
+  assert.equal("criterion" in projected, false);
+  assert.equal("monthAge" in projected, false);
 
   const ordered = sortLegacyMilestones([
     { id: "late", assessmentAgeMonths: 4 },
@@ -121,6 +128,61 @@ test("knowledge bridge restores milestone flattened fields and assessment orderi
     { id: "early-a", assessmentAgeMonths: 2, category: "cognitive" },
   ]);
   assert.deepEqual(ordered.map((item) => item.id), ["early-a", "early-b", "late"]);
+});
+
+test("development projections reproduce legacy IDs and omit canonical-only aliases", () => {
+  const activity = projectLegacyKnowledgeItem("activities", {
+    id: "act_face_talk",
+    activityId: "act_face_talk",
+    title: "面对面说话与回应",
+    ageMinMonths: 0,
+    ageMaxMonths: 3,
+    monthAge: 0,
+    content: "面对面说话与回应",
+    categories: [],
+    developmentGoals: [],
+    materials: [],
+    steps: [],
+    safety: [],
+    stopConditions: [],
+    sourceRefs: [],
+  });
+  assert.equal(activity.id, legacyReferenceId("ActivityRecommendation", 0));
+  assert.equal("content" in activity, false);
+  assert.equal("monthAge" in activity, false);
+
+  const warning = projectLegacyKnowledgeItem("warning-signs", {
+    id: "rf_3m_01",
+    warningSignId: "rf_3m_01",
+    ageMonths: 3,
+    monthAge: 3,
+    signText: "对较大声音没有反应",
+    actionAdvice: "咨询专业人员",
+    description: "对较大声音没有反应",
+    recommendedAction: "咨询专业人员",
+    sourceRefs: [],
+  });
+  assert.equal(warning.id, legacyReferenceId("DevelopmentWarningSign", 0));
+  assert.equal("signText" in warning, false);
+  assert.equal("actionAdvice" in warning, false);
+  assert.equal("monthAge" in warning, false);
+});
+
+test("release projection restores legacy source IDs and sourceId fields", () => {
+  const release = projectLegacyDataRelease({
+    title: "test release",
+    asOf: "2026-08-03",
+    evidencePriority: ["A"],
+    nullPolicy: "use null",
+    sources: [{ id: "src_nip_2026", title: "source", notes: null }],
+  });
+  assert.equal(release?.id, legacyReferenceId("DataRelease", 0));
+  assert.equal("evidencePriority" in (release ?? {}), false);
+  assert.equal("nullPolicy" in (release ?? {}), false);
+  const source = (release?.sources as Array<Record<string, unknown>>)[0];
+  assert.equal(source.id, legacySourceRefId({ id: "src_nip_2026" }));
+  assert.equal(source.sourceId, "src_nip_2026");
+  assert.equal(source.dataReleaseId, release?.id);
 });
 
 test("knowledge bridge keeps the legacy reference datasets lossless", () => {
