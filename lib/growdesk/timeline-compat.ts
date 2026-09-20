@@ -6,6 +6,7 @@ import { BridgeError, isoTimestamp, wireVersion } from "./bridge-protocol";
 import { formatIsoToLocalTime, getLocalDateStr } from "@/lib/date";
 import { getFeedingEffectiveMl } from "@/lib/nutrition/breastmilk";
 import { decodeNotes } from "./food-compat";
+import { parseSupplementAmount } from "./nutrition-compat";
 
 export interface GrowDeskTimelineEntry {
   id: string;
@@ -389,11 +390,19 @@ export function fromGrowDeskTimelineEntry(
       sourceAgent = supp.sourceAgent || null;
       const recordedById = supp.recordedByUserId || supp.recordedById;
       recorderName = lookup(context.memberNames, recordedById) || null;
-      const prodId = supp.productId || supp.supplementProductId;
-      const prod = lookup(context.supplementProducts, prodId);
+      const explicitProdId = supp.productId || supp.supplementProductId;
+      let prod = lookup(context.supplementProducts, explicitProdId);
+      if (!prod && typeof supp.supplementName === "string") {
+        const candidates = context.supplementProducts instanceof Map
+          ? Array.from(context.supplementProducts.values())
+          : Object.values(context.supplementProducts || {});
+        prod = candidates.find(candidate => candidate && typeof candidate === "object" && candidate.name === supp.supplementName);
+      }
+      const prodId = explicitProdId || prod?.id;
       const prodName = supp.productName || supp.supplementName || prod?.name || "营养补充剂";
-      const unit = supp.unitName || supp.amount || prod?.unitName || "剂";
-      const dose = supp.dose ?? supp.dosage ?? "";
+      const parsedAmount = typeof supp.amount === "string" ? parseSupplementAmount(supp.amount) : null;
+      const unit = supp.unitName || parsedAmount?.unitName || prod?.unitName || "剂";
+      const dose = supp.dose ?? supp.dosage ?? parsedAmount?.dose ?? "";
       let d = `${prodName} ${dose} ${unit}`.trim();
       if (supp.notes) d += ` · ${supp.notes}`;
       detail = d;

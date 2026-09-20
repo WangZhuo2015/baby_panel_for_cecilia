@@ -17,6 +17,7 @@ import { BridgeError, bridgeErrorResponse, wireVersion } from "@/lib/growdesk/br
 import { fetchLegacyFeedingList } from "@/lib/growdesk/feeding-list";
 import { fetchRecordDetail, idempotencyKey, readJsonObject, recordPath, requireWriteData } from "@/lib/growdesk/record-route-helpers";
 import { enrichGrowDeskFeedingRecords } from "@/lib/growdesk/feeding-product-compat";
+import { projectLegacyFeedingRecord, wantsExtendedRepresentation } from "@/lib/growdesk/legacy-projections";
 
 function mapError(e: unknown) {
   if (e instanceof ValidationError) return NextResponse.json({ error: e.message }, { status: 400 });
@@ -37,6 +38,7 @@ export async function GET(request: Request) {
         return NextResponse.json({ error: "Unauthorized: 会话无效或已过期" }, { status: 401 });
       }
       const { searchParams } = new URL(request.url);
+      const extended = wantsExtendedRepresentation(request);
       const babyId = searchParams.get("babyId");
       if (!babyId) {
         return NextResponse.json({ error: "请提供 babyId" }, { status: 400 });
@@ -45,13 +47,13 @@ export async function GET(request: Request) {
       if (recordId) {
         const detail = await fetchRecordDetail<GrowDeskFeedingRecord>(growdeskFetch, bffSession.accessToken, babyId, recordId, "feeding");
         const [enriched] = await enrichGrowDeskFeedingRecords(growdeskFetch, bffSession.accessToken, babyId, [detail]);
-        return NextResponse.json(enriched, { headers: { "cache-control": "no-store" } });
+        return NextResponse.json(extended ? enriched : projectLegacyFeedingRecord(enriched), { headers: { "cache-control": "no-store" } });
       }
       const list = await fetchLegacyFeedingList<GrowDeskFeedingRecord>(
         growdeskFetch, bffSession.accessToken, babyId, legacyListQuery(searchParams),
       );
       const enriched = await enrichGrowDeskFeedingRecords(growdeskFetch, bffSession.accessToken, babyId, list);
-      return NextResponse.json(enriched, { headers: { "cache-control": "no-store" } });
+      return NextResponse.json(extended ? enriched : enriched.map(projectLegacyFeedingRecord), { headers: { "cache-control": "no-store" } });
     }
 
     const auth = await requireAuth(request);

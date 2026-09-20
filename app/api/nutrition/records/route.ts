@@ -24,6 +24,7 @@ import { PRESET_SUPPLEMENT_PRODUCTS } from "@/lib/nutrition/presets";
 import crypto from "node:crypto";
 import { fetchCompleteList } from "@/lib/growdesk/paged-list";
 import { BridgeError, bridgeErrorResponse, isoTimestamp, requireData, pathId } from "@/lib/growdesk/bridge-protocol";
+import { projectLegacySupplementRecord, wantsExtendedRepresentation } from "@/lib/growdesk/legacy-projections";
 
 function requireUpstreamObject(value: unknown, label: string): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -81,6 +82,7 @@ export async function GET(request: Request) {
         return NextResponse.json({ error: "Unauthorized: 会话无效或已过期" }, { status: 401 });
       }
       const { searchParams } = new URL(request.url);
+      const extended = wantsExtendedRepresentation(request);
       const requestedBabyId = searchParams.get("babyId");
       const baby = await loadWebBaby(growdeskFetch, bffSession.accessToken, requestedBabyId);
       if (!baby) {
@@ -132,7 +134,8 @@ export async function GET(request: Request) {
         records = records.filter((r) => r.productId === productId);
       }
 
-      return NextResponse.json({ records: records.slice(0, limit) });
+      const limited = records.slice(0, limit);
+      return NextResponse.json({ records: extended ? limited : limited.map(projectLegacySupplementRecord) });
     }
 
     const auth = await requireAuth(request);

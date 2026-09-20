@@ -15,6 +15,7 @@ import {
 import { loadWebBaby } from "@/lib/growdesk/bridge-identity";
 import { BridgeError, bridgeErrorResponse, wireVersion } from "@/lib/growdesk/bridge-protocol";
 import crypto from "node:crypto";
+import { projectLegacyGrowthRecord, wantsExtendedRepresentation } from "@/lib/growdesk/legacy-projections";
 
 export async function GET(request: Request) {
   try {
@@ -24,6 +25,7 @@ export async function GET(request: Request) {
         return NextResponse.json({ error: "Unauthorized: 会话无效或已过期" }, { status: 401 });
       }
       const { searchParams } = new URL(request.url);
+      const extended = wantsExtendedRepresentation(request);
       let babyId = searchParams.get("babyId");
       if (!babyId) {
         const baby = await loadWebBaby(growdeskFetch, bffSession.accessToken);
@@ -48,7 +50,8 @@ export async function GET(request: Request) {
       }
       const rawList = Array.isArray(res.data) ? res.data : (res.data as any)?.data || [];
       const baby = await loadWebBaby(growdeskFetch, bffSession.accessToken, babyId);
-      return NextResponse.json(rawList.map((record: GrowDeskGrowthRecord) => fromGrowDeskGrowthRecord(record, baby?.birthDate)));
+      const mapped = rawList.map((record: GrowDeskGrowthRecord) => fromGrowDeskGrowthRecord(record, baby?.birthDate));
+      return NextResponse.json(extended ? mapped : mapped.map(projectLegacyGrowthRecord));
     }
 
     const auth = await requireAuth(request);

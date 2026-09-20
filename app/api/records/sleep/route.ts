@@ -16,6 +16,7 @@ import {
 } from "@/lib/growdesk/sleep-compat";
 import { fetchLegacyRecordList } from "@/lib/growdesk/record-list";
 import { fetchRecordDetail, idempotencyKey, readJsonObject, recordPath, requireWriteData } from "@/lib/growdesk/record-route-helpers";
+import { projectLegacySleepRecord, wantsExtendedRepresentation } from "@/lib/growdesk/legacy-projections";
 
 export async function GET(request: Request) {
   try {
@@ -25,6 +26,7 @@ export async function GET(request: Request) {
         return NextResponse.json({ error: "Unauthorized: 会话无效或已过期" }, { status: 401 });
       }
       const { searchParams } = new URL(request.url);
+      const extended = wantsExtendedRepresentation(request);
       const babyId = searchParams.get("babyId");
       if (!babyId) {
         return NextResponse.json({ error: "请提供 babyId" }, { status: 400 });
@@ -32,10 +34,12 @@ export async function GET(request: Request) {
       const recordId = searchParams.get("id");
       if (recordId) {
         const record = await fetchRecordDetail<GrowDeskSleepRecord>(growdeskFetch, bffSession.accessToken, babyId, recordId, "sleep");
-        return NextResponse.json(fromGrowDeskSleepRecord(record), { headers: { "cache-control": "no-store" } });
+        const mapped = fromGrowDeskSleepRecord(record);
+        return NextResponse.json(extended ? mapped : projectLegacySleepRecord(mapped), { headers: { "cache-control": "no-store" } });
       }
       const list = await fetchLegacyRecordList<GrowDeskSleepRecord>(growdeskFetch, bffSession.accessToken, babyId, legacyListQuery(searchParams), "sleep");
-      return NextResponse.json(list.map(fromGrowDeskSleepRecord), { headers: { "cache-control": "no-store" } });
+      const mapped = list.map(fromGrowDeskSleepRecord);
+      return NextResponse.json(extended ? mapped : mapped.map(projectLegacySleepRecord), { headers: { "cache-control": "no-store" } });
     }
     const auth = await requireAuth(request);
     if (auth.errorResponse) return auth.errorResponse;

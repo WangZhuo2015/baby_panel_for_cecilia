@@ -21,6 +21,11 @@ import {
   loadWebBaby,
   creationFamilyId,
 } from "./bridge-identity";
+import {
+  GROWDESK_REPRESENTATION_HEADER,
+  wantsExtendedRepresentation,
+} from "./legacy-projections";
+export { GROWDESK_REPRESENTATION_HEADER } from "./legacy-projections";
 
 export interface WebSession {
   accessToken: string;
@@ -76,13 +81,6 @@ function json(data: unknown, status = 200) {
  * into the extended projection explicitly so an old client never starts
  * depending on additive fields by accident.
  */
-export const GROWDESK_REPRESENTATION_HEADER = "x-growdesk-representation";
-const EXTENDED_REPRESENTATION = "extended";
-
-function wantsExtendedRepresentation(request: Request): boolean {
-  return request.headers.get(GROWDESK_REPRESENTATION_HEADER)?.trim().toLowerCase() === EXTENDED_REPRESENTATION;
-}
-
 async function jsonObject(request: Request): Promise<Record<string, unknown>> {
   const raw: unknown = await request.json().catch(() => null);
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {

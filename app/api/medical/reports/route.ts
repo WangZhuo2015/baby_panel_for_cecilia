@@ -16,6 +16,7 @@ import {
 } from "@/lib/growdesk/medical-compat";
 import { loadWebBaby } from "@/lib/growdesk/bridge-identity";
 import crypto from "node:crypto";
+import { projectLegacyMedicalRecord, wantsExtendedRepresentation } from "@/lib/growdesk/legacy-projections";
 
 export async function GET(request: Request) {
   try {
@@ -25,6 +26,7 @@ export async function GET(request: Request) {
         return NextResponse.json({ error: "Unauthorized: 会话无效或已过期" }, { status: 401 });
       }
       const { searchParams } = new URL(request.url);
+      const extended = wantsExtendedRepresentation(request);
       let requestedBabyId = searchParams.get("babyId");
       if (!requestedBabyId) {
         const baby = await loadWebBaby(growdeskFetch, bffSession.accessToken);
@@ -53,7 +55,7 @@ export async function GET(request: Request) {
       const filtered = category && category !== "all"
         ? legacyList.filter((item: any) => item.category === category)
         : legacyList;
-      return NextResponse.json(filtered);
+      return NextResponse.json(extended ? filtered : filtered.map(projectLegacyMedicalRecord));
     }
 
     const auth = await requireAuth(request);

@@ -16,6 +16,7 @@ import {
 } from "@/lib/growdesk/diaper-compat";
 import { fetchLegacyRecordList } from "@/lib/growdesk/record-list";
 import { fetchRecordDetail, idempotencyKey, readJsonObject, recordPath, requireWriteData } from "@/lib/growdesk/record-route-helpers";
+import { projectLegacyDiaperRecord, wantsExtendedRepresentation } from "@/lib/growdesk/legacy-projections";
 
 export async function GET(request: Request) {
   try {
@@ -25,15 +26,18 @@ export async function GET(request: Request) {
         return NextResponse.json({ error: "Unauthorized: 会话无效或已过期" }, { status: 401 });
       }
       const { searchParams } = new URL(request.url);
+      const extended = wantsExtendedRepresentation(request);
       const babyId = searchParams.get("babyId");
       if (!babyId) return NextResponse.json({ error: "请提供 babyId" }, { status: 400 });
       const recordId = searchParams.get("id");
       if (recordId) {
         const record = await fetchRecordDetail<GrowDeskDiaperRecord>(growdeskFetch, bffSession.accessToken, babyId, recordId, "diaper");
-        return NextResponse.json(fromGrowDeskDiaperRecord(record), { headers: { "cache-control": "no-store" } });
+        const mapped = fromGrowDeskDiaperRecord(record);
+        return NextResponse.json(extended ? mapped : projectLegacyDiaperRecord(mapped), { headers: { "cache-control": "no-store" } });
       }
       const list = await fetchLegacyRecordList<GrowDeskDiaperRecord>(growdeskFetch, bffSession.accessToken, babyId, legacyListQuery(searchParams), "diaper");
-      return NextResponse.json(list.map(fromGrowDeskDiaperRecord), { headers: { "cache-control": "no-store" } });
+      const mapped = list.map(fromGrowDeskDiaperRecord);
+      return NextResponse.json(extended ? mapped : mapped.map(projectLegacyDiaperRecord), { headers: { "cache-control": "no-store" } });
     }
     const auth = await requireAuth(request);
     if (auth.errorResponse) return auth.errorResponse;

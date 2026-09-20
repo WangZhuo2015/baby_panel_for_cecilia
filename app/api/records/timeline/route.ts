@@ -17,6 +17,7 @@ import { fetchCompleteList } from "@/lib/growdesk/paged-list";
 import { getLocalDateStr } from "@/lib/date";
 import { loadWebBaby } from "@/lib/growdesk/bridge-identity";
 import { extractSupplementStateFromFoodPlan } from "@/lib/growdesk/nutrition-compat";
+import { projectLegacyTimelineResponse, wantsExtendedRepresentation } from "@/lib/growdesk/legacy-projections";
 
 function objectData(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -50,6 +51,7 @@ export async function GET(request: Request) {
         return NextResponse.json({ error: "Unauthorized: 会话无效或已过期" }, { status: 401 });
       }
       const { searchParams } = new URL(request.url);
+      const extended = wantsExtendedRepresentation(request);
       const babyId = searchParams.get("babyId");
       if (!babyId) return NextResponse.json({ error: "请提供 babyId" }, { status: 400 });
       const token = bffSession.accessToken;
@@ -113,7 +115,8 @@ export async function GET(request: Request) {
         memberNames,
         dayStartMs: dayBounds?.start.getTime(),
       };
-      return NextResponse.json(fromGrowDeskTimelineResponse(list, context), {
+      const mapped = fromGrowDeskTimelineResponse(list, context);
+      return NextResponse.json(extended ? mapped : projectLegacyTimelineResponse(mapped), {
         headers: { "cache-control": "no-store" },
       });
     }

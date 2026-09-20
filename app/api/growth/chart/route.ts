@@ -12,6 +12,7 @@ import {
 } from "@/lib/growdesk/growth-compat";
 import { loadWebBaby } from "@/lib/growdesk/bridge-identity";
 import { BridgeError, bridgeErrorResponse } from "@/lib/growdesk/bridge-protocol";
+import { projectLegacyGrowthChart, wantsExtendedRepresentation } from "@/lib/growdesk/legacy-projections";
 
 export async function GET(request: Request) {
   try {
@@ -21,6 +22,7 @@ export async function GET(request: Request) {
         return NextResponse.json({ error: "Unauthorized: 会话无效或已过期" }, { status: 401 });
       }
       const { searchParams } = new URL(request.url);
+      const extended = wantsExtendedRepresentation(request);
       const requestedBabyId = searchParams.get("babyId");
       if (!requestedBabyId) {
         return NextResponse.json({ error: "请提供 babyId" }, { status: 400 });
@@ -51,13 +53,14 @@ export async function GET(request: Request) {
       const hasPoints = transformedPercentiles.months.length > 0;
       const whoPercentiles = hasPoints ? transformedPercentiles : getWhoStandard(babyGender);
 
-      return NextResponse.json({
+      const chart = {
         measurements: rawMeasurements.map((record: Parameters<typeof fromGrowDeskGrowthRecord>[0]) => fromGrowDeskGrowthRecord(record, birthDate)),
         whoPercentiles,
         monthLabels: WHO_MONTHS,
         gender: babyGender,
         rawWhoPercentiles: chartData.whoPercentiles,
-      });
+      };
+      return NextResponse.json(extended ? chart : projectLegacyGrowthChart(chart));
     }
 
     const auth = await requireAuth(request);

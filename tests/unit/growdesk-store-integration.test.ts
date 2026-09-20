@@ -74,16 +74,53 @@ test("identity reads explicitly request the extended GrowDesk representation", a
 test("cold record loads await the authorized baby before issuing scoped requests", async (t) => {
   invalidateCache();
   const state = store(); state.baby = null;
-  const urls: string[] = [];
-  t.mock.method(globalThis, "fetch", async (url: string) => {
-    urls.push(url);
+  const calls: Array<{ url: string; init?: RequestInit }> = [];
+  t.mock.method(globalThis, "fetch", async (url: string, init?: RequestInit) => {
+    calls.push({ url, init });
     if (url.startsWith("/api/baby")) return Response.json({ id: "test_baby_loaded" });
     assert.equal(new URL(url, "http://localhost").searchParams.get("babyId"), "test_baby_loaded");
     return Response.json([]);
   });
   await Promise.all([state.fetchFeedingRecords(), state.fetchSleepRecords(), state.fetchDiaperRecords(), state.fetchFoodLogRecords(), state.fetchDailySummary(), state.fetchTimeline()]);
-  assert.equal(urls.filter(url => url.startsWith("/api/baby")).length, 1);
-  assert.equal(urls.length, 7);
+  assert.equal(calls.filter(call => call.url.startsWith("/api/baby")).length, 1);
+  assert.equal(calls.length, 7);
+  for (const call of calls.filter(call => !call.url.startsWith("/api/baby"))) {
+    assert.equal(new Headers(call.init?.headers).get("x-growdesk-representation"), "extended");
+  }
+  invalidateCache();
+});
+
+test("record writes, including food POST and PUT, request the extended GrowDesk response", async (t) => {
+  invalidateCache();
+  const state = store();
+  state.family = { id: "test_family" };
+  state.baby = { id: "test_baby_selected", familyId: "test_family" };
+  state.selectedBabyId = "test_baby_selected";
+  const calls: Array<{ url: string; init?: RequestInit }> = [];
+  t.mock.method(globalThis, "fetch", async (url: string, init?: RequestInit) => {
+    calls.push({ url, init });
+    if (init?.method === "POST" || init?.method === "PUT") return Response.json({ id: "test_record" });
+    return Response.json([]);
+  });
+
+  await state.addFeedingRecord({ type: "formula", timestamp: "2026-09-19T08:00:00.000Z" });
+  await state.addSleepRecord({ startTime: "2026-09-19T09:00:00.000Z", endTime: "2026-09-19T09:30:00.000Z", type: "nap" });
+  await state.addDiaperRecord({ type: "wet", timestamp: "2026-09-19T10:00:00.000Z" });
+  await state.addFoodLogRecord({ date: "2026-09-19", time: "11:00", foods: [] });
+  await state.updateTimelineRecord("food", "test_record", { acceptance: "liked" });
+
+  const writes = calls.filter(call => call.init?.method === "POST" || call.init?.method === "PUT");
+  assert.deepEqual(writes.map(call => [call.init?.method, call.url]), [
+    ["POST", "/api/records/feeding"],
+    ["POST", "/api/records/sleep"],
+    ["POST", "/api/records/diaper"],
+    ["POST", "/api/food/logs"],
+    ["PUT", "/api/food/logs"],
+  ]);
+  for (const call of writes) {
+    assert.equal(new Headers(call.init?.headers).get("x-growdesk-representation"), "extended");
+    assert.equal(new Headers(call.init?.headers).get("content-type"), "application/json");
+  }
   invalidateCache();
 });
 

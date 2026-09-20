@@ -139,7 +139,9 @@ export const createRecordsSlice = (set: any, get: any): RecordsSlice => ({
     return dedup(key, async () => {
       try {
         const query = toQuery({ date, babyId });
-        const data = await request<FeedingRecord[]>(`/api/records/feeding${query}`);
+        const data = await request<FeedingRecord[]>(`/api/records/feeding${query}`, {
+          headers: GROWDESK_EXTENDED_REPRESENTATION_HEADERS,
+        });
         if (get().baby?.id !== babyId) return;
         set({ feedingRecords: data || [] });
         markFetched(key);
@@ -160,7 +162,9 @@ export const createRecordsSlice = (set: any, get: any): RecordsSlice => ({
     return dedup(key, async () => {
       try {
         const query = toQuery({ babyId });
-        const data = await request<SleepRecord[]>(`/api/records/sleep${query}`);
+        const data = await request<SleepRecord[]>(`/api/records/sleep${query}`, {
+          headers: GROWDESK_EXTENDED_REPRESENTATION_HEADERS,
+        });
         if (get().baby?.id !== babyId) return;
         set({ sleepRecords: data || [] });
         markFetched(key);
@@ -181,7 +185,9 @@ export const createRecordsSlice = (set: any, get: any): RecordsSlice => ({
     return dedup(key, async () => {
       try {
         const query = toQuery({ babyId });
-        const data = await request<DiaperRecord[]>(`/api/records/diaper${query}`);
+        const data = await request<DiaperRecord[]>(`/api/records/diaper${query}`, {
+          headers: GROWDESK_EXTENDED_REPRESENTATION_HEADERS,
+        });
         if (get().baby?.id !== babyId) return;
         set({ diaperRecords: data || [] });
         markFetched(key);
@@ -202,7 +208,9 @@ export const createRecordsSlice = (set: any, get: any): RecordsSlice => ({
     return dedup(key, async () => {
       try {
         const query = toQuery({ date, babyId });
-        const data = await request<FoodLogRecord[]>(`/api/food/logs${query}`);
+        const data = await request<FoodLogRecord[]>(`/api/food/logs${query}`, {
+          headers: GROWDESK_EXTENDED_REPRESENTATION_HEADERS,
+        });
         if (!isCurrentBaby(get, babyId)) return;
         set({ foodLogRecords: data || [] });
         markFetched(key);
@@ -223,7 +231,9 @@ export const createRecordsSlice = (set: any, get: any): RecordsSlice => ({
     return dedup(key, async () => {
       try {
         const query = toQuery({ date, babyId });
-        const data = await request<DailySummary>(`/api/records/daily-summary${query}`);
+        const data = await request<DailySummary>(`/api/records/daily-summary${query}`, {
+          headers: GROWDESK_EXTENDED_REPRESENTATION_HEADERS,
+        });
         if (get().baby?.id !== babyId) return;
         set({ dailySummary: data });
         markFetched(key);
@@ -244,7 +254,9 @@ export const createRecordsSlice = (set: any, get: any): RecordsSlice => ({
     return dedup(key, async () => {
       try {
         const query = toQuery({ date, babyId });
-        const data = await request<TimelineEntry[]>(`/api/records/timeline${query}`);
+        const data = await request<TimelineEntry[]>(`/api/records/timeline${query}`, {
+          headers: GROWDESK_EXTENDED_REPRESENTATION_HEADERS,
+        });
         if (get().baby?.id !== babyId) return;
         set({ timeline: data || [] });
         markFetched(key);
@@ -342,7 +354,7 @@ export const createRecordsSlice = (set: any, get: any): RecordsSlice => ({
     try {
       const newRecord = (await request<FeedingRecord>("/api/records/feeding", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { ...GROWDESK_EXTENDED_REPRESENTATION_HEADERS, "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       })) as FeedingRecord;
       if (!isCurrentWriteIdentity(get, identity)) return;
@@ -375,7 +387,7 @@ export const createRecordsSlice = (set: any, get: any): RecordsSlice => ({
     try {
       const newRecord = (await request<SleepRecord>("/api/records/sleep", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { ...GROWDESK_EXTENDED_REPRESENTATION_HEADERS, "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       })) as SleepRecord;
       if (!isCurrentWriteIdentity(get, identity)) return;
@@ -408,7 +420,7 @@ export const createRecordsSlice = (set: any, get: any): RecordsSlice => ({
     try {
       const newRecord = (await request<DiaperRecord>("/api/records/diaper", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { ...GROWDESK_EXTENDED_REPRESENTATION_HEADERS, "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       })) as DiaperRecord;
       if (!isCurrentWriteIdentity(get, identity)) return;
@@ -442,7 +454,7 @@ export const createRecordsSlice = (set: any, get: any): RecordsSlice => ({
     try {
       const newRecord = (await request<FoodLogRecord>("/api/food/logs", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { ...GROWDESK_EXTENDED_REPRESENTATION_HEADERS, "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       })) as FoodLogRecord;
       if (!isCurrentWriteIdentity(get, identity)) return;
@@ -475,7 +487,7 @@ export const createRecordsSlice = (set: any, get: any): RecordsSlice => ({
     try {
       const updated = await request<Record<string, unknown>>(endpoint, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: { ...GROWDESK_EXTENDED_REPRESENTATION_HEADERS, "Content-Type": "application/json" },
         body: JSON.stringify({ id, ...recordWriteContext(get(), type, id), ...patch, babyId }),
       });
       if (!isCurrentBaby(get, babyId)) return;
@@ -502,7 +514,7 @@ export const createRecordsSlice = (set: any, get: any): RecordsSlice => ({
     try {
       await request<{ success: boolean }>(endpoint, {
         method: "DELETE",
-        headers: { "Content-Type": "application/json" },
+        headers: { ...GROWDESK_EXTENDED_REPRESENTATION_HEADERS, "Content-Type": "application/json" },
         body: JSON.stringify({ id, ...recordWriteContext(get(), type, id), babyId }),
       });
       if (!isCurrentBaby(get, babyId)) return;
