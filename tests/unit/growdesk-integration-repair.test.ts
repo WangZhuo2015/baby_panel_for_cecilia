@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { BridgeError, wireVersion, feedingKind, isoTimestamp, calendarDate, babyPayload, legacyBaby, pathId, type BridgeFetch, type BridgeResult, type ApiBaby } from "../../lib/growdesk/bridge-protocol";
 import { loadWebIdentity, loadWebBaby, creationFamilyId } from "../../lib/growdesk/bridge-identity";
-import { createIdentityEndpoints } from "../../lib/growdesk/bridge-endpoints";
+import { createIdentityEndpoints, GROWDESK_REPRESENTATION_HEADER } from "../../lib/growdesk/bridge-endpoints";
 import { fetchLegacyFeedingList } from "../../lib/growdesk/feeding-list";
 import { guardLegacyClient } from "../../lib/growdesk/guard-legacy-client";
 import { recordWriteContext } from "../../lib/growdesk/record-write-context";
@@ -75,9 +75,47 @@ test("me restores login through BFF session without legacy cookies", async () =>
   const data = await response.json(); assert.equal(data.user.username, "test_caregiver"); assert.equal(data.baby.nickname, "test_child"); assert.deepEqual(data.membership, { role: "admin", relation: "parent" }); assert.equal(data.accessToken, undefined);
 });
 
+test("identity reads default to the legacy projection and opt into extended fields atomically", async () => {
+  const extendedUser = { ...user, createdAt: "2026-01-02T00:00:00Z", updatedAt: "2026-01-03T00:00:00Z" };
+  const endpoints = createIdentityEndpoints({
+    fetchApi: baseFetch,
+    resolveSession: async () => ({ accessToken: "test_token", user: extendedUser }),
+    verifyCsrf: () => null,
+  });
+
+  const legacyMe = await (await endpoints.me(new Request("https://test.invalid/api/auth/me"))).json();
+  assert.deepEqual(legacyMe, {
+    user,
+    family: { id: family.id, name: family.name },
+    baby: {
+      id: apiBaby.id,
+      familyId: apiBaby.familyId,
+      nickname: apiBaby.name,
+      birthDate: apiBaby.birthDate,
+      gender: "female",
+      avatarUrl: null,
+      gestationalAge: apiBaby.gestationalWeeks,
+      createdAt: apiBaby.createdAt,
+      updatedAt: apiBaby.updatedAt,
+    },
+    membership: { role: "admin", relation: "parent" },
+  });
+  assert.equal("inviteCode" in legacyMe.family, false, "missing canonical invite codes must not be fabricated");
+
+  const extendedMe = await (await endpoints.me(new Request("https://test.invalid/api/auth/me", {
+    headers: { [GROWDESK_REPRESENTATION_HEADER]: "extended" },
+  }))).json();
+  assert.equal(extendedMe.user.createdAt, extendedUser.createdAt);
+  assert.equal(extendedMe.family.timeZone, family.timeZone);
+  assert.equal(extendedMe.baby.gestationalDays, apiBaby.gestationalDays);
+  assert.equal(extendedMe.families[0].babies[0].gestationalDays, apiBaby.gestationalDays);
+});
+
 test("BFF family members preserve canonical member identity and role", async () => {
   const endpoints = createIdentityEndpoints({ fetchApi: baseFetch, resolveSession: async () => ({ accessToken: "test_token", user }), verifyCsrf: () => null });
-  const response = await endpoints.familyMembers(new Request("https://test.invalid/api/family/members"));
+  const response = await endpoints.familyMembers(new Request("https://test.invalid/api/family/members", {
+    headers: { [GROWDESK_REPRESENTATION_HEADER]: "extended" },
+  }));
   assert.equal(response.status, 200);
   assert.deepEqual((await response.json()).members, [{
     id: familyMember.id,
@@ -89,6 +127,43 @@ test("BFF family members preserve canonical member identity and role", async () 
     relation: familyMember.relation,
     joinedAt: familyMember.joinedAt,
   }]);
+});
+
+test("family members default to legacy fields while extended reads retain scope metadata", async () => {
+  const endpoints = createIdentityEndpoints({ fetchApi: baseFetch, resolveSession: async () => ({ accessToken: "test_token", user }), verifyCsrf: () => null });
+  const legacy = await (await endpoints.familyMembers(new Request("https://test.invalid/api/family/members"))).json();
+  assert.deepEqual(legacy, {
+    family: { id: family.id, name: family.name },
+    members: [{
+      id: familyMember.id,
+      userId: familyMember.userId,
+      username: familyMember.username,
+      displayName: familyMember.displayName,
+      role: familyMember.role,
+      relation: familyMember.relation,
+      joinedAt: familyMember.joinedAt,
+    }],
+  });
+
+  const extended = await (await endpoints.familyMembers(new Request("https://test.invalid/api/family/members", {
+    headers: { [GROWDESK_REPRESENTATION_HEADER]: "extended" },
+  }))).json();
+  assert.equal(extended.family.timeZone, family.timeZone);
+  assert.deepEqual(extended.family.babies, []);
+  assert.equal(extended.members[0].familyId, family.id);
+});
+
+test("baby GET defaults to the old field set and exposes precision only with explicit representation", async () => {
+  const endpoints = createIdentityEndpoints({ fetchApi: baseFetch, resolveSession: async () => ({ accessToken: "test_token", user }), verifyCsrf: () => null });
+  const legacy = await (await endpoints.baby(new Request("https://test.invalid/api/baby"))).json();
+  assert.equal(legacy.gestationalDays, undefined);
+  assert.equal(legacy.gestationalAge, apiBaby.gestationalWeeks);
+
+  const extended = await (await endpoints.baby(new Request("https://test.invalid/api/baby", {
+    headers: { [GROWDESK_REPRESENTATION_HEADER]: "extended" },
+  }))).json();
+  assert.equal(extended.gestationalDays, apiBaby.gestationalDays);
+  assert.equal(extended.createdAt, apiBaby.createdAt);
 });
 
 test("BFF auth.me does not fabricate membership when canonical family membership omits the principal", async () => {

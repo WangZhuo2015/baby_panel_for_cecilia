@@ -1,6 +1,6 @@
 "use client";
 import type { User, Family, FamilyMember, Baby, BabyMember, BabyMemberRole } from "@/types";
-import { isFresh, markFetched, invalidateCache, dedup } from "./helpers";
+import { isFresh, markFetched, invalidateCache, dedup, GROWDESK_EXTENDED_REPRESENTATION_HEADERS } from "./helpers";
 import { request, isAuthError } from "./helpers";
 
 const SELECTED_BABY_KEY = "baby-panel:selected-baby:";
@@ -240,7 +240,7 @@ export const createAuthSlice = (set: any, get: any): AuthSlice => ({
     }
     return dedup("user", async () => {
       try {
-        const res = await fetch("/api/auth/me");
+        const res = await fetch("/api/auth/me", { headers: GROWDESK_EXTENDED_REPRESENTATION_HEADERS });
         if (!res.ok) {
           if (res.status >= 500) {
             // A backend outage is not evidence that the existing session expired.
@@ -354,6 +354,7 @@ export const createAuthSlice = (set: any, get: any): AuthSlice => ({
     try {
       const data = await request<{ family?: Family; members?: FamilyMember[] }>(
         `/api/family/members?familyId=${encodeURIComponent(familyId)}`,
+        { headers: GROWDESK_EXTENDED_REPRESENTATION_HEADERS },
       );
       const returnedFamily = mapFamily(data.family);
       set({
@@ -420,7 +421,9 @@ export const createAuthSlice = (set: any, get: any): AuthSlice => ({
     if (typeof babyId !== "string" || !babyId.trim()) throw new Error("请选择宝宝");
     const candidate = get().babies.find((baby: Baby) => baby.id === babyId);
     if (!candidate) throw new Error("无权访问该宝宝");
-    const verified = await request<Baby>(`/api/baby?babyId=${encodeURIComponent(babyId)}`);
+    const verified = await request<Baby>(`/api/baby?babyId=${encodeURIComponent(babyId)}`, {
+      headers: GROWDESK_EXTENDED_REPRESENTATION_HEADERS,
+    });
     const selected = mapBaby(verified) ?? candidate;
     if (selected.id !== babyId) throw new Error("宝宝授权响应无效");
     const family = get().families.find((item: Family) => item.id === selected.familyId) ?? get().family;

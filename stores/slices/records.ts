@@ -1,6 +1,6 @@
 "use client";
 import { enqueueOutbox, isRetryableSubmitError } from "@/lib/outbox";
-import { _fetchedAt, isFresh, markFetched, invalidateCache, dedup, toQuery } from "./helpers";
+import { _fetchedAt, isFresh, markFetched, invalidateCache, dedup, toQuery, GROWDESK_EXTENDED_REPRESENTATION_HEADERS } from "./helpers";
 import { request, isAuthError } from "./helpers";
 import { getLocalDateStr } from "@/lib/date";
 import { recordWriteContext } from "@/lib/growdesk/record-write-context";
@@ -99,7 +99,9 @@ export const createRecordsSlice = (set: any, get: any): RecordsSlice => ({
     const userId = get().user?.id;
     return dedup('baby', async () => {
       try {
-        const data = await request<Baby>(`/api/baby${toQuery({ babyId: selectedId })}`);
+        const data = await request<Baby>(`/api/baby${toQuery({ babyId: selectedId })}`, {
+          headers: GROWDESK_EXTENDED_REPRESENTATION_HEADERS,
+        });
         if (get().user?.id !== userId || get().baby?.id !== selectedId) return;
         set({ baby: data ?? null });
         markFetched('baby');

@@ -42,7 +42,32 @@ test("baby read and update use the selected baby explicitly", async (t) => {
   await state.fetchBaby(true);
   await state.saveBaby({ nickname: "test_new_name" });
   assert.equal(new URL(calls[0]!.url, "http://localhost").searchParams.get("babyId"), "test_baby_selected");
+  assert.equal(new Headers(calls[0]!.init?.headers).get("x-growdesk-representation"), "extended");
   assert.equal(JSON.parse(String(calls[1]!.init?.body)).babyId, "test_baby_selected");
+  invalidateCache();
+});
+
+test("identity reads explicitly request the extended GrowDesk representation", async (t) => {
+  invalidateCache();
+  const state = store();
+  const baby = { id: "test_baby_selected", familyId: "test_family", nickname: "test_child", birthDate: "2026-01-01", gender: "female" };
+  const calls: { url: string; init?: RequestInit }[] = [];
+  t.mock.method(globalThis, "fetch", async (url: string, init?: RequestInit) => {
+    calls.push({ url, init });
+    if (url === "/api/auth/me") return Response.json({ user: state.user, family: { id: "test_family", name: "test_family", babies: [baby] }, baby, families: [{ id: "test_family", name: "test_family", babies: [baby] }], babies: [baby] });
+    if (url.startsWith("/api/family/members")) return Response.json({ family: { id: "test_family", name: "test_family" }, members: [] });
+    if (url.startsWith("/api/baby")) return Response.json(baby);
+    throw new Error(`Unexpected request ${url}`);
+  });
+
+  await state.fetchUser();
+  await state.fetchFamilyMembers();
+  await state.fetchBaby(true);
+  assert.deepEqual(calls.map(call => [call.url, new Headers(call.init?.headers).get("x-growdesk-representation")]), [
+    ["/api/auth/me", "extended"],
+    ["/api/family/members?familyId=test_family", "extended"],
+    ["/api/baby?babyId=test_baby_selected", "extended"],
+  ]);
   invalidateCache();
 });
 

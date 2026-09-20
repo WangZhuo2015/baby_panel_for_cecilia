@@ -71,6 +71,18 @@ function json(data: unknown, status = 200) {
   return Response.json(data, { status, headers: { "cache-control": "no-store" } });
 }
 
+/**
+ * Identity reads default to the old Web response shape. The new client opts
+ * into the extended projection explicitly so an old client never starts
+ * depending on additive fields by accident.
+ */
+export const GROWDESK_REPRESENTATION_HEADER = "x-growdesk-representation";
+const EXTENDED_REPRESENTATION = "extended";
+
+function wantsExtendedRepresentation(request: Request): boolean {
+  return request.headers.get(GROWDESK_REPRESENTATION_HEADER)?.trim().toLowerCase() === EXTENDED_REPRESENTATION;
+}
+
 async function jsonObject(request: Request): Promise<Record<string, unknown>> {
   const raw: unknown = await request.json().catch(() => null);
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
@@ -95,9 +107,50 @@ function legacyFamily(
   };
 }
 
-function identityResponse(identity: Awaited<ReturnType<typeof loadWebIdentity>>) {
+function legacyUser(user: WebSession["user"]): WebSession["user"] {
+  return {
+    id: user.id,
+    username: user.username,
+    displayName: user.displayName,
+  };
+}
+
+/** The old baby endpoint did not expose the canonical gestational-day field. */
+function legacyBabyResponse(baby: LegacyBaby | null): Record<string, unknown> | null {
+  if (!baby) return null;
+  return {
+    id: baby.id,
+    familyId: baby.familyId,
+    nickname: baby.nickname,
+    birthDate: baby.birthDate,
+    gender: baby.gender,
+    avatarUrl: baby.avatarUrl,
+    gestationalAge: baby.gestationalAge,
+    createdAt: baby.createdAt,
+    updatedAt: baby.updatedAt,
+  };
+}
+
+/** Keep inviteCode only when a real upstream response supplied one. */
+function legacyFamilyResponse(family: LegacyFamily | null): Record<string, unknown> | null {
+  if (!family) return null;
+  const result: Record<string, unknown> = { id: family.id, name: family.name };
+  if (family.inviteCode !== undefined) result.inviteCode = family.inviteCode;
+  return result;
+}
+
+function identityResponse(
+  identity: Awaited<ReturnType<typeof loadWebIdentity>>,
+  extended: boolean,
+) {
   const families = identity.families.map(item => legacyFamily(item.family, item.babies));
   const selectedFamily = families.find(item => item.id === identity.family?.id) ?? families[0] ?? null;
+  if (!extended) {
+    return {
+      family: legacyFamilyResponse(selectedFamily),
+      baby: legacyBabyResponse(identity.baby),
+    };
+  }
   return {
     family: selectedFamily,
     baby: identity.baby,
@@ -108,7 +161,7 @@ function identityResponse(identity: Awaited<ReturnType<typeof loadWebIdentity>>)
 
 const FAMILY_MEMBER_ROLES = new Set(["admin", "member", "viewer"]);
 
-function mapMember(member: ApiFamilyMember, familyId: string): Record<string, unknown> {
+function mapMember(member: ApiFamilyMember, familyId: string, extended = true): Record<string, unknown> {
   if (
     !member ||
     typeof member !== "object" ||
@@ -123,6 +176,17 @@ function mapMember(member: ApiFamilyMember, familyId: string): Record<string, un
     typeof member.joinedAt !== "string"
   ) {
     throw new BridgeError(502, "UPSTREAM_INVALID_RESPONSE", "GrowDesk 成员响应无效");
+  }
+  if (!extended) {
+    return {
+      id: member.id,
+      userId: member.userId,
+      username: member.username,
+      displayName: member.displayName,
+      role: member.role,
+      relation: member.relation,
+      joinedAt: member.joinedAt,
+    };
   }
   return {
     id: member.id,
@@ -165,9 +229,12 @@ export function createIdentityEndpoints(deps: EndpointDependencies) {
   return {
     async me(request: Request): Promise<Response> {
       try {
+        const extended = wantsExtendedRepresentation(request);
         const session = await deps.resolveSession(request);
         if (!session) {
-          return json({ user: null, family: null, baby: null, families: [], babies: [], membership: null });
+          return extended
+            ? json({ user: null, family: null, baby: null, families: [], babies: [], membership: null })
+            : json({ user: null, family: null, baby: null });
         }
         const identity = await loadWebIdentity(deps.fetchApi, session.accessToken);
         let membership: { role: string; relation: string } | null = null;
@@ -182,7 +249,11 @@ export function createIdentityEndpoints(deps: EndpointDependencies) {
             };
           }
         }
-        return json({ user: session.user, ...identityResponse(identity), membership });
+        return json({
+          user: extended ? session.user : legacyUser(session.user),
+          ...identityResponse(identity, extended),
+          membership,
+        });
       } catch (error) {
         return bridgeErrorResponse(error);
       }
@@ -312,14 +383,15 @@ export function createIdentityEndpoints(deps: EndpointDependencies) {
     async familyMembers(request: Request): Promise<Response> {
       try {
         if (request.method !== "GET") return json({ error: "Method not allowed" }, 405);
+        const extended = wantsExtendedRepresentation(request);
         const session = await deps.resolveSession(request);
         if (!session) throw new BridgeError(401, "UNAUTHORIZED", "会话无效或已过期");
         const requestedId = new URL(request.url).searchParams.get("familyId") ?? undefined;
         const family = await accessibleFamily(deps.fetchApi, session.accessToken, requestedId);
         const members = await loadFamilyMembers(deps.fetchApi, session.accessToken, family);
         return json({
-          family: legacyFamily(family),
-          members: members.map(member => mapMember(member, family.id)),
+          family: extended ? legacyFamily(family) : legacyFamilyResponse(legacyFamily(family)),
+          members: members.map(member => mapMember(member, family.id, extended)),
         });
       } catch (error) {
         return bridgeErrorResponse(error);
@@ -427,7 +499,8 @@ export function createIdentityEndpoints(deps: EndpointDependencies) {
         if (!session) throw new BridgeError(401, "UNAUTHORIZED", "会话无效或已过期");
         const accessToken = session.accessToken;
         if (request.method === "GET") {
-          return json(await loadWebBaby(deps.fetchApi, accessToken, new URL(request.url).searchParams.get("babyId")));
+          const baby = await loadWebBaby(deps.fetchApi, accessToken, new URL(request.url).searchParams.get("babyId"));
+          return json(wantsExtendedRepresentation(request) ? baby : legacyBabyResponse(baby));
         }
         const body = await jsonObject(request);
         if (request.method === "POST") {

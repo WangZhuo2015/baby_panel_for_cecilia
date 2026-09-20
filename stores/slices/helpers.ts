@@ -12,6 +12,13 @@ export const dedup = _dedup;
 // For slices that want isolated cache in tests
 export const createSliceCache = createCache;
 
+// Identity reads opt into the additive GrowDesk representation explicitly.
+// Keeping this header in the shared client helper makes the three reads use
+// one contract while legacy mode simply ignores it.
+export const GROWDESK_EXTENDED_REPRESENTATION_HEADERS = {
+  "x-growdesk-representation": "extended",
+} as const;
+
 export type UnauthorizedHandler = () => void;
 let _onUnauthorized: UnauthorizedHandler | null = null;
 export function setOnUnauthorized(handler: UnauthorizedHandler) {
