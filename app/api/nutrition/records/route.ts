@@ -18,6 +18,8 @@ import {
   extractSupplementStateFromFoodPlan,
   fromGrowDeskFormulaProduct,
   type GrowDeskSupplementRecord,
+  fromGrowDeskSupplementProduct,
+  type GrowDeskSupplementProduct,
   type GrowDeskFormulaProduct,
 } from "@/lib/growdesk/nutrition-compat";
 import { PRESET_SUPPLEMENT_PRODUCTS } from "@/lib/nutrition/presets";
@@ -103,19 +105,18 @@ export async function GET(request: Request) {
         return NextResponse.json({ error: "日期范围无效" }, { status: 400 });
       }
 
-      const [rawList, fpRes] = await Promise.all([
+      const [rawList, rawProducts] = await Promise.all([
         fetchCompleteList<GrowDeskSupplementRecord>(growdeskFetch, bffSession.accessToken, `/api/v1/babies/${pathId(babyId)}/records/supplement`),
-        growdeskFetch<any>(`/api/v1/babies/${babyId}/food-plan`, {
-          method: "GET",
-          accessToken: bffSession.accessToken,
-        }),
+        fetchCompleteList<GrowDeskSupplementProduct>(
+          growdeskFetch,
+          bffSession.accessToken,
+          `/api/v1/families/${pathId(baby.familyId)}/nutrition/supplement-products?includeArchived=true`,
+        ),
       ]);
 
-      const planData = requireScopedFoodPlan(requireData(fpRes), babyId).planData;
       const scopedList = rawList.map((record) => requireScopedSupplementRecord(record, babyId, baby.familyId));
-      const suppState = extractSupplementStateFromFoodPlan(planData);
       const allKnownProducts: SupplementProduct[] = [
-        ...suppState.supplementProducts,
+        ...rawProducts.map(fromGrowDeskSupplementProduct),
         ...PRESET_SUPPLEMENT_PRODUCTS.map((p, idx) => ({
           ...p,
           id: (p as any).id || `preset_${idx}`,
@@ -253,8 +254,9 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "date 必须为 YYYY-MM-DD 格式" }, { status: 400 });
       }
 
-      // Fetch food-plan to find supplement products
-      const [fpRes, rawFormulas, rawFeedings, rawTodaySupps] = await Promise.all([
+      // Food-plan still owns formula defaults/custom nutrient overrides. The
+      // supplement catalog and records themselves are normalized API slices.
+      const [fpRes, rawFormulas, rawFeedings, rawTodaySupps, rawProducts] = await Promise.all([
         growdeskFetch<any>(`/api/v1/babies/${babyId}/food-plan`, {
           method: "GET",
           accessToken: bffSession.accessToken,
@@ -262,6 +264,11 @@ export async function POST(request: Request) {
         fetchCompleteList<GrowDeskFormulaProduct>(growdeskFetch, bffSession.accessToken, `/api/v1/families/${pathId(familyId)}/nutrition/products?includeArchived=true`),
         fetchCompleteList<any>(growdeskFetch, bffSession.accessToken, `/api/v1/babies/${pathId(babyId)}/records/feeding`),
         fetchCompleteList<GrowDeskSupplementRecord>(growdeskFetch, bffSession.accessToken, `/api/v1/babies/${pathId(babyId)}/records/supplement`),
+        fetchCompleteList<GrowDeskSupplementProduct>(
+          growdeskFetch,
+          bffSession.accessToken,
+          `/api/v1/families/${pathId(familyId)}/nutrition/supplement-products?includeArchived=true`,
+        ),
       ]);
 
       const planData = requireScopedFoodPlan(requireData(fpRes), babyId).planData;
@@ -270,7 +277,7 @@ export async function POST(request: Request) {
       const scopedTodaySupps = rawTodaySupps.map((record) => requireScopedSupplementRecord(record, babyId, familyId));
       const suppState = extractSupplementStateFromFoodPlan(planData);
       const allKnownProducts: SupplementProduct[] = [
-        ...suppState.supplementProducts,
+        ...rawProducts.map(fromGrowDeskSupplementProduct),
         ...PRESET_SUPPLEMENT_PRODUCTS.map((p, idx) => ({
           ...p,
           id: (p as any).id || `preset_${idx}`,
@@ -361,8 +368,11 @@ export async function POST(request: Request) {
           idempotencyKey,
           body: {
             supplementName: product.name,
+            productId: product.id,
             occurredAt,
             amount: formattedAmount,
+            dose: String(Number(dose) || 1),
+            unitName: unitName || product.unitName,
             notes: encodedNotes,
           },
         },

@@ -39,9 +39,29 @@ export interface GrowDeskSupplementRecord {
   supplementName: string;
   occurredAt: string;
   amount: string | null;
+  productId?: string | null;
+  dose?: string | number | null;
+  unitName?: string | null;
   notes: string | null;
   recordedByUserId?: string | null;
   version: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface GrowDeskSupplementProduct {
+  id: string;
+  familyId: string;
+  name: string;
+  brand: string | null;
+  dosageForm: string | null;
+  unitName: string;
+  defaultDose: string;
+  nutrientsJson?: unknown;
+  notes: string | null;
+  isActive: boolean;
+  isArchived?: boolean;
+  version?: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -51,6 +71,36 @@ export interface SupplementState {
   supplementSchedules: SupplementSchedule[];
   defaultFormulaId?: string | null;
   customFormulaNutrients?: Record<string, NutrientsMap>;
+}
+
+export function fromGrowDeskSupplementProduct(raw: GrowDeskSupplementProduct): SupplementProduct {
+  let nutrients: NutrientsMap = {};
+  const source = raw.nutrientsJson;
+  if (source !== undefined && source !== null) {
+    let decoded = source;
+    if (typeof decoded === "string") {
+      try { decoded = JSON.parse(decoded); } catch { throw new BridgeError(502, "INVALID_NUTRIENTS", "补剂营养数据格式无效"); }
+    }
+    if (!decoded || typeof decoded !== "object" || Array.isArray(decoded)) {
+      throw new BridgeError(502, "INVALID_NUTRIENTS", "补剂营养数据格式无效");
+    }
+    nutrients = decoded as NutrientsMap;
+  }
+  const defaultDose = Number(raw.defaultDose);
+  return {
+    id: raw.id,
+    familyId: raw.familyId,
+    name: raw.name,
+    brand: raw.brand || raw.name,
+    dosageForm: raw.dosageForm || "drops",
+    unitName: raw.unitName || "滴",
+    defaultDose: Number.isFinite(defaultDose) && defaultDose > 0 ? defaultDose : 1,
+    nutrients,
+    notes: raw.notes,
+    isActive: raw.isActive && !raw.isArchived,
+    createdAt: raw.createdAt,
+    updatedAt: raw.updatedAt,
+  };
 }
 
 // ─── Amount & Dose Parsing ───────────────────────────────────────────────────
@@ -279,10 +329,15 @@ export function fromGrowDeskSupplementRecordEnriched(
   raw: GrowDeskSupplementRecord,
   allProducts: SupplementProduct[] = []
 ): SupplementRecord {
-  const { productId: taggedId, cleanNotes } = extractProductIdFromNotes(raw.notes);
+  const noteProduct = extractProductIdFromNotes(raw.notes);
+  const taggedId = raw.productId || noteProduct.productId;
+  const cleanNotes = raw.productId ? raw.notes : noteProduct.cleanNotes;
   const matchedProduct = findMatchingSupplementProduct(raw.supplementName, taggedId, allProducts);
 
-  const { dose, unitName } = parseSupplementAmount(raw.amount);
+  const parsedAmount = parseSupplementAmount(raw.amount);
+  const numericDose = raw.dose !== undefined && raw.dose !== null ? Number(raw.dose) : parsedAmount.dose;
+  const dose = Number.isFinite(numericDose) && numericDose > 0 ? numericDose : parsedAmount.dose;
+  const unitName = raw.unitName || parsedAmount.unitName;
 
   const d = new Date(raw.occurredAt);
   const date = !Number.isNaN(d.getTime()) ? getLocalDateStr(d) : raw.occurredAt.slice(0, 10);

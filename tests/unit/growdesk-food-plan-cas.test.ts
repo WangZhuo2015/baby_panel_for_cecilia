@@ -296,16 +296,53 @@ test("formula creation propagates a food-plan 503 instead of merging an empty pl
   assert.equal(body.details.partialMutation, true);
 });
 
-test("supplement schedule and vaccine selection carry the same observed food-plan version", async t => {
-  const writes: Array<Record<string, unknown>> = [];
+test("normalized supplement schedule and vaccine selection preserve legacy response shapes without food-plan writes", async t => {
+  const writes: Array<{ url: string; method?: string }> = [];
   setup(t, async (url, init) => {
     if (url.pathname === `/api/v1/babies/${BABY}`) return Response.json({ data: apiBaby() });
-    if (url.pathname === `/api/v1/babies/${BABY}/food-plan`) {
-      if (init.method === "PUT") {
-        writes.push(JSON.parse(String(init.body)));
-        return Response.json({ data: plan({ version: "8" }) });
-      }
-      return Response.json({ data: plan({ planData: { supplementState: { supplementProducts: [supplement()], supplementSchedules: [] } } }) });
+    if (url.pathname === `/api/v1/babies/${BABY}/nutrition/supplement-schedules` && init.method === "POST") {
+      writes.push({ url: url.pathname, method: init.method });
+      return Response.json({ data: {
+        id: "test_schedule",
+        familyId: FAMILY,
+        babyId: BABY,
+        productId: "test_supplement",
+        product: {
+          ...supplement(),
+          defaultDose: "1",
+          nutrientsJson: {},
+          isArchived: false,
+          version: 1,
+          createdAt: "2026-09-19T00:00:00.000Z",
+          updatedAt: "2026-09-19T00:00:00.000Z",
+        },
+        frequency: "daily",
+        customDays: null,
+        targetDose: "1",
+        reminderTime: null,
+        isActive: true,
+        startDate: "2026-09-19",
+        notes: null,
+        version: 1,
+        isCompletedToday: false,
+        createdAt: "2026-09-19T00:00:00.000Z",
+        updatedAt: "2026-09-19T00:00:00.000Z",
+      } }, { status: 201 });
+    }
+    if (url.pathname === `/api/v1/babies/${BABY}/vaccines/selections` && init.method === "PUT") {
+      writes.push({ url: url.pathname, method: init.method });
+      return Response.json({ data: {
+        id: "test_selection",
+        familyId: FAMILY,
+        babyId: BABY,
+        vaccineId: "test_vaccine",
+        doseNumber: 1,
+        selected: false,
+        completed: false,
+        version: 1,
+        createdAt: "2026-09-19T00:00:00.000Z",
+        updatedAt: "2026-09-19T00:00:00.000Z",
+      } });
     }
     throw new Error(`unexpected upstream request: ${url}`);
   });
@@ -324,5 +361,8 @@ test("supplement schedule and vaccine selection carry the same observed food-pla
   }));
   assert.equal(vaccine.status, 200);
   assert.equal(writes.length, 2);
-  assert.deepEqual(writes.map(write => write.baseVersion), ["7", "7"]);
+  assert.deepEqual(writes.map(write => write.url), [
+    `/api/v1/babies/${BABY}/nutrition/supplement-schedules`,
+    `/api/v1/babies/${BABY}/vaccines/selections`,
+  ]);
 });
