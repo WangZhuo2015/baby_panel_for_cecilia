@@ -32,6 +32,23 @@ test("F2 partial edits retain omitted observations and notes from the existing r
   assert.equal(restored.notes, "test_note");
 });
 
+test("default food projection matches the old PWA while extended keeps concurrency fields", () => {
+  const canonical = record(toGrowDeskFoodCreatePayload({ ...form, mealType: "snack", notes: "test_note" }));
+  const legacy = fromGrowDeskFoodRecord(canonical, false) as unknown as Record<string, unknown>;
+  assert.deepEqual(Object.keys(legacy).sort(), [
+    "abnormalNotes", "acceptance", "babyId", "babyState", "clientId", "createdAt", "date",
+    "foods", "hasAbnormal", "id", "portion", "recordedById", "source", "sourceAgent", "time",
+  ].sort());
+  assert.equal(legacy.clientId, null);
+  assert.equal(legacy.recordedById, null);
+  assert.equal(legacy.source, "ui_manual");
+
+  const extended = fromGrowDeskFoodRecord(canonical, true) as unknown as Record<string, unknown>;
+  assert.equal(extended.version, "1");
+  assert.equal(extended.baseVersion, "1");
+  assert.deepEqual(extended.foodNames, ["test_rice"]);
+});
+
 for (const [time, instant] of [["20:00", "2026-09-17T12:00:00.000Z"], ["00:15", "2026-09-16T16:15:00.000Z"]]) {
   test(`F4 Shanghai ${time} maps to the correct instant and back on create/update`, () => {
     for (const payload of [toGrowDeskFoodCreatePayload({ ...form, time, mealType: "snack" }), toGrowDeskFoodUpdatePayload({ date: form.date, time, version: "1" })]) {

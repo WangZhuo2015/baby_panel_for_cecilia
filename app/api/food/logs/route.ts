@@ -28,12 +28,13 @@ export async function GET(request: Request) {
       const babyId = searchParams.get("babyId");
       if (!babyId) return NextResponse.json({ error: "请提供 babyId" }, { status: 400 });
       const recordId = searchParams.get("id");
+      const extended = request.headers.get("x-growdesk-representation") === "extended";
       if (recordId) {
         const record = await fetchRecordDetail<GrowDeskFoodRecord>(growdeskFetch, bffSession.accessToken, babyId, recordId, "food");
-        return NextResponse.json(fromGrowDeskFoodRecord(record), { headers: { "cache-control": "no-store" } });
+        return NextResponse.json(fromGrowDeskFoodRecord(record, extended), { headers: { "cache-control": "no-store" } });
       }
       const list = await fetchLegacyRecordList<GrowDeskFoodRecord>(growdeskFetch, bffSession.accessToken, babyId, legacyListQuery(searchParams), "food");
-      return NextResponse.json(list.map(fromGrowDeskFoodRecord), { headers: { "cache-control": "no-store" } });
+      return NextResponse.json(list.map(record => fromGrowDeskFoodRecord(record, extended)), { headers: { "cache-control": "no-store" } });
     }
     const auth = await requireAuth(request);
     if (auth.errorResponse) return auth.errorResponse;
@@ -71,7 +72,7 @@ export async function POST(request: Request) {
         body: toGrowDeskFoodCreatePayload(body),
       });
       const data = requireWriteData(res, "Failed to create food log record");
-      return NextResponse.json(fromGrowDeskFoodRecord(data), { status: 201 });
+      return NextResponse.json(fromGrowDeskFoodRecord(data, request.headers.get("x-growdesk-representation") === "extended"), { status: 201 });
     }
     const auth = await requireAuth(request);
     if (auth.errorResponse) return auth.errorResponse;
@@ -181,7 +182,7 @@ export async function PUT(request: Request) {
         body: toGrowDeskFoodUpdatePayload(body, existing),
       });
       const data = requireWriteData(res, "Failed to update food log record");
-      return NextResponse.json(fromGrowDeskFoodRecord(data));
+      return NextResponse.json(fromGrowDeskFoodRecord(data, request.headers.get("x-growdesk-representation") === "extended"));
     }
     const auth = await requireAuth(request);
     if (auth.errorResponse) return auth.errorResponse;
