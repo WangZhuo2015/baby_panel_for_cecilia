@@ -502,6 +502,37 @@ test("Issue #5: GrowDesk MCP, OAuth 2.1 & Personal Access Tokens Matrix", async 
         );
       }
 
+      // Durable delete/restore snapshot endpoints
+      if (url.includes("/record-snapshots/feeding/growdesk-feed-1") && method === "DELETE") {
+        return new Response(
+          JSON.stringify({
+            data: {
+              snapshotId: "test_snapshot_feed_1",
+              deletedId: "growdesk-feed-1",
+              entityType: "feeding",
+              version: "2",
+              replayed: false,
+            },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      }
+
+      if (url.endsWith("/record-snapshots/restore") && method === "POST") {
+        return new Response(
+          JSON.stringify({
+            data: {
+              snapshotId: "test_snapshot_feed_1",
+              restoredId: "growdesk-feed-1",
+              entityType: "feeding",
+              version: "3",
+              replayed: false,
+            },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      }
+
       // Delete endpoint
       if (method === "DELETE") {
         return new Response(

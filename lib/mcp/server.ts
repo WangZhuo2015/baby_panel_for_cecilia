@@ -50,18 +50,6 @@ import { fromGrowDeskTimelineResponse } from "@/lib/growdesk/timeline-compat";
 import { fetchLegacyRecordList } from "@/lib/growdesk/record-list";
 import { recordPath, requireWriteData } from "@/lib/growdesk/record-route-helpers";
 
-interface BffSnapshotItem {
-  id: string;
-  babyId: string;
-  userId: string | null;
-  entityType: string;
-  entityId: string;
-  payload: any;
-  createdAt: Date;
-  restored: boolean;
-}
-const bffSnapshots = new Map<string, BffSnapshotItem>();
-
 export interface UserIdentitySummary {
   id: string;
   username: string;
@@ -807,18 +795,19 @@ export function createMcpServer(principal: UserPrincipal, options?: { accessToke
         {
           name: "delete_record",
           description:
-            "【删除记录】删除某条错误或重复记录（支持 feeding, sleep, diaper, food, growth, medical_report, supplement）。删除前系统自动生成安全快照备份，随时可撤销恢复。",
+            "【删除记录】删除某条错误或重复记录（支持 feeding, sleep, diaper, food, growth, medical_report, vaccine, supplement；food_plan 会由后端安全拒绝）。删除前系统自动生成持久化安全快照备份，随时可撤销恢复。",
           inputSchema: {
             type: "object",
             required: ["type"],
             properties: {
               type: {
                 type: "string",
-                enum: ["feeding", "sleep", "diaper", "food", "growth", "medical_report", "supplement"],
+                enum: ["feeding", "sleep", "diaper", "food", "growth", "medical_report", "vaccine", "food_plan", "supplement"],
                 description: "要删除的记录类型",
               },
               id: { type: "string", description: "记录唯一 ID（优先提供）" },
               date: { type: "string", description: "日期 (YYYY-MM-DD，若不知 ID 则删除该日最新一条记录)" },
+              clientId: { type: "string", maxLength: 200, description: "可选幂等键；重试同一删除命令时保持不变" },
             },
           },
         },
@@ -832,7 +821,7 @@ export function createMcpServer(principal: UserPrincipal, options?: { accessToke
               snapshotId: { type: "string", description: "可选：指定要恢复的快照 ID" },
               entityType: {
                 type: "string",
-                enum: ["feeding", "sleep", "diaper", "food", "growth", "medical_report", "supplement"],
+                enum: ["feeding", "sleep", "diaper", "food", "growth", "medical_report", "vaccine", "food_plan", "supplement"],
                 description: "可选：指定恢复的记录类型（留空默认恢复最近一条删除）",
               },
             },
@@ -2655,6 +2644,7 @@ export function createMcpServer(principal: UserPrincipal, options?: { accessToke
         const type = String(args.type);
         let targetId = typeof args.id === "string" ? args.id.trim() : (typeof args.recordId === "string" ? args.recordId.trim() : "");
         const date = typeof args.date === "string" && isValidDateStr(args.date) ? args.date : undefined;
+        let baseVersion: number | undefined;
 
         if (GROWDESK_CONFIG.enabled) {
           if (!targetId && date) {
@@ -2662,17 +2652,34 @@ export function createMcpServer(principal: UserPrincipal, options?: { accessToke
               const res = await growdeskFetch<any[]>(`/api/v1/babies/${babyId}/growth-measurements`, { accessToken });
               const list = Array.isArray(res.data) ? res.data : (res.data as any)?.data || [];
               const found = list.find((r: any) => r.measurementDate?.slice(0, 10) === date || r.date === date);
-              if (found) targetId = found.id;
+              if (found) {
+                targetId = found.id;
+                if (Number.isInteger(found.version)) baseVersion = found.version;
+              }
             } else if (type === "medical_report") {
               const res = await growdeskFetch<any[]>(`/api/v1/babies/${babyId}/medical/reports`, { accessToken });
               const list = Array.isArray(res.data) ? res.data : (res.data as any)?.data || [];
               const found = list.find((r: any) => r.reportDate?.slice(0, 10) === date || r.date === date);
-              if (found) targetId = found.id;
+              if (found) {
+                targetId = found.id;
+                if (Number.isInteger(found.version)) baseVersion = found.version;
+              }
+            } else if (type === "vaccine") {
+              const res = await growdeskFetch<any[]>(`/api/v1/babies/${babyId}/vaccines/records?limit=50`, { accessToken });
+              const list = Array.isArray(res.data) ? res.data : (res.data as any)?.data || [];
+              const found = list.find((r: any) => (r.completedDate || r.administeredDate || r.scheduledDate || r.date)?.slice(0, 10) === date);
+              if (found) {
+                targetId = found.id;
+                if (Number.isInteger(found.version)) baseVersion = found.version;
+              }
             } else if (type === "feeding" || type === "sleep" || type === "diaper" || type === "food" || type === "supplement") {
               const res = await growdeskFetch<any[]>(`/api/v1/babies/${babyId}/records/${type}?limit=50`, { accessToken });
               const list = Array.isArray(res.data) ? res.data : (res.data as any)?.data || [];
               const found = list.find((r: any) => (r.occurredAt || r.startTime || r.date)?.slice(0, 10) === date);
-              if (found) targetId = found.id;
+              if (found) {
+                targetId = found.id;
+                if (Number.isInteger(found.version)) baseVersion = found.version;
+              }
             }
           }
 
@@ -2680,34 +2687,14 @@ export function createMcpServer(principal: UserPrincipal, options?: { accessToke
             throw new Error(`未找到指定的 ${type} 记录，请确认记录 ID 或具体日期`);
           }
 
-          const snapId = `snap_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-          bffSnapshots.set(snapId, {
-            id: snapId,
-            babyId,
-            userId: principal.userId,
-            entityType: type,
-            entityId: targetId,
-            payload: { id: targetId, type, date },
-            createdAt: new Date(),
-            restored: false,
-          });
-
-          let delUrl = "";
-          if (type === "growth") {
-            delUrl = `/api/v1/babies/${babyId}/growth-measurements/${targetId}`;
-          } else if (type === "medical_report") {
-            delUrl = `/api/v1/babies/${babyId}/medical-reports/${targetId}`;
-          } else {
-            delUrl = `/api/v1/babies/${babyId}/records/${type}/${targetId}`;
-          }
-
-          const delRes = await growdeskFetch(delUrl, {
+          const clientId = typeof args.clientId === "string" && args.clientId.trim() ? args.clientId.trim() : undefined;
+          const delRes = await growdeskFetch<any>(`/api/v1/babies/${babyId}/record-snapshots/${encodeURIComponent(type)}/${encodeURIComponent(targetId)}`, {
             method: "DELETE",
             accessToken,
+            idempotencyKey: clientId,
+            body: baseVersion === undefined ? {} : { baseVersion: String(baseVersion) },
           });
-          if (!delRes.ok && delRes.status !== 404) {
-            throw new Error(delRes.error?.message || `Failed to delete ${type} record`);
-          }
+          requireWriteData(delRes, `Failed to delete ${type} record`);
 
           const data = {
             success: true,
@@ -2789,26 +2776,23 @@ export function createMcpServer(principal: UserPrincipal, options?: { accessToke
         }
 
         if (GROWDESK_CONFIG.enabled) {
-          let snapshot: BffSnapshotItem | undefined;
-          if (args.snapshotId) {
-            snapshot = bffSnapshots.get(args.snapshotId);
-          } else {
-            const list = Array.from(bffSnapshots.values()).reverse();
-            snapshot = list.find((s) => (!args.entityType || s.entityType === args.entityType) && s.babyId === babyId && !s.restored);
-          }
-          if (!snapshot || snapshot.babyId !== babyId) {
-            throw new Error("未找到对应的数据快照或无权访问");
-          }
-          if (snapshot.restored) {
-            throw new Error("该快照记录此前已被恢复，无需重复恢复");
-          }
-          snapshot.restored = true;
+          const restoreRes = args.snapshotId
+            ? await growdeskFetch<any>(`/api/v1/babies/${babyId}/record-snapshots/${encodeURIComponent(String(args.snapshotId))}/restore`, {
+                method: "POST",
+                accessToken,
+              })
+            : await growdeskFetch<any>(`/api/v1/babies/${babyId}/record-snapshots/restore`, {
+                method: "POST",
+                accessToken,
+                body: args.entityType ? { entityType: String(args.entityType) } : {},
+              });
+          const restored = requireWriteData(restoreRes, "Failed to restore record snapshot");
 
           const data = {
             success: true,
             action: "restore_record",
-            restoredId: snapshot.entityId,
-            entityType: snapshot.entityType,
+            restoredId: restored.restoredId,
+            entityType: restored.entityType,
             operator: currentUserSummary,
           };
           await logToolCall(name, "success", startTime);
@@ -3567,69 +3551,71 @@ export function createMcpServer(principal: UserPrincipal, options?: { accessToke
             const type = String(del.type);
             let targetId = typeof del.id === "string" ? del.id.trim() : "";
             const date = typeof del.date === "string" && isValidDateStr(del.date) ? del.date : undefined;
+            let baseVersion: number | undefined;
 
             if (!targetId && date) {
               if (type === "growth") {
                 const res = await growdeskFetch<any[]>(`/api/v1/babies/${babyId}/growth-measurements`, { accessToken });
                 const list = Array.isArray(res.data) ? res.data : (res.data as any)?.data || [];
                 const found = list.find((r: any) => r.measurementDate?.slice(0, 10) === date || r.date === date);
-                if (found) targetId = found.id;
+                if (found) {
+                  targetId = found.id;
+                  if (Number.isInteger(found.version)) baseVersion = found.version;
+                }
               } else if (type === "medical_report") {
                 const res = await growdeskFetch<any[]>(`/api/v1/babies/${babyId}/medical/reports`, { accessToken });
                 const list = Array.isArray(res.data) ? res.data : (res.data as any)?.data || [];
                 const found = list.find((r: any) => r.reportDate?.slice(0, 10) === date || r.date === date);
-                if (found) targetId = found.id;
+                if (found) {
+                  targetId = found.id;
+                  if (Number.isInteger(found.version)) baseVersion = found.version;
+                }
+              } else if (type === "vaccine") {
+                const res = await growdeskFetch<any[]>(`/api/v1/babies/${babyId}/vaccines/records?limit=50`, { accessToken });
+                const list = Array.isArray(res.data) ? res.data : (res.data as any)?.data || [];
+                const found = list.find((r: any) => (r.completedDate || r.administeredDate || r.scheduledDate || r.date)?.slice(0, 10) === date);
+                if (found) {
+                  targetId = found.id;
+                  if (Number.isInteger(found.version)) baseVersion = found.version;
+                }
               } else if (type === "feeding" || type === "sleep" || type === "diaper" || type === "food" || type === "supplement") {
                 const res = await growdeskFetch<any[]>(`/api/v1/babies/${babyId}/records/${type}?limit=50`, { accessToken });
                 const list = Array.isArray(res.data) ? res.data : (res.data as any)?.data || [];
                 const found = list.find((r: any) => (r.occurredAt || r.startTime || r.date)?.slice(0, 10) === date);
-                if (found) targetId = found.id;
+                if (found) {
+                  targetId = found.id;
+                  if (Number.isInteger(found.version)) baseVersion = found.version;
+                }
               }
             }
 
             if (!targetId) throw new Error(`未找到指定的 ${type} 记录`);
 
-            const snapId = `snap_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-            bffSnapshots.set(snapId, {
-              id: snapId,
-              babyId,
-              userId: principal.userId,
-              entityType: type,
-              entityId: targetId,
-              payload: { id: targetId, type, date },
-              createdAt: new Date(),
-              restored: false,
+            const clientId = typeof del.clientId === "string" && del.clientId.trim() ? del.clientId.trim() : undefined;
+            const deleteRes = await growdeskFetch<any>(`/api/v1/babies/${babyId}/record-snapshots/${encodeURIComponent(type)}/${encodeURIComponent(targetId)}`, {
+              method: "DELETE",
+              accessToken,
+              idempotencyKey: clientId,
+              body: baseVersion === undefined ? {} : { baseVersion: String(baseVersion) },
             });
-
-            let delUrl = "";
-            if (type === "growth") {
-              delUrl = `/api/v1/babies/${babyId}/growth-measurements/${targetId}`;
-            } else if (type === "medical_report") {
-              delUrl = `/api/v1/babies/${babyId}/medical-reports/${targetId}`;
-            } else {
-              delUrl = `/api/v1/babies/${babyId}/records/${type}/${targetId}`;
-            }
-            await growdeskFetch(delUrl, { method: "DELETE", accessToken });
+            requireWriteData(deleteRes, `Failed to delete ${type} record`);
             messages.push(`🗑️ 已成功删除 ${type} 记录 (ID: ${targetId})，系统已自动备份安全快照，随时可撤销恢复。`);
           }
 
           if (args.undoAction) {
             const undo = args.undoAction;
-            let snapshot: BffSnapshotItem | undefined;
-            if (undo.snapshotId) {
-              snapshot = bffSnapshots.get(undo.snapshotId);
-            } else {
-              const list = Array.from(bffSnapshots.values()).reverse();
-              snapshot = list.find((s) => (!undo.entityType || s.entityType === undo.entityType) && s.babyId === babyId && !s.restored);
-            }
-            if (!snapshot || snapshot.babyId !== babyId) {
-              throw new Error("未找到对应的数据快照或无权访问");
-            }
-            if (snapshot.restored) {
-              throw new Error("该快照记录此前已被恢复，无需重复恢复");
-            }
-            snapshot.restored = true;
-            messages.push(`↩️ 已成功撤销并恢复【${snapshot.entityType}】记录 (新记录 ID: ${snapshot.entityId})`);
+            const restoreRes = undo.snapshotId
+              ? await growdeskFetch<any>(`/api/v1/babies/${babyId}/record-snapshots/${encodeURIComponent(String(undo.snapshotId))}/restore`, {
+                  method: "POST",
+                  accessToken,
+                })
+              : await growdeskFetch<any>(`/api/v1/babies/${babyId}/record-snapshots/restore`, {
+                  method: "POST",
+                  accessToken,
+                  body: undo.entityType ? { entityType: String(undo.entityType) } : {},
+                });
+            const restored = requireWriteData(restoreRes, "Failed to restore record snapshot");
+            messages.push(`↩️ 已成功撤销并恢复【${restored.entityType}】记录 (新记录 ID: ${restored.restoredId})`);
           }
 
           if (messages.length === 0) {
