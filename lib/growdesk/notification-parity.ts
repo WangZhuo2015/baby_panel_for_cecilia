@@ -60,6 +60,12 @@ interface VaccineRecord extends JsonObject {
   familyId: string;
   vaccineCode: string;
   administeredDate: string;
+  scheduledDate?: string | null;
+  completedDate?: string | null;
+  isCompleted?: boolean;
+  doseNumber?: number | null;
+  legacyName?: string | null;
+  legacyDose?: string | null;
   notes?: string | null;
 }
 
@@ -391,6 +397,25 @@ function doseNumber(notes: unknown): number {
   return Number.isInteger(value) && value >= 1 ? value : 1;
 }
 
+function vaccineDoseNumber(record: VaccineRecord): number {
+  if (record.doseNumber !== undefined && record.doseNumber !== null) {
+    if (!Number.isInteger(record.doseNumber) || record.doseNumber < 1 || record.doseNumber > 12) {
+      invalidResponse("GrowDesk 返回了无效的疫苗 doseNumber");
+    }
+    return record.doseNumber;
+  }
+  return doseNumber(record.legacyDose || record.notes);
+}
+
+function vaccineText(value: unknown, field: string, fallback: string): string {
+  if (value === undefined || value === null || value === "") return fallback;
+  return stringField(value, field);
+}
+
+function pendingNaturalKey(code: string, dose: number, scheduledDate: string, name: string): string {
+  return `${code}\u0000${dose}\u0000${scheduledDate}\u0000${name}`;
+}
+
 export function buildVaccineReminderNotifications(
   _schedule: unknown[],
   records: JsonObject[],
@@ -399,34 +424,74 @@ export function buildVaccineReminderNotifications(
   _clock: FamilyClock,
   nowMs = Date.now(),
 ): NotificationItem[] {
-  // Canonical records only represent administered doses. They do not contain
-  // the legacy pending record's scheduledDate/isCompleted state, so deriving a
-  // reminder from the reference schedule would fabricate saved user data.
+  // The canonical API now persists pending records in the vaccine record graph.
+  // Keep the old food-plan projection as a fallback for older Web data, but
+  // never derive reminders from the reference schedule alone.
   const completed = new Set<string>();
+  const pendingRecords: VaccineRecord[] = [];
   for (const raw of records) {
     const record = scopedRecord(raw, "疫苗", scope) as VaccineRecord;
     const code = stringField(record.vaccineCode, "疫苗 vaccineCode");
+    const dose = vaccineDoseNumber(record);
+    if (record.isCompleted !== undefined && typeof record.isCompleted !== "boolean") {
+      invalidResponse("GrowDesk 返回了无效的疫苗 isCompleted");
+    }
+    const isPending = record.isCompleted === false
+      || (record.isCompleted === undefined && record.completedDate === null);
+    if (isPending) {
+      pendingRecords.push(record);
+      continue;
+    }
     dateField(record.administeredDate, "疫苗 administeredDate");
-    completed.add(`${code}-${doseNumber(record.notes)}`);
+    completed.add(`${code}-${dose}`);
   }
-  const pending = readLegacyPendingVaccines(readPendingPlan(plan, scope.babyId));
-  return pending.flatMap(record => {
-    const code = record.vaccineId || record.name;
-    if (completed.has(`${code}-${record.doseNumber}`)) return [];
-    const scheduledMs = Date.parse(record.scheduledDate);
+
+  const buildReminder = (
+    id: string,
+    code: string,
+    name: string,
+    dose: string,
+    doseNum: number,
+    scheduledDate: string,
+  ): NotificationItem | null => {
+    const key = `${code}-${doseNum}`;
+    if (completed.has(key)) return null;
+    const scheduledMs = Date.parse(scheduledDate);
     const days = Math.ceil((scheduledMs - nowMs) / (24 * 60 * 60 * 1000));
-    if (days > 7) return [];
-    return [{
-      id: `vaccine-${record.id}`,
+    if (days > 7) return null;
+    return {
+      id: `vaccine-${id}`,
       type: "vaccine" as const,
-      title: `💉 ${record.name} ${record.dose}`,
-      detail: `计划接种日期：${record.scheduledDate}`,
+      title: `💉 ${name} ${dose}`,
+      detail: `计划接种日期：${scheduledDate}`,
       time: days < 0 ? `已过期 ${Math.abs(days)} 天` : days === 0 ? "今天" : `${days} 天后`,
       urgent: days <= 3,
       icon: "💉",
       createdAt: nowMs,
-    }];
-  }).sort((a, b) => a.detail.localeCompare(b.detail));
+    };
+  };
+
+  const canonicalPendingKeys = new Set<string>();
+  const canonicalItems = pendingRecords.flatMap(record => {
+    const code = stringField(record.vaccineCode, "疫苗 vaccineCode");
+    const doseNum = vaccineDoseNumber(record);
+    const scheduledDate = record.scheduledDate === undefined || record.scheduledDate === null
+      ? dateField(record.administeredDate, "疫苗 administeredDate")
+      : dateField(record.scheduledDate, "疫苗 scheduledDate");
+    const name = vaccineText(record.legacyName, "疫苗 legacyName", code);
+    const dose = vaccineText(record.legacyDose, "疫苗 legacyDose", `第${doseNum}剂`);
+    canonicalPendingKeys.add(pendingNaturalKey(code, doseNum, scheduledDate, name));
+    const reminder = buildReminder(record.id, code, name, dose, doseNum, scheduledDate);
+    return reminder ? [reminder] : [];
+  });
+  const legacyPending = readLegacyPendingVaccines(readPendingPlan(plan, scope.babyId));
+  const legacyItems = legacyPending.flatMap(record => {
+    const code = record.vaccineId || record.name;
+    if (canonicalPendingKeys.has(pendingNaturalKey(code, record.doseNumber, record.scheduledDate, record.name))) return [];
+    const reminder = buildReminder(record.id, code, record.name, record.dose, record.doseNumber, record.scheduledDate);
+    return reminder ? [reminder] : [];
+  });
+  return [...canonicalItems, ...legacyItems].sort((a, b) => a.detail.localeCompare(b.detail));
 }
 
 export function buildDailyReminderNotifications(

@@ -147,6 +147,51 @@ test("GrowDesk daily reminders include an overnight sleep interval", () => {
   assert.deepEqual(items.map(item => item.id), ["daily-food"]);
 });
 
+test("GrowDesk notification parity projects a saved canonical pending vaccine", () => {
+  const items = buildVaccineReminderNotifications(
+    [],
+    [
+      recordBase("vaccine_pending", {
+        vaccineCode: "vaccine_pending_code",
+        legacyName: "测试预约疫苗",
+        legacyDose: "第1剂",
+        administeredDate: "2026-09-20",
+        scheduledDate: "2026-09-20",
+        completedDate: null,
+        isCompleted: false,
+        doseNumber: 1,
+      }),
+      recordBase("vaccine_pending_later", {
+        vaccineCode: "vaccine_pending_code",
+        legacyName: "测试预约疫苗",
+        legacyDose: "第1剂",
+        administeredDate: "2026-09-21",
+        scheduledDate: "2026-09-21",
+        completedDate: null,
+        isCompleted: false,
+        doseNumber: 1,
+      }),
+    ],
+    vaccinePlan(),
+    scope,
+    clock,
+    nowMs,
+  );
+
+  assert.deepEqual(items.map(item => ({ id: item.id, title: item.title, time: item.time })), [
+    {
+      id: "vaccine-vaccine_pending",
+      title: "💉 测试预约疫苗 第1剂",
+      time: "1 天后",
+    },
+    {
+      id: "vaccine-vaccine_pending_later",
+      title: "💉 测试预约疫苗 第1剂",
+      time: "2 天后",
+    },
+  ]);
+});
+
 test("GrowDesk notification parity does not fabricate legacy vaccine records from a reference schedule", () => {
   const items = buildVaccineReminderNotifications(
     [
