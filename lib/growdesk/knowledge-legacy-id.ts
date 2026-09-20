@@ -169,6 +169,12 @@ export function legacyFeedingGuidelineId(item: Record<string, unknown>): string 
   return index >= 0 ? legacyReferenceId("FeedingGuideline", index) : undefined;
 }
 
+export function legacyFoodItemId(item: Record<string, unknown>): string | undefined {
+  const key = sourceId(item.foodId) ?? sourceId(item.id);
+  const index = (foodsDataset.foodItems as ReferenceSource[]).findIndex(candidate => sourceId(candidate.id) === key);
+  return index >= 0 ? legacyReferenceId("FoodItem", index) : undefined;
+}
+
 export function legacyDevelopmentMilestoneId(item: Record<string, unknown>): string | undefined {
   return legacyNaturalId(item, milestones, "DevelopmentMilestone");
 }

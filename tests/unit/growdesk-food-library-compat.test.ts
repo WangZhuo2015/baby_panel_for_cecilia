@@ -14,6 +14,9 @@ test('every reference food retains its preparation, nutrition and safety knowled
     assert.equal(result.isCommonAllergen, source.allergen?.isCommonAllergen ?? null);
     assert.equal(result.recommendedFromMonth, source.introduction?.recommendedFromMonth ?? null);
     assert.equal(result.status, 'tried');
+    assert.match(result.id, /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    assert.equal('allergenRisk' in result, false);
+    assert.equal('recommendedAgeMonths' in result, false);
   }
 });
 
@@ -23,6 +26,7 @@ test('custom food is not assigned another food knowledge and preserves explicit 
   assert.deepEqual(result.nutrition, []);
   assert.equal(result.recommendedFromMonth, 9);
   assert.equal(result.status, 'to_try');
+  assert.equal(result.id, 'test_custom_food');
 });
 
 test('reference list follows legacy age then seed order regardless of upstream name sorting', () => {
