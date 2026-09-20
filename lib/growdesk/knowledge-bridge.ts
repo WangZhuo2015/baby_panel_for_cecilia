@@ -1,6 +1,7 @@
 import { growdeskFetch } from "./client";
 import { resolveBffSession } from "./session";
 import { BridgeError, requireData, bridgeErrorResponse } from "./bridge-protocol";
+import { legacyFeedingGuidelineId } from "./knowledge-legacy-id";
 
 export type KnowledgeKind = "milestones" | "activities" | "warning-signs" | "feeding-guidelines";
 type KnowledgeItem = Record<string, unknown>;
@@ -33,9 +34,10 @@ function jsonArrayField(item: KnowledgeItem, field: string): string {
 /**
  * Project canonical reference details into the legacy Web response shape.
  *
- * The canonical server owns the source values and stable IDs. This adapter
- * only adds the aliases and JSON-string columns that the old Prisma routes
- * returned; it deliberately does not invent the old database UUIDs.
+ * The canonical server owns the source values and natural IDs. This adapter
+ * adds the aliases and JSON-string columns that the old Prisma routes
+ * returned, and reproduces legacy reference-row IDs from the checked-in
+ * source order when the old fixture had deterministic IDs.
  */
 export function projectLegacyKnowledgeItem(kind: KnowledgeKind, source: KnowledgeItem): KnowledgeItem {
   const item = unwrapDetails(source);
@@ -107,8 +109,10 @@ export function projectLegacyKnowledgeItem(kind: KnowledgeKind, source: Knowledg
     };
   }
 
+  const legacyId = legacyFeedingGuidelineId(item);
   return {
     ...item,
+    ...(legacyId ? { id: legacyId } : {}),
     textureJson: jsonArrayField(item, "texture"),
     foodDiversityJson: jsonArrayField(item, "foodDiversity"),
     responsiveFeedingJson: jsonArrayField(item, "responsiveFeeding"),

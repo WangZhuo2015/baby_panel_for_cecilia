@@ -1,4 +1,6 @@
 /** Keep the legacy reading UI's flattened fields alongside canonical metadata. */
+import { legacyBookId } from "./knowledge-legacy-id";
+
 export function fromGrowDeskBook(book: Record<string, unknown>): Record<string, unknown> {
   const details = book.details && typeof book.details === 'object'
     ? book.details as Record<string, unknown> : book;
@@ -13,6 +15,16 @@ export function fromGrowDeskBook(book: Record<string, unknown>): Record<string, 
   result.ratingCount = details.ratingCount ?? rating.count ?? null;
   result.ratingSource = details.ratingSource ?? rating.source ?? null;
   result.ratingRetrievedDate = details.ratingRetrievedDate ?? rating.retrievedDate ?? null;
+  // The old Prisma row had JSON columns for illustrator/translator and no
+  // canonical rating object or optimistic version field.  Keep those
+  // canonical values available in the server DTO while projecting the exact
+  // legacy response shape here.
+  delete result.illustrator;
+  delete result.translator;
+  delete result.rating;
+  delete result.version;
+  const legacyId = legacyBookId(details);
+  if (legacyId) result.id = legacyId;
   return result;
 }
 

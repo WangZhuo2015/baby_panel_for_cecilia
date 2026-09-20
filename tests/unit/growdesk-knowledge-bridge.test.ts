@@ -7,6 +7,7 @@ import {
   projectLegacyKnowledgeItem,
   sortLegacyMilestones,
 } from "../../lib/growdesk/knowledge-bridge";
+import { legacyReferenceId } from "../../lib/growdesk/knowledge-legacy-id";
 
 function readDataset<T>(fileName: string): T {
   return JSON.parse(fs.readFileSync(path.join(process.cwd(), "data", fileName), "utf8")) as T;
@@ -82,6 +83,20 @@ test("knowledge bridge restores warning-sign and feeding-guideline JSON columns"
   assert.equal(guideline.safetyJson, '["持续看护"]');
   assert.equal(guideline.sourceRefsJson, '["src_food"]');
   assert.deepEqual(guideline.texture, ["泥糊"]);
+});
+
+test("feeding guideline uses the source-order legacy row id without hardcoded UUIDs", () => {
+  const guideline = projectLegacyKnowledgeItem("feeding-guidelines", {
+    id: "feeding-guideline-0",
+    ageMinMonths: 6,
+    ageMaxMonths: 8,
+    texture: [],
+    foodDiversity: [],
+    responsiveFeeding: [],
+    safety: [],
+    sourceRefs: [],
+  });
+  assert.equal(guideline.id, legacyReferenceId("FeedingGuideline", 0));
 });
 
 test("knowledge bridge restores milestone flattened fields and assessment ordering", () => {
