@@ -310,8 +310,12 @@ test("GrowDesk notification parity propagates canonical list failures", async ()
 });
 
 test("supplement notification uses the canonical creation actor and hides transport product tags", () => {
-  const items = buildFamilyRecordNotifications({ feeding: [], sleep: [], diaper: [], food: [], growth: [], supplement: [recordBase("test_supp", { supplementName: "test_vitamin", amount: "1.5 滴", notes: "[productId:test_product] test_note", recordedByUserId: "user_test_member" })] }, scope, new Map([["user_test_member", "测试家人"]]), clock, nowMs);
+  const items = buildFamilyRecordNotifications({ feeding: [], sleep: [], diaper: [], food: [], growth: [], supplement: [
+    recordBase("test_supp", { supplementName: "test_vitamin", amount: "1.5 滴", notes: "[productId:test_product] test_note", recordedByUserId: "user_test_member" }),
+    recordBase("test_supp_normalized", { supplementName: "test_vitamin", amount: "1.5 滴", dose: "1.5", unitName: "滴", notes: null, recordedByUserId: "user_test_member" }),
+  ] }, scope, new Map([["user_test_member", "测试家人"]]), clock, nowMs);
   assert.equal(items[0]?.detail, "test_vitamin 1.5滴 · 备注: test_note");
+  assert.equal(items[1]?.detail, "test_vitamin 1.5滴");
   assert.equal(items[0]?.actorId, "user_test_member");
   assert.equal(items[0]?.actorLabel, "测试家人");
 });

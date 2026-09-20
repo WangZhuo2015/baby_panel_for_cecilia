@@ -316,10 +316,11 @@ function recordDetail(kind: string, record: JsonObject, clock: FamilyClock): str
   }
   const product = isObject(record.product) ? record.product : null;
   const name = optionalText(record.supplementName) || optionalText(record.productName) || optionalText(product?.name) || "营养补剂";
-  const amount = (optionalText(record.amount) || optionalText(record.dose))?.replace(/^(\d+(?:\.\d+)?)\s+(?=\S)/, "$1");
+  const amount = (optionalText(record.dose) || optionalText(record.amount))?.replace(/^(\d+(?:\.\d+)?)\s+(?=\S)/, "$1");
   const unit = optionalText(record.unitName) || "";
+  const dose = amount && unit && !amount.endsWith(unit) ? `${amount}${unit}` : amount;
   const notes = extractProductIdFromNotes(optionalText(record.notes)).cleanNotes;
-  return `${name}${amount ? ` ${amount}${unit}` : ""}${notes ? ` · 备注: ${notes}` : ""}`;
+  return `${name}${dose ? ` ${dose}` : ""}${notes ? ` · 备注: ${notes}` : ""}`;
 }
 
 const RECORD_KINDS = [
