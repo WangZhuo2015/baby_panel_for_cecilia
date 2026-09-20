@@ -385,6 +385,28 @@ test("SH-08: Vaccine Compat DTO Layer", async (t) => {
 });
 
 test("SH-08: Timeline Compat DTO Layer", async (t) => {
+  await t.test("fromGrowDeskTimelineEntry: restores numeric supplement dose from Decimal wire strings", () => {
+    const item = fromGrowDeskTimelineEntry({
+      id: "timeline-supplement-1",
+      babyId: "baby-1",
+      entityType: "supplement",
+      entityId: "supplement-1",
+      occurredAt: "2026-09-19T01:00:00.000Z",
+      summary: "Supplement",
+      version: "1",
+    }, {
+      supplements: new Map([["supplement-1", {
+        id: "supplement-1",
+        babyId: "baby-1",
+        supplementName: "Vitamin D",
+        dose: "1.5",
+        unitName: "滴",
+      }]]),
+    });
+
+    assert.equal(item.rawRecord?.dose, 1.5);
+  });
+
   await t.test("fromGrowDeskTimelineResponse: converts list and sets correct icons and labels", () => {
     const items = fromGrowDeskTimelineResponse([
       {
@@ -574,4 +596,3 @@ test("SH-08: Remote MCP Server Dual-Mode & Scopes", async (t) => {
     assert.ok(server, "Server should be instantiated");
   });
 });
-

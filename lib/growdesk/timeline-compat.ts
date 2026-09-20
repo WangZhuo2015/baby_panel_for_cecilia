@@ -402,7 +402,9 @@ export function fromGrowDeskTimelineEntry(
       const prodName = supp.productName || supp.supplementName || prod?.name || "营养补充剂";
       const parsedAmount = typeof supp.amount === "string" ? parseSupplementAmount(supp.amount) : null;
       const unit = supp.unitName || parsedAmount?.unitName || prod?.unitName || "剂";
-      const dose = supp.dose ?? supp.dosage ?? parsedAmount?.dose ?? "";
+      const rawDose = supp.dose ?? supp.dosage ?? parsedAmount?.dose ?? "";
+      const numericDose = typeof rawDose === "string" && rawDose.trim() !== "" ? Number(rawDose) : rawDose;
+      const dose = typeof numericDose === "number" && Number.isFinite(numericDose) ? numericDose : rawDose;
       let d = `${prodName} ${dose} ${unit}`.trim();
       if (supp.notes) d += ` · ${supp.notes}`;
       detail = d;
