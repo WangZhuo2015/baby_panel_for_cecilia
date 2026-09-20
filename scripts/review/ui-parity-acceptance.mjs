@@ -677,7 +677,7 @@ try {
       if (await growthGalleryInput.count() !== 1) {
         throw new Error(`expected exactly one growth OCR gallery input, found ${await growthGalleryInput.count()}`);
       }
-      const growthGalleryButton = page.getByRole("button", { name: "从相册选择", exact: true });
+      const growthGalleryButton = page.getByRole("button", { name: "从相册选", exact: true });
       if (await growthGalleryButton.count() !== 1) {
         throw new Error(`expected exactly one growth OCR gallery button, found ${await growthGalleryButton.count()}`);
       }
@@ -687,12 +687,28 @@ try {
       ]);
       const growthOcrPromise = page.waitForResponse((response) => response.request().method() === "POST"
         && new URL(response.url()).pathname === "/api/growth/ocr");
-      await Promise.all([growthOcrPromise, growthFileChooser.setFiles({
+      await growthFileChooser.setFiles({
         name: `e2e_growth_${suffix}.png`,
         mimeType: "image/png",
         buffer: fixtureBuffer,
-      })]);
-      const growthOcr = await growthOcrPromise;
+      });
+      const uploadSignal = await Promise.race([
+        growthOcrPromise.then((response) => ({ kind: "response", response })),
+        page.getByAltText("测量照片预览").waitFor({ state: "visible", timeout: 5_000 })
+          .then(() => ({ kind: "preview" })),
+        page.getByText("请等待宝宝信息加载完成后再上传", { exact: true })
+          .waitFor({ state: "visible", timeout: 5_000 }).then(() => ({ kind: "scope-unavailable" })),
+        page.waitForTimeout(5_000).then(() => ({ kind: "no-signal" })),
+      ]);
+      if (uploadSignal.kind === "scope-unavailable") {
+        throw new Error("growth OCR upload was rejected because the authenticated baby scope was not ready");
+      }
+      if (uploadSignal.kind === "no-signal") {
+        const selectedFileCount = await growthGalleryInput.evaluate((input) =>
+          input instanceof HTMLInputElement ? input.files?.length ?? 0 : -1);
+        throw new Error(`growth OCR file selection produced no preview or request; selected files: ${selectedFileCount}`);
+      }
+      const growthOcr = uploadSignal.kind === "response" ? uploadSignal.response : await growthOcrPromise;
       const growthOcrBody = await growthOcr.json().catch(() => null);
       Object.assign(report.growthDiagnostic.imageScenario, {
         ocrStatus: growthOcr.status(),
