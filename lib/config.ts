@@ -134,16 +134,16 @@ export const AI_CONFIG = {
     const profile = getActiveLlmProfile();
     if (profile.model) {
       if (profile.model === "hermes-agent" || (this.baseUrl.includes("opencode.ai") && profile.model.includes("muse-spark"))) {
-        return "deepseek-v4-flash-vision-exp";
+        return "Qwen3.8-Flash-Next";
       }
       return profile.model;
     }
     if (preferOpenRouter()) return process.env.OPENROUTER_MODEL || "muse-spark-1.2-contributor";
     const model = process.env.AI_MODEL || process.env.OPENAI_MODEL || "";
     if (!model || model === "hermes-agent" || (this.baseUrl.includes("opencode.ai") && model.includes("muse-spark"))) {
-      return "deepseek-v4-flash-vision-exp";
+      return "Qwen3.8-Flash-Next";
     }
-    return model || "muse-spark-1.2-contributor";
+    return model || "Qwen3.8-Flash-Next";
   },
   get visionModel() {
     const profile = getActiveLlmProfile();
@@ -152,7 +152,7 @@ export const AI_CONFIG = {
     }
     const vision = process.env.AI_VISION_MODEL;
     if (vision && vision !== "hermes-agent") return vision;
-    return "deepseek-v4-flash-vision-exp";
+    return "Qwen3.8-Flash-Next";
   },
   get headers(): Record<string, string> {
     const profile = getActiveLlmProfile();

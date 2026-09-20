@@ -38,8 +38,8 @@ function isTestEnvironment(): boolean {
 function getLegacyEnvProfile(): LlmProfile {
   const baseUrl = (process.env.AI_BASE_URL || process.env.OPENAI_BASE_URL || "https://opencode.ai/zen/go/v1").replace(/\/+$/, "");
   const apiKey = process.env.AI_API_KEY || process.env.OPENAI_API_KEY || "";
-  const model = process.env.AI_MODEL || process.env.OPENAI_MODEL || "muse-spark-1.2-contributor";
-  const visionModel = process.env.AI_VISION_MODEL || "deepseek-v4-flash-vision-exp";
+  const model = process.env.AI_MODEL || process.env.OPENAI_MODEL || "Qwen3.8-Flash-Next";
+  const visionModel = process.env.AI_VISION_MODEL || "Qwen3.8-Flash-Next";
 
   return {
     name: "Legacy Environment",
