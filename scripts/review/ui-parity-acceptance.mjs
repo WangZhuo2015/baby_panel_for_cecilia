@@ -677,6 +677,9 @@ try {
       if (await growthGalleryInput.count() !== 1) {
         throw new Error(`expected exactly one growth OCR gallery input, found ${await growthGalleryInput.count()}`);
       }
+      await page.waitForFunction(() =>
+        document.querySelector('[data-testid="growth-ocr-gallery-input"]')?.getAttribute("data-upload-ready") === "true",
+      );
       const growthGalleryButton = page.getByRole("button", { name: "从相册选", exact: true });
       if (await growthGalleryButton.count() !== 1) {
         throw new Error(`expected exactly one growth OCR gallery button, found ${await growthGalleryButton.count()}`);

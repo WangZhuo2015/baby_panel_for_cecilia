@@ -58,7 +58,8 @@ export function GrowthForm({
 }: GrowthFormProps) {
   const isEdit = formMode === "edit";
   const { showToast } = useToast();
-  const { baby } = useBabyStore();
+  const { baby, family, user, authLoading } = useBabyStore();
+  const uploadScopeReady = !authLoading && Boolean(user?.id && family?.id && baby?.id);
 
   const [inputMode, setInputMode] = useState<InputMode>("manual");
   const [date, setDate] = useState(() => initialData?.date || getLocalDateStr());
@@ -221,6 +222,7 @@ export function GrowthForm({
         <>
           <input
             ref={cameraInputRef}
+            disabled={!uploadScopeReady}
             type="file"
             accept="image/*"
             capture="environment"
@@ -233,6 +235,8 @@ export function GrowthForm({
           <input
             ref={galleryInputRef}
             data-testid="growth-ocr-gallery-input"
+            data-upload-ready={uploadScopeReady ? "true" : "false"}
+            disabled={!uploadScopeReady}
             type="file"
             accept="image/*"
             className="hidden"
@@ -272,6 +276,7 @@ export function GrowthForm({
                     <div className="flex items-center gap-3">
                       <button
                         type="button"
+                        disabled={!uploadScopeReady}
                         onClick={() => {
                           cameraInputRef.current?.click();
                           setOcrDone(false);
@@ -283,6 +288,7 @@ export function GrowthForm({
                       </button>
                       <button
                         type="button"
+                        disabled={!uploadScopeReady}
                         onClick={() => {
                           galleryInputRef.current?.click();
                           setOcrDone(false);
@@ -301,6 +307,7 @@ export function GrowthForm({
                       <CuteButton
                         variant="primary"
                         size="sm"
+                        disabled={!uploadScopeReady}
                         onClick={() => cameraInputRef.current?.click()}
                         className="flex items-center gap-1.5"
                       >
@@ -310,6 +317,7 @@ export function GrowthForm({
                       <CuteButton
                         variant="secondary"
                         size="sm"
+                        disabled={!uploadScopeReady}
                         onClick={() => galleryInputRef.current?.click()}
                         className="flex items-center gap-1.5"
                       >
