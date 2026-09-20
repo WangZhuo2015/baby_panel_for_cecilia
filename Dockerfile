@@ -1,6 +1,7 @@
-FROM node:20-alpine AS base
+ARG NODE_IMAGE=node:24.14.1-alpine3.23@sha256:8510330d3eb72c804231a834b1a8ebb55cb3796c3e4431297a24d246b8add4d5
+FROM ${NODE_IMAGE} AS base
 WORKDIR /app
-RUN apk add --no-cache libc6-compat openssl wget git
+RUN apk add --no-cache libc6-compat openssl wget
 
 # 1. Install dependencies
 # ⚠️ 必须安装 devDependencies：prisma CLI 与 dotenv（prisma.config.ts 依赖）均为 devDep，
@@ -11,9 +12,12 @@ RUN npm ci
 
 # 2. Build application
 FROM base AS builder
+ARG BUILD_REVISION
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-ENV NEXT_TELEMETRY_DISABLED=1
+ENV NEXT_TELEMETRY_DISABLED=1 \
+    BUILD_REVISION=${BUILD_REVISION} \
+    BUILD_SOURCE_DIRTY=false
 RUN npx prisma generate
 RUN npm run build
 

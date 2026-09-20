@@ -32,10 +32,23 @@ hashDirectory(resolve(standalone, ".next/static"), "static");
 artifactHash.update("server.js\0").update(readFileSync(resolve(standalone, "server.js"))).update("\0");
 if (existsSync(resolve(standalone, "public"))) hashDirectory(resolve(standalone, "public"), "public");
 hashDirectory(resolve(standalone, "data"), "data");
+const configuredRevision = process.env.BUILD_REVISION?.trim();
+if (configuredRevision && !/^[0-9a-f]{40}$/.test(configuredRevision)) {
+  throw new Error("BUILD_REVISION must be a full lowercase Git SHA");
+}
+const sourceGitSha = configuredRevision
+  || execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim();
+const configuredDirty = process.env.BUILD_SOURCE_DIRTY?.trim();
+if (configuredDirty && !["true", "false"].includes(configuredDirty)) {
+  throw new Error("BUILD_SOURCE_DIRTY must be true or false");
+}
+const sourceDirty = configuredDirty
+  ? configuredDirty === "true"
+  : Boolean(execFileSync("git", ["status", "--porcelain"], { cwd: root, encoding: "utf8" }).trim());
 writeFileSync(resolve(standalone, "build-provenance.json"), JSON.stringify({
   schemaVersion: 1,
-  sourceGitSha: execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim(),
-  sourceDirty: Boolean(execFileSync("git", ["status", "--porcelain"], { cwd: root, encoding: "utf8" }).trim()),
+  sourceGitSha,
+  sourceDirty,
   buildId: readFileSync(resolve(root, ".next/BUILD_ID"), "utf8").trim(),
   artifactSha256: artifactHash.digest("hex"),
   builtAt: new Date().toISOString(),
