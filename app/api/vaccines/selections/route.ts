@@ -8,30 +8,8 @@ import { verifyBffCsrf } from "@/lib/growdesk/csrf";
 import { growdeskFetch } from "@/lib/growdesk/client";
 import { loadWebBaby } from "@/lib/growdesk/bridge-identity";
 import { BridgeError, bridgeErrorResponse, requireData } from "@/lib/growdesk/bridge-protocol";
-import { foodPlanWriteBody, readGrowDeskFoodPlan, type GrowDeskFoodPlanState } from "@/lib/growdesk/food-plan-state";
-import { buildVaccineSelections, projectLegacyVaccineSelections } from "@/lib/growdesk/vaccine-compat";
+import { buildVaccineSelections, fromGrowDeskVaccineCatalog, projectLegacyVaccineSelections, type GrowDeskVaccineRecord } from "@/lib/growdesk/vaccine-compat";
 import { wantsExtendedRepresentation } from "@/lib/growdesk/legacy-projections";
-
-function readFoodPlan(response: Awaited<ReturnType<typeof growdeskFetch>>, babyId: string): GrowDeskFoodPlanState {
-  return readGrowDeskFoodPlan(response, babyId);
-}
-
-function throwPartialFoodPlanMutation(error: unknown, vaccineId: string): never {
-  if (error instanceof BridgeError) {
-    const details = error.details && typeof error.details === "object" && !Array.isArray(error.details)
-      ? { ...(error.details as Record<string, unknown>) }
-      : error.details === undefined ? {} : { upstreamDetails: error.details };
-    throw new BridgeError(error.status, error.code, error.message, {
-      ...details,
-      partialMutation: true,
-      vaccineId,
-    });
-  }
-  throw new BridgeError(500, "PARTIAL_MUTATION", "疫苗记录已保存，但饮食计划同步失败", {
-    partialMutation: true,
-    vaccineId,
-  });
-}
 
 export async function GET(request: Request) {
   try {
@@ -50,25 +28,51 @@ export async function GET(request: Request) {
         return NextResponse.json({ error: "请提供 babyId" }, { status: 400 });
       }
 
-      const recRes = await growdeskFetch<any[]>(`/api/v1/babies/${babyId}/vaccines/records`, {
-        accessToken: bffSession.accessToken,
-      });
+      const [recRes, catalogRes, selectionRes] = await Promise.all([
+        growdeskFetch<GrowDeskVaccineRecord[]>(`/api/v1/babies/${babyId}/vaccines/records`, {
+          accessToken: bffSession.accessToken,
+        }),
+        growdeskFetch<any>(`/api/v1/vaccines/catalog`, { accessToken: bffSession.accessToken }),
+        growdeskFetch<any[]>(`/api/v1/babies/${babyId}/vaccines/selections`, { accessToken: bffSession.accessToken }),
+      ]);
       const recordsData = requireData(recRes);
       const records = Array.isArray(recordsData) ? recordsData : [];
-
-      const foodPlan = readFoodPlan(await growdeskFetch<any>(`/api/v1/babies/${babyId}/food-plan`, {
-        accessToken: bffSession.accessToken,
-      }), babyId);
-      const planData = foodPlan.planData;
-      const savedSelections = planData.vaccineSelections &&
-        typeof planData.vaccineSelections === "object" &&
-        !Array.isArray(planData.vaccineSelections)
-        ? planData.vaccineSelections as Record<string, { selected?: boolean; completed?: boolean; id?: string; updatedAt?: string }>
-        : {};
+      const catalog = fromGrowDeskVaccineCatalog(requireData(catalogRes));
+      const normalizedSelections = requireData(selectionRes);
+      const savedSelections: Record<string, { selected?: boolean; completed?: boolean; id?: string; updatedAt?: string }> = {};
+      const catalogById = new Map<string, any>();
+      for (const vaccine of (catalog.vaccines || []) as any[]) {
+        catalogById.set(String(vaccine.id), vaccine);
+        if (vaccine.vaccineCode) catalogById.set(String(vaccine.vaccineCode), vaccine);
+        if (vaccine.vaccineId) catalogById.set(String(vaccine.vaccineId), vaccine);
+      }
+      for (const selection of Array.isArray(normalizedSelections) ? normalizedSelections : []) {
+        const vaccine = catalogById.get(String(selection.vaccineId));
+        const legacyId = vaccine?.vaccineId || vaccine?.vaccineCode || selection.vaccineId;
+        savedSelections[`${legacyId}-${selection.doseNumber}`] = {
+          selected: Boolean(selection.selected),
+          completed: Boolean(selection.completed),
+          id: selection.id,
+          updatedAt: selection.updatedAt,
+        };
+      }
+      for (const record of records) {
+        const legacyId = record.vaccineCode;
+        const dose = record.doseNumber || 1;
+        const key = `${legacyId}-${dose}`;
+        if (!savedSelections[key]) {
+          savedSelections[key] = {
+            selected: true,
+            completed: record.isCompleted !== false,
+            id: record.id,
+            updatedAt: record.updatedAt,
+          };
+        }
+      }
 
       const selections = wantsExtendedRepresentation(request)
-        ? buildVaccineSelections(records, savedSelections)
-        : projectLegacyVaccineSelections(records, savedSelections, babyId, foodPlan.updatedAt);
+        ? buildVaccineSelections(records, savedSelections, catalog)
+        : projectLegacyVaccineSelections(records, savedSelections, babyId);
       return NextResponse.json(selections);
     }
 
@@ -123,71 +127,29 @@ export async function PUT(request: Request) {
         return NextResponse.json({ error: "vaccineId 必填" }, { status: 400 });
       }
       const dose = typeof doseNumber === "number" ? doseNumber : 1;
-
-      if (completed === true) {
-        requireData(await growdeskFetch(`/api/v1/babies/${babyId}/vaccines/records`, {
-          method: "POST",
-          accessToken: bffSession.accessToken,
-          body: {
-            vaccineCode: vaccineId.trim(),
-            administeredDate: getLocalDateStr(),
-            notes: `第${dose}剂`,
-          },
-        }));
-      } else if (completed === false) {
-        const recRes = await growdeskFetch<any[]>(`/api/v1/babies/${babyId}/vaccines/records`, {
-          accessToken: bffSession.accessToken,
-        });
-        const recordsData = requireData(recRes);
-        const records = Array.isArray(recordsData) ? recordsData : [];
-        const existing = records.find(
-          (r: any) =>
-            (r.vaccineCode === vaccineId || r.notes?.includes(vaccineId)) &&
-            (r.notes?.includes(`第${dose}剂`) || (!r.notes && dose === 1))
-        );
-        if (existing?.id) {
-          requireData(await growdeskFetch(`/api/v1/babies/${babyId}/vaccines/records/${existing.id}`, {
-            method: "DELETE",
-            accessToken: bffSession.accessToken,
-          }));
-        }
+      if (!Number.isInteger(dose) || dose < 1 || dose > 12) {
+        return NextResponse.json({ error: "doseNumber 必须为 1-12 之间的整数" }, { status: 400 });
       }
-
-      let savedSelection: { selected: boolean; completed: boolean };
-      try {
-        const foodPlan = readFoodPlan(await growdeskFetch<any>(`/api/v1/babies/${babyId}/food-plan`, {
-          accessToken: bffSession.accessToken,
-        }), babyId);
-        const currentSelections = foodPlan.planData.vaccineSelections &&
-          typeof foodPlan.planData.vaccineSelections === "object" &&
-          !Array.isArray(foodPlan.planData.vaccineSelections)
-          ? { ...(foodPlan.planData.vaccineSelections as Record<string, { selected?: boolean; completed?: boolean }>) }
-          : {};
-        const key = `${vaccineId.trim()}-${dose}`;
-        currentSelections[key] = {
-          selected: selected !== undefined ? Boolean(selected) : currentSelections[key]?.selected ?? true,
-          completed: completed !== undefined ? Boolean(completed) : currentSelections[key]?.completed ?? false,
-        };
-
-        requireData(await growdeskFetch(`/api/v1/babies/${babyId}/food-plan`, {
-          method: "PUT",
-          accessToken: bffSession.accessToken,
-          body: foodPlanWriteBody(foodPlan, {
-            ...foodPlan.planData,
-            vaccineSelections: currentSelections,
-          }),
-        }));
-        savedSelection = currentSelections[key]! as { selected: boolean; completed: boolean };
-      } catch (error) {
-        if (completed === true || completed === false) throwPartialFoodPlanMutation(error, vaccineId.trim());
-        throw error;
+      if (typeof selected !== "boolean" && typeof completed !== "boolean") {
+        return NextResponse.json({ error: "selected 或 completed 必须为布尔值" }, { status: 400 });
       }
-
+      const saved = requireData(await growdeskFetch<any>(`/api/v1/babies/${babyId}/vaccines/selections`, {
+        method: "PUT",
+        accessToken: bffSession.accessToken,
+        body: {
+          vaccineId: vaccineId.trim(),
+          doseNumber: dose,
+          ...(selected !== undefined ? { selected: Boolean(selected) } : {}),
+          ...(completed !== undefined ? { completed: Boolean(completed) } : {}),
+          ...(body.baseVersion !== undefined ? { baseVersion: body.baseVersion } : {}),
+        },
+      }));
       return NextResponse.json({
+        ...saved,
         vaccineId: vaccineId.trim(),
         doseNumber: dose,
-        selected: savedSelection.selected,
-        completed: savedSelection.completed,
+        selected: Boolean(saved.selected),
+        completed: Boolean(saved.completed),
       });
     }
 

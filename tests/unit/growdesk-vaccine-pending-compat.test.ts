@@ -93,47 +93,72 @@ function setupRoute(t: any, handler: (url: string, init?: RequestInit) => Respon
   });
 }
 
-test("pending route writes with the fetched CAS version and propagates 409", async t => {
+function canonicalRecord(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "test_vaccine_record",
+    babyId,
+    familyId: scope.familyId,
+    vaccineCode: "vac_test",
+    vaccineId: "test_vaccine_uuid",
+    doseNumber: 1,
+    legacyName: "测试疫苗",
+    legacyDose: "第1剂",
+    administeredDate: "2026-09-20",
+    scheduledDate: "2026-09-20",
+    completedDate: null,
+    isCompleted: false,
+    clinic: null,
+    batchNumber: null,
+    notes: "剂次: 第1剂",
+    version: "1",
+    createdAt: new Date(nowMs).toISOString(),
+    updatedAt: new Date(nowMs).toISOString(),
+    ...overrides,
+  };
+}
+
+test("pending route sends a normalized scheduled record and propagates 409", async t => {
   let written: any;
-  setupRoute(t, (_url, init) => {
-    if (init?.method === "PUT") {
-      written = JSON.parse(String(init.body));
-      return Response.json({ error: { code: "VERSION_CONFLICT", message: "test_conflict" } }, { status: 409 });
-    }
-    return Response.json({ data: fullPlan("7", { formula: { id: "test_formula" } }) });
+  setupRoute(t, (url, init) => {
+    assert.match(url, /\/api\/v1\/babies\/baby_test_pending\/vaccines\/records$/);
+    written = JSON.parse(String(init?.body));
+    return Response.json({ error: { code: "CONCURRENCY_CONFLICT", message: "test_conflict" } }, { status: 409 });
   });
   const response = await postVaccine(request("POST", { babyId, clientId: "pending_route", name: "测试疫苗", dose: "第1剂", scheduledDate: "2026-09-20", isCompleted: false }));
   assert.equal(response.status, 409);
-  assert.equal(written.baseVersion, "7");
-  assert.deepEqual(written.planData.formula, { id: "test_formula" });
+  assert.equal(written.vaccineCode, "测试疫苗");
+  assert.equal(written.scheduledDate, "2026-09-20");
+  assert.equal(written.administeredDate, "2026-09-20");
+  assert.equal(written.completedDate, null);
+  assert.equal(written.isCompleted, false);
 });
 
-test("first pending vaccine creates an empty food plan with baseVersion zero", async t => {
+test("first pending vaccine returns a pending normalized record", async t => {
   let written: any;
   setupRoute(t, (_url, init) => {
-    if (init?.method === "PUT") {
-      written = JSON.parse(String(init.body));
-      return Response.json({ data: fullPlan("1", written.planData) });
-    }
-    return Response.json({ data: { babyId, id: null, createdAt: null, updatedAt: "2026-09-19T00:00:00.000Z", version: "0", planData: {} } });
+    written = JSON.parse(String(init?.body));
+    return Response.json({ data: canonicalRecord({ legacyName: "首次预约" }) }, { status: 201 });
   });
   const response = await postVaccine(request("POST", { babyId, clientId: "pending_first", name: "首次预约", scheduledDate: "2026-09-20", isCompleted: false }));
   assert.equal(response.status, 201);
-  assert.equal(written.baseVersion, "0");
-  assert.equal(written.planData.legacyPendingVaccines[0].id, "pending_first");
+  assert.equal(written.isCompleted, false);
+  assert.equal(written.completedDate, null);
+  const body = await response.json();
+  assert.equal(body.record.isCompleted, false);
+  assert.equal(body.record.completedDate, null);
+  assert.equal(body.record.scheduledDate, "2026-09-20");
 });
 
-test("pending POST replay returns the persisted timestamps and performs only one PUT", async t => {
-  let current = fullPlan("7", {});
-  let puts = 0;
+test("pending POST replay keeps the same legacy record while forwarding idempotency", async t => {
+  const calls: Array<{ body: any; idempotencyKey?: string }> = [];
   setupRoute(t, (_url, init) => {
-    if (init?.method === "PUT") {
-      puts++;
-      const body = JSON.parse(String(init.body));
-      current = fullPlan("8", body.planData);
-      return Response.json({ data: current });
+    const body = JSON.parse(String(init?.body));
+    const headers = init?.headers as Record<string, string> | undefined;
+    calls.push({ body, idempotencyKey: headers?.["idempotency-key"] });
+    if (calls.length === 3) {
+      return Response.json({ error: { code: "IDEMPOTENCY_KEY_REUSED", message: "test_payload_mismatch" } }, { status: 409 });
     }
-    return Response.json({ data: current });
+    return Response.json({ data: canonicalRecord({ legacyName: body.legacyName || "幂等疫苗" }) }, { status: 201 });
   });
   const body = { babyId, clientId: "pending_replay", vaccineId: "vac_test", name: "幂等疫苗", dose: "第1剂", scheduledDate: "2026-09-20", isCompleted: false };
   const first = await postVaccine(request("POST", body));
@@ -144,11 +169,13 @@ test("pending POST replay returns the persisted timestamps and performs only one
   assert.equal(second.status, 201);
   const secondRecord = (await second.json()).record;
   assert.deepEqual(secondRecord, firstRecord);
-  assert.equal(puts, 1);
+  assert.equal(calls.length, 2);
+  assert.equal(calls[0]?.idempotencyKey, "pending_replay");
+  assert.equal(calls[1]?.idempotencyKey, "pending_replay");
 
   const conflict = await postVaccine(request("POST", { ...body, name: "不同疫苗" }));
   assert.equal(conflict.status, 409);
-  assert.equal(puts, 1);
+  assert.equal(calls.length, 3);
 });
 
 test("completed route writes only the canonical administered record", async t => {
@@ -163,28 +190,27 @@ test("completed route writes only the canonical administered record", async t =>
   assert.match(calls[0]!.url, /vaccines\/records$/);
 });
 
-test("pending delete removes only its namespace and propagates plan scope errors", async t => {
-  const pending = createLegacyPendingVaccine({ clientId: "pending_delete", name: "测试疫苗", scheduledDate: "2026-09-20" }, babyId);
-  let saved: any;
-  setupRoute(t, (_url, init) => {
-    if (init?.method === "PUT") { saved = JSON.parse(String(init.body)); return Response.json({ data: fullPlan("8", saved.planData) }); }
-    return Response.json({ data: fullPlan("7", { supplements: ["test_supp"], legacyPendingVaccines: [pending] }) });
+test("pending delete removes the canonical record and does not touch food-plan state", async t => {
+  let deletedUrl = "";
+  setupRoute(t, (url, init) => {
+    deletedUrl = url;
+    assert.equal(init?.method, "DELETE");
+    return Response.json({ data: { id: "pending_delete", deleted: true } });
   });
-  const response = await deleteVaccine(request("DELETE", { babyId, id: pending.id }));
+  const response = await deleteVaccine(request("DELETE", { babyId, id: "pending_delete" }));
   assert.equal(response.status, 200);
-  assert.deepEqual(saved.planData.supplements, ["test_supp"]);
-  assert.deepEqual(saved.planData.legacyPendingVaccines, []);
+  assert.match(deletedUrl, /\/api\/v1\/babies\/baby_test_pending\/vaccines\/records\/pending_delete$/);
 
   t.mock.restoreAll();
 });
 
-test("pending route rejects a cross-scope plan before writing", async t => {
+test("pending route propagates canonical baby scope errors before a legacy write", async t => {
   let writes = 0;
   setupRoute(t, (_url, init) => {
-    if (init?.method === "PUT") writes++;
-    return Response.json({ data: fullPlan("7", {}, { babyId: "baby_other" }) });
+    if (init?.method === "POST") writes++;
+    return Response.json({ error: { code: "BABY_ACCESS_DENIED", message: "test_scope_denied" } }, { status: 403 });
   });
   const response = await postVaccine(request("POST", { babyId, name: "测试疫苗", scheduledDate: "2026-09-20", isCompleted: false }));
-  assert.equal(response.status, 502);
-  assert.equal(writes, 0);
+  assert.equal(response.status, 403);
+  assert.equal(writes, 1);
 });

@@ -10,19 +10,12 @@ import { growdeskFetch } from "@/lib/growdesk/client"
 import {
   toGrowDeskVaccineRecordPayload,
   fromGrowDeskVaccineRecord,
-  loadFullVaccineKnowledge,
+  fromGrowDeskVaccineCatalog,
   projectLegacyVaccineKnowledge,
   type GrowDeskVaccineRecord,
 } from "@/lib/growdesk/vaccine-compat"
-import { wantsExtendedRepresentation } from "@/lib/growdesk/legacy-projections"
 import { loadWebBaby } from "@/lib/growdesk/bridge-identity"
-import { bridgeErrorResponse } from "@/lib/growdesk/bridge-protocol"
-import {
-  createLegacyPendingVaccine,
-  mergeLegacyPendingVaccine,
-  removeLegacyPendingVaccine,
-} from "@/lib/growdesk/vaccine-pending-compat"
-import { foodPlanWriteBody, readGrowDeskFoodPlan } from "@/lib/growdesk/food-plan-state"
+import { bridgeErrorResponse, requireData } from "@/lib/growdesk/bridge-protocol"
 import crypto from "node:crypto"
 
 export async function GET(request: Request) {
@@ -35,8 +28,14 @@ export async function GET(request: Request) {
       if (!bffSession) {
         return NextResponse.json({ error: "Unauthorized: 会话无效或已过期" }, { status: 401 });
       }
-      const fullKb = loadFullVaccineKnowledge(regionCode);
-      return NextResponse.json(wantsExtendedRepresentation(request) ? fullKb : projectLegacyVaccineKnowledge(fullKb, regionCode));
+      const catalog = await growdeskFetch<any>(`/api/v1/vaccines/catalog?regionCode=${encodeURIComponent(regionCode)}`, {
+        accessToken: bffSession.accessToken,
+      });
+      const fullKb = fromGrowDeskVaccineCatalog(requireData(catalog), regionCode);
+      // The normalized API owns the vaccine graph. The versioned Web bundle
+      // supplies the legacy rule/release projection until those reference
+      // slices have dedicated canonical tables, preserving the old response.
+      return NextResponse.json(projectLegacyVaccineKnowledge(fullKb, regionCode));
     }
 
     // Fetch all vaccines
@@ -150,30 +149,6 @@ export async function POST(request: Request) {
       }
       if (!babyId) {
         return NextResponse.json({ error: "请提供 babyId" }, { status: 400 });
-      }
-
-      if (body.isCompleted === false) {
-        const pending = createLegacyPendingVaccine(body, babyId);
-        const planRes = await growdeskFetch<any>(`/api/v1/babies/${babyId}/food-plan`, {
-          accessToken: bffSession.accessToken,
-        });
-        if (!planRes.ok) {
-          return NextResponse.json({ error: planRes.error?.message || "Failed to fetch food plan" }, { status: planRes.status });
-        }
-        const plan = readGrowDeskFoodPlan(planRes, babyId);
-        const merged = mergeLegacyPendingVaccine(plan, pending);
-        if (!merged.created) {
-          return NextResponse.json({ record: merged.item }, { status: 201 });
-        }
-        const saveRes = await growdeskFetch(`/api/v1/babies/${babyId}/food-plan`, {
-          method: "PUT",
-          accessToken: bffSession.accessToken,
-          body: foodPlanWriteBody(plan, merged.planData),
-        });
-        if (!saveRes.ok) {
-          return NextResponse.json({ error: saveRes.error?.message || "Failed to save pending vaccine" }, { status: saveRes.status });
-        }
-        return NextResponse.json({ record: merged.item }, { status: 201 });
       }
 
       const payload = toGrowDeskVaccineRecordPayload(body);
@@ -353,26 +328,6 @@ export async function DELETE(request: Request) {
       }
       if (!babyId) {
         return NextResponse.json({ error: "请提供 babyId" }, { status: 400 });
-      }
-
-      const planRes = await growdeskFetch<any>(`/api/v1/babies/${babyId}/food-plan`, {
-        accessToken: bffSession.accessToken,
-      });
-      if (!planRes.ok) {
-        return NextResponse.json({ error: planRes.error?.message || "Failed to fetch food plan" }, { status: planRes.status });
-      }
-      const plan = readGrowDeskFoodPlan(planRes, babyId);
-      const pendingRemoval = removeLegacyPendingVaccine(plan, id);
-      if (pendingRemoval.found) {
-        const saveRes = await growdeskFetch(`/api/v1/babies/${babyId}/food-plan`, {
-          method: "PUT",
-          accessToken: bffSession.accessToken,
-          body: foodPlanWriteBody(plan, pendingRemoval.planData),
-        });
-        if (!saveRes.ok) {
-          return NextResponse.json({ error: saveRes.error?.message || "Failed to delete pending vaccine" }, { status: saveRes.status });
-        }
-        return NextResponse.json({ success: true, id });
       }
 
       const res = await growdeskFetch(
