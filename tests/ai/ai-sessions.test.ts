@@ -6,7 +6,7 @@ dotenv.config();
 import { prisma } from "../../lib/prisma";
 import { createTestTenant, destroyTestTenant } from "../helpers/tenant";
 
-const BASE_URL = process.env.TEST_BASE_URL?.trim() || process.env.BABY_PANEL_URL || "http://127.0.0.1:3089";
+const BASE_URL = process.env.TEST_BASE_URL?.trim() || "http://127.0.0.1:3089";
 
 test("AI Sessions: Session lifecycle, persistence, rename, and deletion", async (t) => {
   let sessionId: string | null = null;
@@ -16,14 +16,19 @@ test("AI Sessions: Session lifecycle, persistence, rename, and deletion", async 
   const headers = tenant.headers;
 
   try {
-    // Check if test server is running
-    const isReachable = await fetch(`${BASE_URL}/api/nutrition/products`, {
+    // Check if test server is running and accepts this test tenant
+    const isReachable = await fetch(`${BASE_URL}/api/auth/me`, {
       method: "GET",
+      headers,
       signal: AbortSignal.timeout(1500),
-    }).then(() => true).catch(() => false);
+    }).then(async (r) => {
+      if (!r.ok) return false;
+      const data = await r.json().catch(() => ({}));
+      return Boolean(data?.user?.id);
+    }).catch(() => false);
 
     if (!isReachable) {
-      console.log(`[AI Sessions Test] Local server at ${BASE_URL} is offline. Skipping live HTTP roundtrip.`);
+      console.log(`[AI Sessions Test] Local test server at ${BASE_URL} is offline or incompatible. Skipping live HTTP roundtrip.`);
       return;
     }
 

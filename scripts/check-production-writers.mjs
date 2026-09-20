@@ -28,6 +28,7 @@ const REQUIRED_BUSINESS_ROUTES = [
   "app/api/food/items/route.ts",
   "app/api/food/plans/route.ts",
   "app/api/nutrition/records/route.ts",
+  "app/api/nutrition/products/route.ts",
   "app/api/growth/route.ts",
   "app/api/growth/chart/route.ts",
   "app/api/medical/reports/route.ts",
@@ -152,7 +153,7 @@ function runAudit() {
     console.log("===============================================================================\n");
     process.exit(1);
   } else {
-    console.log("✅ AUDIT PASSED: All 14 business routes and MCP entry points have active BFF guards.");
+    console.log(`✅ AUDIT PASSED: All ${REQUIRED_BUSINESS_ROUTES.length} business routes and MCP entry points have active BFF guards.`);
     console.log("   Under GROWDESK_CONFIG.enabled=true, zero direct SQLite writes can leak.");
     console.log("===============================================================================\n");
     process.exit(0);

@@ -29,7 +29,7 @@
 - **实际存在的工具文件核对**：
   1. `lib/agent/tools/feeding.ts`：写入 `FeedingRecord`、`RecordSnapshot`。
   2. `lib/agent/tools/food.ts`：写入 `FoodLogRecord`、`FamilyFoodStatus`。
-  3. `lib/agent/tools/nutrition.ts`：写入 `SupplementRecord`、`RecordSnapshot`。
+  3. `lib/agent/tools/nutrition.ts`：写入 `SupplementRecord`、`SupplementProduct`（补剂产品建档 `create_supplement_product`）、`RecordSnapshot`。
   4. `lib/agent/tools/diaper.ts`：写入 `DiaperRecord`、`RecordSnapshot`。
   5. `lib/agent/tools/sleep.ts`：写入 `SleepRecord`、`RecordSnapshot`。
   6. `lib/agent/tools/growth.ts`：写入 `GrowthMeasurement`。
@@ -106,6 +106,7 @@
 | **NW-01** | AI 工具: 喂养记账 | `lib/agent/tools/feeding.ts` | `FeedingRecord`, `RecordSnapshot` | 内部 Agent Principal 上下文 | `ACTIVE_IN_PRODUCTION` | 停用旧工具，委托新 API |
 | **NW-02** | AI 工具: 辅食打卡 | `lib/agent/tools/food.ts` | `FoodLogRecord`, `FamilyFoodStatus` | 内部 Agent Principal 上下文 | `ACTIVE_IN_PRODUCTION` | 停用旧工具，委托新 API |
 | **NW-03** | AI 工具: 补剂记账 | `lib/agent/tools/nutrition.ts` | `SupplementRecord`, `RecordSnapshot` | 内部 Agent Principal 上下文 | `ACTIVE_IN_PRODUCTION` | 停用旧工具，委托新 API |
+| **NW-03b** | AI/MCP: 补剂建档 | `lib/agent/tools/nutrition.ts`, `lib/mcp/server.ts` | `SupplementProduct` (或 `food-plan`) | Agent Principal / OAuth Bearer (Scoped) | `ACTIVE_IN_PRODUCTION` | 双模式守卫，委托新后端 |
 | **NW-04** | AI 工具: 尿布记账 | `lib/agent/tools/diaper.ts` | `DiaperRecord`, `RecordSnapshot` | 内部 Agent Principal 上下文 | `ACTIVE_IN_PRODUCTION` | 停用旧工具，委托新 API |
 | **NW-05** | AI 工具: 睡眠记账 | `lib/agent/tools/sleep.ts` | `SleepRecord`, `RecordSnapshot` | 内部 Agent Principal 上下文 | `ACTIVE_IN_PRODUCTION` | 停用旧工具，委托新 API |
 | **NW-06** | AI 工具: 生长记录 | `lib/agent/tools/growth.ts` | `GrowthMeasurement` | 内部 Agent Principal 上下文 | `ACTIVE_IN_PRODUCTION` | 停用旧工具，委托新 API |

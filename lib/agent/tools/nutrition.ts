@@ -15,6 +15,11 @@ import type { FormulaProduct, SupplementProduct } from "@/types/nutrition";
 import { GROWDESK_CONFIG } from "@/lib/config";
 import { growdeskFetch } from "@/lib/growdesk/client";
 import { toGrowDeskSupplementCreatePayload } from "@/lib/growdesk/supplement-compat";
+import {
+  extractSupplementStateFromFoodPlan,
+  mergeSupplementStateIntoFoodPlan,
+  normalizeNutrients,
+} from "@/lib/growdesk/nutrition-compat";
 
 export function makeNutritionTools(ctx: {
   userId: string;
@@ -297,6 +302,138 @@ export function makeNutritionTools(ctx: {
     },
   };
 
+  const createSupplementProduct: AgentTool = {
+    name: "create_supplement_product",
+    label: "建档营养补剂",
+    description:
+      "在家庭档案库中建档新的营养补充剂产品（包含名称、品牌、剂型、单次剂量与营养成分表），无需打卡即可建档录入。",
+    parameters: Type.Object({
+      name: Type.String({
+        description: "补剂全称（如'天然海藻油DHA'、'小金条液体钙'、'星鲨维生素D3滴剂'）",
+      }),
+      brand: Type.Optional(Type.String({ description: "品牌名称（如'健敏思'、'伊可新'、'Ddrops'，默认'家庭自选'）" })),
+      dosageForm: Type.Optional(
+        Type.String({
+          description: "剂型: drops(滴剂), capsule(胶囊), liquid_ml(口服液), sachet(粉剂袋装), tablet(片剂)，默认 drops",
+        })
+      ),
+      unitName: Type.Optional(Type.String({ description: "单次计量单位（如 滴、粒、ml、袋、片，默认 滴）" })),
+      defaultDose: Type.Optional(Type.Number({ description: "单次推荐用量数值，默认 1.0" })),
+      nutrients: Type.Optional(
+        Type.Record(
+          Type.String(),
+          Type.Any(),
+          { description: "营养素成分含量表，如 {\"vitamin_d\": {\"amount\": 400, \"unit\": \"IU\"}, \"dha\": 100}" }
+        )
+      ),
+      notes: Type.Optional(Type.String({ description: "补充说明或医嘱注意事项" })),
+    }),
+    executionMode: "sequential",
+    execute: async (_id, raw) => {
+      const params = raw as Params;
+      const name = String(params.name || "").trim();
+      if (!name) fail("请输入补剂名称");
+
+      const brand = String(params.brand || name).trim() || "家庭自选";
+      const dosageForm = String(params.dosageForm || "drops").trim();
+      const unitName = String(params.unitName || "滴").trim();
+      const defaultDose = typeof params.defaultDose === "number" && params.defaultDose > 0 ? params.defaultDose : 1.0;
+      const notes = typeof params.notes === "string" && params.notes.trim() ? params.notes.trim() : null;
+      const nutrients = normalizeNutrients(params.nutrients);
+
+      if (GROWDESK_CONFIG.enabled) {
+        const newProduct: SupplementProduct = {
+          id: `supp_prod_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+          familyId,
+          name,
+          brand,
+          dosageForm,
+          unitName,
+          defaultDose,
+          nutrients,
+          notes,
+          isActive: true,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+
+        if (ctx.accessToken) {
+          try {
+            const fpRes = await growdeskFetch<any>(`/api/v1/babies/${babyId}/food-plan`, {
+              method: "GET",
+              accessToken: ctx.accessToken,
+            });
+            const existingPlanData = (fpRes.ok && (fpRes.data?.data?.planData || fpRes.data?.planData)) || {};
+            const suppState = extractSupplementStateFromFoodPlan(existingPlanData);
+            const updatedList = [
+              ...suppState.supplementProducts.filter((p) => p.name !== name),
+              newProduct,
+            ];
+            const merged = mergeSupplementStateIntoFoodPlan(existingPlanData, {
+              supplementProducts: updatedList,
+            });
+            await growdeskFetch(`/api/v1/babies/${babyId}/food-plan`, {
+              method: "PUT",
+              accessToken: ctx.accessToken,
+              body: { planData: merged },
+            });
+          } catch {}
+        }
+
+        return ok(
+          `✅ 成功为家庭建档补剂：【${brand} ${name}】（每次 ${defaultDose} ${unitName}）！后续可在打卡或营养分析中直接使用 ✨`,
+          { product: newProduct }
+        );
+      }
+
+      // Local SQLite mode:
+      let existing = await prisma.supplementProduct.findFirst({
+        where: {
+          familyId,
+          name,
+        },
+      });
+
+      if (existing) {
+        const updated = await prisma.supplementProduct.update({
+          where: { id: existing.id },
+          data: {
+            brand,
+            dosageForm,
+            unitName,
+            defaultDose,
+            nutrientsJson: JSON.stringify(nutrients),
+            notes,
+            isActive: true,
+          },
+        });
+        return ok(
+          `✅ 已更新补剂档案：【${brand} ${name}】（每次 ${defaultDose} ${unitName}，成分已更新）✨`,
+          { product: { ...updated, nutrients } }
+        );
+      }
+
+      const created = await prisma.supplementProduct.create({
+        data: {
+          familyId,
+          name,
+          brand,
+          dosageForm,
+          unitName,
+          defaultDose,
+          nutrientsJson: JSON.stringify(nutrients),
+          notes,
+          isActive: true,
+        },
+      });
+
+      return ok(
+        `✅ 成功为家庭建档新补剂：【${brand} ${name}】（每次 ${defaultDose} ${unitName}）！已录入家庭营养库 ✨`,
+        { product: { ...created, nutrients } }
+      );
+    },
+  };
+
   const getNutritionAnalysis: AgentTool = {
     name: "get_nutrition_analysis",
     label: "查询营养摄入与分析",
@@ -567,5 +704,5 @@ export function makeNutritionTools(ctx: {
     },
   };
 
-  return [recordSupplement, getNutritionAnalysis, queryNutritionProducts];
+  return [recordSupplement, createSupplementProduct, getNutritionAnalysis, queryNutritionProducts];
 }

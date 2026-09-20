@@ -64,7 +64,7 @@ function opencodeVisionModelId(): string {
   if (profile.visionModel && profile.visionModel !== "hermes-agent") return profile.visionModel;
   const v = process.env.AI_VISION_MODEL;
   if (v && v !== "hermes-agent") return v;
-  return "deepseek-v4-flash-vision-exp";
+  return "DeepSeek-V4.1-Flash";
 }
 
 export function listLlmBackends(): LlmBackendPublic[] {

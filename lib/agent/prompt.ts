@@ -69,8 +69,9 @@ const TOOL_PROTOCOL = `
      - 必须信息：【具体测量数值】（体重 kg / 身长 cm / 头围 cm 至少一项）。
      - 追问规则：若家长只说“今天测了身高体重”未提供数字，应追问具体数值。
      - 录入规则：若已给出具体数值（如“体检体重 7.8kg，身长 68cm”），直接调用 record_growth 录入并评估 WHO 百分位。
-   - 💊 **营养补剂打卡 (record_supplement)**：
+   - 💊 **营养补剂打卡与建档 (record_supplement / create_supplement_product)**：
      - 必须信息：【补剂产品/品类】（如维生素 D3、AD、铁剂等）。
+     - 规则：若家长表达要登记/建档新买的补剂（并未吃），调用 create_supplement_product；若已服用打卡则调用 record_supplement。
      - 追问规则：若只说“吃了补剂”，应追问具体吃了哪款补剂及剂量。
 
 2. **交互式对话操作卡片 (Action Cards - 录入与确认核心交互)**：

@@ -123,6 +123,24 @@ test("AI Tools: Direct invocation of agent tools", async (t) => {
   const productsResult: any = await productsTool.execute("call-9", { type: "all" });
   assert.ok(productsResult.content[0].text.length > 0);
 
+  // 9b. Tool: create_supplement_product
+  console.log("-> Testing create_supplement_product tool...");
+  const createSuppTool = toolMap.get("create_supplement_product");
+  assert.ok(createSuppTool, "create_supplement_product tool must exist");
+  const createSuppResult: any = await createSuppTool.execute("call-9b", {
+    name: "天然海藻油DHA",
+    brand: "健敏思",
+    dosageForm: "capsule",
+    unitName: "粒",
+    defaultDose: 1,
+    nutrients: {
+      dha: { amount: 100, unit: "mg" },
+    },
+    notes: "随餐服用",
+  });
+  const createSuppText = createSuppResult.content[0].text;
+  assert.ok(createSuppText.includes("天然海藻油DHA"), "Should confirm supplement product creation");
+
   // 10. Tool: record_supplement
   console.log("-> Testing record_supplement tool...");
   const suppTool = toolMap.get("record_supplement");

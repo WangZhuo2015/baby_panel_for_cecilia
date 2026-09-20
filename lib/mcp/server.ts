@@ -20,7 +20,13 @@ import {
   getLocalDayUtcRange,
   localTimeToUtcIso,
 } from "@/lib/date";
-import { formatSupplementAmount } from "@/lib/growdesk/nutrition-compat";
+import {
+  formatSupplementAmount,
+  extractSupplementStateFromFoodPlan,
+  mergeSupplementStateIntoFoodPlan,
+  normalizeNutrients,
+} from "@/lib/growdesk/nutrition-compat";
+import type { SupplementProduct } from "@/types/nutrition";
 import * as records from "@/lib/records/service";
 import { performWebSearch } from "@/lib/agent/search";
 import { checkRateLimit } from "@/lib/rate-limit";
@@ -782,6 +788,31 @@ export function createMcpServer(principal: UserPrincipal, options?: { accessToke
               date: { type: "string", description: "日期 (YYYY-MM-DD，默认今天)" },
               time: { type: "string", description: "时间 (HH:mm，默认当前时间)" },
               notes: { type: "string", description: "备注" },
+            },
+          },
+        },
+        {
+          name: "create_supplement_product",
+          description:
+            "【补剂建档写】在家庭档案库中建档新的营养补充剂产品（名称、品牌、剂型、单次规格与营养成分表），无需打卡即可建档录入。",
+          inputSchema: {
+            type: "object",
+            required: ["name"],
+            properties: {
+              name: { type: "string", description: "补剂全称（如'天然海藻油DHA'、'小金条液体钙'、'星鲨维生素D3滴剂'）" },
+              brand: { type: "string", description: "品牌名称（如'健敏思'、'伊可新'、'Ddrops'，默认'家庭自选'）" },
+              dosageForm: {
+                type: "string",
+                enum: ["drops", "capsule", "liquid_ml", "sachet", "tablet"],
+                description: "剂型: drops(滴剂), capsule(胶囊), liquid_ml(口服液), sachet(粉剂袋装), tablet(片剂)，默认 drops",
+              },
+              unitName: { type: "string", description: "单次计量单位（如 滴、粒、ml、袋、片，默认 滴）" },
+              defaultDose: { type: "number", description: "单次推荐用量数值，默认 1.0" },
+              nutrients: {
+                type: "object",
+                description: "营养素成分含量表，如 {\"vitamin_d\": {\"amount\": 400, \"unit\": \"IU\"}, \"dha\": 100}",
+              },
+              notes: { type: "string", description: "补充说明或医嘱注意事项" },
             },
           },
         },
@@ -2545,6 +2576,124 @@ export function createMcpServer(principal: UserPrincipal, options?: { accessToke
           },
         };
 
+        await logToolCall(name, "success", startTime);
+        return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      }
+
+      // ═════════════════════════════════════════════════════════════════════
+      // 24b. create_supplement_product (Supplement Product Register/Update)
+      // ═════════════════════════════════════════════════════════════════════
+      if (name === "create_supplement_product") {
+        if (!checkScope(principal, "write")) {
+          throw new McpError(ErrorCode.InvalidRequest, "Forbidden: Missing baby:write scope");
+        }
+
+        const suppName = String(args.name || "").trim();
+        if (!suppName) throw new Error("请提供补剂名称");
+
+        const brand = String(args.brand || suppName).trim() || "家庭自选";
+        const dosageForm = String(args.dosageForm || "drops").trim();
+        const unitName = String(args.unitName || "滴").trim();
+        const defaultDose = typeof args.defaultDose === "number" && args.defaultDose > 0 ? args.defaultDose : 1.0;
+        const notes = typeof args.notes === "string" && args.notes.trim() ? args.notes.trim() : null;
+        const nutrients = normalizeNutrients(args.nutrients);
+
+        if (GROWDESK_CONFIG.enabled) {
+          const newProduct: SupplementProduct = {
+            id: `supp_prod_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+            familyId: baby.familyId,
+            name: suppName,
+            brand,
+            dosageForm,
+            unitName,
+            defaultDose,
+            nutrients,
+            notes,
+            isActive: true,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          };
+
+          if (accessToken) {
+            try {
+              const fpRes = await growdeskFetch<any>(`/api/v1/babies/${babyId}/food-plan`, {
+                method: "GET",
+                accessToken,
+              });
+              const existingPlanData = (fpRes.ok && (fpRes.data?.data?.planData || fpRes.data?.planData)) || {};
+              const suppState = extractSupplementStateFromFoodPlan(existingPlanData);
+              const updatedList = [
+                ...suppState.supplementProducts.filter((p) => p.name !== suppName),
+                newProduct,
+              ];
+              const merged = mergeSupplementStateIntoFoodPlan(existingPlanData, {
+                supplementProducts: updatedList,
+              });
+              await growdeskFetch(`/api/v1/babies/${babyId}/food-plan`, {
+                method: "PUT",
+                accessToken,
+                body: { planData: merged },
+              });
+            } catch {}
+          }
+
+          const data = {
+            success: true,
+            action: "create_supplement_product",
+            product: newProduct,
+          };
+          await logToolCall(name, "success", startTime);
+          return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+        }
+
+        let existing = await prisma.supplementProduct.findFirst({
+          where: {
+            familyId: baby.familyId,
+            name: suppName,
+          },
+        });
+
+        if (existing) {
+          const updated = await prisma.supplementProduct.update({
+            where: { id: existing.id },
+            data: {
+              brand,
+              dosageForm,
+              unitName,
+              defaultDose,
+              nutrientsJson: JSON.stringify(nutrients),
+              notes,
+              isActive: true,
+            },
+          });
+          const data = {
+            success: true,
+            action: "create_supplement_product",
+            product: { ...updated, nutrients },
+          };
+          await logToolCall(name, "success", startTime);
+          return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+        }
+
+        const created = await prisma.supplementProduct.create({
+          data: {
+            familyId: baby.familyId,
+            name: suppName,
+            brand,
+            dosageForm,
+            unitName,
+            defaultDose,
+            nutrientsJson: JSON.stringify(nutrients),
+            notes,
+            isActive: true,
+          },
+        });
+
+        const data = {
+          success: true,
+          action: "create_supplement_product",
+          product: { ...created, nutrients },
+        };
         await logToolCall(name, "success", startTime);
         return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
       }

@@ -556,6 +556,30 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         },
       },
       {
+        name: "create_supplement_product",
+        description: "在家庭档案库中建档新的营养补充剂产品（包含名称、品牌、剂型、单次剂量与营养成分表），无需打卡即可建档录入。",
+        inputSchema: {
+          type: "object",
+          required: ["session", "name"],
+          properties: {
+            ...SESSION_PROP,
+            name: { type: "string", description: "补剂全称（如'天然海藻油DHA'、'小金条液体钙'、'星鲨维生素D3滴剂'）" },
+            brand: { type: "string", description: "品牌名称（如'健敏思'、'伊可新'、'Ddrops'，默认'家庭自选'）" },
+            dosageForm: {
+              type: "string",
+              description: "剂型: drops(滴剂), capsule(胶囊), liquid_ml(口服液), sachet(粉剂袋装), tablet(片剂)，默认 drops",
+            },
+            unitName: { type: "string", description: "单次计量单位（如 滴、粒、ml、袋、片，默认 滴）" },
+            defaultDose: { type: "number", description: "单次推荐用量数值，默认 1.0" },
+            nutrients: {
+              type: "object",
+              description: "营养素成分含量表，如 {\"vitamin_d\": {\"amount\": 400, \"unit\": \"IU\"}, \"dha\": 100}",
+            },
+            notes: { type: "string", description: "补充说明或医嘱注意事项" },
+          },
+        },
+      },
+      {
         name: "get_nutrition_analysis",
         description: "查询宝宝单日或近7天/30天全量营养素摄入汇总（包含总奶量、维生素D、维生素A、钙、铁、锌、DHA、能量、蛋白质等）、DRIs 2023 推荐量达标率与安全上限 (UL) 状态。",
         inputSchema: {
@@ -820,6 +844,24 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       return {
         content: [
           { type: "text", text: `✅ 补剂打卡记录成功！\n${JSON.stringify(data, null, 2)}` },
+        ],
+      };
+    }
+
+    if (name === "create_supplement_product") {
+      const data = await postJson("/api/nutrition/products", bound, {
+        type: "supplement",
+        name: args.name,
+        brand: args.brand,
+        dosageForm: args.dosageForm || "drops",
+        unitName: args.unitName || "滴",
+        defaultDose: args.defaultDose || 1.0,
+        nutrients: args.nutrients || {},
+        notes: args.notes,
+      });
+      return {
+        content: [
+          { type: "text", text: `✅ 营养补剂建档成功！\n${JSON.stringify(data, null, 2)}` },
         ],
       };
     }

@@ -45,6 +45,49 @@ export interface SupplementState {
   customFormulaNutrients?: Record<string, NutrientsMap>;
 }
 
+// ─── Nutrients Normalization ────────────────────────────────────────────────
+
+export function normalizeNutrients(raw: unknown): NutrientsMap {
+  if (!raw || typeof raw !== "object") return {};
+  const standardUnits: Record<string, string> = {
+    vitamin_d: "IU",
+    vitamind: "IU",
+    vitamin_a: "mcg RAE",
+    vitamina: "mcg RAE",
+    vitamin_c: "mg",
+    vitaminc: "mg",
+    calcium: "mg",
+    iron: "mg",
+    zinc: "mg",
+    dha: "mg",
+    energy_kcal: "kcal",
+    protein: "g",
+  };
+  const standardKeys: Record<string, string> = {
+    vitamind: "vitamin_d",
+    vitamina: "vitamin_a",
+    vitaminc: "vitamin_c",
+  };
+
+  const result: NutrientsMap = {};
+  for (const [k, v] of Object.entries(raw as Record<string, any>)) {
+    const cleanKey = k.toLowerCase().replace(/-/g, "_");
+    const stdKey = standardKeys[cleanKey] || cleanKey;
+    if (typeof v === "number") {
+      result[stdKey] = {
+        amount: Number(v.toFixed(2)),
+        unit: standardUnits[stdKey] || "mg",
+      };
+    } else if (v && typeof v === "object" && typeof v.amount === "number") {
+      result[stdKey] = {
+        amount: Number(v.amount.toFixed(2)),
+        unit: String(v.unit || standardUnits[stdKey] || "mg"),
+      };
+    }
+  }
+  return result;
+}
+
 // ─── Amount & Dose Parsing ───────────────────────────────────────────────────
 
 export function formatSupplementAmount(dose: number, unitName?: string | null): string {

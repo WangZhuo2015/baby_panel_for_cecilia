@@ -113,6 +113,11 @@ export const MCP_TOOL_METAS: Record<string, ToolMeta> = {
     category: "write",
     description: "打卡录入一次维生素或营养补充剂喂服",
   },
+  create_supplement_product: {
+    label: "建档营养补剂产品",
+    category: "write",
+    description: "在家庭营养库中建档新的补充剂产品（名称、品牌、剂型、规格与营养成分表）",
+  },
 
   // 生长发育
   get_growth_records: {

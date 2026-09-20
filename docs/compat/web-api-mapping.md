@@ -234,6 +234,30 @@ flowchart LR
 
 ---
 
+### 3.6 营养品档案库与补剂建档 (Nutrition Products & Supplements: ADR 0009)
+- **旧路由入口**：`app/api/nutrition/products/route.ts`（GET, POST, PUT, DELETE）
+- **旧代码事实**：
+  - 支持奶粉（`type="formula"`）与补剂（`type="supplement"`）。
+  - 补剂字段：`name` (string, 必填), `brand` (string), `dosageForm` (enum), `unitName` (string), `defaultDose` (number), `nutrients` (object map), `notes` (string)。
+- **目标 GrowDesk API**：
+  - **原生端点 (目标)**：`GET/POST /api/v1/families/:familyId/nutrition/supplements`
+  - **BFF 兼容桥接 (现状)**：保存在宝宝辅食计划中 `/api/v1/babies/:babyId/food-plan` (`planData.supplementState.supplementProducts`)。
+
+| 旧字段名 | 旧类型 | 目标字段名 | 目标类型 | 映射规则与约束 |
+|---|---|---|---|---|
+| `id` | `string` | `id` | `string` | 实体 ID (UUID/CUID) |
+| `familyId` | `string` | URL 路径 `:familyId` | `string` | 所属家庭 ID |
+| `name` | `string` | `name` | `string` | 补剂全称 (如 "天然海藻油DHA") |
+| `brand` | `string \| null` | `brand` | `string \| null` | 品牌 (默认 "家庭自选") |
+| `dosageForm` | `string` | `dosageForm` | `enum` | 剂型: drops, capsule, liquid_ml, sachet, tablet |
+| `unitName` | `string` | `unitName` | `string` | 单次单位: 滴、粒、ml、袋、片 |
+| `defaultDose` | `number` | `defaultDose` | `number \| string` (Decimal) | 推荐单次用量，默认 1.0 |
+| `nutrients` | `Record<string, {amount, unit}>` | `nutrients` | `jsonb` | 归一化营养成分表 (IU, mg, mcg RAE) |
+| `notes` | `string \| null` | `notes` | `string \| null` | 补充说明/医嘱注意事项 |
+| `isActive` | `boolean` | `isActive` | `boolean` | 是否在用 |
+
+---
+
 ## 4. 脱敏 Golden Fixture 样例 (真实旧输入与正确 UTC 转换)
 
 ### 4.1 喂养新增请求 (POST /api/records/feeding)
