@@ -43,6 +43,7 @@ export async function GET(request: Request) {
       const catalogById = new Map<string, any>();
       for (const vaccine of (catalog.vaccines || []) as any[]) {
         catalogById.set(String(vaccine.id), vaccine);
+        if (vaccine.normalizedId) catalogById.set(String(vaccine.normalizedId), vaccine);
         if (vaccine.vaccineCode) catalogById.set(String(vaccine.vaccineCode), vaccine);
         if (vaccine.vaccineId) catalogById.set(String(vaccine.vaccineId), vaccine);
       }

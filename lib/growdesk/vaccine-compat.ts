@@ -91,6 +91,9 @@ export function fromGrowDeskVaccineCatalog(raw: unknown, regionCode = "CN-JS") {
     const legacyId = String(row.vaccineCode || row.id || key);
     const projected = {
       ...row,
+      // Keep the normalized primary key for joins such as VaccineSelection.
+      // `id` remains the legacy public vaccine code expected by the old Web.
+      normalizedId: String(row.id || key),
       id: legacyId,
       vaccineId: legacyId,
       programType: override?.programType || row.programType,
@@ -571,9 +574,19 @@ function projectLegacySchedule(regionCode: string): LegacyVaccineResponse[] {
 export function projectLegacyVaccineKnowledge(fullKnowledge: ReturnType<typeof loadFullVaccineKnowledge>, regionCode = "CN-JS") {
   const createdAt = legacyFixtureCreatedAt();
   const rawById = new Map(sourceArray(staticVaccineData.vaccines).map((row) => [String(sourceRecord(row).id), sourceRecord(row)]));
-  const projectGroup = (rows: unknown[]) => rows
-    .map((row) => sourceRecord(row))
-    .map((row) => projectLegacyVaccine(rawById.get(String(row.vaccineId ?? row.id)) ?? row, regionCode, createdAt));
+  const projectGroup = (rows: unknown[]) => {
+    const present = new Set(rows.map((row) => {
+      const value = sourceRecord(row);
+      return String(value.vaccineId ?? value.vaccineCode ?? value.id);
+    }));
+    // The normalized API sorts by vaccineCode for stable pagination. The old
+    // Web exposed the versioned dataset order, so restore that order after
+    // confirming which catalogue rows are actually present upstream.
+    return sourceArray(staticVaccineData.vaccines)
+      .map(sourceRecord)
+      .filter((row) => present.has(String(row.id)))
+      .map((row) => projectLegacyVaccine(row, regionCode, createdAt));
+  };
   const templates = sourceArray(staticVaccineData.vaccineStrategyTemplates).map(sourceRecord);
   const rules = sourceArray(staticVaccineData.scheduleEngineRules).map(sourceRecord);
   const meta = sourceRecord(sourcesDataset.datasetMeta);
