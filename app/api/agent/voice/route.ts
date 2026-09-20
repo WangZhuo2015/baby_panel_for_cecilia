@@ -6,7 +6,7 @@ import { GROWDESK_CONFIG } from "@/lib/config";
 import { resolveBffSession } from "@/lib/growdesk/session";
 import { loadWebBaby } from "@/lib/growdesk/bridge-identity";
 import { growdeskFetch } from "@/lib/growdesk/client";
-import { bffVoiceLogStore } from "@/lib/growdesk/voice-logs";
+import { createGrowDeskVoiceLog } from "@/lib/growdesk/voice-log-api";
 import {
   buildAgentSystemPrompt,
   createBabyPanelTools,
@@ -48,11 +48,25 @@ async function logVoiceInteraction(data: {
   isAsync: boolean;
   isFastPath: boolean;
   acknowledged: boolean;
+  accessToken?: string;
   baby?: any;
 }): Promise<string | null> {
   if (GROWDESK_CONFIG.enabled) {
-    const log = bffVoiceLogStore.createLog(data);
-    return log.id;
+    if (!data.accessToken) return null;
+    try {
+      const log = await createGrowDeskVoiceLog(growdeskFetch, data.accessToken, {
+        babyId: data.babyId,
+        prompt: data.prompt,
+        reply: data.reply,
+        isAsync: data.isAsync,
+        isFastPath: data.isFastPath,
+        acknowledged: data.acknowledged,
+      });
+      return log.id;
+    } catch (error) {
+      console.warn("[Voice API] Failed to persist GrowDesk interaction:", error);
+      return null;
+    }
   }
   try {
     const log = await prisma.agentVoiceLog.create({
@@ -253,6 +267,7 @@ export async function POST(request: Request) {
         isAsync: false,
         isFastPath: true,
         acknowledged: true,
+        accessToken: principal.accessToken,
         baby,
       });
 
@@ -378,6 +393,7 @@ export async function POST(request: Request) {
             isAsync: true,
             isFastPath: false,
             acknowledged: false,
+            accessToken: principal.accessToken,
             baby,
           });
 
@@ -425,6 +441,7 @@ export async function POST(request: Request) {
       isAsync: false,
       isFastPath: false,
       acknowledged: true,
+      accessToken: principal.accessToken,
       baby,
     });
 

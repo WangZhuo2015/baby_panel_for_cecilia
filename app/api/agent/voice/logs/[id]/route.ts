@@ -3,7 +3,9 @@ import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/api-helpers";
 import { GROWDESK_CONFIG } from "@/lib/config";
 import { resolveBffSession } from "@/lib/growdesk/session";
-import { bffVoiceLogStore } from "@/lib/growdesk/voice-logs";
+import { BridgeError } from "@/lib/growdesk/bridge-protocol";
+import { acknowledgeGrowDeskVoiceLog, getGrowDeskVoiceLog } from "@/lib/growdesk/voice-log-api";
+import { growdeskFetch } from "@/lib/growdesk/client";
 
 export const dynamic = "force-dynamic";
 
@@ -18,13 +20,7 @@ export async function GET(
         return NextResponse.json({ success: false, error: "Unauthorized: 会话无效或已过期" }, { status: 401 });
       }
       const { id } = await props.params;
-      const log = bffVoiceLogStore.getLog(id, bffSession.user.id);
-      if (!log) {
-        return NextResponse.json(
-          { success: false, error: "未找到该语音交互记录" },
-          { status: 404 }
-        );
-      }
+      const log = await getGrowDeskVoiceLog(growdeskFetch, bffSession.accessToken, id);
       return NextResponse.json({ success: true, log });
     }
 
@@ -48,6 +44,9 @@ export async function GET(
 
     return NextResponse.json({ success: true, log });
   } catch (error: any) {
+    if (GROWDESK_CONFIG.enabled && error instanceof BridgeError) {
+      return NextResponse.json({ success: false, error: error.message }, { status: error.status });
+    }
     console.error("GET /api/agent/voice/logs/[id] error:", error);
     return NextResponse.json(
       { success: false, error: error?.message || "获取记录失败" },
@@ -70,13 +69,7 @@ export async function PATCH(
       const body = await request.json().catch(() => ({}));
       const acknowledged = body.acknowledged === true || body.acknowledged === "true";
 
-      const ok = bffVoiceLogStore.acknowledgeLog(id, bffSession.user.id, acknowledged);
-      if (!ok) {
-        return NextResponse.json(
-          { success: false, error: "记录不存在或无权修改" },
-          { status: 404 }
-        );
-      }
+      await acknowledgeGrowDeskVoiceLog(growdeskFetch, bffSession.accessToken, id, acknowledged);
       return NextResponse.json({ success: true });
     }
 
@@ -101,6 +94,9 @@ export async function PATCH(
 
     return NextResponse.json({ success: true });
   } catch (error: any) {
+    if (GROWDESK_CONFIG.enabled && error instanceof BridgeError) {
+      return NextResponse.json({ success: false, error: error.message }, { status: error.status });
+    }
     console.error("PATCH /api/agent/voice/logs/[id] error:", error);
     return NextResponse.json(
       { success: false, error: error?.message || "更新状态失败" },
