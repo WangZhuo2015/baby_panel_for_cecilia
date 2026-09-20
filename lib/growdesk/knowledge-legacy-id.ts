@@ -3,6 +3,7 @@ import foodsDataset from "../../data/04_foods.json";
 import milestonesDataset from "../../data/03_milestones.json";
 import activitiesDataset from "../../data/06_activities.json";
 import sourcesDataset from "../../data/01_sources.json";
+import vaccinesDataset from "../../data/02_vaccines.json";
 
 /**
  * The legacy golden fixture makes Prisma's generated reference-row IDs
@@ -17,6 +18,9 @@ const LEGACY_UUID_PREFIX = "growdesk-test-golden";
 type BookSource = { id?: unknown };
 type FeedingGuidelineSource = { ageMinMonths?: unknown; ageMaxMonths?: unknown };
 type ReferenceSource = { id?: unknown };
+type VaccineSource = { id?: unknown; doses?: unknown[] };
+type VaccineStrategySource = { id?: unknown };
+type ScheduleEngineRuleSource = { id?: unknown };
 
 const books = (booksDataset.books as BookSource[]);
 const feedingGuidelines = (foodsDataset.feedingGuidelines as FeedingGuidelineSource[]);
@@ -24,6 +28,9 @@ const milestones = (milestonesDataset.milestones as ReferenceSource[]);
 const warningSigns = (milestonesDataset.developmentRedFlags as ReferenceSource[]);
 const activities = (activitiesDataset.activities as ReferenceSource[]);
 const sources = (sourcesDataset.sources as ReferenceSource[]);
+const vaccines = (vaccinesDataset.vaccines as VaccineSource[]);
+const vaccineStrategyTemplates = (vaccinesDataset.vaccineStrategyTemplates as VaccineStrategySource[]);
+const scheduleEngineRules = (vaccinesDataset.scheduleEngineRules as ScheduleEngineRuleSource[]);
 
 function uuidBytes(value: string): Uint8Array {
   const normalized = value.replace(/-/g, "");
@@ -195,4 +202,77 @@ export function legacySourceRefId(source: Record<string, unknown>): string | und
   const key = sourceId(source.sourceId) ?? sourceId(source.id);
   const index = sources.findIndex(candidate => sourceId(candidate.id) === key);
   return index >= 0 ? legacyReferenceId("SourceRef", index) : undefined;
+}
+
+function vaccineSourceIndex(vaccine: Record<string, unknown>): number {
+  const key = sourceId(vaccine.vaccineId) ?? sourceId(vaccine.id);
+  return vaccines.findIndex(candidate => sourceId(candidate.id) === key);
+}
+
+/** Reproduce the legacy Prisma Vaccine row ID from the checked-in source order. */
+export function legacyVaccineId(vaccine: Record<string, unknown>): string | undefined {
+  const index = vaccineSourceIndex(vaccine);
+  return index >= 0 ? legacyReferenceId("Vaccine", index) : undefined;
+}
+
+/** Reproduce the legacy Prisma VaccineDose row ID from the flattened dose order. */
+export function legacyVaccineDoseId(
+  vaccine: Record<string, unknown>,
+  dose: Record<string, unknown> | number,
+): string | undefined {
+  const vaccineIndex = vaccineSourceIndex(vaccine);
+  if (vaccineIndex < 0) return undefined;
+  const doseNumber = typeof dose === "number" ? dose : sourceNumber(dose.doseNumber);
+  if (doseNumber === undefined) return undefined;
+  const sourceDoses = Array.isArray(vaccines[vaccineIndex].doses) ? vaccines[vaccineIndex].doses : [];
+  const doseIndex = sourceDoses.findIndex(candidate => {
+    if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) return false;
+    return sourceNumber((candidate as Record<string, unknown>).doseNumber) === doseNumber;
+  });
+  if (doseIndex < 0) return undefined;
+  const globalIndex = vaccines
+    .slice(0, vaccineIndex)
+    .reduce((total, candidate) => total + (Array.isArray(candidate.doses) ? candidate.doses.length : 0), 0) + doseIndex;
+  return legacyReferenceId("VaccineDose", globalIndex);
+}
+
+/** Reproduce the legacy Prisma VaccineStrategyGroup row ID from source order. */
+export function legacyVaccineStrategyGroupId(strategy: Record<string, unknown>): string | undefined {
+  const key = sourceId(strategy.strategyId) ?? sourceId(strategy.id);
+  const index = vaccineStrategyTemplates.findIndex(candidate => sourceId(candidate.id) === key);
+  return index >= 0 ? legacyReferenceId("VaccineStrategyGroup", index) : undefined;
+}
+
+/** Reproduce the legacy Prisma ScheduleEngineRule row ID from source order. */
+export function legacyScheduleEngineRuleId(rule: Record<string, unknown>): string | undefined {
+  const key = sourceId(rule.ruleId) ?? sourceId(rule.id);
+  const index = scheduleEngineRules.findIndex(candidate => sourceId(candidate.id) === key);
+  return index >= 0 ? legacyReferenceId("ScheduleEngineRule", index) : undefined;
+}
+
+/**
+ * Legacy-golden fixture rows use a UUID-shaped prefix plus a zero-padded row
+ * number. Derive neighbouring rows only when the upstream ID carries that
+ * convention; arbitrary production IDs are never rewritten.
+ */
+export function legacyFixtureSiblingId(value: string, offset: number): string | undefined {
+  if (!Number.isInteger(offset)) return undefined;
+  const match = /^([0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-)(\d{12})$/i.exec(value);
+  if (!match) return undefined;
+  const index = Number(match[2]);
+  const next = index + offset;
+  if (!Number.isSafeInteger(next) || next < 0 || next > 999999999999) return undefined;
+  return `${match[1]}${String(next).padStart(12, "0")}`;
+}
+
+/**
+ * The reference fixture normalizer sets createdAt to the UTC start of the
+ * logical run day. Truncating the process clock preserves that convention
+ * under the golden clock preload without embedding a baseline timestamp.
+ */
+export function legacyFixtureCreatedAt(now: Date = new Date()): string {
+  const stamp = new Date(now.getTime());
+  if (!Number.isFinite(stamp.getTime())) throw new Error("Invalid fixture clock");
+  stamp.setUTCHours(0, 0, 0, 0);
+  return stamp.toISOString();
 }

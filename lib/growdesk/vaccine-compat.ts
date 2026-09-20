@@ -1,5 +1,18 @@
 import fs from "node:fs";
 import path from "node:path";
+import vaccineDataset from "../../data/02_vaccines.json";
+import sourcesDataset from "../../data/01_sources.json";
+import {
+  legacyDataReleaseId,
+  legacyFixtureCreatedAt,
+  legacyFixtureSiblingId,
+  legacyReferenceId,
+  legacyScheduleEngineRuleId,
+  legacySourceRefId,
+  legacyVaccineDoseId,
+  legacyVaccineId,
+  legacyVaccineStrategyGroupId,
+} from "./knowledge-legacy-id";
 
 if (typeof window !== "undefined") {
   throw new Error("This module can only be loaded on the server.");
@@ -317,9 +330,264 @@ export function loadFullVaccineKnowledge(regionCode = "CN-JS") {
   };
 }
 
+type LegacyVaccineResponse = Record<string, unknown>;
+type VaccineSourceRow = Record<string, any>;
+type SavedVaccineSelection = {
+  selected?: boolean;
+  completed?: boolean;
+  id?: string;
+  updatedAt?: string;
+};
+
+const staticVaccineData = vaccineDataset as {
+  datasetMeta?: Record<string, any>;
+  vaccines?: VaccineSourceRow[];
+  vaccineStrategyTemplates?: VaccineSourceRow[];
+  vaccineSchedule?: VaccineSourceRow[];
+  optionalVaccineTimeline?: VaccineSourceRow[];
+  scheduleEngineRules?: VaccineSourceRow[];
+};
+
+const staticSources = (sourcesDataset.sources as VaccineSourceRow[]);
+
+function sourceArray(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : [];
+}
+
+function sourceRecord(value: unknown): Record<string, any> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, any> : {};
+}
+
+function legacyVaccineDose(vaccine: VaccineSourceRow, dose: VaccineSourceRow, id: string, legacyVaccineRowId: string): LegacyVaccineResponse {
+  return {
+    id,
+    vaccineId: legacyVaccineRowId,
+    doseNumber: dose.doseNumber,
+    doseLabel: dose.doseLabel ?? `第${dose.doseNumber}剂`,
+    recommendedAgeMonths: dose.recommendedAgeMonths ?? null,
+    minimumAgeDays: dose.minimumAgeDays ?? null,
+    maximumAgeDays: dose.maximumAgeDays ?? null,
+    recommendedAgeMaxMonths: dose.recommendedAgeMaxMonths ?? null,
+    minimumIntervalDaysFromPrevious: dose.minimumIntervalDaysFromPrevious ?? null,
+    maximumIntervalDaysFromPrevious: dose.maximumIntervalDaysFromPrevious ?? null,
+    route: dose.route ?? null,
+    site: dose.site ?? null,
+    doseVolumeMl: dose.doseVolumeMl ?? null,
+    notes: dose.notes ?? null,
+    sourceRefsJson: sourceArray(dose.sourceRefs),
+  };
+}
+
+function projectLegacyVaccine(vaccine: VaccineSourceRow, regionCode: string, createdAt: string): LegacyVaccineResponse {
+  const canonical = sourceRecord(vaccine);
+  const naturalId = String(canonical.id);
+  const regionalOverrides = sourceArray(canonical.regionalProgramOverrides).map(sourceRecord);
+  const appliedOverride = regionalOverrides.find((item) => item.regionCode === regionCode);
+  const sourceDoses = sourceArray(canonical.doses).map(sourceRecord);
+  const legacyId = legacyVaccineId(canonical) ?? naturalId;
+  const product = sourceRecord(canonical.product);
+  const projected: LegacyVaccineResponse = {
+    id: legacyId,
+    vaccineId: naturalId,
+    name: canonical.name,
+    shortName: canonical.shortName ?? null,
+    englishName: canonical.englishName ?? null,
+    programType: appliedOverride?.programType ?? canonical.programType,
+    legacyLabel: canonical.legacyLabel ?? null,
+    sexRestriction: canonical.sexRestriction ?? "all",
+    chinaNational: canonical.chinaNational ?? false,
+    diseases: sourceArray(canonical.diseases),
+    targetPopulation: canonical.targetPopulation ?? null,
+    policyEffectiveDate: canonical.policyEffectiveDate ?? null,
+    policyVersion: canonical.policyVersion ?? null,
+    routineHealthyChildOption: canonical.routineHealthyChildOption ?? true,
+    manualReviewRequired: canonical.manualReviewRequired ?? false,
+    marketStatus: canonical.marketStatus ?? null,
+    productBrandName: product.brandName ?? null,
+    productManufacturer: product.manufacturer ?? null,
+    productApprovalNumber: product.approvalNumber ?? null,
+    jiangsuNotes: canonical.jiangsuNotes ?? null,
+    suzhouNotes: canonical.suzhouNotes ?? null,
+    catchUpSupported: sourceRecord(canonical.catchUp).supported ?? false,
+    catchUpRules: sourceArray(sourceRecord(canonical.catchUp).rules),
+    simultaneousVaccination: canonical.simultaneousVaccination ?? null,
+    substitutionRules: sourceArray(canonical.substitutionRules),
+    contraindications: sourceArray(canonical.contraindications),
+    precautions: sourceArray(canonical.precautions),
+    specialPopulations: sourceArray(canonical.specialPopulations),
+    regionalOverrides,
+    regimenOptions: sourceArray(canonical.regimenOptions),
+    sourceRefsJson: sourceArray(canonical.sourceRefs),
+    createdAt,
+    doses: sourceDoses.map((dose) => legacyVaccineDose(
+      canonical,
+      dose,
+      legacyVaccineDoseId(canonical, dose) ?? `${legacyId}:${dose.doseNumber}`,
+      legacyId,
+    )),
+  };
+  if (appliedOverride) {
+    projected.feeType = appliedOverride.feeType ?? null;
+    projected.regionalOverride = appliedOverride;
+  }
+  return projected;
+}
+
+function projectLegacySchedule(regionCode: string): LegacyVaccineResponse[] {
+  void regionCode;
+  const rows: Array<LegacyVaccineResponse & { insertionIndex: number }> = [];
+  let insertionIndex = 0;
+  for (const entryValue of sourceArray(staticVaccineData.vaccineSchedule)) {
+    const entry = sourceRecord(entryValue);
+    for (const itemValue of sourceArray(entry.items)) {
+      const item = sourceRecord(itemValue);
+      rows.push({
+        id: legacyReferenceId("VaccineScheduleEntry", insertionIndex),
+        ageMonths: entry.ageMonths ?? null,
+        ageDays: null,
+        ageLabel: null,
+        vaccineId: item.vaccineId,
+        doseNumber: item.doseNumber ?? 1,
+        priority: item.priority ?? "routine",
+        isOptional: false,
+        action: null,
+        selectionGroup: null,
+        notes: null,
+        sourceRefsJson: sourceArray(item.sourceRefs),
+        insertionIndex,
+      });
+      insertionIndex += 1;
+    }
+  }
+  for (const entryValue of sourceArray(staticVaccineData.optionalVaccineTimeline)) {
+    const entry = sourceRecord(entryValue);
+    for (const itemValue of sourceArray(entry.items)) {
+      const item = sourceRecord(itemValue);
+      rows.push({
+        id: legacyReferenceId("VaccineScheduleEntry", insertionIndex),
+        ageMonths: entry.ageMonths ?? null,
+        ageDays: entry.ageDays ?? null,
+        ageLabel: entry.ageLabel ?? null,
+        vaccineId: item.vaccineId,
+        // The legacy seed intentionally inserted one row per optional item.
+        doseNumber: 1,
+        priority: "optional",
+        isOptional: true,
+        action: item.action ?? null,
+        selectionGroup: item.selectionGroup ?? null,
+        notes: null,
+        sourceRefsJson: sourceArray(item.sourceRefs),
+        insertionIndex,
+      });
+      insertionIndex += 1;
+    }
+  }
+  return rows
+    .sort((left, right) => {
+      const ageLeft = left.ageMonths === null ? Number.NEGATIVE_INFINITY : Number(left.ageMonths);
+      const ageRight = right.ageMonths === null ? Number.NEGATIVE_INFINITY : Number(right.ageMonths);
+      return ageLeft - ageRight || Number(left.doseNumber) - Number(right.doseNumber) || left.insertionIndex - right.insertionIndex;
+    })
+    .map(({ insertionIndex: _insertionIndex, ...row }) => row);
+}
+
+/**
+ * Project the complete static vaccine catalogue back to the old Prisma DTO.
+ * The extended source projection remains available through loadFullVaccineKnowledge;
+ * only the default Web representation should call this function.
+ */
+export function projectLegacyVaccineKnowledge(fullKnowledge: ReturnType<typeof loadFullVaccineKnowledge>, regionCode = "CN-JS") {
+  const createdAt = legacyFixtureCreatedAt();
+  const rawById = new Map(sourceArray(staticVaccineData.vaccines).map((row) => [String(sourceRecord(row).id), sourceRecord(row)]));
+  const projectGroup = (rows: unknown[]) => rows
+    .map((row) => sourceRecord(row))
+    .map((row) => projectLegacyVaccine(rawById.get(String(row.vaccineId ?? row.id)) ?? row, regionCode, createdAt));
+  const templates = sourceArray(staticVaccineData.vaccineStrategyTemplates).map(sourceRecord);
+  const rules = sourceArray(staticVaccineData.scheduleEngineRules).map(sourceRecord);
+  const meta = sourceRecord(sourcesDataset.datasetMeta);
+  const dataRelease = {
+    id: legacyDataReleaseId(),
+    title: meta.title ?? "0–3岁中国婴幼儿育儿数据库",
+    asOf: meta.asOf ?? fullKnowledge.dataRelease?.asOf ?? null,
+    createdAt,
+    sources: staticSources.map((source) => ({
+      id: legacySourceRefId(source) ?? source.id,
+      sourceId: source.id,
+      title: source.title,
+      organization: source.organization ?? null,
+      year: source.year ?? null,
+      publicationDate: source.publicationDate ?? null,
+      url: source.url ?? null,
+      sourceLevel: source.sourceLevel ?? null,
+      sourceType: source.sourceType ?? null,
+      accessedDate: source.accessedDate ?? null,
+      notes: source.notes ?? null,
+      dataReleaseId: legacyDataReleaseId(),
+    })),
+  };
+  return {
+    national: projectGroup(fullKnowledge.national),
+    nonProgram: projectGroup(fullKnowledge.nonProgram),
+    provincial: projectGroup(fullKnowledge.provincial),
+    strategyGroups: templates.map((template) => ({
+      id: legacyVaccineStrategyGroupId(template) ?? template.id,
+      strategyId: template.id,
+      name: template.name,
+      scope: template.scope ?? null,
+      baseProgram: template.baseProgram ?? null,
+      optionsJson: sourceArray(template.optionalSelections),
+      sourceRefsJson: sourceArray(template.sourceRefs),
+    })),
+    schedule: projectLegacySchedule(regionCode),
+    engineRules: rules.map((rule) => ({
+      id: legacyScheduleEngineRuleId(rule) ?? rule.id,
+      ruleId: rule.id,
+      type: rule.type,
+      vaccineIdsJson: sourceArray(rule.vaccineIds),
+      description: rule.description ?? "",
+      sourceRefsJson: sourceArray(rule.sourceRefs),
+    })),
+    dataRelease,
+  };
+}
+
+/** Project persisted old selection rows, preserving the old row shape. */
+export function projectLegacyVaccineSelections(
+  records: GrowDeskVaccineRecord[],
+  savedSelections: Record<string, SavedVaccineSelection> | undefined,
+  babyId: string,
+  updatedAtFallback?: string,
+) {
+  const recordByKey = new Map<string, GrowDeskVaccineRecord>();
+  for (const record of records) {
+    recordByKey.set(`${record.vaccineCode}-${parseDoseNumber(record.notes)}`, record);
+  }
+  return Object.entries(savedSelections ?? {})
+    .map(([key, saved]) => {
+      const separator = key.lastIndexOf("-");
+      const vaccineId = separator > 0 ? key.slice(0, separator) : key;
+      const parsedDose = separator > 0 ? Number(key.slice(separator + 1)) : 1;
+      const doseNumber = Number.isInteger(parsedDose) && parsedDose > 0 ? parsedDose : 1;
+      const record = recordByKey.get(`${vaccineId}-${doseNumber}`);
+      const id = saved.id || (record ? legacyFixtureSiblingId(record.id, 1) : undefined);
+      const updatedAt = saved.updatedAt || record?.updatedAt || record?.createdAt || updatedAtFallback;
+      const row: LegacyVaccineResponse = {
+        ...(id ? { id } : {}),
+        babyId,
+        vaccineId,
+        doseNumber,
+        selected: saved.selected ?? true,
+        completed: saved.completed ?? false,
+        ...(updatedAt ? { updatedAt } : {}),
+      };
+      return row;
+    })
+    .sort((left, right) => String(left.vaccineId).localeCompare(String(right.vaccineId)) || Number(left.doseNumber) - Number(right.doseNumber));
+}
+
 export function buildVaccineSelections(
   records: GrowDeskVaccineRecord[],
-  savedSelections?: Record<string, { selected?: boolean; completed?: boolean }>,
+  savedSelections?: Record<string, SavedVaccineSelection>,
 ): VaccineSelectionItem[] {
   const result: VaccineSelectionItem[] = [];
   const recordMap = new Map<string, GrowDeskVaccineRecord>();

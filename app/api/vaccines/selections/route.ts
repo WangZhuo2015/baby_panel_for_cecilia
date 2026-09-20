@@ -9,7 +9,8 @@ import { growdeskFetch } from "@/lib/growdesk/client";
 import { loadWebBaby } from "@/lib/growdesk/bridge-identity";
 import { BridgeError, bridgeErrorResponse, requireData } from "@/lib/growdesk/bridge-protocol";
 import { foodPlanWriteBody, readGrowDeskFoodPlan, type GrowDeskFoodPlanState } from "@/lib/growdesk/food-plan-state";
-import { buildVaccineSelections } from "@/lib/growdesk/vaccine-compat";
+import { buildVaccineSelections, projectLegacyVaccineSelections } from "@/lib/growdesk/vaccine-compat";
+import { wantsExtendedRepresentation } from "@/lib/growdesk/legacy-projections";
 
 function readFoodPlan(response: Awaited<ReturnType<typeof growdeskFetch>>, babyId: string): GrowDeskFoodPlanState {
   return readGrowDeskFoodPlan(response, babyId);
@@ -62,10 +63,12 @@ export async function GET(request: Request) {
       const savedSelections = planData.vaccineSelections &&
         typeof planData.vaccineSelections === "object" &&
         !Array.isArray(planData.vaccineSelections)
-        ? planData.vaccineSelections as Record<string, { selected?: boolean; completed?: boolean }>
+        ? planData.vaccineSelections as Record<string, { selected?: boolean; completed?: boolean; id?: string; updatedAt?: string }>
         : {};
 
-      const selections = buildVaccineSelections(records, savedSelections);
+      const selections = wantsExtendedRepresentation(request)
+        ? buildVaccineSelections(records, savedSelections)
+        : projectLegacyVaccineSelections(records, savedSelections, babyId, foodPlan.updatedAt);
       return NextResponse.json(selections);
     }
 

@@ -11,8 +11,10 @@ import {
   toGrowDeskVaccineRecordPayload,
   fromGrowDeskVaccineRecord,
   loadFullVaccineKnowledge,
+  projectLegacyVaccineKnowledge,
   type GrowDeskVaccineRecord,
 } from "@/lib/growdesk/vaccine-compat"
+import { wantsExtendedRepresentation } from "@/lib/growdesk/legacy-projections"
 import { loadWebBaby } from "@/lib/growdesk/bridge-identity"
 import { bridgeErrorResponse } from "@/lib/growdesk/bridge-protocol"
 import {
@@ -34,7 +36,7 @@ export async function GET(request: Request) {
         return NextResponse.json({ error: "Unauthorized: 会话无效或已过期" }, { status: 401 });
       }
       const fullKb = loadFullVaccineKnowledge(regionCode);
-      return NextResponse.json(fullKb);
+      return NextResponse.json(wantsExtendedRepresentation(request) ? fullKb : projectLegacyVaccineKnowledge(fullKb, regionCode));
     }
 
     // Fetch all vaccines
