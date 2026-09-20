@@ -401,10 +401,13 @@ test("SH-08: Timeline Compat DTO Layer", async (t) => {
         supplementName: "Vitamin D",
         dose: "1.5",
         unitName: "滴",
+        notes: "[productId:test_product] test_note",
       }]]),
     });
 
     assert.equal(item.rawRecord?.dose, 1.5);
+    assert.equal(item.rawRecord?.notes, "test_note");
+    assert.equal(item.detail, "Vitamin D 1.5 滴 · test_note");
   });
 
   await t.test("fromGrowDeskTimelineResponse: converts list and sets correct icons and labels", () => {

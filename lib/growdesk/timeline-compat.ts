@@ -6,7 +6,7 @@ import { BridgeError, isoTimestamp, wireVersion } from "./bridge-protocol";
 import { formatIsoToLocalTime, getLocalDateStr } from "@/lib/date";
 import { getFeedingEffectiveMl } from "@/lib/nutrition/breastmilk";
 import { decodeNotes } from "./food-compat";
-import { parseSupplementAmount } from "./nutrition-compat";
+import { extractProductIdFromNotes, parseSupplementAmount } from "./nutrition-compat";
 
 export interface GrowDeskTimelineEntry {
   id: string;
@@ -405,8 +405,9 @@ export function fromGrowDeskTimelineEntry(
       const rawDose = supp.dose ?? supp.dosage ?? parsedAmount?.dose ?? "";
       const numericDose = typeof rawDose === "string" && rawDose.trim() !== "" ? Number(rawDose) : rawDose;
       const dose = typeof numericDose === "number" && Number.isFinite(numericDose) ? numericDose : rawDose;
+      const notes = extractProductIdFromNotes(supp.notes).cleanNotes;
       let d = `${prodName} ${dose} ${unit}`.trim();
-      if (supp.notes) d += ` · ${supp.notes}`;
+      if (notes) d += ` · ${notes}`;
       detail = d;
 
       rawRecord = {
@@ -417,7 +418,7 @@ export function fromGrowDeskTimelineEntry(
         productName: prodName,
         dose: dose !== "" ? dose : null,
         unitName: unit,
-        notes: supp.notes || null,
+        notes: notes || null,
         source: supp.source || "ui_manual",
         sourceAgent: supp.sourceAgent || null,
         version: wireVersion(supp.version || entry.version),
