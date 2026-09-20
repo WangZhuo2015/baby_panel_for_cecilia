@@ -63,6 +63,7 @@ function hasObservedGrowthVersion(measurement: GrowthMeasurement): boolean {
 export default function GrowthPage() {
   const router = useRouter();
   const baby = useBabyStore((s) => s.baby);
+  const fetchUser = useBabyStore((s) => s.fetchUser);
   const selectedBabyId = useBabyStore((s) => s.selectedBabyId);
   const userId = useBabyStore((s) => s.user?.id ?? null);
   const familyId = useBabyStore((s) => s.family?.id ?? null);
@@ -84,6 +85,11 @@ export default function GrowthPage() {
   const [monthLabels, setMonthLabels] = useState<number[]>([]);
 
   const [chartError, setChartError] = useState<string | null>(null);
+
+  useEffect(() => {
+    void fetchUser();
+  }, [fetchUser]);
+
   const loadChart = useCallback(async () => {
     if (!selectedBabyId) return;
     try {

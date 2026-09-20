@@ -760,11 +760,12 @@ try {
     if (protectedGrowthImagePath) {
       await page.getByText("有图", { exact: true }).first().waitFor({ state: "visible", timeout: 15_000 });
       const protectedDownloadPromise = page.waitForResponse((response) => response.request().method() === "GET"
-        && new URL(response.url()).pathname === protectedGrowthImagePath);
+        && new URL(response.url()).pathname === protectedGrowthImagePath).catch(() => null);
       await page.getByRole("button", { name: "编辑 2026-09-18 生长记录" }).click();
       const editDialog = page.getByRole("dialog", { name: "编辑生长记录" });
       await editDialog.waitFor({ state: "visible", timeout: 15_000 });
       const protectedDownload = await protectedDownloadPromise;
+      if (!protectedDownload) throw new Error("growth protected image download did not complete");
       const savedGrowthImage = editDialog.getByAltText("已保存的生长测量照片，点击查看原图");
       await savedGrowthImage.waitFor({ state: "visible", timeout: 15_000 });
       const savedDimensions = await savedGrowthImage.evaluate((image) => ({
