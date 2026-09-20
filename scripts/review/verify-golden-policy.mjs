@@ -22,6 +22,33 @@ export function verifyGoldenPolicy(report) {
     return { passed: false, code: "EMPTY_GOLDEN_RESULTS" };
   }
 
+  const seenEndpoints = new Set();
+  const structuralErrors = [];
+  for (const [index, result] of report.results.entries()) {
+    if (!result || typeof result !== "object" || Array.isArray(result)) {
+      structuralErrors.push({ endpoint: index, reason: "RESULT_INVALID" });
+      continue;
+    }
+    if (typeof result.id !== "string" || result.id.length === 0) {
+      structuralErrors.push({ endpoint: index, reason: "RESULT_ID_INVALID" });
+    } else if (seenEndpoints.has(result.id)) {
+      structuralErrors.push({ endpoint: result.id, reason: "DUPLICATE_ENDPOINT_RESULT" });
+    } else {
+      seenEndpoints.add(result.id);
+    }
+    if (result.status !== "PASS" && result.status !== "FAIL") {
+      structuralErrors.push({ endpoint: result.id ?? index, reason: "RESULT_STATUS_INVALID" });
+    } else if (
+      result.status === "PASS" &&
+      (result.reason !== null || result.differenceCount !== 0 || !Array.isArray(result.differences) || result.differences.length !== 0)
+    ) {
+      structuralErrors.push({ endpoint: result.id, reason: "PASS_RESULT_HAS_DIFFERENCES" });
+    }
+  }
+  if (structuralErrors.length > 0) {
+    return { passed: false, code: "INVALID_GOLDEN_RESULTS", rejected: structuralErrors };
+  }
+
   const accepted = [];
   const rejected = [];
   for (const result of report.results) {

@@ -59,3 +59,22 @@ test("rejects legacy drift even when the displayed path resembles an exception",
   const result = verifyGoldenPolicy(candidate);
   assert.equal(result.passed, false);
 });
+
+test("rejects duplicate endpoint rows and PASS rows that hide differences", () => {
+  const duplicate = report();
+  duplicate.results.push({ ...duplicate.results[0] });
+  const duplicateResult = verifyGoldenPolicy(duplicate);
+  assert.equal(duplicateResult.passed, false);
+  assert.equal(duplicateResult.code, "INVALID_GOLDEN_RESULTS");
+
+  const malformedPass = report();
+  malformedPass.results[0] = {
+    ...malformedPass.results[0],
+    reason: "BODY_MISMATCH",
+    differenceCount: 1,
+    differences: [{ path: "$/hidden", reason: "value_mismatch" }],
+  };
+  const malformedPassResult = verifyGoldenPolicy(malformedPass);
+  assert.equal(malformedPassResult.passed, false);
+  assert.equal(malformedPassResult.code, "INVALID_GOLDEN_RESULTS");
+});
