@@ -73,6 +73,39 @@ export interface SupplementState {
   customFormulaNutrients?: Record<string, NutrientsMap>;
 }
 
+export function normalizeNutrients(raw: unknown): NutrientsMap {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  const standardUnits: Record<string, string> = {
+    vitamin_d: "IU", vitamin_a: "mcg RAE", vitamin_c: "mg",
+    calcium: "mg", iron: "mg", zinc: "mg", dha: "mg",
+    energy_kcal: "kcal", protein: "g",
+  };
+  const standardKeys: Record<string, string> = {
+    vitamind: "vitamin_d", vitamina: "vitamin_a", vitaminc: "vitamin_c",
+  };
+  const result: NutrientsMap = {};
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    const normalizedKey = key.trim().toLowerCase().replace(/-/g, "_");
+    const canonicalKey = standardKeys[normalizedKey] || normalizedKey;
+    if (!canonicalKey) continue;
+    if (typeof value === "number" && Number.isFinite(value) && value >= 0) {
+      result[canonicalKey] = { amount: Number(value.toFixed(2)), unit: standardUnits[canonicalKey] || "mg" };
+      continue;
+    }
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      const amount = (value as { amount?: unknown }).amount;
+      const unit = (value as { unit?: unknown }).unit;
+      if (typeof amount === "number" && Number.isFinite(amount) && amount >= 0) {
+        result[canonicalKey] = {
+          amount: Number(amount.toFixed(2)),
+          unit: typeof unit === "string" && unit.trim() ? unit.trim() : standardUnits[canonicalKey] || "mg",
+        };
+      }
+    }
+  }
+  return result;
+}
+
 export function fromGrowDeskSupplementProduct(raw: GrowDeskSupplementProduct): SupplementProduct {
   let nutrients: NutrientsMap = {};
   const source = raw.nutrientsJson;

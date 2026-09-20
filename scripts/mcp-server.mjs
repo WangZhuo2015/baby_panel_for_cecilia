@@ -556,6 +556,24 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         },
       },
       {
+        name: "create_supplement_product",
+        description: "在当前家庭建档或更新营养补充剂产品，无需同时记录一次服用。",
+        inputSchema: {
+          type: "object",
+          required: ["session", "name"],
+          properties: {
+            ...SESSION_PROP,
+            name: { type: "string", description: "补剂全称" },
+            brand: { type: "string", description: "品牌名称，默认家庭自选" },
+            dosageForm: { type: "string", enum: ["drops", "capsule", "liquid_ml", "sachet", "tablet"] },
+            unitName: { type: "string", description: "单次计量单位，默认滴" },
+            defaultDose: { type: "number", description: "单次推荐用量，默认1" },
+            nutrients: { type: "object", description: "营养成分表" },
+            notes: { type: "string", description: "补充说明或医嘱注意事项" },
+          },
+        },
+      },
+      {
         name: "get_nutrition_analysis",
         description: "查询宝宝单日或近7天/30天全量营养素摄入汇总（包含总奶量、维生素D、维生素A、钙、铁、锌、DHA、能量、蛋白质等）、DRIs 2023 推荐量达标率与安全上限 (UL) 状态。",
         inputSchema: {
@@ -822,6 +840,20 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           { type: "text", text: `✅ 补剂打卡记录成功！\n${JSON.stringify(data, null, 2)}` },
         ],
       };
+    }
+
+    if (name === "create_supplement_product") {
+      const data = await postJson("/api/nutrition/products", bound, {
+        type: "supplement",
+        name: args.name,
+        brand: args.brand,
+        dosageForm: args.dosageForm || "drops",
+        unitName: args.unitName || "滴",
+        defaultDose: args.defaultDose || 1,
+        nutrients: args.nutrients || {},
+        notes: args.notes,
+      });
+      return { content: [{ type: "text", text: `✅ 营养补剂建档成功！\n${JSON.stringify(data, null, 2)}` }] };
     }
 
     if (name === "get_nutrition_analysis") {

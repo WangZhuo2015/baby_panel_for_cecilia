@@ -15,6 +15,7 @@ import type { FormulaProduct, SupplementProduct } from "@/types/nutrition";
 import { GROWDESK_CONFIG } from "@/lib/config";
 import { growdeskFetch } from "@/lib/growdesk/client";
 import { toGrowDeskSupplementCreatePayload } from "@/lib/growdesk/supplement-compat";
+import { fromGrowDeskSupplementProduct, normalizeNutrients, type GrowDeskSupplementProduct } from "@/lib/growdesk/nutrition-compat";
 
 export function makeNutritionTools(ctx: {
   userId: string;
@@ -297,6 +298,63 @@ export function makeNutritionTools(ctx: {
     },
   };
 
+  const createSupplementProduct: AgentTool = {
+    name: "create_supplement_product",
+    label: "建档营养补剂",
+    description: "在家庭档案库中建档或更新营养补充剂产品，无需同时记录一次服用。",
+    parameters: Type.Object({
+      name: Type.String({ description: "补剂全称" }),
+      brand: Type.Optional(Type.String({ description: "品牌名称，默认家庭自选" })),
+      dosageForm: Type.Optional(Type.Union([
+        Type.Literal("drops"), Type.Literal("capsule"), Type.Literal("liquid_ml"), Type.Literal("sachet"), Type.Literal("tablet"),
+      ])),
+      unitName: Type.Optional(Type.String({ description: "单次计量单位，默认滴" })),
+      defaultDose: Type.Optional(Type.Number({ description: "单次推荐用量，默认1" })),
+      nutrients: Type.Optional(Type.Record(Type.String(), Type.Any())),
+      notes: Type.Optional(Type.String()),
+    }),
+    executionMode: "sequential",
+    execute: async (_id, raw) => {
+      const params = raw as Params;
+      const name = String(params.name || "").trim();
+      if (!name) fail("请输入补剂名称");
+      const brand = String(params.brand || "家庭自选").trim() || "家庭自选";
+      const dosageForm = String(params.dosageForm || "drops").trim();
+      const unitName = String(params.unitName || "滴").trim() || "滴";
+      const defaultDose = typeof params.defaultDose === "number" && Number.isFinite(params.defaultDose) && params.defaultDose > 0 ? params.defaultDose : 1;
+      const notes = typeof params.notes === "string" && params.notes.trim() ? params.notes.trim() : null;
+      const nutrients = normalizeNutrients(params.nutrients);
+
+      if (GROWDESK_CONFIG.enabled) {
+        if (!ctx.accessToken) fail("云端会话不可用，请重新登录后再试");
+        const response = await growdeskFetch<GrowDeskSupplementProduct>(
+          `/api/v1/families/${familyId}/nutrition/supplement-products`,
+          {
+            method: "POST",
+            accessToken: ctx.accessToken,
+            body: { name, brand, dosageForm, unitName, defaultDose: String(defaultDose), nutrientsJson: nutrients, notes },
+          },
+        );
+        if (!response.ok || !response.data) fail(response.error?.message || "补剂建档失败");
+        const product = fromGrowDeskSupplementProduct(response.data);
+        return ok(`✅ 已建档补剂：【${brand} ${name}】（每次 ${defaultDose} ${unitName}）`, { product });
+      }
+
+      const existing = await prisma.supplementProduct.findFirst({ where: { familyId, name } });
+      const product = existing
+        ? await prisma.supplementProduct.update({
+            where: { id: existing.id },
+            data: { brand, dosageForm, unitName, defaultDose, nutrientsJson: JSON.stringify(nutrients), notes, isActive: true },
+          })
+        : await prisma.supplementProduct.create({
+            data: { familyId, name, brand, dosageForm, unitName, defaultDose, nutrientsJson: JSON.stringify(nutrients), notes, isActive: true },
+          });
+      return ok(`✅ 已${existing ? "更新" : "建档"}补剂：【${brand} ${name}】（每次 ${defaultDose} ${unitName}）`, {
+        product: { ...product, nutrients },
+      });
+    },
+  };
+
   const getNutritionAnalysis: AgentTool = {
     name: "get_nutrition_analysis",
     label: "查询营养摄入与分析",
@@ -567,5 +625,5 @@ export function makeNutritionTools(ctx: {
     },
   };
 
-  return [recordSupplement, getNutritionAnalysis, queryNutritionProducts];
+  return [recordSupplement, createSupplementProduct, getNutritionAnalysis, queryNutritionProducts];
 }

@@ -20,7 +20,7 @@ import {
   getLocalDayUtcRange,
   localTimeToUtcIso,
 } from "@/lib/date";
-import { formatSupplementAmount } from "@/lib/growdesk/nutrition-compat";
+import { formatSupplementAmount, fromGrowDeskSupplementProduct, normalizeNutrients, type GrowDeskSupplementProduct } from "@/lib/growdesk/nutrition-compat";
 import * as records from "@/lib/records/service";
 import { performWebSearch } from "@/lib/agent/search";
 import { checkRateLimit } from "@/lib/rate-limit";
@@ -770,6 +770,23 @@ export function createMcpServer(principal: UserPrincipal, options?: { accessToke
               date: { type: "string", description: "日期 (YYYY-MM-DD，默认今天)" },
               time: { type: "string", description: "时间 (HH:mm，默认当前时间)" },
               notes: { type: "string", description: "备注" },
+            },
+          },
+        },
+        {
+          name: "create_supplement_product",
+          description: "【补剂建档写】在当前家庭建档或更新营养补充剂产品，无需同时记录一次服用。",
+          inputSchema: {
+            type: "object",
+            required: ["name"],
+            properties: {
+              name: { type: "string", description: "补剂全称" },
+              brand: { type: "string", description: "品牌名称，默认家庭自选" },
+              dosageForm: { type: "string", enum: ["drops", "capsule", "liquid_ml", "sachet", "tablet"] },
+              unitName: { type: "string", description: "单次计量单位，默认滴" },
+              defaultDose: { type: "number", description: "单次推荐用量，默认1" },
+              nutrients: { type: "object", description: "营养成分表" },
+              notes: { type: "string", description: "补充说明或医嘱注意事项" },
             },
           },
         },
@@ -2534,6 +2551,48 @@ export function createMcpServer(principal: UserPrincipal, options?: { accessToke
           },
         };
 
+        await logToolCall(name, "success", startTime);
+        return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      }
+
+      if (name === "create_supplement_product") {
+        if (!checkScope(principal, "write")) {
+          throw new McpError(ErrorCode.InvalidRequest, "Forbidden: Missing baby:write scope");
+        }
+        const suppName = String(args.name || "").trim();
+        if (!suppName) throw new Error("请提供补剂名称");
+        const brand = String(args.brand || "家庭自选").trim() || "家庭自选";
+        const dosageForm = String(args.dosageForm || "drops").trim();
+        const unitName = String(args.unitName || "滴").trim() || "滴";
+        const defaultDose = typeof args.defaultDose === "number" && Number.isFinite(args.defaultDose) && args.defaultDose > 0 ? args.defaultDose : 1;
+        const notes = typeof args.notes === "string" && args.notes.trim() ? args.notes.trim() : null;
+        const nutrients = normalizeNutrients(args.nutrients);
+
+        let product: unknown;
+        if (GROWDESK_CONFIG.enabled) {
+          const response = await growdeskFetch<GrowDeskSupplementProduct>(
+            `/api/v1/families/${baby.familyId}/nutrition/supplement-products`,
+            {
+              method: "POST",
+              accessToken,
+              body: { name: suppName, brand, dosageForm, unitName, defaultDose: String(defaultDose), nutrientsJson: nutrients, notes },
+            },
+          );
+          product = fromGrowDeskSupplementProduct(requireWriteData(response, "Failed to create supplement product"));
+        } else {
+          const existing = await prisma.supplementProduct.findFirst({ where: { familyId: baby.familyId, name: suppName } });
+          const saved = existing
+            ? await prisma.supplementProduct.update({
+                where: { id: existing.id },
+                data: { brand, dosageForm, unitName, defaultDose, nutrientsJson: JSON.stringify(nutrients), notes, isActive: true },
+              })
+            : await prisma.supplementProduct.create({
+                data: { familyId: baby.familyId, name: suppName, brand, dosageForm, unitName, defaultDose, nutrientsJson: JSON.stringify(nutrients), notes, isActive: true },
+              });
+          product = { ...saved, nutrients };
+        }
+
+        const data = { success: true, action: "create_supplement_product", product };
         await logToolCall(name, "success", startTime);
         return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
       }
