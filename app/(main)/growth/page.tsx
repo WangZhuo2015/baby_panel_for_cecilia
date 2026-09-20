@@ -94,7 +94,9 @@ export default function GrowthPage() {
     if (!selectedBabyId) return;
     try {
       const query = new URLSearchParams({ babyId: selectedBabyId });
-      const res = await fetch(`/api/growth/chart?${query}`);
+      const res = await fetch(`/api/growth/chart?${query}`, {
+        headers: { "x-growdesk-representation": "extended" },
+      });
       if (!res.ok) throw new Error("生长曲线加载失败，请重试");
       const data = await res.json();
       // A late response for a previous baby must not replace the active chart.

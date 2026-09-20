@@ -2,7 +2,7 @@
 import { recordWriteContext } from "@/lib/growdesk/record-write-context";
 import { enqueueOutbox, isRetryableSubmitError } from "@/lib/outbox";
 import { isFresh, markFetched, invalidateCache, dedup, toQuery } from "./helpers";
-import { request, isAuthError } from "./helpers";
+import { request, isAuthError, GROWDESK_EXTENDED_REPRESENTATION_HEADERS } from "./helpers";
 import { _fetchedAt } from "./helpers";
 import type { GrowthMeasurement, MedicalReport, FoodItem, FeedingGuideline, FoodPlan, Book, Vaccine, VaccineStrategyGroup, VaccineScheduleEntry, ScheduleEngineRule, DevelopmentMilestone, DevelopmentWarningSign, ActivityRecommendation, WeatherData } from "@/types";
 
@@ -79,7 +79,9 @@ export const createGrowthSlice = (set: any, get: any): GrowthSlice => ({
     return dedup(key, async () => {
       try {
         const query = toQuery({ babyId });
-        const data = await request<GrowthMeasurement[]>(`/api/growth${query}`);
+        const data = await request<GrowthMeasurement[]>(`/api/growth${query}`, {
+          headers: GROWDESK_EXTENDED_REPRESENTATION_HEADERS,
+        });
         if (get().baby?.id === babyId) {
           set({ growthMeasurements: data || [] });
           markFetched(key);
@@ -101,7 +103,9 @@ export const createGrowthSlice = (set: any, get: any): GrowthSlice => ({
     return dedup(key, async () => {
       try {
         const query = toQuery({ category: category && category !== "all" ? category : undefined, babyId });
-        const data = await request<MedicalReport[]>(`/api/medical/reports${query}`);
+        const data = await request<MedicalReport[]>(`/api/medical/reports${query}`, {
+          headers: GROWDESK_EXTENDED_REPRESENTATION_HEADERS,
+        });
         if (get().baby?.id !== babyId) return;
         set({ medicalReports: data || [] });
         markFetched(key);
@@ -187,7 +191,9 @@ export const createGrowthSlice = (set: any, get: any): GrowthSlice => ({
     return dedup(key, async () => {
       try {
         const params = regionCode ? `?regionCode=${regionCode}` : "";
-        const data = await request<GrowthSlice["vaccineData"]>(`/api/vaccines${params}`);
+        const data = await request<GrowthSlice["vaccineData"]>(`/api/vaccines${params}`, {
+          headers: GROWDESK_EXTENDED_REPRESENTATION_HEADERS,
+        });
         set({ vaccineData: data });
         markFetched(key);
       } catch (e) { if (!isAuthError(e)) console.error("Failed to fetch vaccines:", e); }
