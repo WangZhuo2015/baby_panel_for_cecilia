@@ -50,6 +50,11 @@ export const RecordActionSheet: React.FC<RecordActionSheetProps> = ({
             <X size={16} />
           </button>
         </div>
+        {item.detail ? (
+          <p className="px-1 pb-2 text-xs text-text-secondary break-words">
+            {item.detail}
+          </p>
+        ) : null}
 
         <button
           type="button"
