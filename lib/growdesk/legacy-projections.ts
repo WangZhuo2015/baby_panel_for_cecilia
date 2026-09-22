@@ -27,16 +27,17 @@ export function projectLegacyMedicalRecord<T extends object>(record: T) {
   return without(record, "version", "baseVersion");
 }
 
-type LegacyProductProjection<T> = T extends object ? Omit<T, "createdAt" | "updatedAt"> : T;
-export type LegacySupplementProjection<T extends object> = Omit<T, "product"> & {
-  product?: LegacyProductProjection<T extends { product?: infer P } ? P : unknown>;
-};
+// Nested product input is accepted as unknown, not asserted to retain its old type.
+export type LegacySupplementProjection<T extends object> = Omit<T, "product"> & { product?: unknown };
 export function projectLegacySupplementRecord<T extends object>(record: T): LegacySupplementProjection<T> {
   const product = (record as Record<string, unknown>).product;
-  if (!product || typeof product !== "object" || Array.isArray(product)) {
-    return { ...record } as LegacySupplementProjection<T>;
-  }
-  return { ...record, product: without(product as Record<string, unknown>, "createdAt", "updatedAt") } as LegacySupplementProjection<T>;
+  const result = without(record, "product");
+  if (!Object.prototype.hasOwnProperty.call(record, "product")) return result;
+  return {
+    ...result,
+    product: product && typeof product === "object" && !Array.isArray(product)
+      ? without(product as Record<string, unknown>, "createdAt", "updatedAt") : product,
+  };
 }
 
 function projectLegacyTimelineRawRecord(type: string, value: unknown): unknown {
