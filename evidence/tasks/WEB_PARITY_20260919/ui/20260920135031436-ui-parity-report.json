@@ -1,0 +1,736 @@
+{
+  "baseURL": "http://127.0.0.1:61353",
+  "runId": "growdesk-integration-1gu_kas9",
+  "buildProvenance": {
+    "schemaVersion": 1,
+    "sourceGitSha": "06ae4a63bc303a85d8d13a7e65fe65991ec7cc26",
+    "sourceDirty": true,
+    "buildId": "JlqEWcdCIuS32Dqzmt_ps",
+    "artifactSha256": "429d71d61936cd57f93e2795fe4404d33a4094b59bb60025e960bd877429a24f",
+    "builtAt": "2026-09-20T13:32:48.380Z"
+  },
+  "account": "e2e_parity_1789912231436_37987",
+  "startedAt": "2026-09-20T13:50:31.447Z",
+  "steps": [
+    {
+      "name": "stack-preflight",
+      "startedAt": "2026-09-20T13:50:32.269Z",
+      "status": "PASS",
+      "finishedAt": "2026-09-20T13:50:32.281Z"
+    },
+    {
+      "name": "register-and-onboard",
+      "startedAt": "2026-09-20T13:50:32.281Z",
+      "status": "PASS",
+      "finishedAt": "2026-09-20T13:50:33.488Z"
+    },
+    {
+      "name": "baby-avatar-crop-upload-refresh",
+      "startedAt": "2026-09-20T13:50:33.488Z",
+      "status": "PASS",
+      "finishedAt": "2026-09-20T13:50:34.572Z"
+    },
+    {
+      "name": "create-second-isolated-family-fixture",
+      "startedAt": "2026-09-20T13:50:34.572Z",
+      "status": "PASS",
+      "finishedAt": "2026-09-20T13:50:34.666Z"
+    },
+    {
+      "name": "feeding-create-refresh-edit",
+      "startedAt": "2026-09-20T13:50:34.666Z",
+      "status": "PASS",
+      "finishedAt": "2026-09-20T13:50:37.266Z"
+    },
+    {
+      "name": "offline-feeding-outbox-sync-delete",
+      "startedAt": "2026-09-20T13:50:37.266Z",
+      "status": "PASS",
+      "finishedAt": "2026-09-20T13:50:38.927Z"
+    },
+    {
+      "name": "diaper-create-refresh-delete",
+      "startedAt": "2026-09-20T13:50:38.927Z",
+      "status": "PASS",
+      "finishedAt": "2026-09-20T13:50:40.622Z"
+    },
+    {
+      "name": "historical-sleep-create-refresh-delete",
+      "startedAt": "2026-09-20T13:50:40.622Z",
+      "status": "PASS",
+      "finishedAt": "2026-09-20T13:50:42.232Z"
+    },
+    {
+      "name": "food-acceptance-abnormal-create-refresh-delete",
+      "startedAt": "2026-09-20T13:50:42.232Z",
+      "status": "PASS",
+      "finishedAt": "2026-09-20T13:50:43.085Z"
+    },
+    {
+      "name": "growth-historical-create-refresh-delete",
+      "startedAt": "2026-09-20T13:50:43.085Z",
+      "status": "PASS",
+      "finishedAt": "2026-09-20T13:50:45.097Z"
+    },
+    {
+      "name": "nutrition-route-and-date-switch",
+      "startedAt": "2026-09-20T13:50:45.097Z",
+      "status": "PASS",
+      "finishedAt": "2026-09-20T13:50:45.413Z"
+    },
+    {
+      "name": "supplement-product-and-record-create-refresh-delete",
+      "startedAt": "2026-09-20T13:50:45.413Z",
+      "status": "PASS",
+      "finishedAt": "2026-09-20T13:50:46.814Z"
+    },
+    {
+      "name": "medical-create-refresh-delete",
+      "startedAt": "2026-09-20T13:50:46.814Z",
+      "status": "PASS",
+      "finishedAt": "2026-09-20T13:50:51.908Z"
+    },
+    {
+      "name": "vaccine-completion-refresh-persistence",
+      "startedAt": "2026-09-20T13:50:51.908Z",
+      "status": "PASS",
+      "finishedAt": "2026-09-20T13:50:52.881Z"
+    },
+    {
+      "name": "feeding-delete-final",
+      "startedAt": "2026-09-20T13:50:52.881Z",
+      "status": "PASS",
+      "finishedAt": "2026-09-20T13:50:54.027Z"
+    },
+    {
+      "name": "family-switch-ui",
+      "startedAt": "2026-09-20T13:50:54.027Z",
+      "status": "PASS",
+      "finishedAt": "2026-09-20T13:50:55.527Z"
+    },
+    {
+      "name": "network-and-console-health",
+      "startedAt": "2026-09-20T13:50:55.527Z",
+      "status": "PASS",
+      "finishedAt": "2026-09-20T13:50:55.528Z"
+    }
+  ],
+  "console": [
+    {
+      "type": "error",
+      "text": "Failed to load resource: the server responded with a status of 503 ()",
+      "url": "http://127.0.0.1:61353/records/feeding",
+      "locationUrl": "http://127.0.0.1:61353/api/records/daily-summary?babyId=668aa65b-b950-432e-956d-d510468064c2",
+      "expectedCandidate": "offline-read-503",
+      "relatedUrl": "http://127.0.0.1:61353/api/records/daily-summary?babyId=668aa65b-b950-432e-956d-d510468064c2",
+      "expected": "offline-read-503"
+    },
+    {
+      "type": "error",
+      "text": "Failed to fetch daily summary: Error: 网络连接不可用，请检查您的网络连接。\n    at h (http://127.0.0.1:61353/_next/static/chunks/3058kx7w99c5u.js:1:2745)\n    at async http://127.0.0.1:61353/_next/static/chunks/3058kx7w99c5u.js:1:21616",
+      "url": "http://127.0.0.1:61353/records/feeding",
+      "locationUrl": "http://127.0.0.1:61353/_next/static/chunks/3058kx7w99c5u.js",
+      "expectedCandidate": "offline-read-503",
+      "relatedPath": "/api/records/daily-summary",
+      "expected": "offline-read-503"
+    },
+    {
+      "type": "error",
+      "text": "Failed to load resource: the server responded with a status of 503 ()",
+      "url": "http://127.0.0.1:61353/records/feeding",
+      "locationUrl": "http://127.0.0.1:61353/api/ai/daily-summary?babyId=668aa65b-b950-432e-956d-d510468064c2&force=1",
+      "expectedCandidate": "offline-read-503",
+      "relatedUrl": "http://127.0.0.1:61353/api/ai/daily-summary?babyId=668aa65b-b950-432e-956d-d510468064c2&force=1",
+      "expected": "offline-read-503"
+    },
+    {
+      "type": "error",
+      "text": "Failed to load resource: the server responded with a status of 503 ()",
+      "url": "http://127.0.0.1:61353/records/feeding",
+      "locationUrl": "http://127.0.0.1:61353/api/records/timeline?babyId=668aa65b-b950-432e-956d-d510468064c2",
+      "expectedCandidate": "offline-read-503",
+      "relatedUrl": "http://127.0.0.1:61353/api/records/timeline?babyId=668aa65b-b950-432e-956d-d510468064c2",
+      "expected": "offline-read-503"
+    },
+    {
+      "type": "error",
+      "text": "Failed to load resource: the server responded with a status of 503 ()",
+      "url": "http://127.0.0.1:61353/records/feeding",
+      "locationUrl": "http://127.0.0.1:61353/api/records/feeding?babyId=668aa65b-b950-432e-956d-d510468064c2",
+      "expectedCandidate": "offline-read-503",
+      "relatedUrl": "http://127.0.0.1:61353/api/records/feeding?babyId=668aa65b-b950-432e-956d-d510468064c2",
+      "expected": "offline-read-503"
+    },
+    {
+      "type": "error",
+      "text": "Failed to load resource: the server responded with a status of 503 ()",
+      "url": "http://127.0.0.1:61353/records/feeding",
+      "locationUrl": "http://127.0.0.1:61353/api/records/sleep?babyId=668aa65b-b950-432e-956d-d510468064c2",
+      "expectedCandidate": "offline-read-503",
+      "relatedUrl": "http://127.0.0.1:61353/api/records/sleep?babyId=668aa65b-b950-432e-956d-d510468064c2",
+      "expected": "offline-read-503"
+    },
+    {
+      "type": "error",
+      "text": "Failed to load resource: the server responded with a status of 503 ()",
+      "url": "http://127.0.0.1:61353/records/feeding",
+      "locationUrl": "http://127.0.0.1:61353/api/records/diaper?babyId=668aa65b-b950-432e-956d-d510468064c2",
+      "expectedCandidate": "offline-read-503",
+      "relatedUrl": "http://127.0.0.1:61353/api/records/diaper?babyId=668aa65b-b950-432e-956d-d510468064c2",
+      "expected": "offline-read-503"
+    },
+    {
+      "type": "error",
+      "text": "Failed to load resource: the server responded with a status of 503 ()",
+      "url": "http://127.0.0.1:61353/records/feeding",
+      "locationUrl": "http://127.0.0.1:61353/api/food/logs?babyId=668aa65b-b950-432e-956d-d510468064c2",
+      "expectedCandidate": "offline-read-503",
+      "relatedUrl": "http://127.0.0.1:61353/api/food/logs?babyId=668aa65b-b950-432e-956d-d510468064c2",
+      "expected": "offline-read-503"
+    },
+    {
+      "type": "error",
+      "text": "Failed to load resource: the server responded with a status of 503 ()",
+      "url": "http://127.0.0.1:61353/records/feeding",
+      "locationUrl": "http://127.0.0.1:61353/api/growth?babyId=668aa65b-b950-432e-956d-d510468064c2",
+      "expectedCandidate": "offline-read-503",
+      "relatedUrl": "http://127.0.0.1:61353/api/growth?babyId=668aa65b-b950-432e-956d-d510468064c2",
+      "expected": "offline-read-503"
+    },
+    {
+      "type": "error",
+      "text": "Failed to load resource: the server responded with a status of 503 ()",
+      "url": "http://127.0.0.1:61353/records/feeding",
+      "locationUrl": "http://127.0.0.1:61353/api/medical/reports?babyId=668aa65b-b950-432e-956d-d510468064c2",
+      "expectedCandidate": "offline-read-503",
+      "relatedUrl": "http://127.0.0.1:61353/api/medical/reports?babyId=668aa65b-b950-432e-956d-d510468064c2",
+      "expected": "offline-read-503"
+    },
+    {
+      "type": "error",
+      "text": "Failed to fetch AI daily summary: Error: 网络连接不可用，请检查您的网络连接。\n    at h (http://127.0.0.1:61353/_next/static/chunks/3058kx7w99c5u.js:1:2745)\n    at async http://127.0.0.1:61353/_next/static/chunks/3058kx7w99c5u.js:1:22634",
+      "url": "http://127.0.0.1:61353/records/feeding",
+      "locationUrl": "http://127.0.0.1:61353/_next/static/chunks/3058kx7w99c5u.js",
+      "expectedCandidate": "offline-read-503",
+      "relatedPath": "/api/ai/daily-summary",
+      "expected": "offline-read-503"
+    },
+    {
+      "type": "error",
+      "text": "Failed to fetch timeline: Error: 网络连接不可用，请检查您的网络连接。\n    at h (http://127.0.0.1:61353/_next/static/chunks/3058kx7w99c5u.js:1:2745)\n    at async http://127.0.0.1:61353/_next/static/chunks/3058kx7w99c5u.js:1:22059",
+      "url": "http://127.0.0.1:61353/records/feeding",
+      "locationUrl": "http://127.0.0.1:61353/_next/static/chunks/3058kx7w99c5u.js",
+      "expectedCandidate": "offline-read-503",
+      "relatedPath": "/api/records/timeline",
+      "expected": "offline-read-503"
+    },
+    {
+      "type": "error",
+      "text": "Failed to fetch feeding records: Error: 网络连接不可用，请检查您的网络连接。\n    at h (http://127.0.0.1:61353/_next/static/chunks/3058kx7w99c5u.js:1:2745)\n    at async http://127.0.0.1:61353/_next/static/chunks/3058kx7w99c5u.js:1:19851",
+      "url": "http://127.0.0.1:61353/records/feeding",
+      "locationUrl": "http://127.0.0.1:61353/_next/static/chunks/3058kx7w99c5u.js",
+      "expectedCandidate": "offline-read-503",
+      "relatedPath": "/api/records/feeding",
+      "expected": "offline-read-503"
+    },
+    {
+      "type": "error",
+      "text": "Failed to fetch sleep records: Error: 网络连接不可用，请检查您的网络连接。\n    at h (http://127.0.0.1:61353/_next/static/chunks/3058kx7w99c5u.js:1:2745)\n    at async http://127.0.0.1:61353/_next/static/chunks/3058kx7w99c5u.js:1:20289",
+      "url": "http://127.0.0.1:61353/records/feeding",
+      "locationUrl": "http://127.0.0.1:61353/_next/static/chunks/3058kx7w99c5u.js",
+      "expectedCandidate": "offline-read-503",
+      "relatedPath": "/api/records/sleep",
+      "expected": "offline-read-503"
+    },
+    {
+      "type": "error",
+      "text": "Failed to fetch diaper records: Error: 网络连接不可用，请检查您的网络连接。\n    at h (http://127.0.0.1:61353/_next/static/chunks/3058kx7w99c5u.js:1:2745)\n    at async http://127.0.0.1:61353/_next/static/chunks/3058kx7w99c5u.js:1:20724",
+      "url": "http://127.0.0.1:61353/records/feeding",
+      "locationUrl": "http://127.0.0.1:61353/_next/static/chunks/3058kx7w99c5u.js",
+      "expectedCandidate": "offline-read-503",
+      "relatedPath": "/api/records/diaper",
+      "expected": "offline-read-503"
+    },
+    {
+      "type": "error",
+      "text": "Failed to fetch food log records: Error: 网络连接不可用，请检查您的网络连接。\n    at h (http://127.0.0.1:61353/_next/static/chunks/3058kx7w99c5u.js:1:2745)\n    at async http://127.0.0.1:61353/_next/static/chunks/3058kx7w99c5u.js:1:21182",
+      "url": "http://127.0.0.1:61353/records/feeding",
+      "locationUrl": "http://127.0.0.1:61353/_next/static/chunks/3058kx7w99c5u.js",
+      "expectedCandidate": "offline-read-503",
+      "relatedPath": "/api/food/logs",
+      "expected": "offline-read-503"
+    },
+    {
+      "type": "error",
+      "text": "Failed to fetch growth measurements: Error: 网络连接不可用，请检查您的网络连接。\n    at h (http://127.0.0.1:61353/_next/static/chunks/3058kx7w99c5u.js:1:2745)\n    at async http://127.0.0.1:61353/_next/static/chunks/3058kx7w99c5u.js:1:28297",
+      "url": "http://127.0.0.1:61353/records/feeding",
+      "locationUrl": "http://127.0.0.1:61353/_next/static/chunks/3058kx7w99c5u.js",
+      "expectedCandidate": "offline-read-503",
+      "relatedPath": "/api/growth",
+      "expected": "offline-read-503"
+    },
+    {
+      "type": "error",
+      "text": "Failed to fetch medical reports: Error: 网络连接不可用，请检查您的网络连接。\n    at h (http://127.0.0.1:61353/_next/static/chunks/3058kx7w99c5u.js:1:2745)\n    at async http://127.0.0.1:61353/_next/static/chunks/3058kx7w99c5u.js:1:28776",
+      "url": "http://127.0.0.1:61353/records/feeding",
+      "locationUrl": "http://127.0.0.1:61353/_next/static/chunks/3058kx7w99c5u.js",
+      "expectedCandidate": "offline-read-503",
+      "relatedPath": "/api/medical/reports",
+      "expected": "offline-read-503"
+    },
+    {
+      "type": "error",
+      "text": "Failed to load resource: net::ERR_INTERNET_DISCONNECTED",
+      "url": "http://127.0.0.1:61353/records/feeding",
+      "locationUrl": "http://127.0.0.1:61353/api/records/feeding",
+      "expectedCandidate": "offline-submit",
+      "expected": "offline-submit"
+    },
+    {
+      "type": "error",
+      "text": "Failed to load resource: the server responded with a status of 503 ()",
+      "url": "http://127.0.0.1:61353/",
+      "locationUrl": "http://127.0.0.1:61353/api/app-config",
+      "expectedCandidate": "offline-read-503",
+      "relatedUrl": "http://127.0.0.1:61353/api/app-config",
+      "expected": "offline-read-503"
+    },
+    {
+      "type": "error",
+      "text": "Failed to load resource: the server responded with a status of 503 ()",
+      "url": "http://127.0.0.1:61353/",
+      "locationUrl": "http://127.0.0.1:61353/api/agent/voice/logs?unreadAsync=true",
+      "expectedCandidate": "offline-read-503",
+      "relatedUrl": "http://127.0.0.1:61353/api/agent/voice/logs?unreadAsync=true",
+      "expected": "offline-read-503"
+    },
+    {
+      "type": "error",
+      "text": "Failed to load resource: the server responded with a status of 503 ()",
+      "url": "http://127.0.0.1:61353/",
+      "locationUrl": "http://127.0.0.1:61353/api/auth/me",
+      "expectedCandidate": "offline-read-503",
+      "relatedUrl": "http://127.0.0.1:61353/api/auth/me",
+      "expected": "offline-read-503"
+    },
+    {
+      "type": "error",
+      "text": "Failed to load resource: the server responded with a status of 503 ()",
+      "url": "http://127.0.0.1:61353/",
+      "locationUrl": "http://127.0.0.1:61353/api/weather",
+      "expectedCandidate": "offline-read-503",
+      "relatedUrl": "http://127.0.0.1:61353/api/weather",
+      "expected": "offline-read-503"
+    },
+    {
+      "type": "error",
+      "text": "Failed to fetch weather: Error: 网络连接不可用，请检查您的网络连接。\n    at h (http://127.0.0.1:61353/_next/static/chunks/3058kx7w99c5u.js:1:2745)\n    at async http://127.0.0.1:61353/_next/static/chunks/3058kx7w99c5u.js:1:32192",
+      "url": "http://127.0.0.1:61353/",
+      "locationUrl": "http://127.0.0.1:61353/_next/static/chunks/3058kx7w99c5u.js",
+      "expectedCandidate": "offline-read-503",
+      "relatedPath": "/api/weather",
+      "expected": "offline-read-503"
+    },
+    {
+      "type": "error",
+      "text": "Failed to load resource: the server responded with a status of 503 ()",
+      "url": "http://127.0.0.1:61353/",
+      "locationUrl": "http://127.0.0.1:61353/?_rsc=5CB68i4pnAekjehf",
+      "expectedCandidate": "offline-read-503",
+      "relatedUrl": "http://127.0.0.1:61353/?_rsc=5CB68i4pnAekjehf",
+      "expected": "offline-read-503"
+    },
+    {
+      "type": "error",
+      "text": "Failed to load resource: the server responded with a status of 503 ()",
+      "url": "http://127.0.0.1:61353/",
+      "locationUrl": "http://127.0.0.1:61353/daily-summary?_rsc=5CB68i4pnAekjehf",
+      "expectedCandidate": "offline-read-503",
+      "relatedUrl": "http://127.0.0.1:61353/daily-summary?_rsc=5CB68i4pnAekjehf",
+      "expected": "offline-read-503"
+    },
+    {
+      "type": "error",
+      "text": "Failed to load resource: the server responded with a status of 503 ()",
+      "url": "http://127.0.0.1:61353/",
+      "locationUrl": "http://127.0.0.1:61353/growth?_rsc=5CB68i4pnAekjehf",
+      "expectedCandidate": "offline-read-503",
+      "relatedUrl": "http://127.0.0.1:61353/growth?_rsc=5CB68i4pnAekjehf",
+      "expected": "offline-read-503"
+    },
+    {
+      "type": "error",
+      "text": "Failed to load resource: the server responded with a status of 503 ()",
+      "url": "http://127.0.0.1:61353/",
+      "locationUrl": "http://127.0.0.1:61353/food?_rsc=5CB68i4pnAekjehf",
+      "expectedCandidate": "offline-read-503",
+      "relatedUrl": "http://127.0.0.1:61353/food?_rsc=5CB68i4pnAekjehf",
+      "expected": "offline-read-503"
+    },
+    {
+      "type": "error",
+      "text": "Failed to load resource: the server responded with a status of 503 ()",
+      "url": "http://127.0.0.1:61353/",
+      "locationUrl": "http://127.0.0.1:61353/nutrition?_rsc=5CB68i4pnAekjehf",
+      "expectedCandidate": "offline-read-503",
+      "relatedUrl": "http://127.0.0.1:61353/nutrition?_rsc=5CB68i4pnAekjehf",
+      "expected": "offline-read-503"
+    },
+    {
+      "type": "error",
+      "text": "Failed to load resource: the server responded with a status of 503 ()",
+      "url": "http://127.0.0.1:61353/",
+      "locationUrl": "http://127.0.0.1:61353/health/vaccines?_rsc=5CB68i4pnAekjehf",
+      "expectedCandidate": "offline-read-503",
+      "relatedUrl": "http://127.0.0.1:61353/health/vaccines?_rsc=5CB68i4pnAekjehf",
+      "expected": "offline-read-503"
+    },
+    {
+      "type": "error",
+      "text": "Failed to load resource: the server responded with a status of 503 ()",
+      "url": "http://127.0.0.1:61353/",
+      "locationUrl": "http://127.0.0.1:61353/development?_rsc=5CB68i4pnAekjehf",
+      "expectedCandidate": "offline-read-503",
+      "relatedUrl": "http://127.0.0.1:61353/development?_rsc=5CB68i4pnAekjehf",
+      "expected": "offline-read-503"
+    },
+    {
+      "type": "error",
+      "text": "Failed to load resource: the server responded with a status of 503 ()",
+      "url": "http://127.0.0.1:61353/",
+      "locationUrl": "http://127.0.0.1:61353/books?_rsc=5CB68i4pnAekjehf",
+      "expectedCandidate": "offline-read-503",
+      "relatedUrl": "http://127.0.0.1:61353/books?_rsc=5CB68i4pnAekjehf",
+      "expected": "offline-read-503"
+    },
+    {
+      "type": "error",
+      "text": "Failed to load resource: the server responded with a status of 503 ()",
+      "url": "http://127.0.0.1:61353/",
+      "locationUrl": "http://127.0.0.1:61353/weather?_rsc=5CB68i4pnAekjehf",
+      "expectedCandidate": "offline-read-503",
+      "relatedUrl": "http://127.0.0.1:61353/weather?_rsc=5CB68i4pnAekjehf",
+      "expected": "offline-read-503"
+    },
+    {
+      "type": "error",
+      "text": "Failed to load resource: the server responded with a status of 503 ()",
+      "url": "http://127.0.0.1:61353/",
+      "locationUrl": "http://127.0.0.1:61353/family?_rsc=5CB68i4pnAekjehf",
+      "expectedCandidate": "offline-read-503",
+      "relatedUrl": "http://127.0.0.1:61353/family?_rsc=5CB68i4pnAekjehf",
+      "expected": "offline-read-503"
+    }
+  ],
+  "network": [
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:61353/api/records/daily-summary?babyId=668aa65b-b950-432e-956d-d510468064c2",
+      "status": 503,
+      "expected": "offline-read-503"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:61353/api/ai/daily-summary?babyId=668aa65b-b950-432e-956d-d510468064c2&force=1",
+      "status": 503,
+      "expected": "offline-read-503"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:61353/api/records/timeline?babyId=668aa65b-b950-432e-956d-d510468064c2",
+      "status": 503,
+      "expected": "offline-read-503"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:61353/api/records/feeding?babyId=668aa65b-b950-432e-956d-d510468064c2",
+      "status": 503,
+      "expected": "offline-read-503"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:61353/api/records/sleep?babyId=668aa65b-b950-432e-956d-d510468064c2",
+      "status": 503,
+      "expected": "offline-read-503"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:61353/api/records/diaper?babyId=668aa65b-b950-432e-956d-d510468064c2",
+      "status": 503,
+      "expected": "offline-read-503"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:61353/api/food/logs?babyId=668aa65b-b950-432e-956d-d510468064c2",
+      "status": 503,
+      "expected": "offline-read-503"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:61353/api/growth?babyId=668aa65b-b950-432e-956d-d510468064c2",
+      "status": 503,
+      "expected": "offline-read-503"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:61353/api/medical/reports?babyId=668aa65b-b950-432e-956d-d510468064c2",
+      "status": 503,
+      "expected": "offline-read-503"
+    },
+    {
+      "method": "POST",
+      "url": "http://127.0.0.1:61353/api/records/feeding",
+      "error": "net::ERR_INTERNET_DISCONNECTED",
+      "expected": "offline-submit"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:61353/api/app-config",
+      "status": 503,
+      "expected": "offline-read-503"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:61353/api/agent/voice/logs?unreadAsync=true",
+      "status": 503,
+      "expected": "offline-read-503"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:61353/api/auth/me",
+      "status": 503,
+      "expected": "offline-read-503"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:61353/api/weather",
+      "status": 503,
+      "expected": "offline-read-503"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:61353/?_rsc=5CB68i4pnAekjehf",
+      "status": 503,
+      "expected": "offline-read-503"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:61353/daily-summary?_rsc=5CB68i4pnAekjehf",
+      "status": 503,
+      "expected": "offline-read-503"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:61353/growth?_rsc=5CB68i4pnAekjehf",
+      "status": 503,
+      "expected": "offline-read-503"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:61353/food?_rsc=5CB68i4pnAekjehf",
+      "status": 503,
+      "expected": "offline-read-503"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:61353/nutrition?_rsc=5CB68i4pnAekjehf",
+      "status": 503,
+      "expected": "offline-read-503"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:61353/health/vaccines?_rsc=5CB68i4pnAekjehf",
+      "status": 503,
+      "expected": "offline-read-503"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:61353/development?_rsc=5CB68i4pnAekjehf",
+      "status": 503,
+      "expected": "offline-read-503"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:61353/books?_rsc=5CB68i4pnAekjehf",
+      "status": 503,
+      "expected": "offline-read-503"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:61353/weather?_rsc=5CB68i4pnAekjehf",
+      "status": 503,
+      "expected": "offline-read-503"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:61353/family?_rsc=5CB68i4pnAekjehf",
+      "status": 503,
+      "expected": "offline-read-503"
+    }
+  ],
+  "avatarDiagnostic": {
+    "status": "PASS",
+    "storage": {
+      "s3Covered": true,
+      "driver": "owned-minio"
+    },
+    "uploadStatus": 200,
+    "attachmentId": "f4b80e3e-2310-437c-9d62-8197d58b4b5b",
+    "avatarUrl": "/api/attachments/f4b80e3e-2310-437c-9d62-8197d58b4b5b",
+    "firstDisplay": {
+      "status": 200,
+      "contentType": "image/jpeg",
+      "cacheControl": "private, no-store",
+      "nosniff": "nosniff",
+      "dimensions": {
+        "complete": true,
+        "naturalWidth": 400,
+        "naturalHeight": 400,
+        "src": "http://127.0.0.1:61353/api/attachments/f4b80e3e-2310-437c-9d62-8197d58b4b5b"
+      }
+    },
+    "refreshedDisplay": {
+      "status": 200,
+      "dimensions": {
+        "complete": true,
+        "naturalWidth": 400,
+        "naturalHeight": 400,
+        "src": "http://127.0.0.1:61353/api/attachments/f4b80e3e-2310-437c-9d62-8197d58b4b5b"
+      }
+    },
+    "anonymousStatus": 401
+  },
+  "foodDiagnostic": {
+    "status": 201,
+    "postedBabyId": true,
+    "postedAcceptance": 4,
+    "postedAbnormalNotes": "e2e_food_reaction_36_37987"
+  },
+  "growthDiagnostic": {
+    "imageScenario": {
+      "status": "PASS",
+      "storage": {
+        "s3Covered": true,
+        "driver": "owned-minio"
+      },
+      "externalAi": {
+        "mode": "owned-loopback-virtual",
+        "realProviderCovered": false
+      },
+      "ocrStatus": 200,
+      "attachmentId": "aab8ea1b-8bcd-41fb-88ed-78765f9bd8b4",
+      "imageUrl": "/api/attachments/aab8ea1b-8bcd-41fb-88ed-78765f9bd8b4",
+      "ocrRecognitionQualityCovered": false,
+      "previewDimensions": {
+        "complete": true,
+        "naturalWidth": 1,
+        "naturalHeight": 1
+      },
+      "firstEditDisplay": {
+        "status": 200,
+        "contentType": "image/png",
+        "cacheControl": "private, no-store",
+        "nosniff": "nosniff",
+        "dimensions": {
+          "complete": true,
+          "naturalWidth": 1,
+          "naturalHeight": 1,
+          "src": "/api/attachments/aab8ea1b-8bcd-41fb-88ed-78765f9bd8b4"
+        }
+      }
+    },
+    "createStatus": 201,
+    "createdImageUrl": "/api/attachments/aab8ea1b-8bcd-41fb-88ed-78765f9bd8b4",
+    "updateStatus": 200,
+    "updatedImageUrl": "/api/attachments/aab8ea1b-8bcd-41fb-88ed-78765f9bd8b4"
+  },
+  "medicalDiagnostic": {
+    "attempts": [
+      {
+        "expectedTitle": "e2e_medical_1789912231436_37987_1",
+        "afterTitleBlur": "e2e_medical_1789912231436_37987_1",
+        "afterOtherFields": "e2e_medical_1789912231436_37987_1",
+        "postedTitle": "e2e_medical_1789912231436_37987_1",
+        "postedBabyId": true
+      },
+      {
+        "expectedTitle": "e2e_medical_1789912231436_37987_2",
+        "afterTitleBlur": "e2e_medical_1789912231436_37987_2",
+        "afterOtherFields": "e2e_medical_1789912231436_37987_2",
+        "postedTitle": "e2e_medical_1789912231436_37987_2",
+        "postedBabyId": true
+      },
+      {
+        "expectedTitle": "e2e_medical_1789912231436_37987_3",
+        "afterTitleBlur": "e2e_medical_1789912231436_37987_3",
+        "afterOtherFields": "e2e_medical_1789912231436_37987_3",
+        "postedTitle": "e2e_medical_1789912231436_37987_3",
+        "postedBabyId": true
+      }
+    ],
+    "imageScenario": {
+      "status": "PASS",
+      "storage": {
+        "s3Covered": true,
+        "driver": "owned-minio"
+      },
+      "externalAi": {
+        "mode": "owned-loopback-virtual",
+        "realProviderCovered": false
+      },
+      "ocrStatus": 200,
+      "ocrAttachmentId": "ad0fb81f-20ef-4b0f-8f9e-12a4fb33a42f",
+      "ocrImageUrl": "/api/attachments/ad0fb81f-20ef-4b0f-8f9e-12a4fb33a42f",
+      "ocrRecognitionQualityCovered": false,
+      "previewDimensions": {
+        "complete": true,
+        "naturalWidth": 1,
+        "naturalHeight": 1
+      },
+      "fallbackMedicalUploadObserved": false,
+      "firstDownload": {
+        "status": 200,
+        "contentType": "image/png",
+        "cacheControl": "private, no-store",
+        "nosniff": "nosniff",
+        "dimensions": {
+          "complete": true,
+          "naturalWidth": 1,
+          "naturalHeight": 1,
+          "src": "/api/attachments/ad0fb81f-20ef-4b0f-8f9e-12a4fb33a42f"
+        }
+      },
+      "refreshedDownload": {
+        "status": 200,
+        "dimensions": {
+          "complete": true,
+          "naturalWidth": 1,
+          "naturalHeight": 1,
+          "src": "/api/attachments/ad0fb81f-20ef-4b0f-8f9e-12a4fb33a42f"
+        }
+      },
+      "anonymousStatus": 401
+    }
+  },
+  "sleepDiagnostic": {
+    "postStatus": 201,
+    "postPayload": {
+      "startTime": "2026-09-20T12:15:00.000Z",
+      "endTime": "2026-09-20T13:05:00.000Z",
+      "type": "night",
+      "nightWakingCount": 0,
+      "notes": "自主入睡 🌟 · 开心笑 😊 | e2e_sleep_1789912231436_37987",
+      "date": "2026-09-20",
+      "babyId": "668aa65b-b950-432e-956d-d510468064c2",
+      "clientId": "0fa8b238-9199-4e87-8be8-da3e373e4a40"
+    },
+    "timelineUrl": "http://127.0.0.1:61353/api/records/timeline?babyId=668aa65b-b950-432e-956d-d510468064c2",
+    "timelineStatus": 200,
+    "timelineSleepRows": []
+  },
+  "offlineDiagnostic": {
+    "bannerText": "当前离线 · 新记录已保存在本机，联网后自动同步"
+  },
+  "finishedAt": "2026-09-20T13:50:55.528Z",
+  "result": "PASS"
+}
