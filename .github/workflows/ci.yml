@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, codex/migration-readiness-20260922]
   pull_request:
-    branches: [main]
+    branches: [main, codex/web-parity-20260919]
 
 permissions:
   contents: read
@@ -17,44 +17,36 @@ jobs:
   ci:
     name: Build, Lint & Automated Tests
     runs-on: ubuntu-latest
-
+    timeout-minutes: 20
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
+        with:
+          persist-credentials: false
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: "npm"
-
+          cache: npm
       - name: Install dependencies
         run: npm ci
-
       - name: Generate Prisma Client
         run: npx prisma generate
-
       - name: TypeScript typecheck
         run: npm run typecheck
-
       - name: Lint (Oxlint)
         run: npm run lint
-
       - name: Validate Prisma Schema
         run: npx prisma validate
-
       - name: Check Database Migrations Baseline
         run: npx prisma migrate diff --from-migrations prisma/migrations --to-schema prisma/schema.prisma --exit-code
-
       - name: Verify baseline migration applies to a fresh database
         run: |
           rm -f /tmp/ci-fresh.db*
           DATABASE_URL="file:/tmp/ci-fresh.db" npx prisma migrate deploy
           rm -f /tmp/ci-fresh.db*
-
       - name: Dependency audit (critical)
         run: npm audit --audit-level=critical
-
       - name: Verify version consistency (package.json = lib/version.ts = sw.js)
         run: |
           node -e "
@@ -66,12 +58,9 @@ jobs:
             if(pkg!==ui[1]||pkg!==sw[1]){console.error(\`版本漂移: pkg=\${pkg} ui=\${ui[1]} sw=\${sw[1]}\`);process.exit(1);}
             console.log('version consistent:', pkg);
           "
-
-      - name: Run unit tests
+      - name: Run unit and AI tests
         run: npm test
-
       - name: Run Next.js build
         run: npm run build
-
       - name: Verify Docker build
         run: docker build -t baby-panel:test .
