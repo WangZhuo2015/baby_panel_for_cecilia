@@ -6,7 +6,7 @@ import { BridgeError, type BridgeFetch } from "../../lib/growdesk/bridge-protoco
 const id = "a0000000-0000-4000-8000-000000000001";
 function stub(value: unknown, status = 200) {
   const calls: Array<{ pathname: string; token?: string }> = [];
-  const fetchApi: BridgeFetch = async <T>(pathname: string, options) => {
+  const fetchApi: BridgeFetch = async <T>(pathname: string, options?: Parameters<BridgeFetch>[1]) => {
     calls.push({ pathname, token: options?.accessToken });
     return status === 200
       ? { ok: true, status, data: value as T }
