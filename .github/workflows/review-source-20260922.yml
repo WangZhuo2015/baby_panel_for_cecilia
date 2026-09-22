@@ -8,29 +8,39 @@ permissions:
 jobs:
   sources:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
         with:
           path: web
+          fetch-depth: 0
           persist-credentials: false
       - uses: actions/checkout@v4
         with:
           repository: WangZhuo2015/growdesk-server
           ref: cc35c0ac581b00fa057fdbac917d8e6fa6a15c73
           path: server
+          fetch-depth: 0
           persist-credentials: false
-      - name: Archive tracked source only
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.x
+      - name: Install pinned tools for isolated review
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund --prefix web
+          npm ci --ignore-scripts --no-audit --no-fund --prefix server
+          cd server && npm run backend:db:generate
+      - name: Archive tracked history and framework tools only
         run: |
           mkdir artifacts
-          git -C web archive --format=tar HEAD > artifacts/web-source.tar
-          git -C server archive --format=tar HEAD > artifacts/server-source.tar
-          git -C web rev-parse HEAD > artifacts/web-sha.txt
-          git -C server rev-parse HEAD > artifacts/server-sha.txt
+          git -C web bundle create ../artifacts/web.bundle --all
+          git -C server bundle create ../artifacts/server.bundle --all
+          tar -czf artifacts/web-dependencies.tar.gz -C web node_modules
+          tar -czf artifacts/server-dependencies.tar.gz -C server node_modules packages/database/src/generated
           sha256sum artifacts/* > artifacts/SHA256SUMS
       - uses: actions/upload-artifact@v4
         with:
-          name: pinned-migration-review-sources
+          name: pinned-review-tools
           path: artifacts/
           retention-days: 1
           if-no-files-found: error
