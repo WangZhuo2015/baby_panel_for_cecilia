@@ -63,4 +63,4 @@ jobs:
       - name: Run Next.js build
         run: npm run build
       - name: Verify Docker build
-        run: docker build -t baby-panel:test .
+        run: docker build --build-arg BUILD_REVISION="$(git rev-parse HEAD)" -t baby-panel:test .
