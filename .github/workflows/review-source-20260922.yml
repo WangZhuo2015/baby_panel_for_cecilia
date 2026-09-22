@@ -1,0 +1,36 @@
+name: Pinned migration review sources
+on:
+  push:
+    branches: [codex/migration-readiness-20260922]
+    paths: [.github/workflows/review-source-20260922.yml]
+permissions:
+  contents: read
+jobs:
+  sources:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: web
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: WangZhuo2015/growdesk-server
+          ref: cc35c0ac581b00fa057fdbac917d8e6fa6a15c73
+          path: server
+          persist-credentials: false
+      - name: Archive tracked source only
+        run: |
+          mkdir artifacts
+          git -C web archive --format=tar HEAD > artifacts/web-source.tar
+          git -C server archive --format=tar HEAD > artifacts/server-source.tar
+          git -C web rev-parse HEAD > artifacts/web-sha.txt
+          git -C server rev-parse HEAD > artifacts/server-sha.txt
+          sha256sum artifacts/* > artifacts/SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pinned-migration-review-sources
+          path: artifacts/
+          retention-days: 1
+          if-no-files-found: error
