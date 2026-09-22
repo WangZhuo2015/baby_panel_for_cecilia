@@ -1,0 +1,65 @@
+name: Verify focused migration fixes
+on:
+  push:
+    branches: [codex/migration-readiness-20260922]
+    paths: [.github/workflows/verify-review-fixes-20260922.yml]
+permissions:
+  contents: write
+concurrency:
+  group: verify-review-fixes-20260922
+  cancel-in-progress: false
+jobs:
+  verify:
+    if: github.repository == 'WangZhuo2015/baby_panel_for_cecilia' && github.ref == 'refs/heads/codex/migration-readiness-20260922'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: codex/migration-readiness-20260922
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.x
+          cache: npm
+      - name: Apply only exact-source retry clock fixes
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import subprocess
+          assert subprocess.check_output(['git','branch','--show-current'],text=True).strip() == 'codex/migration-readiness-20260922'
+          p=Path('lib/growdesk/ai-jobs.ts')
+          assert subprocess.check_output(['git','hash-object',str(p)],text=True).strip() == 'b109200941d6814be3ea519859c3a3512c1e1cbb'
+          text=p.read_text()
+          for old,new in [
+              ('new Date(job.createdAt).getTime()', 'new Date(job.startedAt || job.createdAt).getTime()'),
+              ('new Date(j.createdAt).getTime()', 'new Date(j.startedAt || j.createdAt).getTime()'),
+              ('    job.attempt += 1;\n    job.status = "running";', '    job.attempt += 1;\n    job.startedAt = new Date().toISOString();\n    job.status = "running";'),
+          ]:
+              assert text.count(old)==1, old
+              text=text.replace(old,new)
+          p.write_text(text)
+          p=Path('tests/unit/growdesk-ai-jobs.test.ts')
+          assert subprocess.check_output(['git','hash-object',str(p)],text=True).strip() == 'd08396959405af700ec22cacb8ed92700a1ac064'
+          text=p.read_text()
+          assert text.count('    job.createdAt = fourMinutesAgo;')==1
+          p.write_text(text.replace('    job.createdAt = fourMinutesAgo;', '    job.createdAt = fourMinutesAgo;\n    job.startedAt = fourMinutesAgo;'))
+          PY
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npm run typecheck
+      - run: npm run lint
+      - name: Focused regression suite (not full legacy suite)
+        run: npx tsx --env-file=.env.test --test tests/unit/growdesk-projection-types.test.ts tests/unit/growdesk-legacy-upload.test.ts tests/unit/growdesk-job-retry-clock.test.ts
+      - run: npm run build
+      - run: docker build -t baby-panel:migration-review .
+      - name: Publish verified retry fix and remove temporary workflow
+        run: |
+          git rm .github/workflows/verify-review-fixes-20260922.yml
+          git add lib/growdesk/ai-jobs.ts tests/unit/growdesk-ai-jobs.test.ts
+          git diff --cached --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'fix(ai): reset retry attempt clock without rewriting creation history'
+          git push origin HEAD:refs/heads/codex/migration-readiness-20260922
+          git rev-parse HEAD
