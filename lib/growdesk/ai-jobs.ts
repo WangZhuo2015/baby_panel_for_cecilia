@@ -128,7 +128,7 @@ class BffAiJobStore {
 
     // Timeout watchdog: auto-mark failed if running > 3 minutes
     if (job.status === "running") {
-      const elapsed = Date.now() - new Date(job.createdAt).getTime();
+      const elapsed = Date.now() - new Date(job.startedAt || job.createdAt).getTime();
       if (elapsed > TIMEOUT_MS) {
         job.status = "failed";
         job.errorMessage = "AI 识别任务响应超时，请重新拍摄更清晰的照片并上传";
@@ -155,7 +155,7 @@ class BffAiJobStore {
 
     // Watchdog check for list
     for (const j of userJobs) {
-      if (j.status === "running" && now - new Date(j.createdAt).getTime() > TIMEOUT_MS) {
+      if (j.status === "running" && now - new Date(j.startedAt || j.createdAt).getTime() > TIMEOUT_MS) {
         j.status = "failed";
         j.errorMessage = "AI 识别任务响应超时，请重新拍摄更清晰的照片并上传";
         j.finishedAt = new Date().toISOString();
@@ -238,6 +238,7 @@ class BffAiJobStore {
     }
 
     job.attempt += 1;
+    job.startedAt = new Date().toISOString();
     job.status = "running";
     job.errorMessage = null;
     job.finishedAt = null;
