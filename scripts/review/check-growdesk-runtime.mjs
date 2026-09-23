@@ -84,7 +84,9 @@ try {
   assert.equal(selected.status, 200); assert.equal((await selected.json()).id, baby.id);
   const feeding = await call(`/api/records/feeding?babyId=${baby.id}&date=2026-09-13`, { headers: { cookie } });
   assert.equal(feeding.status, 200); assert.deepEqual(await feeding.json(), []);
-  const detail = await call(`/api/records/feeding?babyId=${baby.id}&id=${feedingDetail.id}`, { headers: { cookie } });
+  const detail = await call(`/api/records/feeding?babyId=${baby.id}&id=${feedingDetail.id}`, {
+    headers: { cookie, "x-growdesk-representation": "extended" },
+  });
   assert.equal(detail.status, 200);
   const editRecord = await detail.json();
   assert.equal(editRecord.timestamp, feedingDetail.occurredAt);
