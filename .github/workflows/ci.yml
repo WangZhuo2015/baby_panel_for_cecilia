@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, codex/web-parity-20260919]
   pull_request:
-    branches: [main]
+    branches: [main, codex/web-parity-20260919]
 
 permissions:
   contents: read
