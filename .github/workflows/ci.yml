@@ -73,5 +73,8 @@ jobs:
       - name: Run Next.js build
         run: npm run build
 
+      - name: Verify GrowDesk Go adapter runtime wiring
+        run: node scripts/review/check-growdesk-runtime.mjs
+
       - name: Verify Docker build
         run: docker build -t baby-panel:test .
