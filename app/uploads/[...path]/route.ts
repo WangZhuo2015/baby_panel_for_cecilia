@@ -18,22 +18,24 @@ const MIME_TYPES: Record<string, string> = {
 
 import { GROWDESK_CONFIG } from "@/lib/config";
 import { resolveBffSession } from "@/lib/growdesk/session";
+import { growdeskFetch } from "@/lib/growdesk/client";
+import { createLegacyAttachmentEndpoint } from "@/lib/growdesk/legacy-attachment-bridge";
+
+const resolveLegacyAttachment = createLegacyAttachmentEndpoint({
+  fetchApi: growdeskFetch, resolveSession: resolveBffSession,
+});
 
 export async function GET(
   request: NextRequest,
   context: { params: Promise<{ path: string[] }> }
 ) {
   try {
-    // 儿童头像/医学影像属最高敏数据：拒绝匿名访问（能力 URL 模式不可吊销，必须加会话门槛）
-    let hasSession = false;
     if (GROWDESK_CONFIG.enabled) {
-      const bffSession = await resolveBffSession(request);
-      if (bffSession) hasSession = true;
+      return resolveLegacyAttachment(request, (await context.params).path);
     }
-    if (!hasSession) {
-      const session = await getAuthSession(request);
-      if (session) hasSession = true;
-    }
+    // Legacy deployment only. GrowDesk never reaches filesystem/old JWT reads.
+    const session = await getAuthSession(request);
+    const hasSession = Boolean(session);
 
     if (!hasSession) {
       return new NextResponse("Unauthorized", {
