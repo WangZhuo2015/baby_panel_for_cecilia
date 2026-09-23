@@ -780,7 +780,7 @@ export async function DELETE(request: Request) {
 
         if (existing.isDefault) {
           const nextActive = await prisma.formulaProduct.findFirst({
-            where: { familyId, isActive: true },
+            where: { familyId, isActive: true, id: { not: id } },
             orderBy: { createdAt: "desc" },
           });
           if (nextActive) {
