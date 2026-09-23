@@ -11,7 +11,6 @@ from http.cookies import SimpleCookie
 import hashlib
 import importlib.util
 import json
-import os
 from pathlib import Path
 import secrets
 import signal
@@ -38,6 +37,16 @@ def git(root, *args):
 def identifier(value):
     assert isinstance(value, str) and str(uuid.UUID(value)) == value, 'Expected canonical generated UUID'
     return value
+
+
+def stop_process(proc):
+    if proc.poll() is None:
+        proc.terminate()
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait(timeout=5)
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -146,7 +155,7 @@ class Scenario:
         after = self.feed_state(fid)
         for field in ('feeding', 'timeline', 'changes', 'receipts'):
             assert after[field] == before[field] + 1, field + ' must commit exactly once'
-        assert int(after['cursor']) == int(before['cursor']) + 1
+        assert int(after['cursor']) == int(before['cursor'] or '0') + 1
         replay = self.bff('POST', '/api/records/feeding', 201, feeding, key='test_web_go_create')
         assert replay == created and self.feed_state(fid) == after
         self.bff('POST', '/api/records/feeding', 409, {**feeding, 'amountMl': 121}, key='test_web_go_create')
@@ -197,7 +206,7 @@ class Scenario:
         raw = by_id[records['supplement']]['rawRecord']
         assert raw['productId'] == pid and raw['dose'] == 1.5 and raw['productName'] == 'test_historical_vitamin'
         assert all('version' not in row for row in self.bff('GET', timeline_path, 200))
-        assert self.owned.sql(f"SELECT COUNT(*) FROM food_plans WHERE baby_id='{bid}';") == '0'
+        assert self.owned.sql(f"SELECT COUNT(*) FROM baby_food_plans WHERE baby_id='{bid}';") == '0'
         self.passed('five-kind Go timeline, overnight sleep and archived canonical supplement without food-plan')
 
         caregiver_name = 'test_web_go_caregiver_' + self.owned.owner
@@ -265,16 +274,19 @@ def main():
             log = tempfile.TemporaryFile(mode='w+t'); owned.files.append(log)
             proc = subprocess.Popen(['node', str(ROOT / '.next/standalone/server.js')], cwd=ROOT / '.next/standalone', env=env, stdout=log, stderr=log)
             owned.processes.append(proc)
-            for _ in range(100):
-                if proc.poll() is not None: raise RuntimeError('Next standalone exited before readiness')
-                try:
-                    status, value, _ = request_json(web, 'GET', '/api/auth/me')
-                    if status == 200 and value.get('user') is None: break
-                except OSError: pass
-                time.sleep(.1)
-            else: raise RuntimeError('Next standalone readiness timed out')
-            Scenario(owned, native, web, report).run()
-            report['passed'] = True
+            try:
+                for _ in range(100):
+                    if proc.poll() is not None: raise RuntimeError('Next standalone exited before readiness')
+                    try:
+                        status, value, _ = request_json(web, 'GET', '/api/auth/me')
+                        if status == 200 and value.get('user') is None: break
+                    except OSError: pass
+                    time.sleep(.1)
+                else: raise RuntimeError('Next standalone readiness timed out')
+                Scenario(owned, native, web, report).run()
+                report['passed'] = True
+            finally:
+                stop_process(proc)
     except BaseException as error:
         report['errorType'] = type(error).__name__
         raise
