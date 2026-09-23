@@ -25,6 +25,7 @@ export type BridgeFetch = <T>(path: string, options?: {
   accessToken?: string;
   body?: unknown;
   idempotencyKey?: string;
+  signal?: AbortSignal;
 }) => Promise<BridgeResult<T>>;
 
 export function requireData<T>(result: BridgeResult<T>): T {
@@ -125,7 +126,7 @@ export function babyPayload(body: Record<string, unknown>, patch = false): Recor
   }
   if (!patch || body.birthDate !== undefined) result.birthDate = calendarDate(body.birthDate);
   if (!patch || body.gender !== undefined) {
-    if (!["male", "female", "unknown"].includes(String(body.gender))) throw new BridgeError(400, "INVALID_GENDER", "无效的宝宝性别");
+    if (!['male', 'female', 'unknown'].includes(String(body.gender))) throw new BridgeError(400, "INVALID_GENDER", "无效的宝宝性别");
     result.gender = body.gender === "male" ? "boy" : body.gender === "female" ? "girl" : "other";
   }
   if (body.gestationalAge !== undefined) {
