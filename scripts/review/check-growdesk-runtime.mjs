@@ -1,6 +1,7 @@
 /** Next.js HTTP wiring smoke against a synthetic upstream; NOT PostgreSQL/browser E2E. */
 import assert from 'node:assert/strict';
 import http from 'node:http';
+import { createECDH } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -12,6 +13,12 @@ const feedingDetail = { id: 'test_feed_runtime', babyId: baby.id, familyId: fami
 let outage = false;
 let secretHash;
 let notificationFailure = false;
+let pushFailure = false;
+let savedSubscription;
+const testPushKey = createECDH('prime256v1'); testPushKey.generateKeys();
+const testSubscription = { endpoint: 'https://push.example.invalid/test_token', expirationTime: null, keys: {
+  p256dh: testPushKey.getPublicKey().toString('base64url'), auth: Buffer.alloc(16, 1).toString('base64url'),
+} };
 const upstream = http.createServer(async (req, res) => {
   let raw = ''; for await (const part of req) raw += part;
   const body = raw ? JSON.parse(raw) : {};
@@ -57,7 +64,13 @@ const upstream = http.createServer(async (req, res) => {
   if (url.pathname === '/api/v1/development/milestones') {
     res.end(JSON.stringify({ data: [], dataRelease: { id: 'test_release', title: 'test_reference', asOf: '2026-01-01', sources: [{ organization: 'test_organization' }] } })); return;
   }
-  if (url.pathname.startsWith('/api/v1/devices/')) { send({ success: true }); return; }
+  if (url.pathname.startsWith('/api/v1/devices/')) {
+    if (pushFailure) { res.writeHead(503); res.end(JSON.stringify({ error: { code: 'TEST_PUSH_OUTAGE', message: 'test push unavailable' } })); return; }
+    if (req.method === 'PUT') savedSubscription = JSON.parse(body.token);
+    else if (req.method === 'DELETE') savedSubscription = null;
+    else { res.writeHead(405); res.end('{}'); return; }
+    send({ success: true }); return;
+  }
   res.writeHead(404); res.end('{}');
 });
 let child;
@@ -72,6 +85,7 @@ try {
     GROWDESK_ENABLED: 'true', GROWDESK_BACKEND: 'go', GROWDESK_WEB_ORIGIN: origin,
     GROWDESK_API_URL: '',
     GROWDESK_GO_API_URL: `http://127.0.0.1:${upstream.address().port}`,
+    VAPID_PUBLIC_KEY: testPushKey.getPublicKey().toString('base64url'),
     DATABASE_URL: 'file:./dev_test.db', JWT_SECRET: 'test_runtime_only_012345678901234567890123456789',
   }, stdio: ['ignore', 'pipe', 'pipe'] });
   child.stdout.on('data', chunk => { logs += chunk; }); child.stderr.on('data', chunk => { logs += chunk; });
@@ -122,13 +136,27 @@ try {
   assert.equal(failedNotifications.status, 503);
   assert.equal((await failedNotifications.json()).code, 'TEST_NOTIFICATION_OUTAGE');
   notificationFailure = false;
+  const publicKeyResponse = await call('/api/push/vapid-key', { headers: { cookie } });
+  assert.equal(publicKeyResponse.status, 200);
+  assert.equal((await publicKeyResponse.json()).publicKey, testPushKey.getPublicKey().toString('base64url'));
   const pushSub = await call('/api/push/subscribe', {
     method: 'POST',
     headers: { cookie, origin, 'content-type': 'application/json' },
-    body: JSON.stringify({ endpoint: 'https://push.example.com/test_token' }),
+    body: JSON.stringify(testSubscription),
   });
   assert.equal(pushSub.status, 200);
   assert.equal((await pushSub.json()).success, true);
+  assert.deepEqual(savedSubscription, testSubscription);
+  pushFailure = true;
+  const unsubscribe = () => call('/api/push/subscribe', {
+    method: 'DELETE', headers: { cookie, origin, 'content-type': 'application/json' },
+    body: JSON.stringify({ endpoint: testSubscription.endpoint }),
+  });
+  assert.equal((await unsubscribe()).status, 503);
+  assert.deepEqual(savedSubscription, testSubscription);
+  pushFailure = false;
+  assert.equal((await unsubscribe()).status, 200);
+  assert.equal(savedSubscription, null);
   // Registration is bridged now; missing Origin must reach CSRF rejection, not the migration fence.
   assert.equal((await call('/api/auth/register', { method: 'POST' })).status, 403);
   assert.equal((await call('/api/baby', { method: 'PUT', headers: { cookie, origin: 'https://test_attacker.invalid' }, body: '{}' })).status, 403);
