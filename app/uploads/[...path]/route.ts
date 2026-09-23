@@ -21,9 +21,6 @@ import { resolveBffSession } from "@/lib/growdesk/session";
 import { growdeskFetch } from "@/lib/growdesk/client";
 import { createLegacyAttachmentEndpoint } from "@/lib/growdesk/legacy-attachment-bridge";
 
-const resolveLegacyAttachment = createLegacyAttachmentEndpoint({
-  fetchApi: growdeskFetch, resolveSession: resolveBffSession,
-});
 
 export async function GET(
   request: NextRequest,
@@ -31,7 +28,9 @@ export async function GET(
 ) {
   try {
     if (GROWDESK_CONFIG.enabled) {
-      return resolveLegacyAttachment(request, (await context.params).path);
+      return createLegacyAttachmentEndpoint({
+        fetchApi: growdeskFetch, resolveSession: resolveBffSession,
+      })(request, (await context.params).path);
     }
     // Legacy deployment only. GrowDesk never reaches filesystem/old JWT reads.
     const session = await getAuthSession(request);
