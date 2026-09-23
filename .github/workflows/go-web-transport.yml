@@ -57,3 +57,61 @@ jobs:
       - run: npm run build
       - name: Standalone Go-selection smoke (synthetic upstream, not a real Go acceptance test)
         run: node scripts/review/check-growdesk-runtime.mjs
+  native-cross-repo:
+    name: Actual Next BFF and Go on owned PostgreSQL and Redis
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      DATABASE_URL: file:./dev_test.db
+      JWT_SECRET: test_go_web_build_secret_no_production_credentials
+      NEXT_TELEMETRY_DISABLED: '1'
+      BUILD_REVISION: ${{ github.event.pull_request.head.sha || github.sha }}
+      GOFLAGS: -mod=readonly
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          path: web
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: WangZhuo2015/growdesk-server
+          ref: 3e0578ba5e7ba6dc4b00e04d931385bbc5fafddb
+          path: backend
+          persist-credentials: false
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.27.1'
+          cache-dependency-path: backend/go.sum
+      - name: Build the fixed native backend (not TypeScript)
+        working-directory: backend
+        run: |
+          set -eu
+          go mod download
+          go mod verify
+          git diff --exit-code -- go.mod go.sum
+          mkdir -p dist-go
+          CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X main.revision=$(git rev-parse HEAD)" -o dist-go/growdesk-api ./cmd/growdesk-api
+          dist-go/growdesk-api --version
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Build the actual Web standalone server
+        working-directory: web
+        run: |
+          set -eu
+          npm ci --ignore-scripts --no-audit --no-fund
+          npx prisma generate
+          npm run build
+          python3 -m py_compile scripts/review/check-go-native-web.py
+      - name: Cross-repository HTTP and persistent-state checks
+        working-directory: web
+        run: python3 scripts/review/check-go-native-web.py --backend-root ../backend --report test-results/go-native-web.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: go-native-web-${{ github.event.pull_request.head.sha || github.sha }}
+          path: web/test-results/go-native-web.json
+          if-no-files-found: error
