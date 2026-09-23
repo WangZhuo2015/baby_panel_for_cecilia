@@ -195,8 +195,10 @@ export const PUSH_CONFIG = {
 
 export type GrowDeskBackendImplementation = "typescript" | "go";
 
+type GrowDeskEnv = Readonly<Record<string, string | undefined>>;
+
 export function resolveGrowDeskBackendImplementation(
-  env: NodeJS.ProcessEnv = process.env,
+  env: GrowDeskEnv = process.env,
 ): GrowDeskBackendImplementation {
   const raw = (env.GROWDESK_BACKEND || "typescript").trim().toLowerCase();
   if (raw === "typescript" || raw === "node" || raw === "fastify") return "typescript";
@@ -206,7 +208,7 @@ export function resolveGrowDeskBackendImplementation(
   );
 }
 
-export function resolveGrowDeskApiUrl(env: NodeJS.ProcessEnv = process.env): string {
+export function resolveGrowDeskApiUrl(env: GrowDeskEnv = process.env): string {
   const explicit = (env.GROWDESK_API_URL || "").trim();
   if (explicit) return explicit.replace(/\/+$/, "");
   if (resolveGrowDeskBackendImplementation(env) === "go") {
