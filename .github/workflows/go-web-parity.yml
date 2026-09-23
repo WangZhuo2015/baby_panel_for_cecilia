@@ -1,0 +1,83 @@
+name: Native Go Web parity
+
+on:
+  push:
+    branches: [main, codex/web-parity-20260919]
+  pull_request:
+    branches: [main, codex/web-parity-20260919]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-go-web-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  native-web-postgres:
+    name: Real Next BFF and native Go on owned PostgreSQL
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.14.1
+          cache: npm
+      - name: Build the exact Web revision
+        run: |
+          set -eu
+          git diff --exit-code
+          npm ci
+          npx prisma generate
+          npm run build
+          python3 -m py_compile scripts/review/check-native-go-web.py
+      - name: Read immutable Go reference
+        id: native
+        run: |
+          node --input-type=module -e '
+            import fs from "node:fs";
+            import assert from "node:assert/strict";
+            const baseline = JSON.parse(fs.readFileSync("scripts/review/go-api-baseline.json", "utf8"));
+            assert.equal(baseline.repository, "WangZhuo2015/growdesk-server");
+            assert.match(baseline.commit, /^[0-9a-f]{40}$/);
+            console.log("revision=" + baseline.commit);
+          ' >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v4
+        with:
+          repository: WangZhuo2015/growdesk-server
+          ref: ${{ steps.native.outputs.revision }}
+          path: node_modules/.growdesk-test-reference
+          persist-credentials: false
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.27.1'
+          cache: true
+          cache-dependency-path: node_modules/.growdesk-test-reference/go.sum
+      - name: Build the pinned native API without changing the reference
+        working-directory: node_modules/.growdesk-test-reference
+        env:
+          GOFLAGS: -mod=readonly
+        run: |
+          set -eu
+          test "$(git rev-parse HEAD)" = '${{ steps.native.outputs.revision }}'
+          go mod download
+          go mod verify
+          git diff --exit-code -- go.mod go.sum
+          mkdir -p dist-go
+          CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X main.revision=$(git rev-parse HEAD)" -o dist-go/growdesk-api ./cmd/growdesk-api
+      - name: Exercise actual Web HTTP and native persistent effects
+        run: |
+          python3 scripts/review/check-native-go-web.py \
+            --server-root node_modules/.growdesk-test-reference \
+            --binary node_modules/.growdesk-test-reference/dist-go/growdesk-api \
+            --report "$RUNNER_TEMP/native-web-evidence/report.json"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-web-parity-${{ github.event.pull_request.head.sha || github.sha }}
+          path: ${{ runner.temp }}/native-web-evidence/report.json
+          if-no-files-found: error
