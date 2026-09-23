@@ -1,4 +1,6 @@
 /** Method-level migration allowlist. Unknown routes must not fall through to legacy JWT/SQLite. */
+export type GrowDeskBridgeBackend = "typescript" | "go";
+
 export const BRIDGED_METHODS: Readonly<Record<string, readonly string[]>> = {
   "/api/baby/avatar": ["POST"],
   "/api/medical/upload": ["POST"],
@@ -50,13 +52,42 @@ export const BRIDGED_METHODS: Readonly<Record<string, readonly string[]>> = {
   "/api/ai/jobs": ["GET", "POST"],
   "/api/user/tokens": ["GET", "POST"],
 };
-export function isBridgedMethod(pathname: string, method: string): boolean {
+const GO_PENDING_WEB_ROUTES = new Set([
+  "/api/agent/voice",
+  "/api/ai/chat",
+  "/api/ai/chat/cancel",
+  "/api/ai/daily-summary",
+  "/api/ai/jobs",
+  "/api/ai/tips",
+  "/api/growth/ocr",
+  "/api/medical/ocr",
+  "/api/user/tokens",
+]);
+
+function isPendingGoRoute(pathname: string): boolean {
+  if (GO_PENDING_WEB_ROUTES.has(pathname)) return true;
+  return /^\/api\/ai\/jobs\/[^/]+$/.test(pathname);
+}
+
+export function isBridgedMethod(
+  pathname: string,
+  method: string,
+  backend: GrowDeskBridgeBackend = "typescript",
+): boolean {
+  const upperMethod = method.toUpperCase();
+
+  // The Go preview must never silently fall back to Web-local AI/PAT state.
+  if (backend === "go" && isPendingGoRoute(pathname)) return false;
+
   // Dynamic session-item handlers implement GET/PATCH/DELETE (POST stays 404-ish upstream).
   if (/^\/api\/ai\/sessions\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(pathname)) {
-    return ["GET", "PATCH", "DELETE"].includes(method.toUpperCase());
+    return ["GET", "PATCH", "DELETE"].includes(upperMethod);
   }
-  if (/^\/api\/books\/[^/]+$/.test(pathname)) return method.toUpperCase() === "PATCH";
-  if (/^\/api\/medical\/reports\/[a-f0-9-]{36}$/i.test(pathname)) return ["GET", "PUT", "PATCH", "DELETE"].includes(method.toUpperCase());
-  if (/^\/api\/attachments\/[a-f0-9-]{36}$/i.test(pathname)) return method.toUpperCase() === "GET";
-  return BRIDGED_METHODS[pathname]?.includes(method.toUpperCase()) ?? false;
+  if (/^\/api\/ai\/jobs\/[^/]+$/.test(pathname)) {
+    return backend === "typescript" && ["GET", "PATCH"].includes(upperMethod);
+  }
+  if (/^\/api\/books\/[^/]+$/.test(pathname)) return upperMethod === "PATCH";
+  if (/^\/api\/medical\/reports\/[a-f0-9-]{36}$/i.test(pathname)) return ["GET", "PUT", "PATCH", "DELETE"].includes(upperMethod);
+  if (/^\/api\/attachments\/[a-f0-9-]{36}$/i.test(pathname)) return upperMethod === "GET";
+  return BRIDGED_METHODS[pathname]?.includes(upperMethod) ?? false;
 }
