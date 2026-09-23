@@ -16,7 +16,7 @@ import { familyDayBounds, fetchLegacyRecordList } from "@/lib/growdesk/record-li
 import { fetchCompleteList } from "@/lib/growdesk/paged-list";
 import { getLocalDateStr } from "@/lib/date";
 import { loadWebBaby } from "@/lib/growdesk/bridge-identity";
-import { extractSupplementStateFromFoodPlan } from "@/lib/growdesk/nutrition-compat";
+import { fromGrowDeskSupplementProduct, type GrowDeskSupplementProduct } from "@/lib/growdesk/nutrition-compat";
 import { projectLegacyTimelineResponse, wantsExtendedRepresentation } from "@/lib/growdesk/legacy-projections";
 
 function objectData(value: unknown): Record<string, unknown> {
@@ -34,14 +34,7 @@ async function listData(path: string, accessToken: string): Promise<Record<strin
   return data.map(objectData);
 }
 
-async function supplementPlanData(babyId: string, accessToken: string): Promise<Record<string, unknown>> {
-  const response = await growdeskFetch<unknown>(`/api/v1/babies/${pathId(babyId)}/food-plan`, { accessToken });
-  // No plan is a valid empty state; authentication, transport and server errors
-  // must propagate rather than masquerade as a successfully loaded empty plan.
-  if (!response.ok && response.status === 404) return {};
-  const plan = objectData(requireData(response));
-  return plan.planData === null || plan.planData === undefined ? {} : objectData(plan.planData);
-}
+
 
 export async function GET(request: Request) {
   try {
@@ -75,10 +68,12 @@ export async function GET(request: Request) {
       const hasFeeding = list.some(entry => entry.entityType === "feeding");
       const hasSupplement = list.some(entry => entry.entityType === "supplement");
 
-      const [details, formulaProducts, planData, members] = await Promise.all([
-        fetchTimelineDetailMaps(growdeskFetch, token, babyId, list),
+      const [details, formulaProducts, supplementProducts, members] = await Promise.all([
+        fetchTimelineDetailMaps(growdeskFetch, token, babyId, list, {
+          lookup: GROWDESK_CONFIG.usesGoBackend ? "by-id" : "paged", signal: request.signal,
+        }),
         hasFeeding ? fetchCompleteList<Record<string, unknown>>(growdeskFetch, token, `${familyPath}/nutrition/products?includeArchived=true`) : Promise.resolve([]),
-        hasSupplement ? supplementPlanData(babyId, token) : Promise.resolve({}),
+        hasSupplement ? fetchCompleteList<GrowDeskSupplementProduct>(growdeskFetch, token, `${familyPath}/nutrition/supplement-products?includeArchived=true`) : Promise.resolve([]),
         listData(`${familyPath}/members`, token),
       ]);
 
@@ -91,9 +86,11 @@ export async function GET(request: Request) {
       }
 
       const supplementProductsMap = new Map<string, Record<string, unknown>>();
-      const supplementState = extractSupplementStateFromFoodPlan(planData);
-      for (const product of supplementState.supplementProducts || []) {
-        const item = objectData(product);
+      for (const product of supplementProducts) {
+        if (product.familyId !== baby.familyId) {
+          throw new BridgeError(502, "UPSTREAM_INVALID_RECORD", "补剂档案不属于当前家庭");
+        }
+        const item = objectData(fromGrowDeskSupplementProduct(product));
         if (typeof item.id !== "string" || !item.id) {
           throw new BridgeError(502, "UPSTREAM_INVALID_RECORD", "GrowDesk 返回了无效的补剂档案");
         }

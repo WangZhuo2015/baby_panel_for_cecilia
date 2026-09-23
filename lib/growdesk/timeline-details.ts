@@ -97,6 +97,62 @@ async function loadKind(
 }
 
 /**
+ * The native API already exposes scoped per-record GETs. Historical IDs do not
+ * require scanning every newer record. A single worker pool bounds concurrency
+ * across all domains; one failure cancels siblings and never returns partial maps.
+ */
+async function loadById(
+  fetchApi: BridgeFetch,
+  token: string,
+  babyId: string,
+  wanted: ReadonlyMap<DetailKind, ReadonlyMap<string, string>>,
+  signal?: AbortSignal,
+): Promise<TimelineDetailMaps> {
+  const results = KINDS.map(() => new Map<string, TimelineDetailRecord>());
+  const work = KINDS.flatMap((kind, index) =>
+    Array.from(wanted.get(kind) ?? [], ([id, version]) => ({ kind, index, id, version })),
+  );
+  if (work.length > 2000) {
+    throw new BridgeError(503, "TIMELINE_DETAIL_LIMIT", "时间线详情过多，请缩小日期范围后重试");
+  }
+  const cancel = new AbortController();
+  const combined = signal ? AbortSignal.any([signal, cancel.signal]) : cancel.signal;
+  let offset = 0;
+  let failed = combined.aborted;
+  let failure: unknown = new BridgeError(499, "REQUEST_ABORTED", "请求已取消");
+  async function worker() {
+    while (!failed && offset < work.length) {
+      const item = work[offset++]!;
+      try {
+        const response = await fetchApi<unknown>(
+          `/api/v1/babies/${pathId(babyId)}/records/${item.kind}/${pathId(item.id)}`,
+          { accessToken: token, signal: combined },
+        );
+        if (!response.ok && response.status === 404) {
+          throw new BridgeError(409, "TIMELINE_DETAILS_MISSING", "部分时间线记录已删除或详情缺失，请刷新后重试");
+        }
+        const value = requireData(response);
+        if (!value || typeof value !== "object" || Array.isArray(value)) throw invalidRecord();
+        const record = value as Record<string, unknown>;
+        if (record.id !== item.id || record.babyId !== babyId) throw invalidRecord();
+        const version = upstreamVersion(record.version);
+        if (version !== item.version) {
+          throw new BridgeError(409, "TIMELINE_CHANGED", "记录在读取时间线后已变更，请刷新后重试");
+        }
+        const detail: TimelineDetailRecord = { ...record, id: item.id, babyId, version };
+        if (item.kind === "feeding" && record.feedingType === "bottle") detail.type = "bottle_breast";
+        results[item.index]!.set(item.id, detail);
+      } catch (error) {
+        if (!failed) { failed = true; failure = error; cancel.abort(); }
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(work.length, 5) }, () => worker()));
+  if (failed) throw failure;
+  return { feedings: results[0]!, sleeps: results[1]!, diapers: results[2]!, foods: results[3]!, supplements: results[4]! };
+}
+
+/**
  * Resolve precisely the IDs referenced by the requested timeline, including
  * records older than the first 200 rows. Keep at most five reads in flight,
  * paginate each domain serially, and stop once every requested ID is resolved.
@@ -108,6 +164,7 @@ export async function fetchTimelineDetailMaps(
   token: string,
   babyId: string,
   entries: readonly TimelineDetailReference[],
+  options: { lookup?: "paged" | "by-id"; signal?: AbortSignal } = {},
 ): Promise<TimelineDetailMaps> {
   pathId(babyId);
   const wanted = new Map<DetailKind, Map<string, string>>(
@@ -126,6 +183,7 @@ export async function fetchTimelineDetailMaps(
     if (previous !== undefined && previous !== version) throw invalidRecord();
     bucket.set(entry.entityId, version);
   }
+  if (options.lookup === "by-id") return loadById(fetchApi, token, babyId, wanted, options.signal);
   const results = await Promise.all(KINDS.map(kind => loadKind(fetchApi, token, babyId, kind, wanted.get(kind)!)));
   return {
     feedings: results[0]!,
