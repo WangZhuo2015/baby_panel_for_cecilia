@@ -1,0 +1,39 @@
+name: Go Web Prisma review dependencies
+on:
+  push:
+    branches: [codex/go-web-complete-20260923]
+    paths: [.github/workflows/go-web-prisma-review.yml]
+permissions:
+  contents: read
+jobs:
+  dependencies:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.x'
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Generate schema-matched client without accessing a database
+        env:
+          DATABASE_URL: file:./dev_test.db
+        run: |
+          set -eu
+          npx prisma generate
+          mkdir -p review-export
+          find node_modules/@prisma/engines node_modules/prisma -type f -name 'schema-engine-*' > review-export/engine-files.txt
+          test -s review-export/engine-files.txt
+          tar -czf review-export/prisma-runtime.tar.gz generated -T review-export/engine-files.txt
+          git rev-parse HEAD > review-export/source-sha.txt
+          sha256sum prisma/schema.prisma package-lock.json > review-export/inputs.txt
+          (cd review-export && sha256sum prisma-runtime.tar.gz inputs.txt source-sha.txt > SHA256SUMS)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: go-web-prisma-${{ github.sha }}
+          path: review-export/*
+          retention-days: 3
+          if-no-files-found: error
