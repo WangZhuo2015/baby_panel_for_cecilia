@@ -2,6 +2,7 @@
 
 import { useState, useRef } from "react";
 import Image from "next/image";
+import { shouldBypassImageOptimization } from "@/lib/private-image";
 import {
   Upload,
   Loader2,
@@ -254,7 +255,7 @@ export function GrowthForm({
                     alt="测量照片预览"
                     width={144}
                     height={144}
-                    unoptimized={imagePreview.startsWith("data:") || imagePreview.startsWith("blob:") || imagePreview.startsWith("/api/attachments/")}
+                    unoptimized={shouldBypassImageOptimization(imagePreview)}
                     className="w-full h-full object-cover"
                   />
                 </div>
