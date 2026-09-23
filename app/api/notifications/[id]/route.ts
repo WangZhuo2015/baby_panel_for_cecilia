@@ -16,24 +16,19 @@ export async function POST(
   }
 
   if (GROWDESK_CONFIG.enabled) {
-    const csrfErr = verifyBffCsrf(request);
-    if (csrfErr) return csrfErr;
-
-    const bffSession = await resolveBffSession(request);
-    if (!bffSession) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
     try {
-      const result = await growdeskFetch(`/api/v1/notifications/${pathId(id)}/read`, {
-        method: "POST",
-        accessToken: bffSession.accessToken,
-      });
-      requireData(result);
-      return NextResponse.json({ success: true });
-    } catch (error) {
-      return bridgeErrorResponse(error);
-    }
+      const csrfErr = verifyBffCsrf(request, { enforceInTest: true });
+      if (csrfErr) return csrfErr;
+      const bffSession = await resolveBffSession(request);
+      if (!bffSession) throw new BridgeError(401, "UNAUTHORIZED", "请先登录");
+      const result = requireData(await growdeskFetch<{ success: boolean }>(
+        `/api/v1/notifications/${pathId(id)}/read`, {
+          method: "POST", accessToken: bffSession.accessToken,
+        },
+      ));
+      if (result?.success !== true) throw new BridgeError(502, "UPSTREAM_INVALID_RESPONSE", "服务端未确认已读状态");
+      return NextResponse.json({ success: true }, { headers: { "cache-control": "no-store" } });
+    } catch (error) { return bridgeErrorResponse(error); }
   }
 
   const auth = await requireAuth(request);
