@@ -27,6 +27,19 @@ const upstream = http.createServer(async (req, res) => {
   if (req.headers.authorization !== 'Bearer test_access_token') { res.writeHead(401); res.end('{}'); return; }
   if (url.pathname === '/api/v1/families') { send([family]); return; }
   if (url.pathname === `/api/v1/families/${family.id}/babies`) { send([baby]); return; }
+  if (url.pathname === `/api/v1/families/${family.id}/members`) {
+    send([{
+      id: 'test_membership_runtime',
+      userId: user.id,
+      familyId: family.id,
+      role: 'admin',
+      username: user.username,
+      displayName: user.displayName,
+      relation: 'parent',
+      joinedAt: '2026-01-01T00:00:00.000Z',
+    }]);
+    return;
+  }
   if (url.pathname === `/api/v1/families/${family.id}`) { send(family); return; }
   if (url.pathname === `/api/v1/babies/${baby.id}`) { send(baby); return; }
   if (url.pathname.endsWith(`/records/feeding/${feedingDetail.id}`)) { send(feedingDetail); return; }
