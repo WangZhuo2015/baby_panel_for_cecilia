@@ -106,7 +106,7 @@ export function normalizeNutrients(raw: unknown): NutrientsMap {
   return result;
 }
 
-export function fromGrowDeskSupplementProduct(raw: GrowDeskSupplementProduct): SupplementProduct {
+export function fromGrowDeskSupplementProduct(raw: GrowDeskSupplementProduct, extended = false): SupplementProduct {
   let nutrients: NutrientsMap = {};
   const source = raw.nutrientsJson;
   if (source !== undefined && source !== null) {
@@ -122,6 +122,7 @@ export function fromGrowDeskSupplementProduct(raw: GrowDeskSupplementProduct): S
   const defaultDose = Number(raw.defaultDose);
   return {
     id: raw.id,
+    ...(extended && Number.isSafeInteger(raw.version) && raw.version! > 0 ? { version: raw.version } : {}),
     familyId: raw.familyId,
     name: raw.name,
     brand: raw.brand || raw.name,

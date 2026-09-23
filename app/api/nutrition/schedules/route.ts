@@ -7,30 +7,41 @@ import { GROWDESK_CONFIG } from "@/lib/config";
 import { resolveBffSession } from "@/lib/growdesk/session";
 import { verifyBffCsrf } from "@/lib/growdesk/csrf";
 import { growdeskFetch } from "@/lib/growdesk/client";
-import { loadWebBaby } from "@/lib/growdesk/bridge-identity";
-import { BridgeError, bridgeErrorResponse, requireData } from "@/lib/growdesk/bridge-protocol";
+import { wantsExtendedRepresentation } from "@/lib/growdesk/legacy-projections";
+import { resolveNutritionScope } from "@/lib/growdesk/nutrition-scope";
+import { BridgeError, bridgeErrorResponse, pathId, requireData } from "@/lib/growdesk/bridge-protocol";
 import {
   fromGrowDeskSupplementProduct,
   type GrowDeskSupplementProduct,
 } from "@/lib/growdesk/nutrition-compat";
 
-function mapGrowDeskSchedule(raw: unknown, babyId: string): SupplementSchedule {
+function mapGrowDeskSchedule(raw: unknown, babyId: string, familyId: string, extended = false): SupplementSchedule {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
     throw new BridgeError(502, "UPSTREAM_INVALID_SCHEDULE", "GrowDesk 返回了无效的补剂计划");
   }
   const source = raw as Record<string, any>;
   const product = source.product as GrowDeskSupplementProduct | undefined;
+  if (source.babyId !== babyId || source.familyId !== familyId ||
+      !product || product.familyId !== familyId || product.id !== source.productId) {
+    throw new BridgeError(502, "UPSTREAM_SCOPE_MISMATCH", "补剂计划不属于当前家庭/宝宝");
+  }
+  const dose = Number(source.targetDose);
+  if (typeof source.id !== "string" || !source.id || !Number.isFinite(dose) || dose <= 0 ||
+      typeof source.isActive !== "boolean" || typeof source.isCompletedToday !== "boolean") {
+    throw new BridgeError(502, "UPSTREAM_INVALID_SCHEDULE", "补剂计划字段不完整");
+  }
   if (!product || typeof product.id !== "string" || product.familyId === undefined) {
     throw new BridgeError(502, "UPSTREAM_INVALID_SCHEDULE", "GrowDesk 补剂计划缺少产品信息");
   }
   return {
     id: String(source.id),
+    ...(extended && Number.isSafeInteger(source.version) && source.version > 0 ? { version: source.version } : {}),
     babyId: String(source.babyId || babyId),
     productId: String(source.productId),
     product: fromGrowDeskSupplementProduct(product),
     frequency: source.frequency || "daily",
     customDays: source.customDays ?? undefined,
-    targetDose: Number(source.targetDose) || 1,
+    targetDose: dose,
     reminderTime: source.reminderTime ?? null,
     isActive: source.isActive !== false,
     startDate: source.startDate ?? null,
@@ -50,18 +61,18 @@ export async function GET(request: Request) {
       }
 
       const { searchParams } = new URL(request.url);
-      const requestedBabyId = searchParams.get("babyId");
-      const baby = await loadWebBaby(growdeskFetch, bffSession.accessToken, requestedBabyId);
-      if (!baby) {
+      const scope = await resolveNutritionScope(growdeskFetch, bffSession.accessToken, request.url);
+      if (!scope.babyId) {
         return NextResponse.json({ error: "未找到指定的宝宝档案" }, { status: 404 });
       }
 
-      const babyId = baby.id;
+      const babyId = scope.babyId;
       const dateParam = searchParams.get("date");
+      if (dateParam !== null && !isValidDateStr(dateParam)) throw new BridgeError(400, "INVALID_DATE", "日期格式无效");
       const targetDate = dateParam && isValidDateStr(dateParam) ? dateParam : getLocalDateStr();
 
       const scheduleRes = await growdeskFetch<unknown[]>(
-        `/api/v1/babies/${babyId}/nutrition/supplement-schedules?date=${encodeURIComponent(targetDate)}`,
+        `/api/v1/babies/${pathId(babyId)}/nutrition/supplement-schedules?date=${encodeURIComponent(targetDate)}`,
         { method: "GET", accessToken: bffSession.accessToken },
       );
       const rawSchedules = requireData(scheduleRes);
@@ -69,7 +80,7 @@ export async function GET(request: Request) {
         throw new BridgeError(502, "UPSTREAM_INVALID_SCHEDULE", "GrowDesk 返回了无效的补剂计划列表");
       }
       const schedules = rawSchedules
-        .map((raw) => mapGrowDeskSchedule(raw, babyId))
+        .map((raw) => mapGrowDeskSchedule(raw, babyId, scope.familyId!, wantsExtendedRepresentation(request)))
         .filter((schedule) => schedule.isActive !== false);
       const completedProductIds = new Set(
         schedules.filter((schedule) => schedule.isCompletedToday).map((schedule) => schedule.productId),
@@ -164,12 +175,12 @@ export async function POST(request: Request) {
       }
 
       const body = await request.json().catch(() => ({}));
-      const baby = await loadWebBaby(growdeskFetch, bffSession.accessToken, body.babyId);
-      if (!baby) {
+      const scope = await resolveNutritionScope(growdeskFetch, bffSession.accessToken, request.url, body);
+      if (!scope.babyId) {
         return NextResponse.json({ error: "未找到指定的宝宝档案" }, { status: 404 });
       }
 
-      const babyId = baby.id;
+      const babyId = scope.babyId;
       const {
         id,
         productId,
@@ -186,24 +197,33 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "请选择补剂产品" }, { status: 400 });
       }
 
+      const numericDose = Number(targetDose);
+      if ((typeof targetDose !== "string" && typeof targetDose !== "number") ||
+          !Number.isFinite(numericDose) || numericDose <= 0 || !/^\d+(\.\d+)?$/.test(String(targetDose))) {
+        throw new BridgeError(400, "INVALID_DOSE", "计划剂量必须是正数");
+      }
+      if (typeof isActive !== "boolean") throw new BridgeError(400, "INVALID_ACTIVE_FLAG", "isActive 必须是布尔值");
+      if (id) pathId(id);
+      pathId(productId);
       const payload = {
         ...(id ? { id } : {}),
+        ...(body.baseVersion !== undefined ? { baseVersion: body.baseVersion } : {}),
         productId,
         frequency,
         customDays: customDays ?? null,
-        targetDose: String(Number(targetDose) || 1),
+        targetDose: String(targetDose),
         reminderTime: reminderTime ? String(reminderTime).trim() : null,
-        isActive: Boolean(isActive),
+        isActive,
         startDate: startDate || null,
         notes: notes ? String(notes).trim() : null,
       };
-      const response = await growdeskFetch<any>(`/api/v1/babies/${babyId}/nutrition/supplement-schedules`, {
+      const response = await growdeskFetch<any>(`/api/v1/babies/${pathId(babyId)}/nutrition/supplement-schedules`, {
         method: "POST",
         accessToken: bffSession.accessToken,
         body: payload,
       });
       const saved = requireData(response);
-      return NextResponse.json(mapGrowDeskSchedule(saved, babyId), { status: response.status === 201 ? 201 : 200 });
+      return NextResponse.json(mapGrowDeskSchedule(saved, babyId, scope.familyId!, wantsExtendedRepresentation(request)), { status: response.status === 201 ? 201 : 200 });
     }
 
     const auth = await requireAuth(request);
@@ -250,7 +270,7 @@ export async function POST(request: Request) {
           customDaysJson: customDays ? JSON.stringify(customDays) : null,
           targetDose: Number(targetDose) || 1.0,
           reminderTime: reminderTime ? String(reminderTime).trim() : null,
-          isActive: Boolean(isActive),
+          isActive,
           startDate: startDate || existing.startDate,
           notes: notes !== undefined ? (notes ? String(notes).trim() : null) : existing.notes,
         },
@@ -272,7 +292,7 @@ export async function POST(request: Request) {
           customDaysJson: customDays ? JSON.stringify(customDays) : null,
           targetDose: Number(targetDose) || 1.0,
           reminderTime: reminderTime ? String(reminderTime).trim() : null,
-          isActive: Boolean(isActive),
+          isActive,
           startDate: startDate || existingSame.startDate,
           notes: notes !== undefined ? (notes ? String(notes).trim() : null) : existingSame.notes,
         },
@@ -290,7 +310,7 @@ export async function POST(request: Request) {
         customDaysJson: customDays ? JSON.stringify(customDays) : null,
         targetDose: Number(targetDose) || 1.0,
         reminderTime: reminderTime ? String(reminderTime).trim() : null,
-        isActive: Boolean(isActive),
+        isActive,
         startDate: startDate || getLocalDateStr(),
         notes: notes ? String(notes).trim() : null,
       },
@@ -318,19 +338,18 @@ export async function DELETE(request: Request) {
 
       const { searchParams } = new URL(request.url);
       const id = searchParams.get("id");
-      const requestedBabyId = searchParams.get("babyId");
 
       if (!id) {
         return NextResponse.json({ error: "请提供计划 ID" }, { status: 400 });
       }
 
-      const baby = await loadWebBaby(growdeskFetch, bffSession.accessToken, requestedBabyId);
-      if (!baby) {
+      const scope = await resolveNutritionScope(growdeskFetch, bffSession.accessToken, request.url);
+      if (!scope.babyId) {
         return NextResponse.json({ error: "未找到指定的宝宝档案" }, { status: 404 });
       }
 
-      const babyId = baby.id;
-      const response = await growdeskFetch(`/api/v1/babies/${babyId}/nutrition/supplement-schedules/${encodeURIComponent(id)}`, {
+      const babyId = scope.babyId;
+      const response = await growdeskFetch(`/api/v1/babies/${pathId(babyId)}/nutrition/supplement-schedules/${encodeURIComponent(id)}`, {
         method: "DELETE",
         accessToken: bffSession.accessToken,
       });

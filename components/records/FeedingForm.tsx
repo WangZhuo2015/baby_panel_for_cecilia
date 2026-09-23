@@ -1,5 +1,7 @@
 "use client";
 
+import { useNutritionFetch } from "@/lib/hooks/useNutritionFetch";
+
 import { useState, useEffect, useCallback, useMemo } from "react";
 import {
   CheckCircle2,
@@ -61,6 +63,7 @@ export function FeedingForm({
   saving = false,
 }: FeedingFormProps) {
   const isEdit = mode === "edit";
+  const nutritionFetch = useNutritionFetch(initialData?.babyId);
 
   const [feedingType, setFeedingType] = useState<FeedingType>(() => {
     return (initialData?.type as FeedingType) || "formula";
@@ -125,7 +128,7 @@ export function FeedingForm({
   const fetchFormulas = useCallback(
     async (autoSelectId?: string) => {
       try {
-        const res = await fetch("/api/nutrition/products?type=formula&includeInactive=true");
+        const res = await nutritionFetch("/api/nutrition/products?type=formula&includeInactive=true");
         if (!res.ok) return;
         const data = await res.json();
         const list = data.formulas || [];
@@ -159,7 +162,7 @@ export function FeedingForm({
         }
       } catch {}
     },
-    [isEdit, initialData?.formulaProductId]
+    [isEdit, initialData?.formulaProductId, nutritionFetch]
   );
 
   useEffect(() => {
@@ -617,6 +620,7 @@ export function FeedingForm({
         </CuteButton>
       </div>
       <QuickFormulaManageModal
+        babyId={initialData?.babyId}
         isOpen={isFormulaModalOpen}
         onClose={() => setIsFormulaModalOpen(false)}
         selectedFormulaId={selectedFormulaId}

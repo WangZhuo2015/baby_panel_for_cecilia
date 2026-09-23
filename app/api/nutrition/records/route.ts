@@ -116,7 +116,7 @@ export async function GET(request: Request) {
 
       const scopedList = rawList.map((record) => requireScopedSupplementRecord(record, babyId, baby.familyId));
       const allKnownProducts: SupplementProduct[] = [
-        ...rawProducts.map(fromGrowDeskSupplementProduct),
+        ...rawProducts.map(raw => fromGrowDeskSupplementProduct(raw)),
         ...PRESET_SUPPLEMENT_PRODUCTS.map((p, idx) => ({
           ...p,
           id: (p as any).id || `preset_${idx}`,
@@ -277,7 +277,7 @@ export async function POST(request: Request) {
       const scopedTodaySupps = rawTodaySupps.map((record) => requireScopedSupplementRecord(record, babyId, familyId));
       const suppState = extractSupplementStateFromFoodPlan(planData);
       const allKnownProducts: SupplementProduct[] = [
-        ...rawProducts.map(fromGrowDeskSupplementProduct),
+        ...rawProducts.map(raw => fromGrowDeskSupplementProduct(raw)),
         ...PRESET_SUPPLEMENT_PRODUCTS.map((p, idx) => ({
           ...p,
           id: (p as any).id || `preset_${idx}`,

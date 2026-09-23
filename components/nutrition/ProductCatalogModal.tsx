@@ -1,5 +1,8 @@
 "use client";
 
+import { useNutritionFetch } from "@/lib/hooks/useNutritionFetch";
+import { NutritionIdentityChangedError } from "@/lib/nutrition/scoped-fetch";
+
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import {
   X,
@@ -30,6 +33,13 @@ export interface ProductCatalogModalProps {
 }
 
 export function ProductCatalogModal({ isOpen, onClose, babyId, onUpdated }: ProductCatalogModalProps) {
+  const nutritionFetch = useNutritionFetch(babyId, true);
+  const [error, setError] = useState<string | null>(null);
+  const reportError = useCallback((error: unknown) => {
+    if (!(error instanceof NutritionIdentityChangedError)) {
+      setError(error instanceof Error ? error.message : "操作失败，请刷新核对后重试");
+    }
+  }, []);
   const [activeTab, setActiveTab] = useState<string>("formula");
   const [formulas, setFormulas] = useState<FormulaProduct[]>([]);
   const [supplements, setSupplements] = useState<SupplementProduct[]>([]);
@@ -88,9 +98,10 @@ export function ProductCatalogModal({ isOpen, onClose, babyId, onUpdated }: Prod
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
+      setError(null);
       const [prodRes, schedRes] = await Promise.all([
-        fetch("/api/nutrition/products?includeInactive=true"),
-        fetch(`/api/nutrition/schedules${babyId ? `?babyId=${babyId}` : ""}`),
+        nutritionFetch("/api/nutrition/products?includeInactive=true"),
+        nutritionFetch(`/api/nutrition/schedules${babyId ? `?babyId=${babyId}` : ""}`),
       ]);
 
       if (prodRes.ok) {
@@ -106,10 +117,16 @@ export function ProductCatalogModal({ isOpen, onClose, babyId, onUpdated }: Prod
       }
     } catch (e) {
       console.error("Failed to fetch product catalog:", e);
+      reportError(e);
     } finally {
       setLoading(false);
     }
-  }, [babyId]);
+  }, [babyId, nutritionFetch, reportError]);
+
+  useEffect(() => {
+    // Clear private lists immediately when the captured identity changes.
+    setFormulas([]); setSupplements([]); setSchedules([]); setError(null);
+  }, [nutritionFetch]);
 
   useEffect(() => {
     if (isOpen) {
@@ -167,7 +184,7 @@ export function ProductCatalogModal({ isOpen, onClose, babyId, onUpdated }: Prod
   // 预置导入奶粉
   const handleImportPresetFormula = async (preset: any) => {
     try {
-      const res = await fetch("/api/nutrition/products", {
+      const res = await nutritionFetch("/api/nutrition/products", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -182,13 +199,14 @@ export function ProductCatalogModal({ isOpen, onClose, babyId, onUpdated }: Prod
       }
     } catch (e) {
       console.error("Import preset error:", e);
+      reportError(e);
     }
   };
 
   // 预置导入补剂 (默认自动加入每日计划)
   const handleImportPresetSupp = async (preset: any, frequency: "daily" | "alternate_day" = "daily") => {
     try {
-      const res = await fetch("/api/nutrition/products", {
+      const res = await nutritionFetch("/api/nutrition/products", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -199,7 +217,7 @@ export function ProductCatalogModal({ isOpen, onClose, babyId, onUpdated }: Prod
       if (res.ok) {
         const prod = await res.json();
         if (babyId && prod.id) {
-          await fetch("/api/nutrition/schedules", {
+          await nutritionFetch("/api/nutrition/schedules", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -216,6 +234,7 @@ export function ProductCatalogModal({ isOpen, onClose, babyId, onUpdated }: Prod
       }
     } catch (e) {
       console.error("Import preset supplement error:", e);
+      reportError(e);
     }
   };
 
@@ -225,20 +244,21 @@ export function ProductCatalogModal({ isOpen, onClose, babyId, onUpdated }: Prod
       const existingSched = schedules.find((s) => s.productId === productId);
       if (frequency === "none") {
         if (existingSched) {
-          await fetch(`/api/nutrition/schedules?id=${existingSched.id}`, {
+          await nutritionFetch(`/api/nutrition/schedules?id=${existingSched.id}`, {
             method: "DELETE",
           });
         }
       } else {
-        await fetch("/api/nutrition/schedules", {
+        await nutritionFetch("/api/nutrition/schedules", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             id: existingSched?.id,
+            baseVersion: existingSched?.version,
             babyId,
             productId,
             frequency,
-            targetDose: 1.0,
+            targetDose: existingSched?.targetDose ?? supplements.find(product => product.id === productId)?.defaultDose ?? 1.0,
             isActive: true,
           }),
         });
@@ -248,6 +268,7 @@ export function ProductCatalogModal({ isOpen, onClose, babyId, onUpdated }: Prod
       window.dispatchEvent(new CustomEvent("baby:nutrition-updated"));
     } catch (e) {
       console.error("Set schedule frequency error:", e);
+      reportError(e);
     }
   };
 
@@ -255,7 +276,7 @@ export function ProductCatalogModal({ isOpen, onClose, babyId, onUpdated }: Prod
   const handleDeleteProduct = async (type: "formula" | "supplement", id: string, name: string) => {
     if (!window.confirm(`确定要移除「${name}」吗？\n（若已有历史记录使用该档案，系统将为您安全归档停用，以保护历史营养数据完整准确）`)) return;
     try {
-      const res = await fetch(`/api/nutrition/products?type=${type}&id=${id}`, {
+      const res = await nutritionFetch(`/api/nutrition/products?type=${type}&id=${id}`, {
         method: "DELETE",
       });
       const data = await res.json().catch(() => ({}));
@@ -271,13 +292,14 @@ export function ProductCatalogModal({ isOpen, onClose, babyId, onUpdated }: Prod
       }
     } catch (e) {
       console.error("Delete product error:", e);
+      reportError(e);
     }
   };
 
   // 设为默认主力奶粉
   const handleSetDefaultFormula = async (id: string) => {
     try {
-      const res = await fetch("/api/nutrition/products", {
+      const res = await nutritionFetch("/api/nutrition/products", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ type: "formula", id, isDefault: true, isActive: true }),
@@ -289,13 +311,14 @@ export function ProductCatalogModal({ isOpen, onClose, babyId, onUpdated }: Prod
       }
     } catch (e) {
       console.error("Set default formula error:", e);
+      reportError(e);
     }
   };
 
   // 恢复/重新启用归档奶粉
   const handleRestoreFormula = async (id: string) => {
     try {
-      const res = await fetch("/api/nutrition/products", {
+      const res = await nutritionFetch("/api/nutrition/products", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ type: "formula", id, isActive: true }),
@@ -307,13 +330,14 @@ export function ProductCatalogModal({ isOpen, onClose, babyId, onUpdated }: Prod
       }
     } catch (e) {
       console.error("Restore formula error:", e);
+      reportError(e);
     }
   };
 
   // 删除计划
   const handleDeleteSchedule = async (id: string) => {
     try {
-      const res = await fetch(`/api/nutrition/schedules?id=${id}`, {
+      const res = await nutritionFetch(`/api/nutrition/schedules?id=${id}`, {
         method: "DELETE",
       });
       if (res.ok) {
@@ -323,6 +347,7 @@ export function ProductCatalogModal({ isOpen, onClose, babyId, onUpdated }: Prod
       }
     } catch (e) {
       console.error("Delete schedule error:", e);
+      reportError(e);
     }
   };
 
@@ -388,6 +413,7 @@ export function ProductCatalogModal({ isOpen, onClose, babyId, onUpdated }: Prod
       }
     } catch (err) {
       console.error("OCR parse error:", err);
+      reportError(err);
       alert("上传识别失败，请检查网络");
     } finally {
       setOcrLoading(false);
@@ -419,6 +445,12 @@ export function ProductCatalogModal({ isOpen, onClose, babyId, onUpdated }: Prod
             <X size={18} />
           </button>
         </div>
+
+        {error && (
+          <p role="alert" className="text-xs text-red-600 py-2">
+            {error}
+          </p>
+        )}
 
         {/* Tab Switcher */}
         <div className="pt-3 pb-2 shrink-0">
@@ -521,8 +553,9 @@ export function ProductCatalogModal({ isOpen, onClose, babyId, onUpdated }: Prod
                       size="sm"
                       className="flex-1"
                       onClick={async () => {
+                        try {
                         if (!formulaForm.name.trim()) return alert("请输入奶粉名称");
-                        await fetch("/api/nutrition/products", {
+                        await nutritionFetch("/api/nutrition/products", {
                           method: "POST",
                           headers: { "Content-Type": "application/json" },
                           body: JSON.stringify({
@@ -534,6 +567,7 @@ export function ProductCatalogModal({ isOpen, onClose, babyId, onUpdated }: Prod
                         await fetchData();
                         if (onUpdated) onUpdated();
                         window.dispatchEvent(new CustomEvent("baby:nutrition-updated"));
+                        } catch (error) { reportError(error); }
                       }}
                     >
                       保存奶粉
@@ -860,6 +894,7 @@ export function ProductCatalogModal({ isOpen, onClose, babyId, onUpdated }: Prod
                       size="sm"
                       className="flex-1"
                       onClick={async () => {
+                        try {
                         if (!suppForm.name.trim()) return alert("请输入补剂名称");
                         const nutrients: any = {};
                         if (suppForm.vitDAmount) nutrients.vitamin_d = { amount: Number(suppForm.vitDAmount), unit: "IU" };
@@ -867,7 +902,7 @@ export function ProductCatalogModal({ isOpen, onClose, babyId, onUpdated }: Prod
                         if (suppForm.vitAAmount) nutrients.vitamin_a = { amount: Number(suppForm.vitAAmount), unit: "mcg RAE" };
                         if (suppForm.ironAmount) nutrients.iron = { amount: Number(suppForm.ironAmount), unit: "mg" };
 
-                        const res = await fetch("/api/nutrition/products", {
+                        const res = await nutritionFetch("/api/nutrition/products", {
                           method: "POST",
                           headers: { "Content-Type": "application/json" },
                           body: JSON.stringify({
@@ -880,7 +915,7 @@ export function ProductCatalogModal({ isOpen, onClose, babyId, onUpdated }: Prod
                         if (res.ok) {
                           const prod = await res.json();
                           if (babyId && prod.id) {
-                            await fetch("/api/nutrition/schedules", {
+                            await nutritionFetch("/api/nutrition/schedules", {
                               method: "POST",
                               headers: { "Content-Type": "application/json" },
                               body: JSON.stringify({
@@ -896,6 +931,7 @@ export function ProductCatalogModal({ isOpen, onClose, babyId, onUpdated }: Prod
                           if (onUpdated) onUpdated();
                           window.dispatchEvent(new CustomEvent("baby:nutrition-updated"));
                         }
+                        } catch (error) { reportError(error); }
                       }}
                     >
                       保存并加入计划
@@ -1195,7 +1231,7 @@ export function ProductCatalogModal({ isOpen, onClose, babyId, onUpdated }: Prod
           initialRatio={reconstitutionModal.product.reconstitutionRatio}
           onConfirm={async (data) => {
             if (reconstitutionModal.product) {
-              await fetch("/api/nutrition/products", {
+              await nutritionFetch("/api/nutrition/products", {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({

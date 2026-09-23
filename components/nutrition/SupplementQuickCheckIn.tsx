@@ -1,5 +1,7 @@
 "use client";
 
+import { useNutritionFetch } from "@/lib/hooks/useNutritionFetch";
+
 import { useState, useEffect, useCallback } from "react";
 import { Plus, Check, AlertTriangle, Sparkles, RefreshCw, ShieldAlert, X } from "lucide-react";
 import { CuteCard } from "@/components/ui/CuteCard";
@@ -18,6 +20,7 @@ export interface SupplementQuickCheckInProps {
 }
 
 export function SupplementQuickCheckIn({ babyId, date, refreshKey, onRecordSuccess, className = "" }: SupplementQuickCheckInProps) {
+  const nutritionFetch = useNutritionFetch(babyId);
   const [schedules, setSchedules] = useState<SupplementSchedule[]>([]);
   const [supplements, setSupplements] = useState<SupplementProduct[]>([]);
   const [completedProductIds, setCompletedProductIds] = useState<string[]>([]);
@@ -44,8 +47,8 @@ export function SupplementQuickCheckIn({ babyId, date, refreshKey, onRecordSucce
     try {
       setLoading(true);
       const [schedulesRes, productsRes] = await Promise.all([
-        fetch(`/api/nutrition/schedules?date=${targetDate}${babyId ? `&babyId=${babyId}` : ""}`),
-        fetch("/api/nutrition/products?type=supplement"),
+        nutritionFetch(`/api/nutrition/schedules?date=${targetDate}${babyId ? `&babyId=${babyId}` : ""}`),
+        nutritionFetch("/api/nutrition/products?type=supplement"),
       ]);
 
       if (schedulesRes.ok) {
@@ -62,7 +65,7 @@ export function SupplementQuickCheckIn({ babyId, date, refreshKey, onRecordSucce
     } finally {
       setLoading(false);
     }
-  }, [babyId, targetDate]);
+  }, [babyId, targetDate, nutritionFetch]);
 
   useEffect(() => {
     fetchData();
@@ -84,7 +87,7 @@ export function SupplementQuickCheckIn({ babyId, date, refreshKey, onRecordSucce
   const handleCheckIn = async (product: SupplementProduct, forceOverride = false) => {
     setSubmittingId(product.id);
     try {
-      const res = await fetch("/api/nutrition/records", {
+      const res = await nutritionFetch("/api/nutrition/records", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

@@ -1,5 +1,7 @@
 "use client";
 
+import { useNutritionFetch } from "@/lib/hooks/useNutritionFetch";
+
 import { useState, useEffect, useCallback, useMemo } from "react";
 import {
   X,
@@ -18,6 +20,7 @@ import { CuteInput } from "@/components/ui/CuteInput";
 import type { FormulaProduct } from "@/types/nutrition";
 
 export interface QuickFormulaManageModalProps {
+  babyId?: string;
   isOpen: boolean;
   onClose: () => void;
   selectedFormulaId?: string | null;
@@ -27,11 +30,13 @@ export interface QuickFormulaManageModalProps {
 
 export function QuickFormulaManageModal({
   isOpen,
+  babyId,
   onClose,
   selectedFormulaId,
   onSelectFormula,
   onFormulasChanged,
 }: QuickFormulaManageModalProps) {
+  const nutritionFetch = useNutritionFetch(babyId);
   const [activeTab, setActiveTab] = useState<"current" | "presets" | "custom">("current");
   const [formulas, setFormulas] = useState<FormulaProduct[]>([]);
   const [presets, setPresets] = useState<any[]>([]);
@@ -61,7 +66,7 @@ export function QuickFormulaManageModal({
     try {
       setLoading(true);
       setError(null);
-      const res = await fetch("/api/nutrition/products?type=formula&includeInactive=true");
+      const res = await nutritionFetch("/api/nutrition/products?type=formula&includeInactive=true");
       if (res.ok) {
         const data = await res.json();
         setFormulas(data.formulas || []);
@@ -79,7 +84,7 @@ export function QuickFormulaManageModal({
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [nutritionFetch]);
 
   useEffect(() => {
     if (isOpen) {
@@ -95,7 +100,7 @@ export function QuickFormulaManageModal({
   const handleSetDefault = async (formula: FormulaProduct) => {
     try {
       setActionLoadingId(formula.id);
-      const res = await fetch("/api/nutrition/products", {
+      const res = await nutritionFetch("/api/nutrition/products", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -126,7 +131,7 @@ export function QuickFormulaManageModal({
 
     try {
       setActionLoadingId(formula.id);
-      const res = await fetch(`/api/nutrition/products?id=${formula.id}&type=formula`, {
+      const res = await nutritionFetch(`/api/nutrition/products?id=${formula.id}&type=formula`, {
         method: "DELETE",
       });
       if (res.ok) {
@@ -154,7 +159,7 @@ export function QuickFormulaManageModal({
     try {
       setActionLoadingId(preset.name);
       const isFirst = activeFormulas.length === 0;
-      const res = await fetch("/api/nutrition/products", {
+      const res = await nutritionFetch("/api/nutrition/products", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -208,7 +213,7 @@ export function QuickFormulaManageModal({
           ? Number((customForm.scoopWeightG / (customForm.waterPerScoopMl + customForm.scoopWeightG * 0.7)).toFixed(4))
           : customForm.reconstitutionRatio || 0.135;
 
-      const res = await fetch("/api/nutrition/products", {
+      const res = await nutritionFetch("/api/nutrition/products", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

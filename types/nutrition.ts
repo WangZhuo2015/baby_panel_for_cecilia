@@ -31,6 +31,8 @@ export interface FormulaProduct {
 // ─── Supplement Product (补剂档案) ──────────────────────────────────────────
 export interface SupplementProduct {
   id: string;
+  /** Present only in the GrowDesk extended representation. */
+  version?: number;
   familyId: string;
   name: string;
   brand: string;
@@ -49,6 +51,8 @@ export type ScheduleFrequency = 'daily' | 'alternate_day' | 'specific_days';
 
 export interface SupplementSchedule {
   id: string;
+  /** Present only in the GrowDesk extended representation. */
+  version?: number;
   babyId: string;
   productId: string;
   product?: SupplementProduct;
