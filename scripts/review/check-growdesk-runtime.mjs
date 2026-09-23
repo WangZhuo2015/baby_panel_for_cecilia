@@ -139,9 +139,14 @@ try {
   const cookie = session.split(';')[0];
   const oldURL = `/uploads/${oldFileName}`;
   assert.equal((await call(oldURL, { redirect: 'manual' })).status, 401);
+  assert.equal((await call(oldURL, { method: 'HEAD', redirect: 'manual' })).status, 401);
   const oldImage = await call(oldURL, { headers: { cookie }, redirect: 'manual' });
   assert.equal(oldImage.status, 307);
   assert.equal(oldImage.headers.get('location'), `/api/attachments/${attachmentId}`);
+  assert.equal((await call(oldURL, { method: 'HEAD', headers: { cookie }, redirect: 'manual' })).status, 307);
+  const imageHead = await call(`/api/attachments/${attachmentId}`, { method: 'HEAD', headers: { cookie } });
+  assert.equal(imageHead.status, 200);
+  assert.equal(await imageHead.text(), '');
   const image = await call(`/api/attachments/${attachmentId}`, { headers: { cookie } });
   assert.equal(image.status, 200);
   assert.equal(image.headers.get('cache-control'), 'private, no-store');
@@ -149,6 +154,7 @@ try {
   attachmentDenied = true;
   assert.equal((await call(oldURL, { headers: { cookie }, redirect: 'manual' })).status, 404);
   assert.equal((await call(`/api/attachments/${attachmentId}`, { headers: { cookie } })).status, 403);
+  assert.equal((await call(`/api/attachments/${attachmentId}`, { method: 'HEAD', headers: { cookie } })).status, 403);
   attachmentDenied = false;
   const me = await call('/api/auth/me' , { headers: { cookie } });
   assert.equal(me.status, 200); assert.equal((await me.json()).user.id, user.id);

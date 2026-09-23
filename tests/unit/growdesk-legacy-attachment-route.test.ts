@@ -72,6 +72,8 @@ test("uploads rewrite precedes public-file routing and preserves method restrict
     assert.equal(proxy(new NextRequest("https://test.invalid/uploads/test.png", { method: "POST" })).status, 405);
     assert.equal(isBridgedMethod("/api/legacy-attachments/medical/test.png", "GET", "go"), true);
     assert.equal(isBridgedMethod("/api/legacy-attachments/medical/test.png", "POST", "go"), false);
+    assert.equal(isBridgedMethod(`/api/attachments/${id}`, "HEAD", "go"), true);
+    assert.equal(isBridgedMethod(`/api/attachments/${id}`, "POST", "go"), false);
   } finally {
     if (previous === undefined) delete process.env.GROWDESK_ENABLED;
     else process.env.GROWDESK_ENABLED = previous;
