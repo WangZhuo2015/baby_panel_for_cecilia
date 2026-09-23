@@ -1,8 +1,10 @@
+import { growdeskCompanionEndpoints } from "@/lib/growdesk/companion-runtime";
 import { NextResponse } from "next/server";
-import { PUSH_CONFIG } from "@/lib/config";
+import { PUSH_CONFIG, GROWDESK_CONFIG } from "@/lib/config";
 import { requireAuth } from "@/lib/api-helpers";
 
 export async function GET(request: Request) {
+  if (GROWDESK_CONFIG.enabled) return growdeskCompanionEndpoints.pushPublicKey(request);
   const auth = await requireAuth(request);
   if (auth.errorResponse) return auth.errorResponse;
 
@@ -16,4 +18,3 @@ export async function GET(request: Request) {
 
   return NextResponse.json({ publicKey });
 }
-

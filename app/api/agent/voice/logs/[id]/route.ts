@@ -1,11 +1,9 @@
+import { growdeskCompanionEndpoints } from "@/lib/growdesk/companion-runtime";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/api-helpers";
 import { GROWDESK_CONFIG } from "@/lib/config";
-import { resolveBffSession } from "@/lib/growdesk/session";
 import { BridgeError } from "@/lib/growdesk/bridge-protocol";
-import { acknowledgeGrowDeskVoiceLog, getGrowDeskVoiceLog } from "@/lib/growdesk/voice-log-api";
-import { growdeskFetch } from "@/lib/growdesk/client";
 
 export const dynamic = "force-dynamic";
 
@@ -15,13 +13,7 @@ export async function GET(
 ) {
   try {
     if (GROWDESK_CONFIG.enabled) {
-      const bffSession = await resolveBffSession(request);
-      if (!bffSession) {
-        return NextResponse.json({ success: false, error: "Unauthorized: 会话无效或已过期" }, { status: 401 });
-      }
-      const { id } = await props.params;
-      const log = await getGrowDeskVoiceLog(growdeskFetch, bffSession.accessToken, id);
-      return NextResponse.json({ success: true, log });
+      return growdeskCompanionEndpoints.getVoiceLog(request, (await props.params).id);
     }
 
     const auth = await requireAuth(request);
@@ -61,16 +53,7 @@ export async function PATCH(
 ) {
   try {
     if (GROWDESK_CONFIG.enabled) {
-      const bffSession = await resolveBffSession(request);
-      if (!bffSession) {
-        return NextResponse.json({ success: false, error: "Unauthorized: 会话无效或已过期" }, { status: 401 });
-      }
-      const { id } = await props.params;
-      const body = await request.json().catch(() => ({}));
-      const acknowledged = body.acknowledged === true || body.acknowledged === "true";
-
-      await acknowledgeGrowDeskVoiceLog(growdeskFetch, bffSession.accessToken, id, acknowledged);
-      return NextResponse.json({ success: true });
+      return growdeskCompanionEndpoints.acknowledgeVoiceLog(request, (await props.params).id);
     }
 
     const auth = await requireAuth(request);

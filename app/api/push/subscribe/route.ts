@@ -3,48 +3,11 @@ import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/api-helpers";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import { GROWDESK_CONFIG } from "@/lib/config";
-import { resolveBffSession } from "@/lib/growdesk/session";
-import { verifyBffCsrf } from "@/lib/growdesk/csrf";
-import { growdeskFetch } from "@/lib/growdesk/client";
-import crypto from "node:crypto";
+import { growdeskCompanionEndpoints } from "@/lib/growdesk/companion-runtime";
 
 export async function POST(request: Request) {
   try {
-    if (GROWDESK_CONFIG.enabled) {
-      const csrfErr = verifyBffCsrf(request);
-      if (csrfErr) return csrfErr;
-
-      const bffSession = await resolveBffSession(request);
-      if (!bffSession) {
-        return NextResponse.json({ error: "Unauthorized: 会话无效或已过期" }, { status: 401 });
-      }
-
-      const subscription = await request.json().catch(() => ({}));
-      const endpoint = subscription?.endpoint ? String(subscription.endpoint).trim() : "";
-      if (!endpoint) {
-        return NextResponse.json({ error: "请求格式无效:必须提供 endpoint 和 keys" }, { status: 400 });
-      }
-
-      const installationId = crypto.createHash("sha256").update(endpoint).digest("hex").slice(0, 32);
-      const res = await growdeskFetch(`/api/v1/devices/${installationId}/push`, {
-        method: "PUT",
-        accessToken: bffSession.accessToken,
-        body: {
-          token: endpoint,
-          platform: "web",
-          environment: "production",
-        },
-      });
-
-      if (!res.ok) {
-        return NextResponse.json(
-          { error: res.error?.message || "订阅保存失败" },
-          { status: res.status },
-        );
-      }
-
-      return NextResponse.json({ success: true, id: installationId });
-    }
+    if (GROWDESK_CONFIG.enabled) return growdeskCompanionEndpoints.subscribe(request);
 
     const auth = await requireAuth(request);
     if (auth.errorResponse) return auth.errorResponse;
@@ -114,27 +77,7 @@ export async function POST(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
-    if (GROWDESK_CONFIG.enabled) {
-      const csrfErr = verifyBffCsrf(request);
-      if (csrfErr) return csrfErr;
-
-      const bffSession = await resolveBffSession(request);
-      if (!bffSession) {
-        return NextResponse.json({ error: "Unauthorized: 会话无效或已过期" }, { status: 401 });
-      }
-
-      const body = await request.json().catch(() => ({}));
-      const endpoint = body?.endpoint ? String(body.endpoint).trim() : "";
-      if (endpoint) {
-        const installationId = crypto.createHash("sha256").update(endpoint).digest("hex").slice(0, 32);
-        await growdeskFetch(`/api/v1/devices/${installationId}/push`, {
-          method: "DELETE",
-          accessToken: bffSession.accessToken,
-        });
-      }
-
-      return NextResponse.json({ success: true });
-    }
+    if (GROWDESK_CONFIG.enabled) return growdeskCompanionEndpoints.unsubscribe(request);
 
     const auth = await requireAuth(request);
     if (auth.errorResponse) return auth.errorResponse;

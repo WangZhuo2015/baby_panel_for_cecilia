@@ -41,7 +41,8 @@ export const BRIDGED_METHODS: Readonly<Record<string, readonly string[]>> = {
   "/api/vaccines/selections": ["GET", "PUT"],
   "/api/records/timeline": ["GET"],
   "/api/notifications": ["GET"],
-  "/api/push/subscribe": ["POST"],
+  "/api/push/subscribe": ["POST", "DELETE"],
+  "/api/push/vapid-key": ["GET"],
   "/api/agent/voice": ["POST"],
   "/api/agent/voice/logs": ["GET"],
   "/api/ai/sessions": ["GET", "POST"],
@@ -79,6 +80,12 @@ export function isBridgedMethod(
   // The Go preview must never silently fall back to Web-local AI/PAT state.
   if (backend === "go" && isPendingGoRoute(pathname)) return false;
 
+  if (/^\/api\/agent\/voice\/logs\/[a-f0-9-]{36}$/i.test(pathname)) {
+    return ["GET", "PATCH"].includes(upperMethod);
+  }
+  if (/^\/api\/notifications\/[a-f0-9-]{36}$/i.test(pathname)) {
+    return ["POST", "PATCH"].includes(upperMethod);
+  }
   // Dynamic session-item handlers implement GET/PATCH/DELETE (POST stays 404-ish upstream).
   if (/^\/api\/ai\/sessions\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(pathname)) {
     return ["GET", "PATCH", "DELETE"].includes(upperMethod);
