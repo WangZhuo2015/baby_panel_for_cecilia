@@ -148,8 +148,10 @@ function transferStream(response: Response, upstream: AbortController, cleanup: 
       if (finished) return;
       finished = true;
       finish();
-      upstream.abort(reason);
-      try { await reader.cancel(reason); } finally { reader.releaseLock(); }
+      // Aborting first errors Undici's reader and makes an intentional
+      // consumer cancellation reject with that same cancellation reason.
+      try { await reader.cancel(reason); }
+      finally { upstream.abort(reason); reader.releaseLock(); }
     },
   }, { highWaterMark: 0 });
   const headers = new Headers(response.headers);
