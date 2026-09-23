@@ -3,10 +3,10 @@
 Status: implemented increment; **not full Web/Go acceptance or production approval**.
 
 - PR: #22, `codex/go-web-adapter-20260923` -> `codex/web-parity-20260919`.
-- Code checkpoint: `79071a3f5885c22ce73a2e53f4dd31a250e65524`.
+- Code checkpoint: `47a2568af1ebac622f8ce8eb9359d2286d4e6128`.
 - Backend candidate inspected: `3e0578ba5e7ba6dc4b00e04d931385bbc5fafddb` in `WangZhuo2015/growdesk-server`.
-- Existing layouts, page components and forms are unchanged by this increment. Browser-facing paths and response envelopes are retained.
-- No merge, deployment, production database action, real push delivery or benchmark was performed.
+- Existing layouts, form behavior, browser-facing paths and response envelopes are retained. Four existing components/pages change only private-image loading policy and its import; dimensions, CSS classes and click behavior are unchanged.
+- No merge, deployment, production database action, real push delivery or benchmark was performed during this increment.
 
 ## Small commits and review findings
 
@@ -21,6 +21,8 @@ Status: implemented increment; **not full Web/Go acceptance or production approv
 | `b2f00c1` | Exercise private-history actions and a real surviving public-file fixture through the actual Next HTTP server. |
 | `0915e10` | Remove the temporary source-export workflow. |
 | `79071a3` | Permit authenticated attachment HEAD requests and test anonymous and revoked access through real Next HTTP routing. |
+| `26d31b4` | Share an explicit private-image policy and use it for avatars. Test actual Next image props rather than only inspecting source text. |
+| `47a2568` | Apply that policy to growth previews, medical-report thumbnails/details and medical-upload previews without changing layout or form behavior. |
 
 ### Authorization and error handling
 
@@ -29,6 +31,14 @@ Push writes check CSRF before session exchange. Body size is bounded at 8 KB; UR
 Old attachment paths reject traversal components, encoded separators, control characters and oversized UTF-8 paths. A mapped ID must be a UUID. Redirects are relative same-origin URLs; upstream-provided URLs and forwarded host headers are not trusted. The canonical attachment endpoint performs its own current authorization. Missing mappings and authorization errors never fall back to disk. The HTTP test creates only its own uniquely named file and deletes only that file.
 
 Voice-log GET checks both the requested ID and current user. PATCH rejects malformed acknowledgement values and foreign origins before writes. Notification read and voice acknowledgement require a positive backend result and preserve upstream denial/outage statuses.
+
+### Private-image compatibility
+
+Next's default image optimizer does not forward authentication headers to its source image (official documentation: https://nextjs.org/docs/app/api-reference/components/image). Protecting old upload URLs without changing image loading would leave some existing avatars and medical pictures inaccessible through the optimizer.
+
+`shouldBypassImageOptimization` applies direct loading to `/uploads/`, `/api/attachments/`, `/api/legacy-attachments/` and temporary data/blob previews, including absolute URLs and query strings. Public static images keep their existing optimization. This helper is a rendering policy, not a URL-authorization function. The API still checks permissions. No global optimizer disablement, forwarded-cookie proxy or public image cache was introduced.
+
+Tests call the real `getImageProps` API to verify that private images preserve their original source and dimensions, omit optimizer-generated srcSet, and that public images still use the optimizer. These tests are not a browser cookie-flow or visual screenshot acceptance test.
 
 ### Compatibility boundaries
 
@@ -40,20 +50,22 @@ The old-image rewrite also runs in TypeScript GrowDesk mode; that deployment mus
 
 ## Executed verification
 
-The three new focused test files contain **18 passing tests** at the code checkpoint:
+The four new focused test files contain **21 passing tests** at the code checkpoint:
 
 ```sh
 node_modules/.bin/tsx --env-file=.env.test --test --test-concurrency=1 \
   tests/unit/growdesk-native-push.test.ts \
   tests/unit/growdesk-legacy-attachment-route.test.ts \
-  tests/unit/growdesk-private-history-routes.test.ts
+  tests/unit/growdesk-private-history-routes.test.ts \
+  tests/unit/private-image.test.ts
 npm run typecheck
 npm run lint
 npm run build
+node scripts/prepare-standalone.mjs
 node scripts/review/check-growdesk-runtime.mjs
 ```
 
-Local focused tests, typecheck, lint and actual Next HTTP smoke passed. Local lint retained existing warnings; it was not warning-free. A local `npm test` attempt was blocked during Prisma's pretest engine download by unavailable DNS; do not report the full local suite as passed. The local build completed and the HTTP smoke was rerun separately after the combined tool invocation timed out. Docker is not installed in the local review container; its result comes from Actions.
+Local focused tests and typecheck passed. Local lint reported 0 errors and 1088 existing warnings; it was not warning-free. A local `npm test` attempt was blocked during Prisma's pretest engine download by unavailable DNS; do not report the full local suite as passed. The local build emitted its completed route output before the combined tool invocation timed out; standalone preparation and the actual HTTP smoke were then executed separately and passed. Docker is not installed in the local review container; its result comes from Actions.
 
 The smoke runs a **real Next.js production build against a synthetic upstream**, including cookie exchange, legacy/extended DTOs, push subscribe/unsubscribe, notification outage/read, voice-history acknowledgement/CSRF, and private attachment GET/HEAD. It is not a real Go/PostgreSQL/MinIO or browser acceptance test.
 
