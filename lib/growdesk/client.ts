@@ -41,7 +41,7 @@ const FORBIDDEN_INCOMING_HEADERS = new Set([
 ]);
 
 /**
- * Controlled, server-only HTTP client to proxy requests from Next.js BFF to GrowDesk Fastify API.
+ * Controlled, server-only HTTP client to proxy requests from Next.js BFF to the selected GrowDesk API implementation.
  * Enforces fixed origin, header sanitization, timeout bounding, and typed error envelope handling.
  */
 export async function growdeskFetch<T>(
