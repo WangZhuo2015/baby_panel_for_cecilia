@@ -11,6 +11,7 @@ const user = { id: 'test_user_runtime', username: 'test_user_runtime', displayNa
 const feedingDetail = { id: 'test_feed_runtime', babyId: baby.id, familyId: family.id, feedingType: 'mixed', occurredAt: '2026-09-12T08:15:00.000Z', amountMl: '85', leftMinutes: 7, rightMinutes: 3, spitUp: false, formulaProductId: null, notes: 'test_original_note', source: 'ui_manual', sourceAgent: null, version: '4' };
 let outage = false;
 let secretHash;
+let notificationFailure = false;
 const upstream = http.createServer(async (req, res) => {
   let raw = ''; for await (const part of req) raw += part;
   const body = raw ? JSON.parse(raw) : {};
@@ -44,7 +45,18 @@ const upstream = http.createServer(async (req, res) => {
   if (url.pathname === `/api/v1/babies/${baby.id}`) { send(baby); return; }
   if (url.pathname.endsWith(`/records/feeding/${feedingDetail.id}`)) { send(feedingDetail); return; }
   if (url.pathname.endsWith('/records/feeding')) { res.end(JSON.stringify({ data: [], page: { nextCursor: null } })); return; }
-  if (url.pathname === '/api/v1/notifications') { res.end(JSON.stringify({ data: [{ id: 'notif_1', eventKey: 'daily.summary', title: '今日日报', body: '测试内容', createdAt: new Date().toISOString() }], page: { nextCursor: null } })); return; }
+  if (url.pathname === '/api/v1/notifications') {
+    if (notificationFailure) { res.writeHead(503); res.end(JSON.stringify({ error: { code: 'TEST_NOTIFICATION_OUTAGE', message: 'test notification outage' } })); return; }
+    res.end(JSON.stringify({ data: [{ id: 'notif_1', userId: user.id, eventKey: 'daily.summary', title: '今日日报', body: '测试内容', readAt: null, createdAt: new Date().toISOString() }], page: { nextCursor: null } })); return;
+  }
+  if ([`/api/v1/babies/${baby.id}/records/sleep`, `/api/v1/babies/${baby.id}/records/diaper`, `/api/v1/babies/${baby.id}/records/food`, `/api/v1/babies/${baby.id}/records/supplement`, `/api/v1/babies/${baby.id}/growth-measurements`].includes(url.pathname)) {
+    res.end(JSON.stringify({ data: [], page: { nextCursor: null } })); return;
+  }
+  if ([`/api/v1/babies/${baby.id}/vaccines/records`, `/api/v1/babies/${baby.id}/vaccines/schedule`].includes(url.pathname)) { send([]); return; }
+  if (url.pathname === `/api/v1/babies/${baby.id}/food-plan`) { send({ id: null, babyId: baby.id, createdAt: null, updatedAt: '2026-01-01T00:00:00.000Z', planData: {}, version: '0' }); return; }
+  if (url.pathname === '/api/v1/development/milestones') {
+    res.end(JSON.stringify({ data: [], dataRelease: { id: 'test_release', title: 'test_reference', asOf: '2026-01-01', sources: [{ organization: 'test_organization' }] } })); return;
+  }
   if (url.pathname.startsWith('/api/v1/devices/')) { send({ success: true }); return; }
   res.writeHead(404); res.end('{}');
 });
@@ -84,6 +96,11 @@ try {
   assert.equal(selected.status, 200); assert.equal((await selected.json()).id, baby.id);
   const feeding = await call(`/api/records/feeding?babyId=${baby.id}&date=2026-09-13`, { headers: { cookie } });
   assert.equal(feeding.status, 200); assert.deepEqual(await feeding.json(), []);
+  const legacyDetail = await call(`/api/records/feeding?babyId=${baby.id}&id=${feedingDetail.id}`, { headers: { cookie } });
+  assert.equal(legacyDetail.status, 200);
+  const legacyRecord = await legacyDetail.json();
+  assert.equal(legacyRecord.amountMl, 85);
+  assert.equal(Object.hasOwn(legacyRecord, 'version'), false, 'default DTO must retain the legacy contract');
   const detail = await call(`/api/records/feeding?babyId=${baby.id}&id=${feedingDetail.id}`, {
     headers: { cookie, "x-growdesk-representation": "extended" },
   });
@@ -98,7 +115,13 @@ try {
   assert.equal(notifs.status, 200);
   const notifList = await notifs.json();
   assert.ok(Array.isArray(notifList));
-  assert.equal(notifList[0]?.id, 'notif_1');
+  assert.ok(notifList.some(item => item.id === 'notif_1'));
+  assert.ok(notifList.some(item => item.id.startsWith('daily-feeding')));
+  notificationFailure = true;
+  const failedNotifications = await call('/api/notifications', { headers: { cookie } });
+  assert.equal(failedNotifications.status, 503);
+  assert.equal((await failedNotifications.json()).code, 'TEST_NOTIFICATION_OUTAGE');
+  notificationFailure = false;
   const pushSub = await call('/api/push/subscribe', {
     method: 'POST',
     headers: { cookie, origin, 'content-type': 'application/json' },
