@@ -87,3 +87,29 @@ test("TypeScript GrowDesk mode retains transitional AI-job reachability", () => 
     false,
   );
 });
+
+
+test("Go handler guards reject transitional PAT and AI-job state before database access", async () => {
+  const previousEnabled = process.env.GROWDESK_ENABLED;
+  const previousBackend = process.env.GROWDESK_BACKEND;
+  process.env.GROWDESK_ENABLED = "true";
+  process.env.GROWDESK_BACKEND = "go";
+  try {
+    const jobs = await import("../../app/api/ai/jobs/route");
+    const job = await import("../../app/api/ai/jobs/[id]/route");
+    const tokens = await import("../../app/api/user/tokens/route");
+
+    assert.equal((await jobs.GET(new Request("http://test.invalid/api/ai/jobs"))).status, 501);
+    assert.equal((await tokens.GET(new Request("http://test.invalid/api/user/tokens"))).status, 501);
+    assert.equal((await tokens.POST(new Request("http://test.invalid/api/user/tokens", { method: "POST" }))).status, 501);
+
+    const context = { params: Promise.resolve({ id: "550e8400-e29b-41d4-a716-446655440000" }) };
+    assert.equal((await job.GET(new Request("http://test.invalid/api/ai/jobs/x"), context)).status, 501);
+    assert.equal((await job.PATCH(new Request("http://test.invalid/api/ai/jobs/x", { method: "PATCH" }), context)).status, 501);
+  } finally {
+    if (previousEnabled === undefined) delete process.env.GROWDESK_ENABLED;
+    else process.env.GROWDESK_ENABLED = previousEnabled;
+    if (previousBackend === undefined) delete process.env.GROWDESK_BACKEND;
+    else process.env.GROWDESK_BACKEND = previousBackend;
+  }
+});
