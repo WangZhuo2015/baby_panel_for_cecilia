@@ -193,12 +193,40 @@ export const PUSH_CONFIG = {
   },
 } as const;
 
+export type GrowDeskBackendImplementation = "typescript" | "go";
+
+export function resolveGrowDeskBackendImplementation(
+  env: NodeJS.ProcessEnv = process.env,
+): GrowDeskBackendImplementation {
+  const raw = (env.GROWDESK_BACKEND || "typescript").trim().toLowerCase();
+  if (raw === "typescript" || raw === "node" || raw === "fastify") return "typescript";
+  if (raw === "go" || raw === "native-go" || raw === "native_go") return "go";
+  throw new Error(
+    `FATAL: GROWDESK_BACKEND must be "typescript" or "go" (received: ${raw || "<empty>"})`,
+  );
+}
+
+export function resolveGrowDeskApiUrl(env: NodeJS.ProcessEnv = process.env): string {
+  const explicit = (env.GROWDESK_API_URL || "").trim();
+  if (explicit) return explicit.replace(/\/+$/, "");
+  if (resolveGrowDeskBackendImplementation(env) === "go") {
+    return (env.GROWDESK_GO_API_URL || "http://127.0.0.1:3081").replace(/\/+$/, "");
+  }
+  return "http://127.0.0.1:3080";
+}
+
 export const GROWDESK_CONFIG = {
   get enabled(): boolean {
     return process.env.GROWDESK_ENABLED === "true" || process.env.GROWDESK_ENABLED === "1";
   },
+  get backend(): GrowDeskBackendImplementation {
+    return resolveGrowDeskBackendImplementation();
+  },
+  get usesGoBackend(): boolean {
+    return this.backend === "go";
+  },
   get apiUrl(): string {
-    return (process.env.GROWDESK_API_URL || "http://127.0.0.1:3080").replace(/\/+$/, "");
+    return resolveGrowDeskApiUrl();
   },
   get cookieName(): string {
     return IS_PRODUCTION ? "__Host-growdesk_web" : "growdesk_web_dev";
@@ -208,6 +236,10 @@ export const GROWDESK_CONFIG = {
 
 export function isGrowDeskEnabled(): boolean {
   return GROWDESK_CONFIG.enabled;
+}
+
+export function isGrowDeskGoBackend(): boolean {
+  return GROWDESK_CONFIG.enabled && GROWDESK_CONFIG.usesGoBackend;
 }
 
 export const config = {
