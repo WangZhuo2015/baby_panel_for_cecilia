@@ -94,7 +94,7 @@ export async function GET(request: Request) {
         const rawList = await fetchCompleteList<GrowDeskFormulaProduct>(
           growdeskFetch,
           bffSession.accessToken,
-          `/api/v1/families/${familyId}/nutrition/products`,
+          `/api/v1/families/${familyId}/nutrition/products${includeInactive ? "?includeArchived=true" : ""}`,
         );
 
         let firstActiveSeen = false;
@@ -124,7 +124,7 @@ export async function GET(request: Request) {
         const rawSupplements = await fetchCompleteList<GrowDeskSupplementProduct>(
           growdeskFetch,
           bffSession.accessToken,
-          `/api/v1/families/${familyId}/nutrition/supplement-products`,
+          `/api/v1/families/${familyId}/nutrition/supplement-products${includeInactive ? "?includeArchived=true" : ""}`,
         );
         supplements = rawSupplements.map(fromGrowDeskSupplementProduct);
         if (!includeInactive) {
@@ -780,7 +780,7 @@ export async function DELETE(request: Request) {
 
         if (existing.isDefault) {
           const nextActive = await prisma.formulaProduct.findFirst({
-            where: { familyId, isActive: true, id: { not: id } },
+            where: { familyId, isActive: true },
             orderBy: { createdAt: "desc" },
           });
           if (nextActive) {
