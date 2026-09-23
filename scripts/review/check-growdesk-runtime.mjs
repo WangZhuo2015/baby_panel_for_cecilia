@@ -1,7 +1,8 @@
 /** Next.js HTTP wiring smoke against a synthetic upstream; NOT PostgreSQL/browser E2E. */
 import assert from 'node:assert/strict';
 import http from 'node:http';
-import { createECDH } from 'node:crypto';
+import { createECDH, randomUUID } from 'node:crypto';
+import { mkdir, writeFile, unlink } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -15,6 +16,14 @@ let secretHash;
 let notificationFailure = false;
 let pushFailure = false;
 let savedSubscription;
+let notificationRead = false;
+const voiceLog = { id: '550e8400-e29b-41d4-a716-446655440123', userId: user.id, familyId: family.id, babyId: baby.id, prompt: 'test prompt', reply: 'test private reply', isAsync: true, isFastPath: false, acknowledged: false, createdAt: '2026-01-01T00:00:00.000Z', baby: null };
+let attachmentDenied = false;
+const attachmentId = '550e8400-e29b-41d4-a716-446655440000';
+const oldFileName = `test_runtime_${randomUUID()}.png`;
+const oldFilePath = `.next/standalone/public/uploads/${oldFileName}`;
+const protectedBytes = 'test_canonical_private_attachment';
+let createdOldFile = false;
 const testPushKey = createECDH('prime256v1'); testPushKey.generateKeys();
 const testSubscription = { endpoint: 'https://push.example.invalid/test_token', expirationTime: null, keys: {
   p256dh: testPushKey.getPublicKey().toString('base64url'), auth: Buffer.alloc(16, 1).toString('base64url'),
@@ -52,9 +61,19 @@ const upstream = http.createServer(async (req, res) => {
   if (url.pathname === `/api/v1/babies/${baby.id}`) { send(baby); return; }
   if (url.pathname.endsWith(`/records/feeding/${feedingDetail.id}`)) { send(feedingDetail); return; }
   if (url.pathname.endsWith('/records/feeding')) { res.end(JSON.stringify({ data: [], page: { nextCursor: null } })); return; }
+  if (url.pathname === '/api/v1/notifications/notif_1/read' && req.method === 'POST') {
+    notificationRead = true; send({ success: true }); return;
+  }
+  if (url.pathname === `/api/v1/voice/logs/${voiceLog.id}`) {
+    if (req.method === 'GET') { send(voiceLog); return; }
+    if (req.method === 'PATCH' && typeof body.acknowledged === 'boolean') {
+      voiceLog.acknowledged = body.acknowledged; send({ success: true }); return;
+    }
+    res.writeHead(400); res.end('{}'); return;
+  }
   if (url.pathname === '/api/v1/notifications') {
     if (notificationFailure) { res.writeHead(503); res.end(JSON.stringify({ error: { code: 'TEST_NOTIFICATION_OUTAGE', message: 'test notification outage' } })); return; }
-    res.end(JSON.stringify({ data: [{ id: 'notif_1', userId: user.id, eventKey: 'daily.summary', title: '今日日报', body: '测试内容', readAt: null, createdAt: new Date().toISOString() }], page: { nextCursor: null } })); return;
+    res.end(JSON.stringify({ data: [{ id: 'notif_1', userId: user.id, eventKey: 'daily.summary', title: '今日日报', body: '测试内容', readAt: notificationRead ? '2026-01-01T00:00:00.000Z' : null, createdAt: new Date().toISOString() }], page: { nextCursor: null } })); return;
   }
   if ([`/api/v1/babies/${baby.id}/records/sleep`, `/api/v1/babies/${baby.id}/records/diaper`, `/api/v1/babies/${baby.id}/records/food`, `/api/v1/babies/${baby.id}/records/supplement`, `/api/v1/babies/${baby.id}/growth-measurements`].includes(url.pathname)) {
     res.end(JSON.stringify({ data: [], page: { nextCursor: null } })); return;
@@ -63,6 +82,16 @@ const upstream = http.createServer(async (req, res) => {
   if (url.pathname === `/api/v1/babies/${baby.id}/food-plan`) { send({ id: null, babyId: baby.id, createdAt: null, updatedAt: '2026-01-01T00:00:00.000Z', planData: {}, version: '0' }); return; }
   if (url.pathname === '/api/v1/development/milestones') {
     res.end(JSON.stringify({ data: [], dataRelease: { id: 'test_release', title: 'test_reference', asOf: '2026-01-01', sources: [{ organization: 'test_organization' }] } })); return;
+  }
+  if (url.pathname === '/api/v1/web/attachments/resolve-legacy') {
+    if (attachmentDenied || url.searchParams.get('path') !== `/uploads/${oldFileName}`) {
+      res.writeHead(404); res.end(JSON.stringify({ error: { code: 'NOT_FOUND', message: 'test hidden' } })); return;
+    }
+    send({ id: attachmentId }); return;
+  }
+  if (url.pathname === `/api/v1/attachments/${attachmentId}/content`) {
+    if (attachmentDenied) { res.writeHead(403); res.end(JSON.stringify({ error: { code: 'BABY_ACCESS_DENIED', message: 'test revoked' } })); return; }
+    res.setHeader('content-type', 'image/png'); res.end(protectedBytes); return;
   }
   if (url.pathname.startsWith('/api/v1/devices/')) {
     if (pushFailure) { res.writeHead(503); res.end(JSON.stringify({ error: { code: 'TEST_PUSH_OUTAGE', message: 'test push unavailable' } })); return; }
@@ -80,6 +109,10 @@ try {
   const reservation = http.createServer(); reservation.listen(0, '127.0.0.1'); await once(reservation, 'listening');
   const port = reservation.address().port; await new Promise(resolve => reservation.close(resolve));
   const origin = `http://127.0.0.1:${port}`;
+  // A real surviving public file must not bypass the mapping/authorization route.
+  await mkdir('.next/standalone/public/uploads', { recursive: true });
+  await writeFile(oldFilePath, 'test_old_disk_bytes_must_never_be_served', { flag: 'wx', mode: 0o600 });
+  createdOldFile = true;
   child = spawn(process.execPath, ['.next/standalone/server.js'], { env: {
     ...process.env, NODE_ENV: 'production', HOSTNAME: '127.0.0.1', PORT: String(port),
     GROWDESK_ENABLED: 'true', GROWDESK_BACKEND: 'go', GROWDESK_WEB_ORIGIN: origin,
@@ -104,7 +137,20 @@ try {
   const session = setCookies.find(value => value.startsWith('__Host-growdesk_web='));
   assert.ok(session?.includes('Secure') && session.includes('HttpOnly'));
   const cookie = session.split(';')[0];
-  const me = await call('/api/auth/me', { headers: { cookie } });
+  const oldURL = `/uploads/${oldFileName}`;
+  assert.equal((await call(oldURL, { redirect: 'manual' })).status, 401);
+  const oldImage = await call(oldURL, { headers: { cookie }, redirect: 'manual' });
+  assert.equal(oldImage.status, 307);
+  assert.equal(oldImage.headers.get('location'), `/api/attachments/${attachmentId}`);
+  const image = await call(`/api/attachments/${attachmentId}`, { headers: { cookie } });
+  assert.equal(image.status, 200);
+  assert.equal(image.headers.get('cache-control'), 'private, no-store');
+  assert.equal(await image.text(), protectedBytes);
+  attachmentDenied = true;
+  assert.equal((await call(oldURL, { headers: { cookie }, redirect: 'manual' })).status, 404);
+  assert.equal((await call(`/api/attachments/${attachmentId}`, { headers: { cookie } })).status, 403);
+  attachmentDenied = false;
+  const me = await call('/api/auth/me' , { headers: { cookie } });
   assert.equal(me.status, 200); assert.equal((await me.json()).user.id, user.id);
   const selected = await call(`/api/baby?babyId=${baby.id}`, { headers: { cookie } });
   assert.equal(selected.status, 200); assert.equal((await selected.json()).id, baby.id);
@@ -136,6 +182,27 @@ try {
   assert.equal(failedNotifications.status, 503);
   assert.equal((await failedNotifications.json()).code, 'TEST_NOTIFICATION_OUTAGE');
   notificationFailure = false;
+  const readNotice = await call('/api/notifications/notif_1', {
+    method: 'PATCH', headers: { cookie, origin },
+  });
+  assert.equal(readNotice.status, 200);
+  assert.deepEqual(await readNotice.json(), { success: true });
+  assert.equal(notificationRead, true);
+  const privateVoice = await call(`/api/agent/voice/logs/${voiceLog.id}`, { headers: { cookie } });
+  assert.equal(privateVoice.status, 200);
+  assert.equal((await privateVoice.json()).log.reply, voiceLog.reply);
+  const ackVoice = await call(`/api/agent/voice/logs/${voiceLog.id}`, {
+    method: 'PATCH', headers: { cookie, origin, 'content-type': 'application/json' },
+    body: JSON.stringify({ acknowledged: true }),
+  });
+  assert.equal(ackVoice.status, 200);
+  assert.equal(voiceLog.acknowledged, true);
+  const foreignAck = await call(`/api/agent/voice/logs/${voiceLog.id}`, {
+    method: 'PATCH', headers: { cookie, origin: 'https://test-attacker.invalid', 'content-type': 'application/json' },
+    body: JSON.stringify({ acknowledged: false }),
+  });
+  assert.equal(foreignAck.status, 403);
+  assert.equal(voiceLog.acknowledged, true);
   const publicKeyResponse = await call('/api/push/vapid-key', { headers: { cookie } });
   assert.equal(publicKeyResponse.status, 200);
   assert.equal((await publicKeyResponse.json()).publicKey, testPushKey.getPublicKey().toString('base64url'));
@@ -171,5 +238,6 @@ try {
   console.error(logs); throw error;
 } finally {
   if (child && child.exitCode === null) { child.kill('SIGTERM'); await once(child, 'exit'); }
+  if (createdOldFile) await unlink(oldFilePath);
   upstream.closeAllConnections(); await new Promise(resolve => upstream.close(resolve));
 }
