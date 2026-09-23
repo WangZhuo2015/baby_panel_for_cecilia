@@ -43,7 +43,16 @@ const upstream = http.createServer(async (req, res) => {
   if (url.pathname === `/api/v1/families/${family.id}`) { send(family); return; }
   if (url.pathname === `/api/v1/babies/${baby.id}`) { send(baby); return; }
   if (url.pathname.endsWith(`/records/feeding/${feedingDetail.id}`)) { send(feedingDetail); return; }
-  if (url.pathname.endsWith('/records/feeding')) { res.end(JSON.stringify({ data: [], page: { nextCursor: null } })); return; }
+  const babyPath = `/api/v1/babies/${baby.id}`;
+  const recordLists = ['feeding', 'sleep', 'diaper', 'food', 'supplement'].map(kind => `${babyPath}/records/${kind}`);
+  if (recordLists.includes(url.pathname) || url.pathname === `${babyPath}/growth-measurements`) {
+    res.end(JSON.stringify({ data: [], page: { nextCursor: null } })); return;
+  }
+  if ([`${babyPath}/vaccines/records`, `${babyPath}/vaccines/schedule`].includes(url.pathname)) { send([]); return; }
+  if (url.pathname === `${babyPath}/food-plan`) { send({ id: null, babyId: baby.id, planData: {}, version: '0', createdAt: null, updatedAt: null }); return; }
+  if (url.pathname === '/api/v1/development/milestones') {
+    res.end(JSON.stringify({ data: [], dataRelease: { id: 'test_release', title: 'Test reference release', asOf: '2026-01-01', sources: [{ organization: 'Test fixture' }] } })); return;
+  }
   if (url.pathname === '/api/v1/notifications') { res.end(JSON.stringify({ data: [{ id: 'notif_1', userId: user.id, eventKey: 'daily.summary', title: '今日日报', body: '测试内容', data: null, readAt: null, createdAt: new Date().toISOString() }], page: { nextCursor: null } })); return; }
   if (url.pathname.startsWith('/api/v1/devices/')) { send({ success: true }); return; }
   res.writeHead(404); res.end('{}');
@@ -115,7 +124,7 @@ try {
   outage = false;
   assert.equal((await call('/api/auth/logout', { method: 'POST', headers: { cookie, origin } })).status, 200);
   assert.equal((await (await call('/api/auth/me', { headers: { cookie } })).json()).user, null);
-  console.log('PASS: actual Next HTTP Go-backend selector, login/cookie/me/baby/feeding, capability fence, CSRF, outage and logout wiring. Synthetic upstream; no PostgreSQL or browser assertions.');
+  console.log('PASS: actual Next HTTP Go-backend selector, login/cookie/me/baby/feeding/notifications, CSRF, outage and logout wiring. Synthetic upstream; no PostgreSQL or browser assertions.');
 } catch (error) {
   console.error(logs); throw error;
 } finally {
