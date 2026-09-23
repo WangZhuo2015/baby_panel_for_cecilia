@@ -67,13 +67,15 @@ jobs:
           go mod download
           go mod verify
           git diff --exit-code -- go.mod go.sum
-          mkdir -p dist-go
-          CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X main.revision=$(git rev-parse HEAD)" -o dist-go/growdesk-api ./cmd/growdesk-api
+          mkdir -p "$RUNNER_TEMP/native-web-bin"
+          CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X main.revision=$(git rev-parse HEAD)" -o "$RUNNER_TEMP/native-web-bin/growdesk-api" ./cmd/growdesk-api
+          git status --short
+          test -z "$(git status --porcelain)"
       - name: Exercise actual Web HTTP and native persistent effects
         run: |
           python3 scripts/review/check-native-go-web.py \
             --server-root node_modules/.growdesk-test-reference \
-            --binary node_modules/.growdesk-test-reference/dist-go/growdesk-api \
+            --binary "$RUNNER_TEMP/native-web-bin/growdesk-api" \
             --report "$RUNNER_TEMP/native-web-evidence/report.json"
       - uses: actions/upload-artifact@v4
         if: always()
