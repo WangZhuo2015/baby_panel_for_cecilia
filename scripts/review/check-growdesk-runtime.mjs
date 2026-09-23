@@ -44,8 +44,9 @@ try {
   const origin = `http://127.0.0.1:${port}`;
   child = spawn(process.execPath, ['.next/standalone/server.js'], { env: {
     ...process.env, NODE_ENV: 'production', HOSTNAME: '127.0.0.1', PORT: String(port),
-    GROWDESK_ENABLED: 'true', GROWDESK_WEB_ORIGIN: origin,
-    GROWDESK_API_URL: `http://127.0.0.1:${upstream.address().port}`,
+    GROWDESK_ENABLED: 'true', GROWDESK_BACKEND: 'go', GROWDESK_WEB_ORIGIN: origin,
+    GROWDESK_API_URL: '',
+    GROWDESK_GO_API_URL: `http://127.0.0.1:${upstream.address().port}`,
     DATABASE_URL: 'file:./dev_test.db', JWT_SECRET: 'test_runtime_only_012345678901234567890123456789',
   }, stdio: ['ignore', 'pipe', 'pipe'] });
   child.stdout.on('data', chunk => { logs += chunk; }); child.stderr.on('data', chunk => { logs += chunk; });
@@ -99,7 +100,7 @@ try {
   outage = false;
   assert.equal((await call('/api/auth/logout', { method: 'POST', headers: { cookie, origin } })).status, 200);
   assert.equal((await (await call('/api/auth/me', { headers: { cookie } })).json()).user, null);
-  console.log('PASS: actual Next HTTP login/cookie/me/baby/feeding, method fence, CSRF, outage and logout wiring. Synthetic upstream; no PostgreSQL or browser assertions.');
+  console.log('PASS: actual Next HTTP Go-backend selector, login/cookie/me/baby/feeding, capability fence, CSRF, outage and logout wiring. Synthetic upstream; no PostgreSQL or browser assertions.');
 } catch (error) {
   console.error(logs); throw error;
 } finally {
