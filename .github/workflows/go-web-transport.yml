@@ -1,0 +1,59 @@
+name: Go Web transport
+on:
+  pull_request:
+    branches: [main, codex/web-parity-20260919, codex/go-web-adapter-20260923]
+  push:
+    branches: [codex/web-parity-20260919]
+permissions:
+  contents: read
+concurrency:
+  group: go-web-transport-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  transport-regression:
+    name: HTTP lifecycle and attachment authorization contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Real loopback HTTP and legacy-reference regression
+        env:
+          NODE_ENV: test
+          DATABASE_URL: file:./dev_test.db
+          JWT_SECRET: test_go_web_transport_secret_no_production_credentials
+        run: |
+          set -eu
+          node --import tsx --test --test-concurrency=1 tests/unit/growdesk-http-transport.test.ts tests/unit/growdesk-legacy-upload.test.ts
+  static-build:
+    name: Typecheck, lint and standalone build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      DATABASE_URL: file:./dev_test.db
+      JWT_SECRET: test_go_web_build_secret_no_production_credentials
+      NEXT_TELEMETRY_DISABLED: '1'
+      BUILD_REVISION: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npx prisma generate
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run build
+      - name: Standalone Go-selection smoke (synthetic upstream, not a real Go acceptance test)
+        run: node scripts/review/check-growdesk-runtime.mjs
