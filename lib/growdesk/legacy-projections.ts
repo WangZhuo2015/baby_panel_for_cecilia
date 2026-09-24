@@ -13,19 +13,17 @@ export function wantsExtendedRepresentation(request: Request): boolean {
   return request.headers.get(GROWDESK_REPRESENTATION_HEADER)?.trim().toLowerCase() === "extended";
 }
 
-function without<T extends object>(record: T, ...keys: string[]): T {
-  const result = { ...record } as T;
+function without<T extends object, K extends string>(record: T, ...keys: K[]): Omit<T, K> {
+  const result = { ...record };
   for (const key of keys) delete (result as Record<string, unknown>)[key];
   return result;
 }
 
-/** The old feeding list/detail did not expose CAS update metadata. */
-export function projectLegacyFeedingRecord<T extends object>(record: T): T {
+export function projectLegacyFeedingRecord<T extends object>(record: T) {
   return without(record, "version", "baseVersion", "updatedAt");
 }
 
-/** The old sleep DTO used startTime/endTime and type only. */
-export function projectLegacySleepRecord<T extends object>(record: T): T {
+export function projectLegacySleepRecord<T extends object>(record: T) {
   return without(
     record,
     "sleepType",
@@ -37,13 +35,11 @@ export function projectLegacySleepRecord<T extends object>(record: T): T {
   );
 }
 
-/** The old diaper DTO had one type discriminator and no CAS metadata. */
-export function projectLegacyDiaperRecord<T extends object>(record: T): T {
+export function projectLegacyDiaperRecord<T extends object>(record: T) {
   return without(record, "version", "baseVersion", "updatedAt");
 }
 
-/** The old growth DTO used the *Cm/Kg fields and did not expose notes/CAS. */
-export function projectLegacyGrowthRecord<T extends object>(record: T): T {
+export function projectLegacyGrowthRecord<T extends object>(record: T) {
   return without(
     record,
     "weight",
@@ -56,19 +52,21 @@ export function projectLegacyGrowthRecord<T extends object>(record: T): T {
   );
 }
 
-/** Medical reports retain updatedAt in the legacy response, but not CAS fields. */
-export function projectLegacyMedicalRecord<T extends object>(record: T): T {
+export function projectLegacyMedicalRecord<T extends object>(record: T) {
   return without(record, "version", "baseVersion");
 }
 
-/** Product timestamps were canonical-only fields in the old supplement DTO. */
-export function projectLegacySupplementRecord<T extends object>(record: T): T {
+// Nested product input is accepted as unknown, not asserted to retain its old type.
+export type LegacySupplementProjection<T extends object> = Omit<T, "product"> & { product?: unknown };
+export function projectLegacySupplementRecord<T extends object>(record: T): LegacySupplementProjection<T> {
   const product = (record as Record<string, unknown>).product;
-  if (!product || typeof product !== "object" || Array.isArray(product)) return { ...record };
+  const result = without(record, "product");
+  if (!Object.prototype.hasOwnProperty.call(record, "product")) return result;
   return {
-    ...record,
-    product: without(product as Record<string, unknown>, "createdAt", "updatedAt"),
-  } as T;
+    ...result,
+    product: product && typeof product === "object" && !Array.isArray(product)
+      ? without(product as Record<string, unknown>, "createdAt", "updatedAt") : product,
+  };
 }
 
 function projectLegacyTimelineRawRecord(type: string, value: unknown): unknown {
@@ -118,8 +116,11 @@ function projectLegacySupplementTimelineDetail(item: Record<string, unknown>, ra
   return `${productName}${amount ? ` ${amount}` : ""}${notes}`;
 }
 
-/** Strip canonical timeline metadata while preserving the old raw edit DTO. */
-export function projectLegacyTimelineItem<T extends object>(item: T): T {
+export type LegacyTimelineProjection<T extends object> = Omit<T,
+  "babyId" | "version" | "baseVersion" | "sortMs" | "rawRecord" | "formulaProductId" | "formulaProductName"
+> & { rawRecord?: unknown; formulaProductId?: unknown; formulaProductName?: unknown };
+
+export function projectLegacyTimelineItem<T extends object>(item: T): LegacyTimelineProjection<T> {
   const result = { ...(item as Record<string, unknown>) };
   delete result.babyId;
   delete result.version;
@@ -134,26 +135,25 @@ export function projectLegacyTimelineItem<T extends object>(item: T): T {
     const detail = projectLegacySupplementTimelineDetail(result, raw as Record<string, unknown>);
     if (detail !== undefined) result.detail = detail;
   }
-  return result as T;
+  return result as LegacyTimelineProjection<T>;
 }
 
-export function projectLegacyTimelineResponse<T extends object>(items: T[]): T[] {
+export function projectLegacyTimelineResponse<T extends object>(items: T[]): LegacyTimelineProjection<T>[] {
   return items.map(projectLegacyTimelineItem);
 }
 
-export function projectLegacyGrowthChart<T extends { measurements?: unknown[] }>(chart: T): T {
-  const result = {
-    ...chart,
-    ...(Array.isArray(chart.measurements)
-      ? {
-        measurements: chart.measurements.map((measurement) => (
-          measurement && typeof measurement === "object" && !Array.isArray(measurement)
-            ? projectLegacyGrowthRecord(measurement)
-            : measurement
-        )),
-      }
-      : {}),
-  } as T & Record<string, unknown>;
-  delete result.rawWhoPercentiles;
-  return result as T;
+export type LegacyGrowthChartProjection<T extends { measurements?: unknown[] }> = Omit<T, "measurements" | "rawWhoPercentiles"> & {
+  measurements?: unknown[];
+};
+export function projectLegacyGrowthChart<T extends { measurements?: unknown[] }>(chart: T): LegacyGrowthChartProjection<T> {
+  const result = without(chart, "rawWhoPercentiles", "measurements");
+  return {
+    ...result,
+    ...(Array.isArray(chart.measurements) ? {
+      measurements: chart.measurements.map(measurement => (
+        measurement && typeof measurement === "object" && !Array.isArray(measurement)
+          ? projectLegacyGrowthRecord(measurement) : measurement
+      )),
+    } : {}),
+  };
 }

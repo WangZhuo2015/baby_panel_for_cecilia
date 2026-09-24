@@ -205,6 +205,7 @@ test("Issue #4: GrowDesk AI Sessions, Jobs, Voice Logs, Knowledge & Daily Summar
     // Simulate creation 4 minutes ago (240 seconds > 180 seconds TIMEOUT_MS)
     const fourMinutesAgo = new Date(Date.now() - 240_000).toISOString();
     job.createdAt = fourMinutesAgo;
+    job.startedAt = fourMinutesAgo;
 
     // getJob triggers watchdog check
     const timedOutJob = bffAiJobStore.getJob(job.id, userA);
