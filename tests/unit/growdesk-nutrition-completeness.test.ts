@@ -12,6 +12,8 @@ import * as protocol from "../../lib/growdesk/bridge-protocol";
 import * as pages from "../../lib/growdesk/paged-list";
 import * as feeding from "../../lib/growdesk/feeding-compat";
 import * as food from "../../lib/growdesk/food-compat";
+import * as nutritionScope from "../../lib/growdesk/nutrition-scope";
+import * as nutritionValidation from "../../lib/growdesk/nutrition-validation";
 import * as nutrition from "../../lib/growdesk/nutrition-compat";
 
 function route(fetchApi: protocol.BridgeFetch) {
@@ -25,8 +27,10 @@ function route(fetchApi: protocol.BridgeFetch) {
     "@/lib/growdesk/bridge-protocol": protocol, "@/lib/growdesk/paged-list": pages,
     "@/lib/growdesk/feeding-compat": feeding, "@/lib/growdesk/food-compat": food,
     "@/lib/growdesk/nutrition-compat": nutrition,
+    "@/lib/growdesk/nutrition-validation": nutritionValidation,
+    "@/lib/growdesk/nutrition-scope": { ...nutritionScope, requireNutritionBaby: async () => ({ id: "test_baby", familyId: "test_family", birthDate: "2026-01-01" }) },
     "@/lib/growdesk/client": { growdeskFetch: fetchApi },
-    "@/lib/growdesk/session": { resolveBffSession: async () => ({ accessToken: "test_token" }) },
+    "@/lib/growdesk/session": { resolveBffSession: async () => ({ accessToken: "test_token", user: { id: "test_user" } }) },
     "@/lib/growdesk/bridge-identity": { loadWebBaby: async () => ({ id: "test_baby", familyId: "test_family", birthDate: "2026-01-01" }) },
   };
   const module = { exports: {} as any };
@@ -47,7 +51,7 @@ test("nutrition includes every page and converts bottle milk through the legacy 
   const seen: string[] = [];
   const api = route((async (endpoint: string) => {
     const url = new URL(endpoint, "https://test.invalid"); seen.push(endpoint);
-    if (url.pathname.endsWith("/food-plan")) return { ok: true, status: 200, data: { planData: {} } };
+    if (url.pathname.endsWith("/food-plan")) return { ok: true, status: 200, data: { babyId: "test_baby", planData: {} } };
     if (url.pathname.endsWith("/records/feeding")) {
       return url.searchParams.has("cursor")
         ? { ok: true, status: 200, data: [record], page: { nextCursor: null } }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
   Bell,
@@ -18,30 +18,10 @@ import {
 import { CuteCard } from "@/components/ui/CuteCard";
 import { SectionTitle } from "@/components/ui/SectionTitle";
 import { AppHeader } from "@/components/ui/AppHeader";
-import { useBabyStore } from "@/stores/useBabyStore";
 import { useToast } from "@/components/ui/Toast";
 import { InstallGuideModal } from "@/components/ui/InstallGuideModal";
-import {
-  getReadNotificationIds,
-  markNotificationRead,
-  markAllNotificationsRead,
-  setClearedBeforeTime,
-  addDismissedNotificationId,
-  filterVisibleNotifications,
-} from "@/lib/notifications-storage";
-
-interface NotificationItem {
-  id: string;
-  type: "vaccine" | "daily" | "data_release" | "family";
-  title: string;
-  detail: string;
-  time: string;
-  urgent: boolean;
-  icon: string;
-  actorId?: string | null;
-  actorLabel?: string | null;
-  createdAt?: number;
-}
+import { useNotificationInbox } from "@/lib/hooks/useNotificationInbox";
+import type { NotificationViewItem as NotificationItem } from "@/lib/notification-actions";
 
 /** 将 VAPID Base64 字符串转换为浏览器 PushManager 必需的 Uint8Array */
 function urlBase64ToUint8Array(base64String: string): Uint8Array {
@@ -58,18 +38,17 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
 }
 
 export default function NotificationsPage() {
-  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [readIds, setReadIds] = useState<Set<string>>(new Set());
   const [pushEnabled, setPushEnabled] = useState(false);
   const [pushPermission, setPushPermission] = useState<string>("default");
   const [showInstallGuide, setShowInstallGuide] = useState(false);
   const [testingPush, setTestingPush] = useState(false);
   const [enablingPush, setEnablingPush] = useState(false);
-  const notificationRequestGeneration = useRef(0);
-
-  const baby = useBabyStore((s) => s.baby);
   const { showToast } = useToast();
+  const reportNotificationError = useCallback((message: string) => showToast(message, "error"), [showToast]);
+  const {
+    notifications, loading, readIds, unreadCount, reload: fetchNotifications,
+    markRead, dismiss, clearAll, error: notificationError,
+  } = useNotificationInbox(true, reportNotificationError);
 
   /** 强制生成最新有效的推送订阅并同步至服务端 */
   const subscribeFresh = useCallback(
@@ -159,66 +138,14 @@ export default function NotificationsPage() {
     }
   }, []);
 
-  const fetchNotifications = useCallback(async () => {
-    const requestedBabyId = baby?.id ?? null;
-    const requestGeneration = ++notificationRequestGeneration.current;
-    setLoading(true);
-    try {
-      const url = requestedBabyId
-        ? `/api/notifications?babyId=${encodeURIComponent(requestedBabyId)}`
-        : "/api/notifications";
-      const res = await fetch(url);
-      if (res.ok) {
-        const data = await res.json();
-        if (
-          requestGeneration !== notificationRequestGeneration.current
-          || (useBabyStore.getState().baby?.id ?? null) !== requestedBabyId
-        ) {
-          return;
-        }
-        const visible = filterVisibleNotifications(Array.isArray(data) ? data : []);
-        setNotifications(visible);
-        if (visible.length > 0) {
-          markAllNotificationsRead(visible.map((n) => n.id));
-          setReadIds(getReadNotificationIds());
-          window.dispatchEvent(new CustomEvent("notifications-read"));
-        }
-      }
-    } catch {
-      // Offline fallback
-    } finally {
-      if (
-        requestGeneration === notificationRequestGeneration.current
-        && (useBabyStore.getState().baby?.id ?? null) === requestedBabyId
-      ) {
-        setLoading(false);
-      }
-    }
-  }, [baby?.id]);
-
-  const markRead = useCallback((id: string) => {
-    markNotificationRead(id);
-    setReadIds(getReadNotificationIds());
-    window.dispatchEvent(new CustomEvent("notifications-read"));
-  }, []);
-
-  const handleDismiss = useCallback((id: string, e?: React.MouseEvent) => {
+  const handleDismiss = useCallback(async (id: string, e?: React.MouseEvent) => {
     e?.stopPropagation();
-    addDismissedNotificationId(id);
-    markNotificationRead(id);
-    setNotifications((prev) => prev.filter((n) => n.id !== id));
-    setReadIds(getReadNotificationIds());
-    window.dispatchEvent(new CustomEvent("notifications-read"));
-    showToast("已清除此条通知 ✨");
-  }, [showToast]);
+    if (await dismiss(id)) showToast("已在本机清除此条通知 ✨");
+  }, [dismiss, showToast]);
 
   useEffect(() => {
-    setReadIds(getReadNotificationIds());
     checkAndSyncPush();
-    fetchNotifications();
-  }, [fetchNotifications, checkAndSyncPush]);
-
-  const unreadCount = notifications.filter((n) => !readIds.has(n.id)).length;
+  }, [checkAndSyncPush]);
 
   const handleEnablePush = async () => {
     if (enablingPush) return;
@@ -317,18 +244,13 @@ export default function NotificationsPage() {
     }
   };
 
-  const handleClearAll = () => {
-    setClearedBeforeTime(Date.now());
-    markAllNotificationsRead(notifications.map((n) => n.id));
-    setNotifications([]);
-    setReadIds(getReadNotificationIds());
-    window.dispatchEvent(new CustomEvent("notifications-read"));
-    showToast("已清除全部通知 ✨", "success");
+  const handleClearAll = async () => {
+    if (await clearAll()) showToast("已在本机清除全部通知 ✨", "success");
   };
 
   const familyNotifs = notifications.filter((n) => n.type === "family");
   const vaccineNotifs = notifications.filter((n) => n.type === "vaccine");
-  const dailyNotifs = notifications.filter((n) => n.type === "daily");
+  const dailyNotifs = notifications.filter((n) => n.type === "daily" || n.type === "ai" || n.type === "data_release");
 
   return (
     <div className="px-4 pb-8">
@@ -466,6 +388,13 @@ export default function NotificationsPage() {
           </div>
           <p className="text-sm text-text-muted">加载中...</p>
         </div>
+      ) : notificationError && notifications.length === 0 ? (
+        <div role="alert" className="flex flex-col items-center justify-center py-20 space-y-3">
+          <p className="text-sm text-text-secondary">{notificationError}</p>
+          <button type="button" onClick={fetchNotifications} className="btn-press text-sm text-primary cursor-pointer">
+            重新加载
+          </button>
+        </div>
       ) : notifications.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20">
           <div className="w-16 h-16 rounded-full bg-primary-soft flex items-center justify-center mb-4">
@@ -575,13 +504,13 @@ function NotificationCard({
 }: {
   notification: NotificationItem;
   read: boolean;
-  onRead: (id: string) => void;
+  onRead: (id: string) => Promise<boolean>;
   onDismiss?: (id: string, e: React.MouseEvent) => void;
 }) {
   const router = useRouter();
 
-  const handleClick = () => {
-    if (!read) onRead(notification.id);
+  const handleClick = async () => {
+    if (!(await onRead(notification.id))) return;
     if (notification.type === "vaccine") {
       router.push("/health/vaccines");
     } else if (notification.type === "family") {

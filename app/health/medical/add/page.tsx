@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
+import { shouldBypassImageOptimization } from "@/lib/private-image";
 import {
   Upload,
   Camera,
@@ -342,7 +343,7 @@ export default function MedicalAddPage() {
                 alt="单据预览"
                 width={400}
                 height={176}
-                unoptimized={imagePreview.startsWith("data:") || imagePreview.startsWith("blob:")}
+                unoptimized={shouldBypassImageOptimization(imagePreview)}
                 className="w-full h-full object-contain"
               />
               <div className="absolute top-2 right-2 flex gap-1.5">

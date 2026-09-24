@@ -11,7 +11,19 @@ import { GROWDESK_CONFIG } from "@/lib/config";
 
 export const dynamic = "force-dynamic";
 
+function goPatUnavailable() {
+  return NextResponse.json(
+    {
+      success: false,
+      error: "个人访问令牌尚未由 Go 服务端持久化接管",
+      code: "GROWDESK_GO_PAT_NOT_READY",
+    },
+    { status: 501, headers: { "cache-control": "no-store" } },
+  );
+}
+
 export async function GET(request: Request) {
+  if (GROWDESK_CONFIG.enabled && GROWDESK_CONFIG.usesGoBackend) return goPatUnavailable();
   try {
     const auth = await requireAuth(request);
     if (auth.errorResponse) return auth.errorResponse;
@@ -28,6 +40,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  if (GROWDESK_CONFIG.enabled && GROWDESK_CONFIG.usesGoBackend) return goPatUnavailable();
   try {
     const auth = await requireAuth(request);
     if (auth.errorResponse) return auth.errorResponse;

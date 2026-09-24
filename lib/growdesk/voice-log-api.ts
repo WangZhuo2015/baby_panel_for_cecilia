@@ -116,9 +116,12 @@ export async function acknowledgeGrowDeskVoiceLog(
   id: string,
   acknowledged: boolean,
 ): Promise<void> {
-  requireData(await fetchApi<{ success: true }>(`/api/v1/voice/logs/${pathId(id)}`, {
+  const result = requireData(await fetchApi<{ success: boolean }>(`/api/v1/voice/logs/${pathId(id)}`, {
     method: "PATCH",
     accessToken,
     body: { acknowledged },
   }));
+  if (result?.success !== true) {
+    throw new BridgeError(502, "UPSTREAM_INVALID_RESPONSE", "服务端未确认语音记录状态");
+  }
 }

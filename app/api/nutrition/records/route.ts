@@ -9,11 +9,11 @@ import { GROWDESK_CONFIG } from "@/lib/config";
 import { resolveBffSession } from "@/lib/growdesk/session";
 import { verifyBffCsrf } from "@/lib/growdesk/csrf";
 import { growdeskFetch } from "@/lib/growdesk/client";
-import { loadWebBaby, loadWebIdentity } from "@/lib/growdesk/bridge-identity";
+import { assertExpectedActor, requireNutritionBaby } from "@/lib/growdesk/nutrition-scope";
+import { checkedProducts, positiveDose } from "@/lib/growdesk/nutrition-validation";
 import {
   fromGrowDeskSupplementRecordEnriched,
   formatSupplementAmount,
-  encodeProductIdInNotes,
   findMatchingSupplementProduct,
   extractSupplementStateFromFoodPlan,
   fromGrowDeskFormulaProduct,
@@ -25,7 +25,7 @@ import {
 import { PRESET_SUPPLEMENT_PRODUCTS } from "@/lib/nutrition/presets";
 import crypto from "node:crypto";
 import { fetchCompleteList } from "@/lib/growdesk/paged-list";
-import { BridgeError, bridgeErrorResponse, isoTimestamp, requireData, pathId } from "@/lib/growdesk/bridge-protocol";
+import { BridgeError, bridgeErrorResponse, isoTimestamp, requireData, pathId, wireVersion } from "@/lib/growdesk/bridge-protocol";
 import { projectLegacySupplementRecord, wantsExtendedRepresentation } from "@/lib/growdesk/legacy-projections";
 
 function requireUpstreamObject(value: unknown, label: string): Record<string, unknown> {
@@ -86,7 +86,8 @@ export async function GET(request: Request) {
       const { searchParams } = new URL(request.url);
       const extended = wantsExtendedRepresentation(request);
       const requestedBabyId = searchParams.get("babyId");
-      const baby = await loadWebBaby(growdeskFetch, bffSession.accessToken, requestedBabyId);
+      assertExpectedActor(request, bffSession.user.id);
+      const baby = await requireNutritionBaby(growdeskFetch, bffSession.accessToken, { babyId: requestedBabyId, familyId: searchParams.get("familyId") });
       if (!baby) {
         return NextResponse.json({ error: "请提供有效的 babyId" }, { status: 400 });
       }
@@ -116,7 +117,7 @@ export async function GET(request: Request) {
 
       const scopedList = rawList.map((record) => requireScopedSupplementRecord(record, babyId, baby.familyId));
       const allKnownProducts: SupplementProduct[] = [
-        ...rawProducts.map(fromGrowDeskSupplementProduct),
+        ...checkedProducts(rawProducts, baby.familyId).map(fromGrowDeskSupplementProduct),
         ...PRESET_SUPPLEMENT_PRODUCTS.map((p, idx) => ({
           ...p,
           id: (p as any).id || `preset_${idx}`,
@@ -225,9 +226,10 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "Unauthorized: 会话无效或已过期" }, { status: 401 });
       }
 
-      const body = await request.json().catch(() => ({}));
-      const requestedBabyId = body.babyId;
-      const baby = await loadWebBaby(growdeskFetch, bffSession.accessToken, requestedBabyId);
+      const body = await request.json().catch(() => null);
+      if (!body || typeof body !== "object" || Array.isArray(body)) throw new BridgeError(400, "INVALID_JSON", "请求正文必须是 JSON 对象");
+      assertExpectedActor(request, bffSession.user.id);
+      const baby = await requireNutritionBaby(growdeskFetch, bffSession.accessToken, body);
       if (!baby) {
         return NextResponse.json({ error: "请提供有效的 babyId" }, { status: 400 });
       }
@@ -277,7 +279,7 @@ export async function POST(request: Request) {
       const scopedTodaySupps = rawTodaySupps.map((record) => requireScopedSupplementRecord(record, babyId, familyId));
       const suppState = extractSupplementStateFromFoodPlan(planData);
       const allKnownProducts: SupplementProduct[] = [
-        ...rawProducts.map(fromGrowDeskSupplementProduct),
+        ...checkedProducts(rawProducts, baby.familyId).map(fromGrowDeskSupplementProduct),
         ...PRESET_SUPPLEMENT_PRODUCTS.map((p, idx) => ({
           ...p,
           id: (p as any).id || `preset_${idx}`,
@@ -285,15 +287,23 @@ export async function POST(request: Request) {
         })),
       ];
 
-      const product =
-        findMatchingSupplementProduct(customSuppName || productId, productId, allKnownProducts) || {
-          id: productId || crypto.randomUUID(),
+      const incomingDose = positiveDose(dose);
+      const catalogProducts = checkedProducts(rawProducts, familyId).map(fromGrowDeskSupplementProduct);
+      if (productId !== undefined && productId !== null) pathId(productId);
+      const selectedProduct = findMatchingSupplementProduct(customSuppName || "", productId || null, catalogProducts);
+      if (productId && !selectedProduct) throw new BridgeError(404, "SUPPLEMENT_PRODUCT_NOT_FOUND", "所选补剂产品不存在，请刷新产品库");
+      if (!productId && !selectedProduct && catalogProducts.filter(product => product.name.trim().toLowerCase() === String(customSuppName).trim().toLowerCase()).length > 1) {
+        throw new BridgeError(409, "SUPPLEMENT_SELECTION_REQUIRED", "存在同名补剂，请明确选择产品");
+      }
+      if (selectedProduct?.isActive === false) throw new BridgeError(409, "SUPPLEMENT_PRODUCT_INACTIVE", "所选补剂已停用，请重新选择");
+      const product = selectedProduct || {
+          id: "",
           familyId,
           name: customSuppName || "补剂",
           brand: customSuppName || "补剂",
           dosageForm: "drops",
           unitName: unitName || "剂",
-          defaultDose: Number(dose) || 1.0,
+          defaultDose: incomingDose,
           nutrients: {},
           isActive: true,
         };
@@ -335,7 +345,7 @@ export async function POST(request: Request) {
       const conflict = checkSupplementConflict({
         babyAgeMonths,
         incomingSupplement: product,
-        incomingDose: Number(dose) || 1.0,
+        incomingDose,
         existingRecordsToday: adaptedSuppRecords,
         feedingsToday: adaptedFeedings as any,
         formulaProductsMap: formulaMap,
@@ -356,8 +366,9 @@ export async function POST(request: Request) {
       }
 
       const occurredAt = localTimeToUtcIso(time, date);
-      const formattedAmount = formatSupplementAmount(Number(dose) || 1.0, unitName || product.unitName);
-      const encodedNotes = encodeProductIdInNotes(product.id, notes);
+      const formattedAmount = formatSupplementAmount(incomingDose, unitName || product.unitName);
+      // Canonical productId is stored separately; do not add a second identity to notes.
+      const cleanNotes = notes === undefined || notes === null ? null : String(notes);
       const idempotencyKey = clientId || request.headers.get("idempotency-key") || crypto.randomUUID();
 
       const res = await growdeskFetch<GrowDeskSupplementRecord>(
@@ -368,12 +379,12 @@ export async function POST(request: Request) {
           idempotencyKey,
           body: {
             supplementName: product.name,
-            productId: product.id,
+            productId: selectedProduct?.id ?? null,
             occurredAt,
             amount: formattedAmount,
-            dose: String(Number(dose) || 1),
+            dose: String(incomingDose),
             unitName: unitName || product.unitName,
-            notes: encodedNotes,
+            notes: cleanNotes,
           },
         },
       );
@@ -596,19 +607,20 @@ export async function DELETE(request: Request) {
       const body = await request.json().catch(() => ({}));
       const id = searchParams.get("id") || body.id;
       const requestedBabyId = searchParams.get("babyId") || body.babyId;
-      const baseVersion = searchParams.get("baseVersion") || body.baseVersion || "1";
+      const baseVersion = wireVersion(searchParams.get("baseVersion") ?? body.baseVersion ?? body.version);
 
       if (!id || typeof id !== "string") {
         return NextResponse.json({ error: "请提供记录 ID" }, { status: 400 });
       }
 
-      const baby = await loadWebBaby(growdeskFetch, bffSession.accessToken, requestedBabyId);
+      assertExpectedActor(request, bffSession.user.id);
+      const baby = await requireNutritionBaby(growdeskFetch, bffSession.accessToken, { babyId: requestedBabyId, familyId: searchParams.get("familyId") });
       if (!baby) {
         return NextResponse.json({ error: "请提供有效的 babyId" }, { status: 400 });
       }
 
       const res = await growdeskFetch(
-        `/api/v1/babies/${baby.id}/records/supplement/${id}?baseVersion=${baseVersion}`,
+        `/api/v1/babies/${pathId(baby.id)}/records/supplement/${pathId(id)}?baseVersion=${encodeURIComponent(baseVersion)}`,
         {
           method: "DELETE",
           accessToken: bffSession.accessToken,

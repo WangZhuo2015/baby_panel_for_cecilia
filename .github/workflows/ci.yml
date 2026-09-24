@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, codex/web-parity-20260919]
   pull_request:
-    branches: [main]
+    branches: [main, codex/web-parity-20260919]
 
 permissions:
   contents: read
@@ -17,15 +17,27 @@ jobs:
   ci:
     name: Build, Lint & Automated Tests
     runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      SOURCE_REVISION: ${{ github.event.pull_request.head.sha || github.sha }}
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Verify source identity
+        run: |
+          test "$(git rev-parse HEAD)" = "$SOURCE_REVISION"
+          git diff --exit-code
+          sha256sum Dockerfile package-lock.json scripts/prepare-standalone.mjs
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24.14.1
           cache: "npm"
 
       - name: Install dependencies
@@ -48,9 +60,9 @@ jobs:
 
       - name: Verify baseline migration applies to a fresh database
         run: |
-          rm -f /tmp/ci-fresh.db*
-          DATABASE_URL="file:/tmp/ci-fresh.db" npx prisma migrate deploy
-          rm -f /tmp/ci-fresh.db*
+          directory=$(mktemp -d)
+          trap 'rm -rf "$directory"' EXIT
+          DATABASE_URL="file:$directory/ci-fresh.db" npx prisma migrate deploy
 
       - name: Dependency audit (critical)
         run: npm audit --audit-level=critical
@@ -73,5 +85,20 @@ jobs:
       - name: Run Next.js build
         run: npm run build
 
-      - name: Verify Docker build
-        run: docker build -t baby-panel:test .
+      - name: Verify GrowDesk Go adapter runtime wiring
+        run: node scripts/review/check-growdesk-runtime.mjs
+
+      - name: Verify Docker build and embedded revision
+        run: |
+          docker build --build-arg "BUILD_REVISION=$SOURCE_REVISION" -t baby-panel:test .
+          docker run --rm --network none --entrypoint node \
+            -e "EXPECTED_REVISION=$SOURCE_REVISION" baby-panel:test -e '
+            const fs = require("node:fs");
+            const assert = require("node:assert/strict");
+            const build = JSON.parse(fs.readFileSync("build-provenance.json", "utf8"));
+            assert.equal(build.sourceGitSha, process.env.EXPECTED_REVISION);
+            assert.equal(build.sourceDirty, false);
+            assert.match(build.artifactSha256, /^[0-9a-f]{64}$/);
+            assert.ok(build.buildId);
+            console.log(JSON.stringify(build));
+          '

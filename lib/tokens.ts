@@ -30,6 +30,12 @@ interface BffPatItem {
 
 const bffPersonalAccessTokens = new Map<string, BffPatItem>();
 
+function assertPatBackendAvailable(): void {
+  if (GROWDESK_CONFIG.enabled && GROWDESK_CONFIG.usesGoBackend) {
+    throw new Error("Personal access tokens are not yet persisted by the Go backend");
+  }
+}
+
 /**
  * Generates a new Personal Access Token for the specified user.
  * 仅返回一次原文；库中只存哈希。调用方须做限流与数量上限检查。
@@ -43,6 +49,7 @@ export async function createPersonalAccessToken(
   const tokenHash = hashPersonalAccessToken(token);
   const tokenHint = buildTokenHint(token);
 
+  assertPatBackendAvailable();
   if (GROWDESK_CONFIG.enabled) {
     const id = `pat_${crypto.randomUUID()}`;
     const createdAt = new Date();
@@ -86,6 +93,7 @@ export async function verifyPersonalAccessToken(rawToken: string) {
 
   const tokenHash = hashPersonalAccessToken(rawToken);
 
+  if (GROWDESK_CONFIG.enabled && GROWDESK_CONFIG.usesGoBackend) return null;
   if (GROWDESK_CONFIG.enabled) {
     let found: BffPatItem | null = null;
     for (const item of bffPersonalAccessTokens.values()) {
@@ -159,6 +167,7 @@ export async function verifyPersonalAccessToken(rawToken: string) {
  * Lists all Personal Access Tokens belonging to a user (hint only, 无原文).
  */
 export async function listPersonalAccessTokens(userId: string) {
+  assertPatBackendAvailable();
   if (GROWDESK_CONFIG.enabled) {
     const list: Array<{ id: string; name: string; maskedToken: string; lastUsedAt: Date | null; createdAt: Date }> = [];
     for (const item of bffPersonalAccessTokens.values()) {
@@ -200,6 +209,7 @@ export async function listPersonalAccessTokens(userId: string) {
  * Revokes / deletes a Personal Access Token for the user.
  */
 export async function revokePersonalAccessToken(userId: string, tokenId: string): Promise<boolean> {
+  assertPatBackendAvailable();
   if (GROWDESK_CONFIG.enabled) {
     const item = bffPersonalAccessTokens.get(tokenId);
     if (!item || item.userId !== userId) return false;

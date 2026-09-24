@@ -7,8 +7,16 @@ import { resolveBffSession } from "@/lib/growdesk/session";
 import { verifyBffCsrf } from "@/lib/growdesk/csrf";
 import { growdeskFetch } from "@/lib/growdesk/client";
 import crypto from "node:crypto";
+import { createNativePushEndpoints } from "@/lib/growdesk/push-bridge";
+
+const nativePush = createNativePushEndpoints({
+  fetchApi: growdeskFetch,
+  resolveSession: resolveBffSession,
+  verifyCsrf: request => verifyBffCsrf(request, { enforceInTest: true }),
+});
 
 export async function POST(request: Request) {
+  if (GROWDESK_CONFIG.enabled && GROWDESK_CONFIG.usesGoBackend) return nativePush.POST(request);
   try {
     if (GROWDESK_CONFIG.enabled) {
       const csrfErr = verifyBffCsrf(request);
@@ -113,6 +121,7 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  if (GROWDESK_CONFIG.enabled && GROWDESK_CONFIG.usesGoBackend) return nativePush.DELETE(request);
   try {
     if (GROWDESK_CONFIG.enabled) {
       const csrfErr = verifyBffCsrf(request);
