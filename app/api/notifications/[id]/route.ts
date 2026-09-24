@@ -5,6 +5,7 @@ import { growdeskFetch } from "@/lib/growdesk/client";
 import { bridgeErrorResponse, BridgeError, pathId, requireData } from "@/lib/growdesk/bridge-protocol";
 import { verifyBffCsrf } from "@/lib/growdesk/csrf";
 import { requireAuth } from "@/lib/api-helpers";
+import { assertExpectedActor } from "@/lib/growdesk/nutrition-scope";
 
 export async function POST(
   request: Request,
@@ -21,6 +22,7 @@ export async function POST(
       if (csrfErr) return csrfErr;
       const bffSession = await resolveBffSession(request);
       if (!bffSession) throw new BridgeError(401, "UNAUTHORIZED", "请先登录");
+      assertExpectedActor(request, bffSession.user.id);
       const result = requireData(await growdeskFetch<{ success: boolean }>(
         `/api/v1/notifications/${pathId(id)}/read`, {
           method: "POST", accessToken: bffSession.accessToken,
