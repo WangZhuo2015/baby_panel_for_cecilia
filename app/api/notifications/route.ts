@@ -15,6 +15,8 @@ export interface NotificationItem {
   actorId?: string | null
   actorLabel?: string | null
   createdAt?: number
+  serverNotificationId?: string
+  readAt?: string | null
 }
 
 const RELATION_NAMES: Record<string, string> = {
@@ -51,54 +53,63 @@ function formatRelativeTime(date: Date): string {
 import { GROWDESK_CONFIG } from "@/lib/config"
 import { resolveBffSession } from "@/lib/growdesk/session"
 import { growdeskFetch } from "@/lib/growdesk/client"
-import { fromGrowDeskNotification, bffNotificationStore } from "@/lib/growdesk/notifications"
+import { bridgeErrorResponse, BridgeError } from "@/lib/growdesk/bridge-protocol"
+import { loadWebBaby, loadWebIdentity } from "@/lib/growdesk/bridge-identity"
+import { fetchGrowDeskNotificationItems } from "@/lib/growdesk/notification-parity"
+import { wantsExtendedRepresentation } from "@/lib/growdesk/legacy-projections"
+import { assertExpectedActor } from "@/lib/growdesk/nutrition-scope"
+
+async function getGrowDeskNotifications(request: Request): Promise<Response> {
+  const bffSession = await resolveBffSession(request)
+  if (!bffSession) {
+    return NextResponse.json({ error: "Unauthorized: 会话无效或已过期" }, { status: 401 })
+  }
+
+  assertExpectedActor(request, bffSession.user.id)
+  const requestedBabyId = new URL(request.url).searchParams.get("babyId")
+  const identity = requestedBabyId
+    ? null
+    : await loadWebIdentity(growdeskFetch, bffSession.accessToken)
+  const baby = requestedBabyId
+    ? await loadWebBaby(growdeskFetch, bffSession.accessToken, requestedBabyId)
+    : identity?.babies.length === 1
+      ? identity.babies[0]
+      : null
+  if (requestedBabyId && !baby) {
+    throw new BridgeError(400, "BABY_REQUIRED", "请提供有效的 babyId")
+  }
+  if (requestedBabyId && baby?.id !== requestedBabyId) {
+    throw new BridgeError(502, "UPSTREAM_SCOPE_MISMATCH", "GrowDesk 返回了其他宝宝的资料")
+  }
+  const requestedFamilyId = new URL(request.url).searchParams.get("familyId")
+  if (requestedFamilyId && baby?.familyId !== requestedFamilyId) {
+    throw new BridgeError(409, "BABY_SCOPE_MISMATCH", "所选家庭或宝宝已变更")
+  }
+
+  const items = await fetchGrowDeskNotificationItems(
+    growdeskFetch,
+    bffSession.accessToken,
+    bffSession.user.id,
+    baby
+      ? { babyId: baby.id, familyId: baby.familyId, birthDate: baby.birthDate }
+      : undefined,
+    Date.now(),
+    wantsExtendedRepresentation(request),
+  )
+  return NextResponse.json(items, { headers: { "cache-control": "no-store" } })
+}
 
 export async function GET(request: Request) {
-  try {
-    if (GROWDESK_CONFIG.enabled) {
-      const bffSession = await resolveBffSession(request)
-      if (!bffSession) {
-        return NextResponse.json({ error: "Unauthorized: 会话无效或已过期" }, { status: 401 })
-      }
-
-      let remoteItems: any[] = []
-      try {
-        const res = await growdeskFetch<{ data: any[]; page?: { nextCursor: string | null } }>(
-          "/api/v1/notifications",
-          {
-            method: "GET",
-            accessToken: bffSession.accessToken,
-          }
-        )
-        if (res.ok && res.data) {
-          const list = Array.isArray(res.data) ? res.data : (res.data as any).data
-          if (Array.isArray(list)) {
-            remoteItems = list
-          }
-        }
-      } catch {}
-
-      // Fallback & merge with local BFF store notifications
-      const localStore = bffNotificationStore.listNotifications(bffSession.user.id)
-      const combined = [...remoteItems, ...localStore.data]
-
-      // Deduplicate by id / eventKey
-      const seen = new Set<string>()
-      const deduped: any[] = []
-      for (const item of combined) {
-        const key = item.id || item.eventKey
-        if (key && !seen.has(key)) {
-          seen.add(key)
-          deduped.push(item)
-        } else if (!key) {
-          deduped.push(item)
-        }
-      }
-
-      const formatted: NotificationItem[] = deduped.map(fromGrowDeskNotification)
-      return NextResponse.json(formatted)
+  if (GROWDESK_CONFIG.enabled) {
+    try {
+      return await getGrowDeskNotifications(request)
+    } catch (error) {
+      console.error("GET /api/notifications GrowDesk error:", error)
+      return bridgeErrorResponse(error)
     }
+  }
 
+  try {
     const auth = await requireAuth(request)
     if (auth.errorResponse) return auth.errorResponse
     const { user } = auth

@@ -2,8 +2,10 @@ import { NextResponse } from "next/server";
 import { GROWDESK_CONFIG } from "@/lib/config";
 import { resolveBffSession } from "@/lib/growdesk/session";
 import { growdeskFetch } from "@/lib/growdesk/client";
-import { bffNotificationStore } from "@/lib/growdesk/notifications";
+import { bridgeErrorResponse, BridgeError, pathId, requireData } from "@/lib/growdesk/bridge-protocol";
+import { verifyBffCsrf } from "@/lib/growdesk/csrf";
 import { requireAuth } from "@/lib/api-helpers";
+import { assertExpectedActor } from "@/lib/growdesk/nutrition-scope";
 
 export async function POST(
   request: Request,
@@ -15,20 +17,20 @@ export async function POST(
   }
 
   if (GROWDESK_CONFIG.enabled) {
-    const bffSession = await resolveBffSession(request);
-    if (!bffSession) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
     try {
-      await growdeskFetch(`/api/v1/notifications/${id}/read`, {
-        method: "POST",
-        accessToken: bffSession.accessToken,
-      });
-    } catch {}
-
-    bffNotificationStore.markAsRead(bffSession.user.id, id);
-    return NextResponse.json({ success: true });
+      const csrfErr = verifyBffCsrf(request, { enforceInTest: true });
+      if (csrfErr) return csrfErr;
+      const bffSession = await resolveBffSession(request);
+      if (!bffSession) throw new BridgeError(401, "UNAUTHORIZED", "请先登录");
+      assertExpectedActor(request, bffSession.user.id);
+      const result = requireData(await growdeskFetch<{ success: boolean }>(
+        `/api/v1/notifications/${pathId(id)}/read`, {
+          method: "POST", accessToken: bffSession.accessToken,
+        },
+      ));
+      if (result?.success !== true) throw new BridgeError(502, "UPSTREAM_INVALID_RESPONSE", "服务端未确认已读状态");
+      return NextResponse.json({ success: true }, { headers: { "cache-control": "no-store" } });
+    } catch (error) { return bridgeErrorResponse(error); }
   }
 
   const auth = await requireAuth(request);
@@ -58,9 +60,11 @@ export async function DELETE(
     if (!bffSession) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-
-    bffNotificationStore.deleteNotification(bffSession.user.id, id);
-    return NextResponse.json({ success: true });
+    return bridgeErrorResponse(new BridgeError(
+      501,
+      "NOTIFICATION_DELETE_UNSUPPORTED",
+      "GrowDesk 通知暂不支持服务端删除；daily/vaccine 等派生提醒仅支持浏览器本地清除",
+    ));
   }
 
   const auth = await requireAuth(request);

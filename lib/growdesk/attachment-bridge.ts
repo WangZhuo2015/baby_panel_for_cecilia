@@ -24,14 +24,24 @@ export async function uploadAttachment(request: Request, purpose: "avatar" | "me
     const sha256 = crypto.createHash("sha256").update(bytes).digest("hex");
     const mimeType = ({ ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp", ".heic": "image/heic" } as Record<string, string>)[checked.ext || ".jpg"] || file.type;
     const created = requireData(await growdeskFetch<{ id: string; uploadUrl: string }>("/api/v1/attachments", {
-      method: "POST", accessToken: session.accessToken,
+      method: "POST", accessToken: session.accessToken, signal: request.signal,
       body: { purpose, mimeType, byteSize: bytes.length, sha256, ownerScope: { familyId, ...(baby ? { babyId: baby.id } : {}) } },
     }));
-    const uploaded = await fetch(created.uploadUrl, { method: "PUT", body: bytes, headers: { "content-type": mimeType }, redirect: "error", signal: AbortSignal.timeout(30000) });
+    const uploaded = await fetch(created.uploadUrl, {
+      method: "PUT", body: bytes, headers: { "content-type": mimeType }, redirect: "error",
+      signal: AbortSignal.any([request.signal, AbortSignal.timeout(30_000)]),
+    });
+    // A PUT response body is not used; release it rather than retaining a connection.
+    void uploaded.body?.cancel().catch(() => undefined);
     if (!uploaded.ok) throw new BridgeError(502, "UPLOAD_FAILED", "文件上传失败，请重试");
-    requireData(await growdeskFetch(`/api/v1/attachments/${pathId(created.id)}/complete`, { method: "POST", accessToken: session.accessToken, body: { byteSize: bytes.length, sha256 } }));
-    const url = `/api/attachments/${created.id}`;
-    if (purpose === "avatar" && baby) requireData(await growdeskFetch(`/api/v1/babies/${pathId(baby.id)}`, { method: "PATCH", accessToken: session.accessToken, body: { avatarUrl: url } }));
+    requireData(await growdeskFetch(`/api/v1/attachments/${pathId(created.id)}/complete`, {
+      method: "POST", accessToken: session.accessToken, signal: request.signal,
+      timeoutMs: 30_000, body: { byteSize: bytes.length, sha256 },
+    }));
+    const url = `/api/attachments/${pathId(created.id)}`;
+    if (purpose === "avatar" && baby) requireData(await growdeskFetch(`/api/v1/babies/${pathId(baby.id)}`, {
+      method: "PATCH", accessToken: session.accessToken, signal: request.signal, body: { avatarUrl: url },
+    }));
     return Response.json({ success: true, attachmentId: created.id, ...(purpose === "avatar" ? { avatarUrl: url } : { imageUrl: url, filename: file.name }) });
   } catch (error) { return bridgeErrorResponse(error); }
 }
@@ -40,9 +50,23 @@ export async function downloadAttachment(request: Request, id: string) {
   try {
     const session = await resolveBffSession(request);
     if (!session) throw new BridgeError(401, "UNAUTHORIZED", "请先登录");
-    const data = requireData(await growdeskFetch<{ downloadUrl: string; mimeType: string }>(`/api/v1/attachments/${pathId(id)}/download-url`, { accessToken: session.accessToken }));
-    const response = await fetch(data.downloadUrl, { redirect: "error", signal: AbortSignal.timeout(30000) });
-    if (!response.ok) throw new BridgeError(502, "DOWNLOAD_FAILED", "附件暂时无法读取");
-    return new Response(response.body, { headers: { "content-type": data.mimeType, "cache-control": "private, no-store", "x-content-type-options": "nosniff", "content-security-policy": "default-src 'none'; sandbox" } });
+    const upstream = await growdeskFetch(`/api/v1/attachments/${pathId(id)}/content`, {
+      accessToken: session.accessToken, responseType: "stream",
+      signal: request.signal, timeoutMs: 30_000,
+    });
+    if (!upstream.ok) {
+      throw new BridgeError(upstream.status, upstream.error?.code || "UPSTREAM_ERROR", upstream.error?.message || "附件暂时无法读取", upstream.error?.details);
+    }
+    if (!upstream.response?.body) throw new BridgeError(502, "UPSTREAM_INVALID_RESPONSE", "附件内容响应为空");
+    const headers = new Headers({
+      "cache-control": "private, no-store",
+      "x-content-type-options": "nosniff",
+      "content-security-policy": "default-src 'none'; sandbox",
+    });
+    const contentType = upstream.response.headers.get("content-type");
+    if (contentType) headers.set("content-type", contentType);
+    // No Content-Length/Encoding: fetch can decompress upstream bytes. The
+    // bounded stream also owns cancellation until EOF or browser disconnect.
+    return new Response(upstream.response.body, { status: upstream.response.status, headers });
   } catch (error) { return bridgeErrorResponse(error); }
 }

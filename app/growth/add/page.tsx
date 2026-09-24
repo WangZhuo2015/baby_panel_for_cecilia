@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AppHeader } from "@/components/ui/AppHeader";
 import { useToast } from "@/components/ui/Toast";
@@ -12,9 +12,14 @@ export default function GrowthAddPage() {
   const router = useRouter();
   const { showToast } = useToast();
   const baby = useBabyStore((s) => s.baby);
+  const fetchUser = useBabyStore((s) => s.fetchUser);
   const addGrowthMeasurement = useBabyStore((s) => s.addGrowthMeasurement);
   const refreshAll = useBabyStore((s) => s.refreshAll);
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    void fetchUser();
+  }, [fetchUser]);
 
   const handleSave = async (data: any) => {
     if (saving) return;

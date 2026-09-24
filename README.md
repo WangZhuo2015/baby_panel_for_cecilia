@@ -101,6 +101,23 @@ npm start
 | `VAPID_PUBLIC_KEY` | Web Push 公钥 | 运行 `scripts/generate-vapid-keys.ts` 生成 |
 | `VAPID_PRIVATE_KEY` | Web Push 私钥 | 运行 `scripts/generate-vapid-keys.ts` 生成 |
 | `PUSH_SEND_TOKEN` | 推送发送鉴权 Token | 自定义字符串 |
+| `GROWDESK_ENABLED` | 启用 GrowDesk BFF 兼容层 | `1` / `true` |
+| `GROWDESK_BACKEND` | GrowDesk 服务实现 | `typescript`（默认）/ `go` |
+| `GROWDESK_API_URL` | 显式后端 URL；设置后覆盖实现专用默认值 | `http://127.0.0.1:3080` |
+| `GROWDESK_GO_API_URL` | 未设置 `GROWDESK_API_URL` 时的 Go 服务 URL | `http://127.0.0.1:3081` |
+
+### Go 后端联调
+
+Web 兼容层保持旧页面 URL 与交互不变；选择 Go 时只替换 GrowDesk 上游实现：
+
+```bash
+GROWDESK_ENABLED=1 \
+GROWDESK_BACKEND=go \
+GROWDESK_GO_API_URL=http://127.0.0.1:3081 \
+npm run dev
+```
+
+如果同时设置 `GROWDESK_API_URL`，该显式地址优先。当前 Go 服务仍是隔离预览并拒绝 production 启动；Web 在 Go 模式下会对尚未服务端化的 PAT、Web 本地 AI jobs 和本地 AI/OCR 执行入口返回明确的 501，而不是回退到 SQLite、进程内 Map 或本地凭证状态。
 
 ---
 

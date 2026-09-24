@@ -13,6 +13,7 @@ export interface LegacySupplementRecord {
   notes?: string | null;
   source?: string;
   sourceAgent?: string | null;
+  recordedById?: string | null;
   version?: number;
   baseVersion?: number;
   createdAt?: string;
@@ -27,6 +28,7 @@ export interface GrowDeskSupplementRecord {
   occurredAt: string;
   amount: string | null;
   notes: string | null;
+  recordedByUserId?: string | null;
   version: string;
   createdAt: string;
   updatedAt: string;
@@ -90,6 +92,7 @@ export function fromGrowDeskSupplementRecord(rec: GrowDeskSupplementRecord): Leg
     occurredAt: rec.occurredAt,
     amount: rec.amount,
     notes: rec.notes,
+    recordedById: rec.recordedByUserId ?? null,
     version: Number(rec.version ?? 1),
     baseVersion: Number(rec.version ?? 1),
     createdAt: rec.createdAt,

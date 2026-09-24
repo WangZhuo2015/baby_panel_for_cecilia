@@ -7,6 +7,8 @@ import { GROWDESK_CONFIG } from "@/lib/config";
 import { resolveBffSession } from "@/lib/growdesk/session";
 import { verifyBffCsrf } from "@/lib/growdesk/csrf";
 import { growdeskFetch } from "@/lib/growdesk/client";
+import { BridgeError, bridgeErrorResponse, pathId } from "@/lib/growdesk/bridge-protocol";
+import { readPlanEnvelope, listRecipes, createRecipe, appendRecipe } from "@/lib/growdesk/food-plan-history";
 
 export async function GET(request: Request) {
   try {
@@ -20,7 +22,7 @@ export async function GET(request: Request) {
       if (!babyId) {
         return NextResponse.json({ error: "请提供 babyId" }, { status: 400 });
       }
-      const res = await growdeskFetch<any>(`/api/v1/babies/${babyId}/food-plan`, {
+      const res = await growdeskFetch<any>(`/api/v1/babies/${pathId(babyId)}/food-plan`, {
         method: "GET",
         accessToken: bffSession.accessToken,
       });
@@ -30,12 +32,7 @@ export async function GET(request: Request) {
           { status: res.status },
         );
       }
-      // growdeskFetch already unwraps the envelope; recipe fields live in planData.
-      const plan = res.data;
-      const data = plan?.planData;
-      const date = searchParams.get("date");
-      const recipe = data?.date ? { ...data, babyId: plan.babyId, updatedAt: plan.updatedAt } : null;
-      return NextResponse.json(recipe && (!date || recipe.date === date) ? [recipe] : []);
+      return NextResponse.json(listRecipes(readPlanEnvelope(res.data, babyId), searchParams));
     }
 
     const auth = await requireAuth(request);
@@ -75,6 +72,7 @@ export async function GET(request: Request) {
 
     return NextResponse.json(parsed);
   } catch (error) {
+    if (error instanceof BridgeError) return bridgeErrorResponse(error);
     console.error("GET /api/food/plans error:", error);
     return NextResponse.json(
       { error: "Failed to fetch food plans" },
@@ -100,26 +98,22 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "请提供 babyId" }, { status: 400 });
       }
 
-      const existingRes = await growdeskFetch<any>(`/api/v1/babies/${babyId}/food-plan`, {
+      const existingRes = await growdeskFetch<any>(`/api/v1/babies/${pathId(babyId)}/food-plan`, {
         method: "GET",
         accessToken: bffSession.accessToken,
       });
       // Do not replace a plan after a failed read: supplement state may exist.
       if (!existingRes.ok) return NextResponse.json({ error: existingRes.error?.message || "Failed to fetch food plan" }, { status: existingRes.status });
-      const existingData = existingRes.data?.planData;
-      if (!existingData || typeof existingData !== "object" || Array.isArray(existingData)) {
-        return NextResponse.json({ error: "Invalid food plan response" }, { status: 502 });
-      }
-      const mergedPlanData = {
-        ...existingData,
-        ...body,
-      };
+      const plan = readPlanEnvelope(existingRes.data, babyId);
+      const recipe = createRecipe(body, babyId);
+      const mergedPlanData = appendRecipe(plan, recipe);
 
-      const res = await growdeskFetch(`/api/v1/babies/${babyId}/food-plan`, {
+      const res = await growdeskFetch(`/api/v1/babies/${pathId(babyId)}/food-plan`, {
         method: "PUT",
         accessToken: bffSession.accessToken,
         body: {
           planData: mergedPlanData,
+          baseVersion: plan.version,
         },
       });
 
@@ -130,7 +124,7 @@ export async function POST(request: Request) {
         );
       }
 
-      return NextResponse.json(res.data, { status: 201 });
+      return NextResponse.json(recipe, { status: 201 });
     }
 
     const auth = await requireAuth(request);
@@ -192,6 +186,7 @@ export async function POST(request: Request) {
       steps: safeJsonParse(plan.steps, []),
     });
   } catch (error) {
+    if (error instanceof BridgeError) return bridgeErrorResponse(error);
     console.error("POST /api/food/plans error:", error);
     return NextResponse.json(
       { error: "Failed to create food plan" },

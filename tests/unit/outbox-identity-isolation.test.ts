@@ -107,6 +107,7 @@ import {
   SNAPSHOT_KEY_PREFIX,
   SNAPSHOT_MAX_AGE,
 } from "../../stores/useBabyStore";
+import { createRecordsSlice } from "../../stores/slices/records";
 
 test("Issue #2: Outbox Identity Isolation & Replay Protection", async (t) => {
   mockStore.data.clear();
@@ -189,6 +190,42 @@ test("Issue #2: Outbox Identity Isolation & Replay Protection", async (t) => {
       assert.equal(pending.length, 0);
     } finally {
       globalThis.fetch = origFetch;
+    }
+  });
+
+  await t.test("3b. Switching babies does not replay another baby's pending draft", async () => {
+    const babyAItem: OutboxEntry = {
+      clientId: "client-id-baby-a-1",
+      url: "/api/records/feeding",
+      body: { babyId: "baby_a", type: "formula" },
+      createdAt: Date.now(),
+      userId: "user_a",
+      familyId: "fam_a",
+      babyId: "baby_a",
+    };
+    await enqueueOutbox(babyAItem);
+
+    const origFetch = globalThis.fetch;
+    let attempted = false;
+    (globalThis as any).fetch = async () => {
+      attempted = true;
+      return { ok: true, status: 200, json: async () => ({}) };
+    };
+
+    try {
+      const res = await flushOutbox({
+        activeUserId: "user_a",
+        activeFamilyId: "fam_a",
+        activeBabyId: "baby_b",
+      });
+
+      assert.equal(res.flushed, 0);
+      assert.equal(res.skippedOtherScope, 1);
+      assert.equal(attempted, false);
+      assert.equal((await listPending()).some((item) => item.clientId === babyAItem.clientId), true);
+    } finally {
+      globalThis.fetch = origFetch;
+      await removePending(babyAItem.clientId);
     }
   });
 
@@ -302,5 +339,152 @@ test("Issue #2: Outbox Identity Isolation & Replay Protection", async (t) => {
     };
     const isFresh = Date.now() - expiredSnap.savedAt < SNAPSHOT_MAX_AGE;
     assert.equal(isFresh, false, "Expired snapshot must be recognized as stale");
+  });
+
+  await t.test("7. A rejected request keeps the identity captured before an account and baby switch", async () => {
+    mockStore.data.clear();
+    const originalFetch = globalThis.fetch;
+    let rejectRequest!: (reason: unknown) => void;
+    globalThis.fetch = (() => new Promise<Response>((_resolve, reject) => {
+      rejectRequest = reject;
+    })) as typeof fetch;
+
+    let state: any = {};
+    const get = () => state;
+    const set = (update: any) => {
+      state = { ...state, ...(typeof update === "function" ? update(state) : update) };
+    };
+    state = {
+      ...createRecordsSlice(set, get),
+      user: { id: "user_a" },
+      family: { id: "fam_a" },
+      baby: { id: "baby_a", familyId: "fam_a" },
+      selectedBabyId: "baby_a",
+      authLoading: false,
+    };
+
+    try {
+      const submission = state.addFeedingRecord({ type: "formula", amountMl: 120 });
+      await new Promise(resolve => setImmediate(resolve));
+      state = {
+        ...state,
+        user: { id: "user_b" },
+        family: { id: "fam_b" },
+        baby: { id: "baby_b", familyId: "fam_b" },
+        selectedBabyId: "baby_b",
+      };
+      rejectRequest(new TypeError("Failed to fetch"));
+      await assert.rejects(submission, /当前离线/);
+
+      const queued = await listPending();
+      assert.equal(queued.length, 1);
+      assert.equal(queued[0]?.userId, "user_a");
+      assert.equal(queued[0]?.familyId, "fam_a");
+      assert.equal(queued[0]?.babyId, "baby_a");
+      assert.equal(queued[0]?.body.babyId, "baby_a");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  await t.test("8. A successful stale request cannot prepend its record into the newly selected scope", async () => {
+    const originalFetch = globalThis.fetch;
+    let resolveRequest!: (response: Response) => void;
+    globalThis.fetch = (() => new Promise<Response>((resolve) => {
+      resolveRequest = resolve;
+    })) as typeof fetch;
+
+    let state: any = {};
+    const get = () => state;
+    const set = (update: any) => {
+      state = { ...state, ...(typeof update === "function" ? update(state) : update) };
+    };
+    state = {
+      ...createRecordsSlice(set, get),
+      user: { id: "user_a" },
+      family: { id: "fam_a" },
+      baby: { id: "baby_a", familyId: "fam_a" },
+      selectedBabyId: "baby_a",
+      authLoading: false,
+      feedingRecords: [],
+    };
+
+    try {
+      const submission = state.addFeedingRecord({ type: "formula", amountMl: 120 });
+      await new Promise(resolve => setImmediate(resolve));
+      state = {
+        ...state,
+        user: { id: "user_b" },
+        family: { id: "fam_b" },
+        baby: { id: "baby_b", familyId: "fam_b" },
+        selectedBabyId: "baby_b",
+        feedingRecords: [{ id: "record_b", babyId: "baby_b" }],
+      };
+      resolveRequest(Response.json({ id: "record_a", babyId: "baby_a", type: "formula", amountMl: 120 }));
+      await submission;
+
+      assert.deepEqual(state.feedingRecords, [{ id: "record_b", babyId: "baby_b" }]);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  await t.test("9. Identity switching during the first replay prevents a second queued request", async () => {
+    mockStore.data.clear();
+    await enqueueOutbox({ clientId: "switch-first", url: "/api/records/feeding", body: { babyId: "baby_a" }, createdAt: 1, userId: "user_a", familyId: "fam_a", babyId: "baby_a" });
+    await enqueueOutbox({ clientId: "switch-second", url: "/api/records/diaper", body: { babyId: "baby_a" }, createdAt: 2, userId: "user_a", familyId: "fam_a", babyId: "baby_a" });
+    const originalFetch = globalThis.fetch;
+    let resolveFirst!: (response: Response) => void;
+    let markFirstStarted!: () => void;
+    const firstStarted = new Promise<void>(resolve => { markFirstStarted = resolve; });
+    const sent: string[] = [];
+    globalThis.fetch = ((url: string | URL | Request) => {
+      sent.push(String(url));
+      markFirstStarted();
+      return new Promise<Response>(resolve => { resolveFirst = resolve; });
+    }) as typeof fetch;
+    let current = true;
+
+    try {
+      const flushing = flushOutbox({
+        activeUserId: "user_a", activeFamilyId: "fam_a", activeBabyId: "baby_a",
+        isCurrentIdentity: () => current,
+      });
+      await firstStarted;
+      current = false;
+      resolveFirst(Response.json({ ok: true }));
+      const result = await flushing;
+
+      assert.deepEqual(sent, ["/api/records/feeding"]);
+      assert.equal(result.flushed, 1);
+      assert.deepEqual((await listPending()).map(item => item.clientId), ["switch-second"]);
+    } finally {
+      globalThis.fetch = originalFetch;
+      await removePending("switch-first");
+      await removePending("switch-second");
+    }
+  });
+
+  await t.test("10. A stale identity before replay sends no queued request", async () => {
+    mockStore.data.clear();
+    await enqueueOutbox({ clientId: "stale-before", url: "/api/records/feeding", body: { babyId: "baby_a" }, createdAt: 1, userId: "user_a", familyId: "fam_a", babyId: "baby_a" });
+    const originalFetch = globalThis.fetch;
+    let sent = false;
+    globalThis.fetch = (async () => {
+      sent = true;
+      return Response.json({ ok: true });
+    }) as typeof fetch;
+    try {
+      const result = await flushOutbox({
+        activeUserId: "user_a", activeFamilyId: "fam_a", activeBabyId: "baby_a",
+        isCurrentIdentity: () => false,
+      });
+      assert.equal(sent, false);
+      assert.equal(result.flushed, 0);
+      assert.deepEqual((await listPending()).map(item => item.clientId), ["stale-before"]);
+    } finally {
+      globalThis.fetch = originalFetch;
+      await removePending("stale-before");
+    }
   });
 });

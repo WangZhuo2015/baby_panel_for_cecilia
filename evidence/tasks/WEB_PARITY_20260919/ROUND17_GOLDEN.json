@@ -1,0 +1,618 @@
+{
+  "status": "IMPLEMENTED_NOT_REVIEWED",
+  "checkpoint": "round17",
+  "passed": false,
+  "exactPass": 9,
+  "total": 31,
+  "testedBuild": {
+    "schemaVersion": 1,
+    "sourceGitSha": "dda4239aefbdacd1b769866cac1cd3e9b2dffbcc",
+    "sourceDirty": true,
+    "buildId": "NwwyYMFNqZuQ5J7CIt1vq",
+    "artifactSha256": "f66a3270172256bef3a4adaa37e702a6433b182b2203069206cc22842785b7db",
+    "builtAt": "2026-09-19T20:07:22.577Z"
+  },
+  "fixtureSha": "5f17622ae828c68955ca08bd5b54bd23bbe0756c5806e4b165fc5023ba2abe1c",
+  "fullReportSha256": "329641235fecbdfdce8503a5cd56c1e8dd666c1443c95a7317adfb2ad2e8c549",
+  "legacyBaseline": {
+    "priorFixtureSha": "096d61d4d5f4ede9688c6315a0da3be07ddccab071c79a3d5a10f10c632d51d8",
+    "fullEndpointObjectsEqual": true,
+    "endpointSha256": "c105ea34fb2d42911a572bd9551885d9c30d171680b2223cf014ff91bb8c87b7"
+  },
+  "results": [
+    {
+      "id": "auth.me",
+      "status": "FAIL",
+      "differenceCount": 10,
+      "examples": [
+        {
+          "path": "$/babies",
+          "reason": "missing_or_extra_field"
+        },
+        {
+          "path": "$/baby/gestationalDays",
+          "reason": "missing_or_extra_field"
+        },
+        {
+          "path": "$/families",
+          "reason": "missing_or_extra_field"
+        },
+        {
+          "path": "$/family/babies",
+          "reason": "missing_or_extra_field"
+        },
+        {
+          "path": "$/family/createdAt",
+          "reason": "missing_or_extra_field"
+        }
+      ]
+    },
+    {
+      "id": "baby",
+      "status": "FAIL",
+      "differenceCount": 1,
+      "examples": [
+        {
+          "path": "$/gestationalDays",
+          "reason": "missing_or_extra_field"
+        }
+      ]
+    },
+    {
+      "id": "family.members",
+      "status": "FAIL",
+      "differenceCount": 6,
+      "examples": [
+        {
+          "path": "$/family/babies",
+          "reason": "missing_or_extra_field"
+        },
+        {
+          "path": "$/family/createdAt",
+          "reason": "missing_or_extra_field"
+        },
+        {
+          "path": "$/family/inviteCode",
+          "reason": "missing_or_extra_field"
+        },
+        {
+          "path": "$/family/timeZone",
+          "reason": "missing_or_extra_field"
+        },
+        {
+          "path": "$/family/updatedAt",
+          "reason": "missing_or_extra_field"
+        }
+      ]
+    },
+    {
+      "id": "records.feeding",
+      "status": "FAIL",
+      "differenceCount": 200,
+      "examples": [
+        {
+          "path": "$/0/baseVersion",
+          "reason": "missing_or_extra_field"
+        },
+        {
+          "path": "$/0/clientId",
+          "reason": "missing_or_extra_field"
+        },
+        {
+          "path": "$/0/updatedAt",
+          "reason": "missing_or_extra_field"
+        },
+        {
+          "path": "$/0/version",
+          "reason": "missing_or_extra_field"
+        },
+        {
+          "path": "$/1/baseVersion",
+          "reason": "missing_or_extra_field"
+        }
+      ]
+    },
+    {
+      "id": "records.sleep",
+      "status": "FAIL",
+      "differenceCount": 7,
+      "examples": [
+        {
+          "path": "$/0/baseVersion",
+          "reason": "missing_or_extra_field"
+        },
+        {
+          "path": "$/0/clientId",
+          "reason": "missing_or_extra_field"
+        },
+        {
+          "path": "$/0/endedAt",
+          "reason": "missing_or_extra_field"
+        },
+        {
+          "path": "$/0/sleepType",
+          "reason": "missing_or_extra_field"
+        },
+        {
+          "path": "$/0/startedAt",
+          "reason": "missing_or_extra_field"
+        }
+      ]
+    },
+    {
+      "id": "records.diaper",
+      "status": "FAIL",
+      "differenceCount": 4,
+      "examples": [
+        {
+          "path": "$/0/baseVersion",
+          "reason": "missing_or_extra_field"
+        },
+        {
+          "path": "$/0/clientId",
+          "reason": "missing_or_extra_field"
+        },
+        {
+          "path": "$/0/updatedAt",
+          "reason": "missing_or_extra_field"
+        },
+        {
+          "path": "$/0/version",
+          "reason": "missing_or_extra_field"
+        }
+      ]
+    },
+    {
+      "id": "records.timeline",
+      "status": "FAIL",
+      "differenceCount": 3948,
+      "examples": [
+        {
+          "path": "$",
+          "reason": "array_length_mismatch"
+        },
+        {
+          "path": "$/0/babyId",
+          "reason": "missing_or_extra_field"
+        },
+        {
+          "path": "$/0/baseVersion",
+          "reason": "missing_or_extra_field"
+        },
+        {
+          "path": "$/0/formulaProductId",
+          "reason": "missing_or_extra_field"
+        },
+        {
+          "path": "$/0/formulaProductName",
+          "reason": "missing_or_extra_field"
+        }
+      ]
+    },
+    {
+      "id": "records.daily-summary",
+      "status": "PASS",
+      "differenceCount": 0,
+      "examples": []
+    },
+    {
+      "id": "feeding.history",
+      "status": "FAIL",
+      "differenceCount": 400,
+      "examples": [
+        {
+          "path": "$/0/baseVersion",
+          "reason": "missing_or_extra_field"
+        },
+        {
+          "path": "$/0/clientId",
+          "reason": "missing_or_extra_field"
+        },
+        {
+          "path": "$/0/updatedAt",
+          "reason": "missing_or_extra_field"
+        },
+        {
+          "path": "$/0/version",
+          "reason": "missing_or_extra_field"
+        },
+        {
+          "path": "$/1/baseVersion",
+          "reason": "missing_or_extra_field"
+        }
+      ]
+    },
+    {
+      "id": "food.logs",
+      "status": "FAIL",
+      "differenceCount": 11,
+      "examples": [
+        {
+          "path": "$/0/baseVersion",
+          "reason": "missing_or_extra_field"
+        },
+        {
+          "path": "$/0/clientId",
+          "reason": "missing_or_extra_field"
+        },
+        {
+          "path": "$/0/foodNames",
+          "reason": "missing_or_extra_field"
+        },
+        {
+          "path": "$/0/mealType",
+          "reason": "missing_or_extra_field"
+        },
+        {
+          "path": "$/0/notes",
+          "reason": "missing_or_extra_field"
+        }
+      ]
+    },
+    {
+      "id": "food.items",
+      "status": "FAIL",
+      "differenceCount": 135,
+      "examples": [
+        {
+          "path": "$/0/allergenRisk",
+          "reason": "missing_or_extra_field"
+        },
+        {
+          "path": "$/0/id",
+          "reason": "value_mismatch"
+        },
+        {
+          "path": "$/0/recommendedAgeMonths",
+          "reason": "missing_or_extra_field"
+        },
+        {
+          "path": "$/1/allergenRisk",
+          "reason": "missing_or_extra_field"
+        },
+        {
+          "path": "$/1/id",
+          "reason": "value_mismatch"
+        }
+      ]
+    },
+    {
+      "id": "food.plans",
+      "status": "PASS",
+      "differenceCount": 0,
+      "examples": []
+    },
+    {
+      "id": "knowledge.food-guidelines",
+      "status": "FAIL",
+      "differenceCount": 1,
+      "examples": [
+        {
+          "path": "$/0/id",
+          "reason": "value_mismatch"
+        }
+      ]
+    },
+    {
+      "id": "growth",
+      "status": "FAIL",
+      "differenceCount": 13,
+      "examples": [
+        {
+          "path": "$/0/baseVersion",
+          "reason": "missing_or_extra_field"
+        },
+        {
+          "path": "$/0/clientId",
+          "reason": "missing_or_extra_field"
+        },
+        {
+          "path": "$/0/headCircumference",
+          "reason": "missing_or_extra_field"
+        },
+        {
+          "path": "$/0/height",
+          "reason": "missing_or_extra_field"
+        },
+        {
+          "path": "$/0/imageUrl",
+          "reason": "missing_or_extra_field"
+        }
+      ]
+    },
+    {
+      "id": "growth.chart",
+      "status": "FAIL",
+      "differenceCount": 14,
+      "examples": [
+        {
+          "path": "$/measurements/0/baseVersion",
+          "reason": "missing_or_extra_field"
+        },
+        {
+          "path": "$/measurements/0/clientId",
+          "reason": "missing_or_extra_field"
+        },
+        {
+          "path": "$/measurements/0/headCircumference",
+          "reason": "missing_or_extra_field"
+        },
+        {
+          "path": "$/measurements/0/height",
+          "reason": "missing_or_extra_field"
+        },
+        {
+          "path": "$/measurements/0/imageUrl",
+          "reason": "missing_or_extra_field"
+        }
+      ]
+    },
+    {
+      "id": "medical.reports",
+      "status": "FAIL",
+      "differenceCount": 5,
+      "examples": [
+        {
+          "path": "$/0/baseVersion",
+          "reason": "missing_or_extra_field"
+        },
+        {
+          "path": "$/0/recordedById",
+          "reason": "missing_or_extra_field"
+        },
+        {
+          "path": "$/0/source",
+          "reason": "missing_or_extra_field"
+        },
+        {
+          "path": "$/0/sourceAgent",
+          "reason": "missing_or_extra_field"
+        },
+        {
+          "path": "$/0/version",
+          "reason": "missing_or_extra_field"
+        }
+      ]
+    },
+    {
+      "id": "nutrition.products",
+      "status": "PASS",
+      "differenceCount": 0,
+      "examples": []
+    },
+    {
+      "id": "nutrition.products.formula",
+      "status": "PASS",
+      "differenceCount": 0,
+      "examples": []
+    },
+    {
+      "id": "nutrition.products.supplement",
+      "status": "PASS",
+      "differenceCount": 0,
+      "examples": []
+    },
+    {
+      "id": "nutrition.records",
+      "status": "FAIL",
+      "differenceCount": 3,
+      "examples": [
+        {
+          "path": "$/records/0/clientId",
+          "reason": "missing_or_extra_field"
+        },
+        {
+          "path": "$/records/0/product/createdAt",
+          "reason": "missing_or_extra_field"
+        },
+        {
+          "path": "$/records/0/product/updatedAt",
+          "reason": "missing_or_extra_field"
+        }
+      ]
+    },
+    {
+      "id": "nutrition.schedules",
+      "status": "PASS",
+      "differenceCount": 0,
+      "examples": []
+    },
+    {
+      "id": "nutrition.analysis.day",
+      "status": "PASS",
+      "differenceCount": 0,
+      "examples": []
+    },
+    {
+      "id": "nutrition.analysis.week",
+      "status": "PASS",
+      "differenceCount": 0,
+      "examples": []
+    },
+    {
+      "id": "vaccines",
+      "status": "FAIL",
+      "differenceCount": 1077,
+      "examples": [
+        {
+          "path": "$/dataRelease/createdAt",
+          "reason": "missing_or_extra_field"
+        },
+        {
+          "path": "$/dataRelease/id",
+          "reason": "missing_or_extra_field"
+        },
+        {
+          "path": "$/dataRelease/localDefaultRegion",
+          "reason": "missing_or_extra_field"
+        },
+        {
+          "path": "$/dataRelease/scope",
+          "reason": "missing_or_extra_field"
+        },
+        {
+          "path": "$/dataRelease/sources",
+          "reason": "missing_or_extra_field"
+        }
+      ]
+    },
+    {
+      "id": "vaccines.selections",
+      "status": "FAIL",
+      "differenceCount": 5,
+      "examples": [
+        {
+          "path": "$",
+          "reason": "array_length_mismatch"
+        },
+        {
+          "path": "$/0/babyId",
+          "reason": "missing_or_extra_field"
+        },
+        {
+          "path": "$/0/id",
+          "reason": "missing_or_extra_field"
+        },
+        {
+          "path": "$/0/recordId",
+          "reason": "missing_or_extra_field"
+        },
+        {
+          "path": "$/0/updatedAt",
+          "reason": "missing_or_extra_field"
+        }
+      ]
+    },
+    {
+      "id": "development.milestones",
+      "status": "FAIL",
+      "differenceCount": 657,
+      "examples": [
+        {
+          "path": "$/dataRelease/createdAt",
+          "reason": "missing_or_extra_field"
+        },
+        {
+          "path": "$/dataRelease/evidencePriority",
+          "reason": "missing_or_extra_field"
+        },
+        {
+          "path": "$/dataRelease/id",
+          "reason": "missing_or_extra_field"
+        },
+        {
+          "path": "$/dataRelease/nullPolicy",
+          "reason": "missing_or_extra_field"
+        },
+        {
+          "path": "$/dataRelease/sources/0/dataReleaseId",
+          "reason": "missing_or_extra_field"
+        }
+      ]
+    },
+    {
+      "id": "development.activities",
+      "status": "FAIL",
+      "differenceCount": 75,
+      "examples": [
+        {
+          "path": "$/0/content",
+          "reason": "missing_or_extra_field"
+        },
+        {
+          "path": "$/0/id",
+          "reason": "value_mismatch"
+        },
+        {
+          "path": "$/0/monthAge",
+          "reason": "missing_or_extra_field"
+        },
+        {
+          "path": "$/1/content",
+          "reason": "missing_or_extra_field"
+        },
+        {
+          "path": "$/1/id",
+          "reason": "value_mismatch"
+        }
+      ]
+    },
+    {
+      "id": "development.warning-signs",
+      "status": "FAIL",
+      "differenceCount": 128,
+      "examples": [
+        {
+          "path": "$/0/actionAdvice",
+          "reason": "missing_or_extra_field"
+        },
+        {
+          "path": "$/0/id",
+          "reason": "value_mismatch"
+        },
+        {
+          "path": "$/0/monthAge",
+          "reason": "missing_or_extra_field"
+        },
+        {
+          "path": "$/0/signText",
+          "reason": "missing_or_extra_field"
+        },
+        {
+          "path": "$/1/actionAdvice",
+          "reason": "missing_or_extra_field"
+        }
+      ]
+    },
+    {
+      "id": "knowledge.books",
+      "status": "FAIL",
+      "differenceCount": 25,
+      "examples": [
+        {
+          "path": "$/0/id",
+          "reason": "value_mismatch"
+        },
+        {
+          "path": "$/0/illustrator",
+          "reason": "missing_or_extra_field"
+        },
+        {
+          "path": "$/0/rating",
+          "reason": "missing_or_extra_field"
+        },
+        {
+          "path": "$/0/translator",
+          "reason": "missing_or_extra_field"
+        },
+        {
+          "path": "$/0/version",
+          "reason": "missing_or_extra_field"
+        }
+      ]
+    },
+    {
+      "id": "notifications.list",
+      "status": "FAIL",
+      "differenceCount": 1,
+      "examples": [
+        {
+          "path": "$/15/id",
+          "reason": "value_mismatch"
+        }
+      ]
+    },
+    {
+      "id": "app.config",
+      "status": "PASS",
+      "differenceCount": 0,
+      "examples": []
+    }
+  ],
+  "notes": [
+    "No fields were filtered or normalized to change comparison results.",
+    "Fixture hash changed because the canonical supplement fixture now stores its creation actor; complete real legacy endpoint objects remain identical.",
+    "Notifications now have one remaining release-ID difference; nutrition records have three metadata differences.",
+    "No production deployment."
+  ]
+}

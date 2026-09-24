@@ -1,3 +1,4 @@
+import { legacyListQuery } from "@/lib/growdesk/legacy-list-query";
 import { NextResponse } from "next/server";
 import { requireAuth, requireBaby, getActiveBaby } from "@/lib/api-helpers";
 import * as records from "@/lib/records/service";
@@ -27,12 +28,13 @@ export async function GET(request: Request) {
       const babyId = searchParams.get("babyId");
       if (!babyId) return NextResponse.json({ error: "请提供 babyId" }, { status: 400 });
       const recordId = searchParams.get("id");
+      const extended = request.headers.get("x-growdesk-representation") === "extended";
       if (recordId) {
         const record = await fetchRecordDetail<GrowDeskFoodRecord>(growdeskFetch, bffSession.accessToken, babyId, recordId, "food");
-        return NextResponse.json(fromGrowDeskFoodRecord(record), { headers: { "cache-control": "no-store" } });
+        return NextResponse.json(fromGrowDeskFoodRecord(record, extended), { headers: { "cache-control": "no-store" } });
       }
-      const list = await fetchLegacyRecordList<GrowDeskFoodRecord>(growdeskFetch, bffSession.accessToken, babyId, searchParams, "food");
-      return NextResponse.json(list.map(fromGrowDeskFoodRecord), { headers: { "cache-control": "no-store" } });
+      const list = await fetchLegacyRecordList<GrowDeskFoodRecord>(growdeskFetch, bffSession.accessToken, babyId, legacyListQuery(searchParams), "food");
+      return NextResponse.json(list.map(record => fromGrowDeskFoodRecord(record, extended)), { headers: { "cache-control": "no-store" } });
     }
     const auth = await requireAuth(request);
     if (auth.errorResponse) return auth.errorResponse;

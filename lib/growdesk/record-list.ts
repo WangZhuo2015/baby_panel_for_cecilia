@@ -12,10 +12,14 @@ import {
 export type LegacyRecordKind = "feeding" | "sleep" | "diaper" | "food" | "timeline";
 
 export interface DatedRecord {
+  id?: string | null;
+  babyId?: string | null;
   occurredAt?: string | null;
   startedAt?: string | null;
   endedAt?: string | null;
   recordDate?: string | null;
+  entityType?: string | null;
+  entityId?: string | null;
 }
 
 const MAX_SCAN_ITEMS = 20_000;
@@ -143,6 +147,28 @@ export async function fetchLegacyRecordList<T extends DatedRecord>(
     dayEnd = bounds.end;
   }
 
+  // A canonical timeline projection uses the sleep's startedAt as occurredAt.
+  // That puts a sleep which began before this calendar day outside the ordinary
+  // point-event window even though the sleep overlaps the day. Resolve the
+  // overlapping sleep IDs through the interval endpoint before filtering the
+  // timeline, while retaining the timeline page/version as the source of the
+  // returned item.
+  let overlappingSleepIds: Set<string> | undefined;
+  if (date && kind === "timeline") {
+    const overlappingSleeps = await fetchLegacyRecordList<DatedRecord>(
+      fetchApi,
+      token,
+      babyId,
+      new URLSearchParams({ date }),
+      "sleep",
+    );
+    overlappingSleepIds = new Set(
+      overlappingSleeps
+        .map(item => item.id)
+        .filter((id): id is string => typeof id === "string" && id.length > 0),
+    );
+  }
+
   const out: T[] = [];
   const visited = new Set<string>();
   let cursor: string | null = null;
@@ -162,6 +188,9 @@ export async function fetchLegacyRecordList<T extends DatedRecord>(
       if (!item || typeof item !== "object" || Array.isArray(item)) {
         throw new BridgeError(502, "UPSTREAM_INVALID_RECORD", "GrowDesk 返回了无效的记录");
       }
+      if (item.babyId !== babyId) {
+        throw new BridgeError(502, "UPSTREAM_SCOPE_MISMATCH", "GrowDesk 返回了其他宝宝的记录");
+      }
       let include = true;
       if (kind === "food") {
         try { calendarDate(item.recordDate); } catch {
@@ -175,11 +204,19 @@ export async function fetchLegacyRecordList<T extends DatedRecord>(
           throw new BridgeError(502, "UPSTREAM_INVALID_INTERVAL", "GrowDesk 返回了无效的睡眠时间区间");
         }
         include = !date || (startedAt < dayEnd! && (endedAt === null || endedAt > dayStart!));
+      } else if (date && kind === "timeline" && item.entityType === "sleep" && item.entityId) {
+        // Sleep projections are keyed by the underlying sleep ID. A malformed
+        // projection without an entityId falls through to occurredAt validation
+        // below and is rejected by the detail/DTO boundary if it is in-range.
+        include = overlappingSleepIds?.has(item.entityId) ?? false;
       } else {
         const occurredAt = parseInstant(item.occurredAt);
         include = !date || (occurredAt >= dayStart! && occurredAt < dayEnd!);
       }
-      if (include) out.push(item);
+      // Growth measurements have their own page in the old PWA and were not
+      // part of its timeline. Keep this filter at the legacy list boundary;
+      // the canonical timeline/iOS projection remains growth-capable.
+      if (include && !(kind === "timeline" && item.entityType === "growth")) out.push(item);
       if (explicit && out.length >= limit) return out.slice(0, limit);
       if (out.length > MAX_SCAN_ITEMS) throw new BridgeError(503, "HISTORY_SCAN_LIMIT", "记录量超出兼容接口上限，未返回截断数据");
     }

@@ -1,4 +1,4 @@
-import { wireVersion } from "./bridge-protocol";
+import { BridgeError, wireVersion } from "./bridge-protocol";
 import { calculateAge } from "../age";
 import { isValidDateStr } from "../date";
 
@@ -19,7 +19,11 @@ export interface LegacyGrowthRecord {
   headCircumference?: number | null;
   headCircumferenceCm?: number | null;
   notes?: string | null;
-  source?: string;
+  imageUrl?: string | null;
+  percentile?: number | null;
+  clientId?: string | null;
+  recordedById?: string | null;
+  source?: string | null;
   sourceAgent?: string | null;
   version?: string | number;
   baseVersion?: string | number;
@@ -40,10 +44,20 @@ export interface GrowDeskGrowthRecord {
   version: string;
   createdAt: string;
   updatedAt: string;
+  /** Read-only projection of the imported GrowthMeasurement metadata. */
+  legacyDate?: string | null;
+  legacyAgeInMonths?: number | null;
+  legacyAgeLabel?: string | null;
+  legacyPercentile?: number | null;
+  legacyClientId?: string | null;
+  legacyRecordedById?: string | null;
+  legacySource?: string | null;
+  legacySourceAgent?: string | null;
 }
 
 export interface GrowDeskWhoPercentilePoint {
-  month: number;
+  monthAge?: number;
+  month?: number;
   p3: string;
   p15: string;
   p50: string;
@@ -72,6 +86,24 @@ function toDecimalStr(val: unknown, precision: number): string | null {
   return isNaN(num) ? null : num.toFixed(precision);
 }
 
+function growthAttachmentId(body: Record<string, unknown>): string | null {
+  const parse = (value: unknown): string | null => {
+    if (value === undefined || value === null || value === "") return null;
+    if (typeof value !== "string") throw new BridgeError(400, "INVALID_ATTACHMENT", "请重新上传测量照片");
+    const id = value.replace(/^\/api\/attachments\//, "");
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+      throw new BridgeError(400, "INVALID_ATTACHMENT", "请重新上传测量照片");
+    }
+    return id;
+  };
+  const fromId = parse(body.attachmentId);
+  const fromUrl = parse(body.imageUrl);
+  if (body.attachmentId !== undefined && body.imageUrl !== undefined && fromId !== fromUrl) {
+    throw new BridgeError(400, "INVALID_ATTACHMENT", "测量照片引用不一致");
+  }
+  return body.attachmentId !== undefined ? fromId : fromUrl;
+}
+
 export function toGrowDeskGrowthCreatePayload(body: Record<string, unknown>) {
   const measurementDate = String(body.measurementDate || body.date || new Date().toISOString().slice(0, 10));
 
@@ -84,7 +116,7 @@ export function toGrowDeskGrowthCreatePayload(body: Record<string, unknown>) {
     weightKg: toDecimalStr(weightRaw, 2),
     heightCm: toDecimalStr(heightRaw, 1),
     headCircumferenceCm: toDecimalStr(headRaw, 1),
-    attachmentId: body.attachmentId ? String(body.attachmentId) : null,
+    attachmentId: growthAttachmentId(body),
     notes: body.notes ? String(body.notes).trim() : null,
   };
 }
@@ -113,8 +145,8 @@ export function toGrowDeskGrowthUpdatePayload(body: Record<string, unknown>) {
     payload.headCircumferenceCm = toDecimalStr(headRaw, 1);
   }
 
-  if (body.attachmentId !== undefined) {
-    payload.attachmentId = body.attachmentId ? String(body.attachmentId) : null;
+  if (body.attachmentId !== undefined || body.imageUrl !== undefined) {
+    payload.attachmentId = growthAttachmentId(body);
   }
 
   if (body.notes !== undefined) {
@@ -124,16 +156,56 @@ export function toGrowDeskGrowthUpdatePayload(body: Record<string, unknown>) {
   return payload;
 }
 
+function validLegacyDate(value: unknown): value is string {
+  return typeof value === "string" && isValidDateStr(value);
+}
+
+function validLegacyAge(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0;
+}
+
+function validLegacyPercentile(value: unknown): value is number {
+  return validLegacyAge(value) && value <= 100;
+}
+
 export function fromGrowDeskGrowthRecord(rec: GrowDeskGrowthRecord, birthDate?: string): LegacyGrowthRecord {
   const weight = rec.weightKg !== null ? Number(rec.weightKg) : null;
   const height = rec.heightCm !== null ? Number(rec.heightCm) : null;
   const head = rec.headCircumferenceCm !== null ? Number(rec.headCircumferenceCm) : null;
   const version = wireVersion(rec.version);
-  const age = birthDate && isValidDateStr(birthDate.slice(0, 10)) && isValidDateStr(rec.measurementDate)
-    ? calculateAge(birthDate, rec.measurementDate) : undefined;
+  const hasLegacyProjection = validLegacyDate(rec.legacyDate);
+  const legacyDateMatchesMeasurement = hasLegacyProjection && validLegacyDate(rec.measurementDate)
+    && rec.legacyDate === rec.measurementDate;
+  const historicalAge = legacyDateMatchesMeasurement && validLegacyAge(rec.legacyAgeInMonths) && typeof rec.legacyAgeLabel === "string"
+    ? { months: rec.legacyAgeInMonths, label: rec.legacyAgeLabel }
+    : undefined;
+  const age = historicalAge ?? (birthDate && isValidDateStr(birthDate.slice(0, 10)) && isValidDateStr(rec.measurementDate)
+    ? calculateAge(birthDate, rec.measurementDate) : undefined);
+  const historicalPercentile = legacyDateMatchesMeasurement
+    ? (validLegacyPercentile(rec.legacyPercentile) ? rec.legacyPercentile : null)
+    : undefined;
+  const defaultLegacyMetadata = !hasLegacyProjection
+    ? {
+        percentile: null,
+        clientId: null,
+        recordedById: null,
+        source: "ui_manual" as const,
+        sourceAgent: null,
+      }
+    : {};
 
   return {
     ...(age ? { ageInMonths: age.months, ageLabel: age.label } : {}),
+    ...(legacyDateMatchesMeasurement ? { percentile: historicalPercentile } : {}),
+    ...defaultLegacyMetadata,
+    ...(hasLegacyProjection
+      ? {
+          clientId: rec.legacyClientId ?? null,
+          recordedById: rec.legacyRecordedById ?? null,
+          source: rec.legacySource ?? null,
+          sourceAgent: rec.legacySourceAgent ?? null,
+        }
+      : {}),
     id: rec.id,
     babyId: rec.babyId,
     date: rec.measurementDate,
@@ -144,6 +216,7 @@ export function fromGrowDeskGrowthRecord(rec: GrowDeskGrowthRecord, birthDate?: 
     headCircumference: head,
     headCircumferenceCm: head,
     notes: rec.notes,
+    imageUrl: rec.attachmentId ? `/api/attachments/${encodeURIComponent(rec.attachmentId)}` : null,
     version,
     baseVersion: version,
     createdAt: rec.createdAt,
@@ -155,7 +228,7 @@ export function transformWhoSeriesToLegacy(points?: GrowDeskWhoPercentilePoint[]
   if (!Array.isArray(points) || points.length === 0) {
     return { P97: [], P85: [], P50: [], P15: [], P3: [] };
   }
-  const sorted = [...points].sort((a, b) => a.month - b.month);
+  const sorted = [...points].sort((a, b) => percentileMonth(a) - percentileMonth(b));
   return {
     P97: sorted.map((p) => Number(p.p97)),
     P85: sorted.map((p) => Number(p.p85)),
@@ -165,12 +238,28 @@ export function transformWhoSeriesToLegacy(points?: GrowDeskWhoPercentilePoint[]
   };
 }
 
+function percentileMonth(point: GrowDeskWhoPercentilePoint): number {
+  const month = point.monthAge ?? point.month;
+  if (typeof month !== "number" || !Number.isInteger(month) || month < 0) {
+    throw new BridgeError(502, "UPSTREAM_INVALID_RECORD", "GrowDesk 生长标准缺少有效月龄");
+  }
+  return month;
+}
+
 export function transformWhoPercentilesForLegacy(data?: {
   weightForAge?: GrowDeskWhoPercentilePoint[];
   heightForAge?: GrowDeskWhoPercentilePoint[];
   headCircumferenceForAge?: GrowDeskWhoPercentilePoint[];
-}): Record<string, LegacyPercentileData> {
+}): LegacyGrowthStandardSet {
+  const series = [data?.weightForAge, data?.heightForAge, data?.headCircumferenceForAge];
+  const months = (series.find(points => points?.length) ?? []).map(percentileMonth).sort((a, b) => a - b);
+  for (const points of series) {
+    if (points?.length && JSON.stringify(points.map(percentileMonth).sort((a, b) => a - b)) !== JSON.stringify(months)) {
+      throw new BridgeError(502, "UPSTREAM_INVALID_RECORD", "GrowDesk 生长标准月龄不一致");
+    }
+  }
   return {
+    months,
     weight: transformWhoSeriesToLegacy(data?.weightForAge),
     height: transformWhoSeriesToLegacy(data?.heightForAge),
     headCircumference: transformWhoSeriesToLegacy(data?.headCircumferenceForAge),

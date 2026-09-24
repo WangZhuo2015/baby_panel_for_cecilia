@@ -5,14 +5,15 @@ export interface LegacyFeedingRecord {
   id: string; babyId: string; type: "breast" | "bottle_breast" | "formula" | "mixed";
   timestamp: string; amountMl: number | null; leftMinutes: number | null; rightMinutes: number | null;
   spitUp: boolean; formulaProductId?: string | null; notes: string | null;
-  source?: string; sourceAgent?: string | null; version: string; baseVersion: string;
+  clientId?: string | null; source?: string; sourceAgent?: string | null; recordedById?: string | null;
+  version: string; baseVersion: string;
   createdAt: string; updatedAt: string;
 }
 export interface GrowDeskFeedingRecord {
   id: string; babyId: string; familyId: string; feedingType: FeedingKind;
   occurredAt: string; amountMl: string | null; leftMinutes: number | null; rightMinutes: number | null;
   spitUp: boolean; formulaProductId: string | null; notes: string | null;
-  source: string; sourceAgent: string | null; version: string; createdAt: string; updatedAt: string;
+  source: string; sourceAgent: string | null; recordedByUserId?: string | null; version: string; createdAt: string; updatedAt: string;
 }
 function nullableNumber(value: unknown, integer = false): number | null {
   if (value === undefined || value === null || value === "") return null;
@@ -85,7 +86,8 @@ export function fromGrowDeskFeedingRecord(rec: GrowDeskFeedingRecord): LegacyFee
     type: rec.feedingType === "bottle" ? "bottle_breast" : rec.feedingType,
     timestamp: rec.occurredAt, amountMl: rec.amountMl === null ? null : Number(rec.amountMl),
     leftMinutes: rec.leftMinutes, rightMinutes: rec.rightMinutes, spitUp: rec.spitUp,
-    formulaProductId: rec.formulaProductId, notes: rec.notes, source: rec.source, sourceAgent: rec.sourceAgent,
+    formulaProductId: rec.formulaProductId, notes: rec.notes, source: rec.source, sourceAgent: rec.sourceAgent, recordedById: rec.recordedByUserId ?? null,
+    clientId: null,
     version, baseVersion: version, createdAt: rec.createdAt, updatedAt: rec.updatedAt,
   };
 }

@@ -41,6 +41,7 @@ export function useSmartPolling(options: SmartPollingOptions = {}) {
   const seenNotifIdsRef = useRef<Set<string>>(new Set());
   const isInitialFetchRef = useRef<boolean>(true);
   const onFamilyActivityRef = useRef(onFamilyActivity);
+  const requestGenerationRef = useRef(0);
 
   useEffect(() => {
     onFamilyActivityRef.current = onFamilyActivity;
@@ -49,8 +50,19 @@ export function useSmartPolling(options: SmartPollingOptions = {}) {
   useEffect(() => {
     // 仅在已登录且有宝宝档案时启动
     if (!enabled || !user || !baby?.id) {
+      requestGenerationRef.current += 1;
       return;
     }
+
+    const scopeGeneration = ++requestGenerationRef.current;
+    const requestedBabyId = baby.id;
+    const requestedUserId = user.id;
+    seenNotifIdsRef.current.clear();
+    isInitialFetchRef.current = true;
+    const isCurrentScope = () =>
+      requestGenerationRef.current === scopeGeneration
+      && (useBabyStore.getState().baby?.id ?? null) === requestedBabyId
+      && (useBabyStore.getState().user?.id ?? null) === requestedUserId;
 
     let timer: ReturnType<typeof setInterval> | null = null;
 
@@ -69,14 +81,14 @@ export function useSmartPolling(options: SmartPollingOptions = {}) {
         isPollingRef.current = true;
         lastPollTimeRef.current = Date.now();
         await pollActiveData();
+        if (!isCurrentScope()) return;
 
         // 检查最新家庭成员动态通知
-        const currentBabyId = baby?.id;
-        const currentUserId = user?.id;
-        if (currentBabyId) {
-          const res = await fetch(`/api/notifications?babyId=${currentBabyId}`);
+        if (requestedBabyId) {
+          const res = await fetch(`/api/notifications?babyId=${encodeURIComponent(requestedBabyId)}`);
           if (res.ok) {
             const list = await res.json();
+            if (!isCurrentScope()) return;
             if (Array.isArray(list)) {
               const familyList = list.filter((n: any) => n.type === "family");
               if (isInitialFetchRef.current) {
@@ -89,7 +101,7 @@ export function useSmartPolling(options: SmartPollingOptions = {}) {
                   (item: any) =>
                     !seenNotifIdsRef.current.has(item.id) &&
                     item.actorId &&
-                    item.actorId !== currentUserId
+                    item.actorId !== requestedUserId
                 );
                 for (const item of familyList) seenNotifIdsRef.current.add(item.id);
 
@@ -155,6 +167,7 @@ export function useSmartPolling(options: SmartPollingOptions = {}) {
     }
 
     return () => {
+      requestGenerationRef.current += 1;
       stopInterval();
       if (typeof document !== "undefined") {
         document.removeEventListener("visibilitychange", handleVisibilityChange);

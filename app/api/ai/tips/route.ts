@@ -6,6 +6,7 @@ import { GROWDESK_CONFIG } from "@/lib/config";
 import { resolveBffSession } from "@/lib/growdesk/session";
 import { loadWebBaby } from "@/lib/growdesk/bridge-identity";
 import { growdeskFetch } from "@/lib/growdesk/client";
+import { BridgeError, bridgeErrorResponse } from "@/lib/growdesk/bridge-protocol";
 
 export async function GET(request: Request) {
   try {
@@ -16,18 +17,7 @@ export async function GET(request: Request) {
       }
       const { searchParams } = new URL(request.url);
       const requestedBabyId = searchParams.get("babyId");
-      let baby: any = null;
-      if (requestedBabyId) {
-        const babyRes = await growdeskFetch<any>(`/api/v1/babies/${requestedBabyId}`, {
-          accessToken: bffSession.accessToken,
-        });
-        if (babyRes.ok && babyRes.data) {
-          baby = babyRes.data;
-        }
-      }
-      if (!baby) {
-        baby = await loadWebBaby(growdeskFetch, bffSession.accessToken);
-      }
+      const baby = await loadWebBaby(growdeskFetch, bffSession.accessToken, requestedBabyId);
       if (!baby) {
         return NextResponse.json({ error: "未找到宝宝档案" }, { status: 404 });
       }

@@ -6,12 +6,14 @@ import { AppHeader } from "@/components/ui/AppHeader";
 import { useToast } from "@/components/ui/Toast";
 import { useBabyStore } from "@/stores/useBabyStore";
 import { FeedingForm } from "@/components/records/FeedingForm";
+import { useRecordIdentityReady } from "@/lib/hooks/useRecordIdentityReady";
 
 export default function FeedingRecordPage() {
   const router = useRouter();
   const { showToast } = useToast();
   const addFeedingRecord = useBabyStore((s) => s.addFeedingRecord);
   const fetchFeedingRecords = useBabyStore((s) => s.fetchFeedingRecords);
+  const identityReady = useRecordIdentityReady();
 
   const [saving, setSaving] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -52,7 +54,7 @@ export default function FeedingRecordPage() {
         <FeedingForm
           mode="create"
           onSubmit={handleSubmit}
-          saving={saving}
+          saving={saving || !identityReady}
         />
       </div>
     </div>

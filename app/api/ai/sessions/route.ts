@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { verifyBffCsrf } from "@/lib/growdesk/csrf";
 import { prisma } from "@/lib/prisma";
 import { requireAuth, requireBaby } from "@/lib/api-helpers";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
@@ -116,6 +117,8 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   if (GROWDESK_CONFIG.enabled) {
+    const csrf = verifyBffCsrf(request, { enforceInTest: true });
+    if (csrf) return csrf;
     try {
       const bffSession = await resolveBffSession(request);
       if (!bffSession) {

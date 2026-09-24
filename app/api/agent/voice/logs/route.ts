@@ -3,7 +3,9 @@ import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/api-helpers";
 import { GROWDESK_CONFIG } from "@/lib/config";
 import { resolveBffSession } from "@/lib/growdesk/session";
-import { bffVoiceLogStore } from "@/lib/growdesk/voice-logs";
+import { BridgeError } from "@/lib/growdesk/bridge-protocol";
+import { listGrowDeskVoiceLogs } from "@/lib/growdesk/voice-log-api";
+import { growdeskFetch } from "@/lib/growdesk/client";
 
 export const dynamic = "force-dynamic";
 
@@ -17,7 +19,7 @@ export async function GET(request: Request) {
       const { searchParams } = new URL(request.url);
       const unreadAsyncOnly = searchParams.get("unreadAsync") === "true";
       const limit = Math.min(50, Math.max(1, parseInt(searchParams.get("limit") || "20", 10)));
-      const res = bffVoiceLogStore.listLogs(bffSession.user.id, { limit, unreadAsyncOnly });
+      const res = await listGrowDeskVoiceLogs(growdeskFetch, bffSession.accessToken, { limit, unreadAsyncOnly });
       if (unreadAsyncOnly) {
         return NextResponse.json({ success: true, unreadLog: res.unreadLog || null });
       }
@@ -65,6 +67,9 @@ export async function GET(request: Request) {
 
     return NextResponse.json({ success: true, logs });
   } catch (error: any) {
+    if (GROWDESK_CONFIG.enabled && error instanceof BridgeError) {
+      return NextResponse.json({ success: false, error: error.message }, { status: error.status });
+    }
     console.error("GET /api/agent/voice/logs error:", error);
     return NextResponse.json(
       { success: false, error: error?.message || "获取语音记录失败" },

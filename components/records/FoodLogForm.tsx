@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { CheckCircle2 } from "lucide-react";
+import { CheckCircle2, RefreshCw } from "lucide-react";
 import { CuteButton } from "@/components/ui/CuteButton";
 import { CuteInput } from "@/components/ui/CuteInput";
 import { CuteTextarea } from "@/components/ui/CuteTextarea";
@@ -27,6 +27,18 @@ const stateOptions = [
   { value: "neutral" as const, emoji: "😐", label: "一般" },
   { value: "rejected" as const, emoji: "😣", label: "拒绝" },
 ];
+
+export function resolveFoodFormFamilyId(input: {
+  selectedBabyId?: string | null;
+  baby?: { id?: string; familyId?: string } | null;
+  family?: { id?: string } | null;
+  families?: Array<{ id?: string }>;
+}): string | null {
+  const { selectedBabyId, baby, family, families = [] } = input;
+  if (!selectedBabyId || baby?.id !== selectedBabyId || !baby.familyId) return null;
+  if (family?.id === baby.familyId) return family.id;
+  return families.some((candidate) => candidate.id === baby.familyId) ? baby.familyId : null;
+}
 
 export interface FoodLogFormProps {
   mode?: "create" | "edit";
@@ -57,10 +69,41 @@ export function FoodLogForm({
 
   const foodItems = useBabyStore((s) => s.foodItems) ?? [];
   const fetchFoodItems = useBabyStore((s) => s.fetchFoodItems);
+  const family = useBabyStore((s) => s.family);
+  const families = useBabyStore((s) => s.families);
+  const baby = useBabyStore((s) => s.baby);
+  const selectedBabyId = useBabyStore((s) => s.selectedBabyId);
+  const fetchUser = useBabyStore((s) => s.fetchUser);
+  const familyId = resolveFoodFormFamilyId({ selectedBabyId, baby, family, families });
+  const [familyLoading, setFamilyLoading] = useState(!familyId);
+  const [familyLoadError, setFamilyLoadError] = useState<string | null>(null);
+  const [familyRetry, setFamilyRetry] = useState(0);
+
+  useEffect(() => {
+    if (familyId) {
+      setFamilyLoading(false);
+      setFamilyLoadError(null);
+      return;
+    }
+    let cancelled = false;
+    setFamilyLoading(true);
+    setFamilyLoadError(null);
+    void fetchUser().then(() => {
+      if (cancelled) return;
+      const state = useBabyStore.getState();
+      const resolved = resolveFoodFormFamilyId(state);
+      if (!resolved) setFamilyLoadError("未能加载当前宝宝所属家庭，请重试");
+    }).catch(() => {
+      if (!cancelled) setFamilyLoadError("家庭信息加载失败，请重试");
+    }).finally(() => {
+      if (!cancelled) setFamilyLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [familyId, fetchUser, familyRetry]);
 
   useEffect(() => {
     fetchFoodItems("tried");
-  }, [fetchFoodItems]);
+  }, [fetchFoodItems, familyId]);
 
   const triedFoods = foodItems.filter((item) => item.status === "tried");
 
@@ -115,12 +158,17 @@ export function FoodLogForm({
       showToast("请输入食材名称");
       return;
     }
+    if (!familyId) {
+      showToast("请先选择家庭");
+      return;
+    }
     setAddingFood(true);
     try {
       const res = await fetch("/api/food/items", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          familyId,
           name,
           icon: newFoodIcon,
           category: "other",
@@ -130,13 +178,14 @@ export function FoodLogForm({
       });
       if (!res.ok) throw new Error("创建失败");
       const created = await res.json();
+      if (resolveFoodFormFamilyId(useBabyStore.getState()) !== familyId) return;
       setSelectedFoods((prev) =>
         prev.includes(created.name) ? prev : [...prev, created.name]
       );
       setShowAddFood(false);
       setNewFoodName("");
       showToast("已添加到食材库 ✅");
-      fetchFoodItems("tried");
+      await fetchFoodItems("tried", true);
     } catch {
       showToast("添加失败，请重试");
     } finally {
@@ -225,12 +274,26 @@ export function FoodLogForm({
 
           <button
             type="button"
+            disabled={familyLoading || !familyId}
             onClick={() => setShowAddFood((v) => !v)}
-            className="btn-press px-3.5 py-1.5 rounded-full text-xs font-medium bg-primary-light/30 text-primary border-2 border-dashed border-primary/30 hover:bg-primary-light/50"
+            className="btn-press px-3.5 py-1.5 rounded-full text-xs font-medium bg-primary-light/30 text-primary border-2 border-dashed border-primary/30 hover:bg-primary-light/50 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {showAddFood ? "收起" : "+ 添加新食材"}
+            {familyLoading ? "加载家庭..." : showAddFood ? "收起" : "+ 添加新食材"}
           </button>
         </div>
+
+        {familyLoadError && !familyLoading && !familyId && (
+          <div className="mt-3 flex items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2.5">
+            <p className="text-xs text-amber-800">{familyLoadError}</p>
+            <button
+              type="button"
+              onClick={() => setFamilyRetry((value) => value + 1)}
+              className="inline-flex shrink-0 items-center gap-1 text-xs font-bold text-primary"
+            >
+              <RefreshCw size={12} /> 重试
+            </button>
+          </div>
+        )}
 
         {showAddFood && (
           <div className="mt-3 bg-card rounded-2xl border border-primary-soft p-3.5 space-y-3">

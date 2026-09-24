@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
+import { shouldBypassImageOptimization } from "@/lib/private-image";
 import {
   Upload,
   Camera,
@@ -33,6 +34,9 @@ export default function MedicalAddPage() {
   const router = useRouter();
   const { showToast } = useToast();
   const { baby, fetchBaby, addMedicalReport } = useBabyStore();
+  const [hydrated, setHydrated] = useState(false);
+
+  useEffect(() => { setHydrated(true); }, []);
 
   useEffect(() => {
     if (!baby) fetchBaby();
@@ -309,6 +313,8 @@ export default function MedicalAddPage() {
   return (
     <div className="min-h-[100dvh] bg-bg max-w-md mx-auto px-4 pb-28">
       <AppHeader title="录入化验 / 体检单" showBack />
+      {/* SSR controls must not accept edits before React owns their values. */}
+      <fieldset disabled={!hydrated} className="m-0 min-w-0 border-0 p-0">
 
       {/* Hidden file inputs */}
       <input
@@ -337,7 +343,7 @@ export default function MedicalAddPage() {
                 alt="单据预览"
                 width={400}
                 height={176}
-                unoptimized={imagePreview.startsWith("data:") || imagePreview.startsWith("blob:")}
+                unoptimized={shouldBypassImageOptimization(imagePreview)}
                 className="w-full h-full object-contain"
               />
               <div className="absolute top-2 right-2 flex gap-1.5">
@@ -700,6 +706,7 @@ export default function MedicalAddPage() {
           </CuteButton>
         </div>
       </div>
+      </fieldset>
     </div>
   );
 }

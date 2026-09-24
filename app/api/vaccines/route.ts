@@ -10,10 +10,12 @@ import { growdeskFetch } from "@/lib/growdesk/client"
 import {
   toGrowDeskVaccineRecordPayload,
   fromGrowDeskVaccineRecord,
-  loadFullVaccineKnowledge,
+  fromGrowDeskVaccineCatalog,
+  projectLegacyVaccineKnowledge,
   type GrowDeskVaccineRecord,
 } from "@/lib/growdesk/vaccine-compat"
 import { loadWebBaby } from "@/lib/growdesk/bridge-identity"
+import { bridgeErrorResponse, requireData } from "@/lib/growdesk/bridge-protocol"
 import crypto from "node:crypto"
 
 export async function GET(request: Request) {
@@ -26,8 +28,14 @@ export async function GET(request: Request) {
       if (!bffSession) {
         return NextResponse.json({ error: "Unauthorized: 会话无效或已过期" }, { status: 401 });
       }
-      const fullKb = loadFullVaccineKnowledge(regionCode);
-      return NextResponse.json(fullKb);
+      const catalog = await growdeskFetch<any>(`/api/v1/vaccines/catalog?regionCode=${encodeURIComponent(regionCode)}`, {
+        accessToken: bffSession.accessToken,
+      });
+      const fullKb = fromGrowDeskVaccineCatalog(requireData(catalog), regionCode);
+      // The normalized API owns the vaccine graph. The versioned Web bundle
+      // supplies the legacy rule/release projection until those reference
+      // slices have dedicated canonical tables, preserving the old response.
+      return NextResponse.json(projectLegacyVaccineKnowledge(fullKb, regionCode));
     }
 
     // Fetch all vaccines
@@ -283,6 +291,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ record: result }, { status: 201 });
   } catch (error) {
+    if (GROWDESK_CONFIG.enabled) return bridgeErrorResponse(error);
     console.error("POST /api/vaccines error:", error);
     return NextResponse.json(
       { error: "Failed to save vaccine record" },
@@ -356,6 +365,7 @@ export async function DELETE(request: Request) {
     await prisma.vaccineRecord.delete({ where: { id } });
     return NextResponse.json({ success: true, id });
   } catch (error: any) {
+    if (GROWDESK_CONFIG.enabled) return bridgeErrorResponse(error);
     console.error("DELETE /api/vaccines error:", error);
     return NextResponse.json({ error: error?.message || "Failed to delete vaccine record" }, { status: 500 });
   }

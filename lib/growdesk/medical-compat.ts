@@ -15,6 +15,9 @@ export interface LegacyMedicalReport {
   items?: unknown[];
   itemsJson?: string;
   imageUrl: string | null;
+  recordedById?: string | null;
+  source?: string | null;
+  sourceAgent?: string | null;
   version?: string;
   baseVersion?: string;
   createdAt?: string;
@@ -129,6 +132,11 @@ export function fromGrowDeskMedicalRecord(rec: GrowDeskMedicalReport): LegacyMed
           ? rec.attachmentIds[0]
           : `/api/attachments/${rec.attachmentIds[0]}`)
       : null,
+    // The canonical medical record has no actor/source columns. Preserve the
+    // old Web defaults without inferring an actor from the current session.
+    recordedById: null,
+    source: "ui_manual",
+    sourceAgent: null,
     version: wireVersion(rec.version),
     baseVersion: wireVersion(rec.version),
     createdAt: rec.createdAt,

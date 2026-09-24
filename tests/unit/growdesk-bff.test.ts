@@ -95,6 +95,7 @@ test("SH-05: Web BFF DTO Compat Layer", async (t) => {
     assert.equal(mapped.type, "bottle_breast");
     assert.equal(mapped.amountMl, 120);
     assert.equal(mapped.notes, "Thawed milk");
+    assert.equal(mapped.clientId, null);
     assert.equal(mapped.version, "2");
     assert.equal(mapped.baseVersion, "2");
   });

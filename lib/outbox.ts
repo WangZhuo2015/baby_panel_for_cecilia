@@ -39,11 +39,13 @@ export interface FlushOptions {
   activeUserId?: string | null;
   activeFamilyId?: string | null;
   activeBabyId?: string | null;
+  isCurrentIdentity?: () => boolean;
 }
 
 export interface FlushResult {
   flushed: number;
   skippedOtherUser: number;
+  skippedOtherScope: number;
   conflicts: number;
   errors: number;
 }
@@ -234,11 +236,16 @@ export async function flushOutbox(options?: FlushOptions): Promise<FlushResult |
   const result: FlushResult = {
     flushed: 0,
     skippedOtherUser: 0,
+    skippedOtherScope: 0,
     conflicts: 0,
     errors: 0,
   };
 
   for (const item of allItems) {
+    // Session cookies are read by fetch at send time. Stop before every
+    // request if the UI identity no longer matches the scope captured by the
+    // caller; leave this and all remaining drafts untouched.
+    if (options?.isCurrentIdentity && !options.isCurrentIdentity()) break;
     // 1. 账号隔离：属于其他用户的草稿绝不代发
     if (item.userId && activeUserId && item.userId !== activeUserId) {
       result.skippedOtherUser += 1;
@@ -252,6 +259,16 @@ export async function flushOutbox(options?: FlushOptions): Promise<FlushResult |
     // 旧队列无 owner 时不得自动归属当前用户，需显式恢复
     if (!item.userId) {
       result.skippedOtherUser += 1;
+      continue;
+    }
+    // A user may own multiple families/babies. Keep a queued write bound to
+    // the scope that was active when it was created; switching the UI must
+    // never replay another baby's draft under the new active scope.
+    if (
+      (options?.activeFamilyId !== undefined && options.activeFamilyId !== null && item.familyId !== options.activeFamilyId) ||
+      (options?.activeBabyId !== undefined && options.activeBabyId !== null && item.babyId !== options.activeBabyId)
+    ) {
+      result.skippedOtherScope += 1;
       continue;
     }
     // 已处于冲突状态的记录不重复自动提交，等待用户显式处理

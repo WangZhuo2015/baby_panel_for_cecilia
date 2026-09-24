@@ -1,0 +1,141 @@
+{
+  "baseURL": "http://127.0.0.1:50227",
+  "runId": "growdesk-integration-ao97rwzh",
+  "buildProvenance": {
+    "schemaVersion": 1,
+    "sourceGitSha": "7bdf6a2856f6caebdf156eecf95ab51e0bde7517",
+    "sourceDirty": true,
+    "buildId": "GNId9ARuUvlQkMZrSCyR2",
+    "artifactSha256": "35df18cdb5e3ef5c157379bd34d00e4d86f6f1c5302c95202a5dc158fd6c27b0",
+    "builtAt": "2026-09-19T18:51:51.645Z"
+  },
+  "account": "e2e_parity_1789844052204_90735",
+  "startedAt": "2026-09-19T18:54:12.214Z",
+  "steps": [
+    {
+      "name": "stack-preflight",
+      "startedAt": "2026-09-19T18:54:13.060Z",
+      "status": "PASS",
+      "finishedAt": "2026-09-19T18:54:13.074Z"
+    },
+    {
+      "name": "register-and-onboard",
+      "startedAt": "2026-09-19T18:54:13.074Z",
+      "status": "PASS",
+      "finishedAt": "2026-09-19T18:54:14.305Z"
+    },
+    {
+      "name": "create-second-isolated-family-fixture",
+      "startedAt": "2026-09-19T18:54:14.305Z",
+      "status": "PASS",
+      "finishedAt": "2026-09-19T18:54:14.425Z"
+    },
+    {
+      "name": "feeding-create-refresh-edit",
+      "startedAt": "2026-09-19T18:54:14.425Z",
+      "status": "PASS",
+      "finishedAt": "2026-09-19T18:54:16.975Z"
+    },
+    {
+      "name": "diaper-create-refresh-delete",
+      "startedAt": "2026-09-19T18:54:16.975Z",
+      "status": "PASS",
+      "finishedAt": "2026-09-19T18:54:19.100Z"
+    },
+    {
+      "name": "historical-sleep-create-refresh-delete",
+      "startedAt": "2026-09-19T18:54:19.100Z",
+      "status": "PASS",
+      "finishedAt": "2026-09-19T18:54:21.108Z"
+    },
+    {
+      "name": "food-acceptance-abnormal-create-refresh-delete",
+      "startedAt": "2026-09-19T18:54:21.108Z",
+      "status": "PASS",
+      "finishedAt": "2026-09-19T18:54:21.981Z"
+    },
+    {
+      "name": "growth-historical-create-refresh-delete",
+      "startedAt": "2026-09-19T18:54:21.981Z",
+      "status": "PASS",
+      "finishedAt": "2026-09-19T18:54:23.635Z"
+    },
+    {
+      "name": "nutrition-route-and-date-switch",
+      "startedAt": "2026-09-19T18:54:23.635Z",
+      "status": "PASS",
+      "finishedAt": "2026-09-19T18:54:23.918Z"
+    },
+    {
+      "name": "supplement-product-and-record-create-refresh-delete",
+      "startedAt": "2026-09-19T18:54:23.918Z",
+      "status": "PASS",
+      "finishedAt": "2026-09-19T18:54:26.018Z"
+    },
+    {
+      "name": "medical-create-refresh-delete",
+      "startedAt": "2026-09-19T18:54:26.018Z",
+      "status": "PASS",
+      "finishedAt": "2026-09-19T18:54:30.363Z"
+    },
+    {
+      "name": "vaccine-completion-refresh-persistence",
+      "startedAt": "2026-09-19T18:54:30.363Z",
+      "status": "PASS",
+      "finishedAt": "2026-09-19T18:54:31.318Z"
+    },
+    {
+      "name": "feeding-delete-final",
+      "startedAt": "2026-09-19T18:54:31.318Z",
+      "status": "PASS",
+      "finishedAt": "2026-09-19T18:54:32.464Z"
+    },
+    {
+      "name": "family-switch-ui",
+      "startedAt": "2026-09-19T18:54:32.464Z",
+      "status": "PASS",
+      "finishedAt": "2026-09-19T18:54:33.912Z"
+    },
+    {
+      "name": "network-and-console-health",
+      "startedAt": "2026-09-19T18:54:33.912Z",
+      "status": "PASS",
+      "finishedAt": "2026-09-19T18:54:33.912Z"
+    }
+  ],
+  "console": [],
+  "network": [],
+  "foodDiagnostic": {
+    "status": 201,
+    "postedBabyId": true,
+    "postedAcceptance": 4,
+    "postedAbnormalNotes": "e2e_food_reaction_04_90735"
+  },
+  "medicalDiagnostic": {
+    "attempts": [
+      {
+        "expectedTitle": "e2e_medical_1789844052204_90735_1",
+        "afterTitleBlur": "e2e_medical_1789844052204_90735_1",
+        "afterOtherFields": "e2e_medical_1789844052204_90735_1",
+        "postedTitle": "e2e_medical_1789844052204_90735_1",
+        "postedBabyId": true
+      },
+      {
+        "expectedTitle": "e2e_medical_1789844052204_90735_2",
+        "afterTitleBlur": "e2e_medical_1789844052204_90735_2",
+        "afterOtherFields": "e2e_medical_1789844052204_90735_2",
+        "postedTitle": "e2e_medical_1789844052204_90735_2",
+        "postedBabyId": true
+      },
+      {
+        "expectedTitle": "e2e_medical_1789844052204_90735_3",
+        "afterTitleBlur": "e2e_medical_1789844052204_90735_3",
+        "afterOtherFields": "e2e_medical_1789844052204_90735_3",
+        "postedTitle": "e2e_medical_1789844052204_90735_3",
+        "postedBabyId": true
+      }
+    ]
+  },
+  "finishedAt": "2026-09-19T18:54:33.912Z",
+  "result": "PASS"
+}

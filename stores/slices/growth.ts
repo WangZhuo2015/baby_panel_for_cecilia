@@ -1,7 +1,8 @@
 "use client";
+import { recordWriteContext } from "@/lib/growdesk/record-write-context";
 import { enqueueOutbox, isRetryableSubmitError } from "@/lib/outbox";
 import { isFresh, markFetched, invalidateCache, dedup, toQuery } from "./helpers";
-import { request, isAuthError } from "./helpers";
+import { request, isAuthError, GROWDESK_EXTENDED_REPRESENTATION_HEADERS } from "./helpers";
 import { _fetchedAt } from "./helpers";
 import type { GrowthMeasurement, MedicalReport, FoodItem, FeedingGuideline, FoodPlan, Book, Vaccine, VaccineStrategyGroup, VaccineScheduleEntry, ScheduleEngineRule, DevelopmentMilestone, DevelopmentWarningSign, ActivityRecommendation, WeatherData } from "@/types";
 
@@ -26,6 +27,8 @@ export interface GrowthSlice {
   warningSigns: DevelopmentWarningSign[];
   activities: ActivityRecommendation[];
   weather: WeatherData | null;
+  /** Internal scope marker used to clear stale food-library rows on family switch. */
+  foodItemsScopeFamilyId?: string;
   aiTips: string[];
   aiError: string | null;
   fetchGrowthMeasurements: (force?: boolean) => Promise<void>;
@@ -41,6 +44,7 @@ export interface GrowthSlice {
   fetchWeather: (lat?: number, lon?: number, city?: string, force?: boolean) => Promise<void>;
   fetchAiTips: (force?: boolean) => Promise<void>;
   addGrowthMeasurement: (measurement: Partial<GrowthMeasurement>) => Promise<void>;
+  updateGrowthMeasurement: (id: string, patch: Partial<GrowthMeasurement>) => Promise<void>;
   deleteGrowthMeasurement: (id: string) => Promise<void>;
   addMedicalReport: (report: Partial<MedicalReport> & { growthData?: any }) => Promise<MedicalReport>;
   deleteMedicalReport: (id: string) => Promise<void>;
@@ -53,6 +57,7 @@ export const createGrowthSlice = (set: any, get: any): GrowthSlice => ({
   vaccineData: null,
   vaccines: [],
   foodItems: [],
+  foodItemsScopeFamilyId: undefined,
   feedingGuidelines: [],
   foodPlans: [],
   books: [],
@@ -65,14 +70,18 @@ export const createGrowthSlice = (set: any, get: any): GrowthSlice => ({
 
   fetchGrowthMeasurements: async (force?: boolean) => {
     if (!get().user && !get().authLoading) return;
+    if (!get().baby?.id) await get().fetchBaby();
     const babyId = get().baby?.id;
+    if (!babyId) return;
     const key = `growthMeasurements:${babyId || ''}`;
     if (!force && get().growthMeasurements.length > 0 && isFresh(key)) return;
     if (force) invalidateCache(key);
     return dedup(key, async () => {
       try {
         const query = toQuery({ babyId });
-        const data = await request<GrowthMeasurement[]>(`/api/growth${query}`);
+        const data = await request<GrowthMeasurement[]>(`/api/growth${query}`, {
+          headers: GROWDESK_EXTENDED_REPRESENTATION_HEADERS,
+        });
         if (get().baby?.id === babyId) {
           set({ growthMeasurements: data || [] });
           markFetched(key);
@@ -85,14 +94,19 @@ export const createGrowthSlice = (set: any, get: any): GrowthSlice => ({
 
   fetchMedicalReports: async (category?: string, force?: boolean) => {
     if (!get().user && !get().authLoading) return;
+    if (!get().baby?.id) await get().fetchBaby();
     const babyId = get().baby?.id;
+    if (!babyId) return;
     const key = `medicalReports:${babyId || ''}:${category || ''}`;
     if (!force && get().medicalReports.length > 0 && isFresh(key)) return;
     if (force) invalidateCache(key);
     return dedup(key, async () => {
       try {
         const query = toQuery({ category: category && category !== "all" ? category : undefined, babyId });
-        const data = await request<MedicalReport[]>(`/api/medical/reports${query}`);
+        const data = await request<MedicalReport[]>(`/api/medical/reports${query}`, {
+          headers: GROWDESK_EXTENDED_REPRESENTATION_HEADERS,
+        });
+        if (get().baby?.id !== babyId) return;
         set({ medicalReports: data || [] });
         markFetched(key);
       } catch (e) {
@@ -102,14 +116,25 @@ export const createGrowthSlice = (set: any, get: any): GrowthSlice => ({
   },
 
   fetchFoodItems: async (status?: string, force?: boolean) => {
-    const key = `foodItems:${status || ''}`;
+    const familyId = get().family?.id || undefined;
+    // Do not fall back to whichever family the backend happens to enumerate
+    // while identity is still loading. The family dependency will rerun this
+    // fetch once the authenticated selection is available.
+    if (!familyId) return;
+    const key = `foodItems:${familyId || ''}:${status || ''}`;
+    if (get().foodItemsScopeFamilyId !== undefined && get().foodItemsScopeFamilyId !== familyId) {
+      set({ foodItems: [], foodItemsScopeFamilyId: undefined });
+    }
     if (!force && get().foodItems.length > 0 && isFresh(key)) return;
     if (force) invalidateCache(key);
     return dedup(key, async () => {
       try {
-        const params = status ? `?status=${status}` : "";
+        const params = toQuery({ status, familyId });
         const data = await request<FoodItem[]>(`/api/food/items${params}`);
-        set({ foodItems: data || [] });
+        // A family switch may happen while the request is in flight. Do not
+        // let the previous family's response repopulate the current picker.
+        if ((get().family?.id || undefined) !== familyId) return;
+        set({ foodItems: data || [], foodItemsScopeFamilyId: familyId });
         markFetched(key);
       } catch (e) { if (!isAuthError(e)) console.error("Failed to fetch food items:", e); }
     });
@@ -128,7 +153,9 @@ export const createGrowthSlice = (set: any, get: any): GrowthSlice => ({
   },
 
   fetchFoodPlans: async (date?: string, force?: boolean) => {
+    if (!get().baby?.id) await get().fetchBaby();
     const babyId = get().baby?.id;
+    if (!babyId) return;
     const key = `foodPlans:${babyId || ''}:${date || ''}`;
     if (!force && isFresh(key)) return;
     if (force) invalidateCache(key);
@@ -136,6 +163,7 @@ export const createGrowthSlice = (set: any, get: any): GrowthSlice => ({
       try {
         const params = toQuery({ babyId, date });
         const data = await request<FoodPlan[]>(`/api/food/plans${params}`);
+        if (get().baby?.id !== babyId) return;
         set({ foodPlans: data || [] });
         markFetched(key);
       } catch (e) { if (!isAuthError(e)) console.error("Failed to fetch food plans:", e); }
@@ -163,7 +191,9 @@ export const createGrowthSlice = (set: any, get: any): GrowthSlice => ({
     return dedup(key, async () => {
       try {
         const params = regionCode ? `?regionCode=${regionCode}` : "";
-        const data = await request<GrowthSlice["vaccineData"]>(`/api/vaccines${params}`);
+        const data = await request<GrowthSlice["vaccineData"]>(`/api/vaccines${params}`, {
+          headers: GROWDESK_EXTENDED_REPRESENTATION_HEADERS,
+        });
         set({ vaccineData: data });
         markFetched(key);
       } catch (e) { if (!isAuthError(e)) console.error("Failed to fetch vaccines:", e); }
@@ -255,7 +285,9 @@ export const createGrowthSlice = (set: any, get: any): GrowthSlice => ({
 
   addGrowthMeasurement: async (measurement) => {
     const clientId = crypto.randomUUID();
-    const payload = { ...measurement, clientId };
+    const scope = get();
+    const babyId = scope.baby?.id;
+    const payload = { ...measurement, babyId, clientId };
     try {
       const newMeasurement = await request<GrowthMeasurement>("/api/growth", {
         method: "POST",
@@ -263,6 +295,7 @@ export const createGrowthSlice = (set: any, get: any): GrowthSlice => ({
         body: JSON.stringify(payload),
       });
       invalidateCache("growthMeasurements");
+      if (get().baby?.id !== babyId) return;
       set((state: any) => ({ growthMeasurements: [...state.growthMeasurements, newMeasurement].sort((a: any,b:any)=> new Date(b.date).getTime()-new Date(a.date).getTime()) }));
     } catch (e) {
       if (isRetryableSubmitError(e)) {
@@ -271,9 +304,9 @@ export const createGrowthSlice = (set: any, get: any): GrowthSlice => ({
           url: "/api/growth",
           body: payload as any,
           createdAt: Date.now(),
-          userId: get().user?.id,
-          familyId: get().family?.id,
-          babyId: get().baby?.id,
+          userId: scope.user?.id,
+          familyId: scope.family?.id,
+          babyId,
         });
         throw new Error("当前离线，记录已保存，联网后自动同步 ⏳");
       }
@@ -281,9 +314,96 @@ export const createGrowthSlice = (set: any, get: any): GrowthSlice => ({
     }
   },
 
+  updateGrowthMeasurement: async (id: string, patch: Partial<GrowthMeasurement>) => {
+    const state = get();
+    const selectedBabyId = typeof state.selectedBabyId === "string" ? state.selectedBabyId.trim() : "";
+    const babyId = typeof state.baby?.id === "string" ? state.baby.id.trim() : "";
+    const familyId = typeof state.family?.id === "string" ? state.family.id.trim() : "";
+    const userId = typeof state.user?.id === "string" ? state.user.id.trim() : "";
+    if (!userId || !familyId || !babyId || (selectedBabyId && selectedBabyId !== babyId)) {
+      throw new Error("宝宝或账号正在切换，请稍后重试");
+    }
+    if (state.baby?.familyId && state.baby.familyId !== familyId) {
+      throw new Error("宝宝所属家庭正在切换，请稍后重试");
+    }
+
+    const existing = state.growthMeasurements.find((record: GrowthMeasurement) => record.id === id);
+    if (!existing) throw new Error("未找到指定的生长记录，请刷新后重试");
+    if (existing.babyId && existing.babyId !== babyId) {
+      throw new Error("生长记录不属于当前宝宝");
+    }
+    if (existing.familyId && existing.familyId !== familyId) {
+      throw new Error("生长记录不属于当前家庭");
+    }
+    const requestedBabyId = patch.babyId == null ? babyId : String(patch.babyId).trim();
+    const requestedFamilyId = patch.familyId == null ? familyId : String(patch.familyId).trim();
+    if (!requestedBabyId || requestedBabyId !== babyId) {
+      throw new Error("生长记录不属于当前宝宝");
+    }
+    if (!requestedFamilyId || requestedFamilyId !== familyId) {
+      throw new Error("生长记录不属于当前家庭");
+    }
+    // The caller must provide the version captured when editing began. Taking
+    // the current cached row's version here could turn a stale form into an
+    // update against a newer server record after a background refresh.
+    const baseVersion = patch.baseVersion ?? patch.version;
+    if (baseVersion === undefined || baseVersion === null || baseVersion === "") {
+      throw new Error("请刷新记录后重试，缺少原记录版本");
+    }
+    const identity = { userId, familyId, babyId };
+    const {
+      id: _ignoredId,
+      babyId: _ignoredBabyId,
+      familyId: _ignoredFamilyId,
+      version: _ignoredVersion,
+      baseVersion: _ignoredBaseVersion,
+      createdAt: _ignoredCreatedAt,
+      updatedAt: _ignoredUpdatedAt,
+      ...editablePatch
+    } = patch;
+
+    try {
+      const updated = await request<GrowthMeasurement>("/api/growth", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...editablePatch,
+          id,
+          babyId,
+          baseVersion: String(baseVersion),
+        }),
+      });
+
+      // A slow response from the previous baby/account must never enter the
+      // newly selected scope. The server response is still allowed to fail the
+      // request, but it cannot mutate the current store after a switch.
+      const current = get();
+      if (current.user?.id !== identity.userId
+        || current.family?.id !== identity.familyId
+        || current.baby?.id !== identity.babyId
+        || (current.selectedBabyId && current.selectedBabyId !== identity.babyId)) return;
+      if (!updated || updated.id !== id || (updated.babyId && updated.babyId !== identity.babyId)) {
+        throw new Error("生长记录响应无效，请刷新后重试");
+      }
+
+      invalidateCache("growthMeasurements");
+      set((currentState: any) => ({
+        growthMeasurements: currentState.growthMeasurements
+          .map((record: GrowthMeasurement) => record.id === id ? updated : record)
+          .sort((a: GrowthMeasurement, b: GrowthMeasurement) => new Date(b.date).getTime() - new Date(a.date).getTime()),
+      }));
+    } catch (e) {
+      // Preserve 401/403/409 and upstream validation messages for the page to
+      // display; swallowing these would make an edit look successfully saved.
+      console.error("Failed to update growth measurement:", e);
+      throw e;
+    }
+  },
+
   deleteGrowthMeasurement: async (id: string) => {
     try {
-      await request<{ success: boolean; id: string }>(`/api/growth?id=${id}`, { method: "DELETE" });
+      const context = recordWriteContext(get(), "growth", id);
+      await request<{ success: boolean; id: string }>(`/api/growth${toQuery({ id, babyId: context.babyId, baseVersion: context.baseVersion === undefined ? undefined : String(context.baseVersion) })}`, { method: "DELETE" });
       invalidateCache("growthMeasurements");
       set((state: any) => ({
         growthMeasurements: state.growthMeasurements.filter((m: any) => m.id !== id),

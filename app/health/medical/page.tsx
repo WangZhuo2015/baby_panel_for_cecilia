@@ -4,6 +4,7 @@ import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
+import { shouldBypassImageOptimization } from "@/lib/private-image";
 import {
   Plus,
   Calendar,
@@ -178,7 +179,7 @@ export default function MedicalReportsPage() {
                       alt="化验单缩略图"
                       width={320}
                       height={96}
-                      unoptimized={job.imageUrl.startsWith("data:") || job.imageUrl.startsWith("blob:")}
+                      unoptimized={shouldBypassImageOptimization(job.imageUrl)}
                       className="mt-2 w-full h-24 object-cover rounded-xl opacity-80"
                     />
                   )}
@@ -427,7 +428,7 @@ export default function MedicalReportsPage() {
                       alt={selectedReport.title}
                       width={400}
                       height={144}
-                      unoptimized={selectedReport.imageUrl.startsWith("data:") || selectedReport.imageUrl.startsWith("blob:")}
+                      unoptimized={shouldBypassImageOptimization(selectedReport.imageUrl)}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform"
                     />
                     <div className="absolute inset-0 bg-black/20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">

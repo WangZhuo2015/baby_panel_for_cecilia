@@ -23,12 +23,17 @@ export default function FamilyPage() {
     user,
     family,
     familyMembers,
+    babyMembers,
+    babyMembersSupported,
     families,
     babies,
     selectedBabyId,
     baby,
     fetchUser,
     fetchFamilyMembers,
+    fetchBabyMembers,
+    grantBabyMember,
+    revokeBabyMember,
     fetchBaby,
     joinFamily,
     selectBaby,
@@ -47,6 +52,7 @@ export default function FamilyPage() {
   const [isAiUsageModalOpen, setIsAiUsageModalOpen] = useState(false);
   const [creatingInvite, setCreatingInvite] = useState(false);
   const [switchingBaby, setSwitchingBaby] = useState<string | null>(null);
+  const [updatingBabyMember, setUpdatingBabyMember] = useState<string | null>(null);
 
   useEffect(() => {
     fetchBaby();
@@ -58,6 +64,10 @@ export default function FamilyPage() {
       }
     });
   }, [fetchBaby, fetchUser, fetchFamilyMembers, router]);
+
+  useEffect(() => {
+    if (user) fetchBabyMembers(selectedBabyId ?? "");
+  }, [user, selectedBabyId, fetchBabyMembers]);
 
 
   const getInviteUrl = () => {
@@ -83,6 +93,7 @@ export default function FamilyPage() {
     setSwitchingBaby(babyId);
     try {
       await selectBaby(babyId);
+      await fetchFamilyMembers();
       showToast("已切换宝宝，正在加载独立记录", "success");
     } catch (err: any) {
       showToast(err?.message || "切换宝宝失败，请稍后重试", "error");
@@ -137,6 +148,32 @@ export default function FamilyPage() {
     }
   };
 
+  const handleGrantBabyAccess = async (userId: string) => {
+    if (!selectedBabyId || updatingBabyMember) return;
+    setUpdatingBabyMember(userId);
+    try {
+      await grantBabyMember(selectedBabyId, userId);
+      showToast("已授权该成员访问当前宝宝", "success");
+    } catch (err: any) {
+      showToast(err?.message || "授权宝宝访问失败，请稍后重试", "error");
+    } finally {
+      setUpdatingBabyMember(null);
+    }
+  };
+
+  const handleRevokeBabyAccess = async (userId: string) => {
+    if (!selectedBabyId || updatingBabyMember) return;
+    setUpdatingBabyMember(userId);
+    try {
+      await revokeBabyMember(selectedBabyId, userId);
+      showToast("已撤回该成员的宝宝访问权限", "success");
+    } catch (err: any) {
+      showToast(err?.message || "撤回宝宝访问失败，请稍后重试", "error");
+    } finally {
+      setUpdatingBabyMember(null);
+    }
+  };
+
   const handleLogout = async () => {
     await logout();
     showToast("已退出登录");
@@ -187,7 +224,9 @@ export default function FamilyPage() {
         </div>
 
         <p className="text-xs text-text-secondary mb-4 leading-relaxed">
-          把专属链接或邀请码分享给宝爸、爷爷奶奶、姥姥姥爷或看护人员，点击即可直接加入，共享喂奶、睡眠、成长与疫苗全部记录。
+          {babyMembersSupported
+            ? "把专属链接或邀请码分享给家人。加入家庭后，宝宝管理员还可以按宝宝单独授权访问记录。"
+            : "把专属链接或邀请码分享给宝爸、爷爷奶奶、姥姥姥爷或看护人员，点击即可直接加入，共享喂奶、睡眠、成长与疫苗全部记录。"}
         </p>
 
         {/* 邀请码与快捷操作栏 */}
@@ -363,6 +402,93 @@ export default function FamilyPage() {
           </CuteCard>
         ))}
       </div>
+
+      {/* Baby-level access control */}
+      {babyMembersSupported && (
+        <>
+          <h3 className="text-sm font-semibold text-text-secondary mb-3 px-1">宝宝访问权限</h3>
+          {baby && selectedBabyId ? (
+        <CuteCard className="p-4 mb-6">
+          <div className="flex items-start justify-between gap-3 mb-3">
+            <div>
+              <p className="text-sm font-bold text-text-primary">{baby.nickname} 的授权成员</p>
+              <p className="text-[11px] text-text-secondary mt-1 leading-relaxed">
+                加入家庭只建立家庭关系；只有这里列出的成员才能访问这个宝宝的记录。
+              </p>
+            </div>
+            <ShieldCheck size={18} className="text-primary shrink-0 mt-0.5" />
+          </div>
+
+          <div className="space-y-2">
+            {babyMembers.length === 0 ? (
+              <p className="text-xs text-text-muted py-2">暂时没有可显示的授权成员。</p>
+            ) : babyMembers.map((member) => {
+              const familyMember = familyMembers.find((item) => item.userId === member.userId);
+              const isCurrentUser = member.userId === user?.id;
+              const roleLabel = member.role === "admin" ? "宝宝管理员" : member.role === "viewer" ? "仅查看" : "可编辑记录";
+              return (
+                <div key={`${member.babyId}:${member.userId}`} className="flex items-center justify-between gap-3 rounded-xl border border-divider px-3 py-2.5">
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold text-text-primary truncate">
+                      {familyMember?.displayName || member.displayName}
+                      {isCurrentUser && <span className="ml-1.5 text-[10px] text-mint">当前账号</span>}
+                    </p>
+                    <p className="text-[10px] text-text-muted truncate">
+                      {familyMember?.username ? `@${familyMember.username} · ` : ""}{roleLabel}
+                    </p>
+                  </div>
+                  {babyMembers.some((item) => item.userId === user?.id && item.role === "admin") && !isCurrentUser && (
+                    <CuteButton
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => handleRevokeBabyAccess(member.userId)}
+                      disabled={Boolean(updatingBabyMember)}
+                    >
+                      {updatingBabyMember === member.userId ? "处理中..." : "撤回访问"}
+                    </CuteButton>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {babyMembers.some((item) => item.userId === user?.id && item.role === "admin") && (
+            <div className="mt-3 pt-3 border-t border-divider/70 space-y-2">
+              <p className="text-[11px] font-semibold text-text-secondary">授权当前家庭成员</p>
+              {familyMembers.filter((member) => !babyMembers.some((item) => item.userId === member.userId)).map((member) => (
+                <div key={member.userId} className="flex items-center justify-between gap-3 rounded-xl bg-primary-soft/25 px-3 py-2.5">
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold text-text-primary truncate">{member.displayName}</p>
+                    <p className="text-[10px] text-text-muted truncate">
+                      {member.username ? `@${member.username} · ` : ""}已加入家庭，等待宝宝授权
+                    </p>
+                  </div>
+                  <CuteButton
+                    size="sm"
+                    variant="primary"
+                    onClick={() => handleGrantBabyAccess(member.userId)}
+                    disabled={Boolean(updatingBabyMember)}
+                  >
+                    {updatingBabyMember === member.userId ? "处理中..." : "授权访问"}
+                  </CuteButton>
+                </div>
+              ))}
+              {familyMembers.every((member) => babyMembers.some((item) => item.userId === member.userId)) && (
+                <p className="text-[11px] text-text-muted">当前家庭成员都已获得此宝宝的访问权限。</p>
+              )}
+            </div>
+          )}
+        </CuteCard>
+          ) : (
+        <CuteCard className="p-4 mb-6 border border-amber-200/70 bg-amber-50/50 dark:bg-amber-950/20 dark:border-amber-800/40">
+          <p className="text-xs font-semibold text-text-primary">等待宝宝管理员授权</p>
+          <p className="text-[11px] text-text-secondary mt-1 leading-relaxed">
+            你已加入家庭，但还没有宝宝访问权限。请联系对应宝宝的管理员在“宝宝访问权限”中授权后再查看记录。
+          </p>
+        </CuteCard>
+          )}
+        </>
+      )}
 
       {/* Join another family */}
       <h3 className="text-sm font-semibold text-text-secondary mb-3 px-1">加入其他家庭</h3>

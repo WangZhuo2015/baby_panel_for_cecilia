@@ -8,7 +8,7 @@ import { resolveBffSession } from "@/lib/growdesk/session";
 import { verifyBffCsrf } from "@/lib/growdesk/csrf";
 import { growdeskFetch } from "@/lib/growdesk/client";
 import { loadWebBaby, creationFamilyId } from "@/lib/growdesk/bridge-identity";
-import { requireData, pathId } from "@/lib/growdesk/bridge-protocol";
+import { BridgeError, bridgeErrorResponse, requireData, pathId } from "@/lib/growdesk/bridge-protocol";
 import { validateUploadedImage } from "@/lib/upload";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 
@@ -58,7 +58,7 @@ export async function POST(request: Request) {
           method: "POST",
           accessToken: session.accessToken,
           body: {
-            purpose: "medical_report",
+            purpose: "growth_photo",
             mimeType: mime,
             byteSize: bytes.length,
             sha256,
@@ -153,6 +153,7 @@ export async function POST(request: Request) {
 
       return NextResponse.json(result);
     } catch (err: any) {
+      if (err instanceof BridgeError) return bridgeErrorResponse(err);
       console.error("GrowDesk growth OCR error:", err);
       return NextResponse.json({ error: err?.message || "识别服务连接超时或失败" }, { status: 500 });
     }

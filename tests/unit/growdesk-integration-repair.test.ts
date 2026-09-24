@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { BridgeError, wireVersion, feedingKind, isoTimestamp, calendarDate, babyPayload, legacyBaby, pathId, type BridgeFetch, type BridgeResult, type ApiBaby } from "../../lib/growdesk/bridge-protocol";
 import { loadWebIdentity, loadWebBaby, creationFamilyId } from "../../lib/growdesk/bridge-identity";
-import { createIdentityEndpoints } from "../../lib/growdesk/bridge-endpoints";
+import { createIdentityEndpoints, GROWDESK_REPRESENTATION_HEADER } from "../../lib/growdesk/bridge-endpoints";
 import { fetchLegacyFeedingList } from "../../lib/growdesk/feeding-list";
 import { guardLegacyClient } from "../../lib/growdesk/guard-legacy-client";
 import { recordWriteContext } from "../../lib/growdesk/record-write-context";
@@ -11,6 +11,7 @@ import { toGrowDeskFeedingCreatePayload, toGrowDeskFeedingUpdatePayload, fromGro
 const apiBaby: ApiBaby = { id: "test_baby_a", familyId: "test_family_a", name: "test_child", birthDate: "2026-01-02", gender: "girl", avatarUrl: null, gestationalWeeks: 38, gestationalDays: 2, createdAt: "2026-01-02T00:00:00Z", updatedAt: "2026-01-02T00:00:00Z" };
 const family = { id: "test_family_a", name: "test_home", timeZone: "Asia/Tokyo", createdAt: "2026-01-02T00:00:00Z", updatedAt: "2026-01-02T00:00:00Z" };
 const user = { id: "test_user_a", username: "test_caregiver", displayName: "test_caregiver" };
+const familyMember = { id: "test_family_member_a", userId: user.id, familyId: family.id, role: "admin", username: user.username, displayName: user.displayName, relation: "parent", joinedAt: "2026-01-02T00:00:00Z" };
 function fake(handler: (path: string, options: Parameters<BridgeFetch>[1]) => BridgeResult<unknown> | Promise<BridgeResult<unknown>>): BridgeFetch {
   return (async <T>(path: string, options: Parameters<BridgeFetch>[1]) => await handler(path, options) as BridgeResult<T>) as BridgeFetch;
 }
@@ -18,7 +19,7 @@ function ok(data: unknown, cursor?: string | null): BridgeResult<unknown> {
   return { ok: true, status: 200, data, ...(cursor !== undefined ? { page: { nextCursor: cursor } } : {}) };
 }
 function fail(status: number): BridgeResult<unknown> { return { ok: false, status, error: { code: `TEST_${status}`, message: "test upstream error" } }; }
-const baseFetch = fake(path => path === "/api/v1/families" ? ok([family]) : path.endsWith("/babies") ? ok([apiBaby]) : path.includes("/babies/") ? ok(apiBaby) : ok(family));
+const baseFetch = fake(path => path === "/api/v1/families" ? ok([family]) : path.endsWith("/members") ? ok([familyMember]) : path.endsWith("/babies") ? ok([apiBaby]) : path.includes("/babies/") ? ok(apiBaby) : ok(family));
 const isStatus = (n: number) => (error: unknown) => error instanceof BridgeError && error.status === n;
 
 for (const value of [undefined, null, ""]) test(`version is required: ${String(value)}`, () => assert.throws(() => wireVersion(value), isStatus(428)));
@@ -71,7 +72,109 @@ test("me restores login through BFF session without legacy cookies", async () =>
   const endpoints = createIdentityEndpoints({ fetchApi: baseFetch, resolveSession: async () => ({ accessToken: "test_new_token", user }), verifyCsrf: () => null });
   const response = await endpoints.me(new Request("https://test.invalid/api/auth/me"));
   assert.equal(response.status, 200); assert.equal(response.headers.get("cache-control"), "no-store");
-  const data = await response.json(); assert.equal(data.user.username, "test_caregiver"); assert.equal(data.baby.nickname, "test_child"); assert.equal(data.accessToken, undefined);
+  const data = await response.json(); assert.equal(data.user.username, "test_caregiver"); assert.equal(data.baby.nickname, "test_child"); assert.deepEqual(data.membership, { role: "admin", relation: "parent" }); assert.equal(data.accessToken, undefined);
+});
+
+test("identity reads default to the legacy projection and opt into extended fields atomically", async () => {
+  const extendedUser = { ...user, createdAt: "2026-01-02T00:00:00Z", updatedAt: "2026-01-03T00:00:00Z" };
+  const endpoints = createIdentityEndpoints({
+    fetchApi: baseFetch,
+    resolveSession: async () => ({ accessToken: "test_token", user: extendedUser }),
+    verifyCsrf: () => null,
+  });
+
+  const legacyMe = await (await endpoints.me(new Request("https://test.invalid/api/auth/me"))).json();
+  assert.deepEqual(legacyMe, {
+    user,
+    family: { id: family.id, name: family.name },
+    baby: {
+      id: apiBaby.id,
+      familyId: apiBaby.familyId,
+      nickname: apiBaby.name,
+      birthDate: apiBaby.birthDate,
+      gender: "female",
+      avatarUrl: null,
+      gestationalAge: apiBaby.gestationalWeeks,
+      createdAt: apiBaby.createdAt,
+      updatedAt: apiBaby.updatedAt,
+    },
+    membership: { role: "admin", relation: "parent" },
+  });
+  assert.equal("inviteCode" in legacyMe.family, false, "missing canonical invite codes must not be fabricated");
+
+  const extendedMe = await (await endpoints.me(new Request("https://test.invalid/api/auth/me", {
+    headers: { [GROWDESK_REPRESENTATION_HEADER]: "extended" },
+  }))).json();
+  assert.equal(extendedMe.user.createdAt, extendedUser.createdAt);
+  assert.equal(extendedMe.family.timeZone, family.timeZone);
+  assert.equal(extendedMe.baby.gestationalDays, apiBaby.gestationalDays);
+  assert.equal(extendedMe.families[0].babies[0].gestationalDays, apiBaby.gestationalDays);
+});
+
+test("BFF family members preserve canonical member identity and role", async () => {
+  const endpoints = createIdentityEndpoints({ fetchApi: baseFetch, resolveSession: async () => ({ accessToken: "test_token", user }), verifyCsrf: () => null });
+  const response = await endpoints.familyMembers(new Request("https://test.invalid/api/family/members", {
+    headers: { [GROWDESK_REPRESENTATION_HEADER]: "extended" },
+  }));
+  assert.equal(response.status, 200);
+  assert.deepEqual((await response.json()).members, [{
+    id: familyMember.id,
+    userId: familyMember.userId,
+    familyId: familyMember.familyId,
+    username: familyMember.username,
+    displayName: familyMember.displayName,
+    role: familyMember.role,
+    relation: familyMember.relation,
+    joinedAt: familyMember.joinedAt,
+  }]);
+});
+
+test("family members default to legacy fields while extended reads retain scope metadata", async () => {
+  const endpoints = createIdentityEndpoints({ fetchApi: baseFetch, resolveSession: async () => ({ accessToken: "test_token", user }), verifyCsrf: () => null });
+  const legacy = await (await endpoints.familyMembers(new Request("https://test.invalid/api/family/members"))).json();
+  assert.deepEqual(legacy, {
+    family: { id: family.id, name: family.name },
+    members: [{
+      id: familyMember.id,
+      userId: familyMember.userId,
+      username: familyMember.username,
+      displayName: familyMember.displayName,
+      role: familyMember.role,
+      relation: familyMember.relation,
+      joinedAt: familyMember.joinedAt,
+    }],
+  });
+
+  const extended = await (await endpoints.familyMembers(new Request("https://test.invalid/api/family/members", {
+    headers: { [GROWDESK_REPRESENTATION_HEADER]: "extended" },
+  }))).json();
+  assert.equal(extended.family.timeZone, family.timeZone);
+  assert.deepEqual(extended.family.babies, []);
+  assert.equal(extended.members[0].familyId, family.id);
+});
+
+test("baby GET defaults to the old field set and exposes precision only with explicit representation", async () => {
+  const endpoints = createIdentityEndpoints({ fetchApi: baseFetch, resolveSession: async () => ({ accessToken: "test_token", user }), verifyCsrf: () => null });
+  const legacy = await (await endpoints.baby(new Request("https://test.invalid/api/baby"))).json();
+  assert.equal(legacy.gestationalDays, undefined);
+  assert.equal(legacy.gestationalAge, apiBaby.gestationalWeeks);
+
+  const extended = await (await endpoints.baby(new Request("https://test.invalid/api/baby", {
+    headers: { [GROWDESK_REPRESENTATION_HEADER]: "extended" },
+  }))).json();
+  assert.equal(extended.gestationalDays, apiBaby.gestationalDays);
+  assert.equal(extended.createdAt, apiBaby.createdAt);
+});
+
+test("BFF auth.me does not fabricate membership when canonical family membership omits the principal", async () => {
+  const endpoints = createIdentityEndpoints({
+    fetchApi: fake(path => path.endsWith("/members") ? ok([{ ...familyMember, userId: "test_other_user" }]) : baseFetch(path, undefined)),
+    resolveSession: async () => ({ accessToken: "test_token", user }),
+    verifyCsrf: () => null,
+  });
+  const response = await endpoints.me(new Request("https://test.invalid/api/auth/me"));
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).membership, null);
 });
 test("me outage is 502, not a false logout", async () => {
   const endpoints = createIdentityEndpoints({ fetchApi: baseFetch, resolveSession: async () => { throw new BridgeError(502, "UPSTREAM_UNAVAILABLE", "test outage"); }, verifyCsrf: () => null });
@@ -105,14 +208,14 @@ test("feeding date filtering respects family timezone and consumes all pages", a
     if (path === `/api/v1/babies/${apiBaby.id}`) return ok(apiBaby);
     if (path === `/api/v1/families/${family.id}`) return ok(family);
     pages++;
-    return pages === 1 ? ok([{ id: "test_new", occurredAt: "2026-09-12T15:30:00Z" }], "test_next") : ok([{ id: "test_old", occurredAt: "2026-09-12T14:30:00Z" }], null);
+    return pages === 1 ? ok([{ id: "test_new", babyId: apiBaby.id, occurredAt: "2026-09-12T15:30:00Z" }], "test_next") : ok([{ id: "test_old", babyId: apiBaby.id, occurredAt: "2026-09-12T14:30:00Z" }], null);
   });
   const data = await fetchLegacyFeedingList<{ id: string; occurredAt: string }>(fetchApi, "test_token", apiBaby.id, new URLSearchParams({ date: "2026-09-13" }));
   assert.equal(pages, 2); assert.deepEqual(data.map(r => r.id), ["test_new"]);
 });
 test("feeding list can return more than 200 records", async () => {
   let calls = 0;
-  const result = await fetchLegacyFeedingList(fake(() => ++calls === 1 ? ok(Array.from({ length: 200 }, (_, i) => ({ id: `test_${i}`, occurredAt: "2026-09-13T00:00:00Z" })), "test_next") : ok([{ id: "test_200", occurredAt: "2026-09-12T00:00:00Z" }], null)), "test_token", apiBaby.id, new URLSearchParams());
+  const result = await fetchLegacyFeedingList(fake(() => ++calls === 1 ? ok(Array.from({ length: 200 }, (_, i) => ({ id: `test_${i}`, babyId: apiBaby.id, occurredAt: "2026-09-13T00:00:00Z" })), "test_next") : ok([{ id: "test_200", babyId: apiBaby.id, occurredAt: "2026-09-12T00:00:00Z" }], null)), "test_token", apiBaby.id, new URLSearchParams());
   assert.equal(result.length, 201);
 });
 test("missing pagination metadata fails instead of returning partial data", async () => {
@@ -122,7 +225,7 @@ test("cursor loop fails instead of repeating records forever", async () => {
   await assert.rejects(fetchLegacyFeedingList(fake(() => ok([], "test_same")), "test_token", apiBaby.id, new URLSearchParams()), isStatus(502));
 });
 test("explicit legacy limit is honored", async () => {
-  const data = await fetchLegacyFeedingList(fake(() => ok([{ occurredAt: "2026-09-13T00:00:00Z" }, { occurredAt: "2026-09-13T01:00:00Z" }], null)), "test_token", apiBaby.id, new URLSearchParams({ limit: "1" }));
+  const data = await fetchLegacyFeedingList(fake(() => ok([{ babyId: apiBaby.id, occurredAt: "2026-09-13T00:00:00Z" }, { babyId: apiBaby.id, occurredAt: "2026-09-13T01:00:00Z" }], null)), "test_token", apiBaby.id, new URLSearchParams({ limit: "1" }));
   assert.equal(data.length, 1);
 });
 test("invalid date fails before issuing requests", async () => {
@@ -148,7 +251,7 @@ test("browser can use a matching timeline version without mixing record types", 
 
 test("unsupported reads cannot reach old authentication and falsely log out a BFF user", async () => {
   const { isBridgedMethod } = await import("../../lib/growdesk/bridge-policy");
-  for (const path of ["/api/ai/daily-summary", "/api/cron/daily-summary", "/api/unknown"]) {
+  for (const path of ["/api/cron/daily-summary", "/api/unknown"]) {
     assert.equal(isBridgedMethod(path, "GET"), false);
   }
   assert.equal(isBridgedMethod("/api/auth/me", "GET"), true);
@@ -160,7 +263,7 @@ test("migration policy checks the HTTP method, not just a filename marker", asyn
   assert.equal(isBridgedMethod("/api/medical/reports", "POST"), true);
   assert.equal(isBridgedMethod("/api/medical/reports", "DELETE"), false);
   assert.equal(isBridgedMethod("/api/medical/reports/test_report", "DELETE"), false);
-  assert.equal(isBridgedMethod("/api/auth/register", "POST"), false);
+  assert.equal(isBridgedMethod("/api/auth/register", "POST"), true);
   assert.equal(isBridgedMethod("/mcp", "POST"), false);
 });
 test("24:00 is rejected instead of silently changing the recorded date", () => assert.throws(() => isoTimestamp("2026-09-13T24:00:00Z"), isStatus(400)));

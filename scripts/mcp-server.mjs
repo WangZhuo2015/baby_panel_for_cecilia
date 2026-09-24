@@ -557,24 +557,18 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "create_supplement_product",
-        description: "在家庭档案库中建档新的营养补充剂产品（包含名称、品牌、剂型、单次剂量与营养成分表），无需打卡即可建档录入。",
+        description: "在当前家庭建档或更新营养补充剂产品，无需同时记录一次服用。",
         inputSchema: {
           type: "object",
           required: ["session", "name"],
           properties: {
             ...SESSION_PROP,
-            name: { type: "string", description: "补剂全称（如'天然海藻油DHA'、'小金条液体钙'、'星鲨维生素D3滴剂'）" },
-            brand: { type: "string", description: "品牌名称（如'健敏思'、'伊可新'、'Ddrops'，默认'家庭自选'）" },
-            dosageForm: {
-              type: "string",
-              description: "剂型: drops(滴剂), capsule(胶囊), liquid_ml(口服液), sachet(粉剂袋装), tablet(片剂)，默认 drops",
-            },
-            unitName: { type: "string", description: "单次计量单位（如 滴、粒、ml、袋、片，默认 滴）" },
-            defaultDose: { type: "number", description: "单次推荐用量数值，默认 1.0" },
-            nutrients: {
-              type: "object",
-              description: "营养素成分含量表，如 {\"vitamin_d\": {\"amount\": 400, \"unit\": \"IU\"}, \"dha\": 100}",
-            },
+            name: { type: "string", description: "补剂全称" },
+            brand: { type: "string", description: "品牌名称，默认使用补剂名称" },
+            dosageForm: { type: "string", enum: ["drops", "capsule", "liquid_ml", "sachet", "tablet"] },
+            unitName: { type: "string", description: "单次计量单位，默认滴" },
+            defaultDose: { type: "number", description: "单次推荐用量，默认1" },
+            nutrients: { type: "object", description: "营养成分表" },
             notes: { type: "string", description: "补充说明或医嘱注意事项" },
           },
         },
@@ -855,15 +849,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         brand: args.brand,
         dosageForm: args.dosageForm || "drops",
         unitName: args.unitName || "滴",
-        defaultDose: args.defaultDose || 1.0,
+        defaultDose: args.defaultDose || 1,
         nutrients: args.nutrients || {},
         notes: args.notes,
       });
-      return {
-        content: [
-          { type: "text", text: `✅ 营养补剂建档成功！\n${JSON.stringify(data, null, 2)}` },
-        ],
-      };
+      return { content: [{ type: "text", text: `✅ 营养补剂建档成功！\n${JSON.stringify(data, null, 2)}` }] };
     }
 
     if (name === "get_nutrition_analysis") {

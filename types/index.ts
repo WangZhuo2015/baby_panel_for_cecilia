@@ -28,6 +28,17 @@ export interface FamilyMember {
   joinedAt: string;
 }
 
+export type BabyMemberRole = 'admin' | 'member' | 'viewer';
+
+export interface BabyMember {
+  userId: string;
+  babyId: string;
+  familyId: string;
+  role: BabyMemberRole;
+  displayName: string;
+  joinedAt: string;
+}
+
 // ===== Baby Types =====
 export interface Baby {
   id: string;
@@ -92,6 +103,8 @@ export interface DiaperRecord {
 // ===== Growth Types =====
 export interface GrowthMeasurement {
   id: string;
+  babyId?: string;
+  familyId?: string;
   date: string;
   ageInMonths: number;
   ageLabel: string;
@@ -102,6 +115,10 @@ export interface GrowthMeasurement {
   imageUrl?: string | null;
   source?: string | null;
   sourceAgent?: string | null;
+  version?: string | number;
+  baseVersion?: string | number;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 // ===== Food Types =====

@@ -1,6 +1,30 @@
 /**
  * 智能通知状态管理（24小时自动归档与自清理，多版本全兼容）
  */
+import { useBabyStore } from '@/stores/useBabyStore';
+
+// Derived IDs such as daily-feeding are shared across babies. Their local
+// acknowledgements must not dismiss another baby's or another user's reminders.
+function scopedKey(key: string): string | null {
+  const { user, baby } = useBabyStore.getState();
+  return user?.id && baby?.id
+    ? `notifications-v3:${encodeURIComponent(user.id)}:${encodeURIComponent(baby.id)}:${key}`
+    : null;
+}
+const scopedStorage = {
+  getItem(key: string): string | null {
+    const scoped = scopedKey(key);
+    return scoped ? localStorage.getItem(scoped) : null;
+  },
+  setItem(key: string, value: string): void {
+    const scoped = scopedKey(key);
+    if (scoped) localStorage.setItem(scoped, value);
+  },
+  removeItem(key: string): void {
+    const scoped = scopedKey(key);
+    if (scoped) localStorage.removeItem(scoped);
+  },
+};
 
 const READ_KEY = "baby_read_notifications";
 const CLEARED_BEFORE_KEY = "baby_notifications_cleared_before";
@@ -15,10 +39,10 @@ interface TimestampedEntry {
 export function getClearedBeforeTime(): number {
   if (typeof window === "undefined") return 0;
   try {
-    const raw = localStorage.getItem(CLEARED_BEFORE_KEY);
+    const raw = scopedStorage.getItem(CLEARED_BEFORE_KEY);
     const ts = raw ? parseInt(raw, 10) : 0;
     if (Date.now() - ts > MAX_AGE_MS) {
-      localStorage.removeItem(CLEARED_BEFORE_KEY);
+      scopedStorage.removeItem(CLEARED_BEFORE_KEY);
       return 0;
     }
     return ts;
@@ -30,14 +54,14 @@ export function getClearedBeforeTime(): number {
 export function setClearedBeforeTime(timestamp: number = Date.now()): void {
   if (typeof window === "undefined") return;
   try {
-    localStorage.setItem(CLEARED_BEFORE_KEY, timestamp.toString());
+    scopedStorage.setItem(CLEARED_BEFORE_KEY, timestamp.toString());
   } catch {}
 }
 
 export function getDismissedNotificationIds(): Set<string> {
   if (typeof window === "undefined") return new Set();
   try {
-    const raw = localStorage.getItem(DISMISSED_KEY) || localStorage.getItem("baby_cleared_notifications");
+    const raw = scopedStorage.getItem(DISMISSED_KEY) || scopedStorage.getItem("baby_cleared_notifications");
     if (!raw) return new Set();
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return new Set();
@@ -65,14 +89,14 @@ export function addDismissedNotificationId(id: string): void {
     existing.add(id);
     const now = Date.now();
     const entries: TimestampedEntry[] = Array.from(existing).map((itemId) => ({ id: itemId, ts: now }));
-    localStorage.setItem(DISMISSED_KEY, JSON.stringify(entries));
+    scopedStorage.setItem(DISMISSED_KEY, JSON.stringify(entries));
   } catch {}
 }
 
 export function getReadNotificationIds(): Set<string> {
   if (typeof window === "undefined") return new Set();
   try {
-    const raw = localStorage.getItem(READ_KEY) || localStorage.getItem("notification-read-ids");
+    const raw = scopedStorage.getItem(READ_KEY) || scopedStorage.getItem("notification-read-ids");
     if (!raw) return new Set();
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return new Set();
@@ -100,8 +124,8 @@ export function markNotificationRead(id: string): void {
     existing.add(id);
     const now = Date.now();
     const entries: TimestampedEntry[] = Array.from(existing).map((itemId) => ({ id: itemId, ts: now }));
-    localStorage.setItem(READ_KEY, JSON.stringify(entries));
-    localStorage.setItem("notification-read-ids", JSON.stringify(Array.from(existing)));
+    scopedStorage.setItem(READ_KEY, JSON.stringify(entries));
+    scopedStorage.setItem("notification-read-ids", JSON.stringify(Array.from(existing)));
   } catch {}
 }
 
@@ -114,8 +138,8 @@ export function markAllNotificationsRead(ids: string[]): void {
     }
     const now = Date.now();
     const entries: TimestampedEntry[] = Array.from(existing).map((itemId) => ({ id: itemId, ts: now }));
-    localStorage.setItem(READ_KEY, JSON.stringify(entries));
-    localStorage.setItem("notification-read-ids", JSON.stringify(Array.from(existing)));
+    scopedStorage.setItem(READ_KEY, JSON.stringify(entries));
+    scopedStorage.setItem("notification-read-ids", JSON.stringify(Array.from(existing)));
   } catch {}
 }
 

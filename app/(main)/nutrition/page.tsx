@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
   Baby,
@@ -11,6 +11,7 @@ import {
   ChevronRight,
   Info,
 } from "lucide-react";
+import { useScopedNutritionRequest } from "@/lib/hooks/useScopedNutritionRequest";
 import { useBabyStore } from "@/stores/useBabyStore";
 import { calculateAge } from "@/lib/age";
 import { getLocalDateStr, addDays, getWeekdayStr } from "@/lib/date";
@@ -57,6 +58,8 @@ export default function NutritionPage() {
   const router = useRouter();
   const baby = useBabyStore((s) => s.baby);
   const fetchUser = useBabyStore((s) => s.fetchUser);
+  const scopedRequest = useScopedNutritionRequest(baby?.id);
+  const readGeneration = useRef(0);
 
   const [selectedDate, setSelectedDate] = useState(() => getLocalDateStr());
   const [timeScale, setTimeScale] = useState<"today" | "7d" | "30d">("today");
@@ -72,20 +75,23 @@ export default function NutritionPage() {
   }, [fetchUser]);
 
   const loadData = useCallback(async () => {
-    if (!baby?.id) return;
+    const generation = ++readGeneration.current;
+    if (!baby?.id) { setDailyAnalysis(null); setMultiDaySummary(null); setLoading(false); return; }
     setLoading(true);
     try {
       if (timeScale === "today") {
-        const res = await fetch(`/api/nutrition/analysis?babyId=${baby.id}&date=${selectedDate}&days=1`);
+        const res = await scopedRequest(`/api/nutrition/analysis?babyId=${baby.id}&date=${selectedDate}&days=1`);
         if (res.ok) {
           const data = await res.json();
+          if (generation !== readGeneration.current) return;
           setDailyAnalysis(data.analysis);
         }
       } else {
         const days = timeScale === "7d" ? 7 : 30;
-        const res = await fetch(`/api/nutrition/analysis?babyId=${baby.id}&date=${selectedDate}&days=${days}`);
+        const res = await scopedRequest(`/api/nutrition/analysis?babyId=${baby.id}&date=${selectedDate}&days=${days}`);
         if (res.ok) {
           const data = await res.json();
+          if (generation !== readGeneration.current) return;
           setMultiDaySummary(data.summary);
           setDailyAnalysis(data.todayAnalysis);
         }
@@ -93,12 +99,15 @@ export default function NutritionPage() {
     } catch (e) {
       console.error("Failed to load nutrition analysis:", e);
     } finally {
-      setLoading(false);
+      if (generation === readGeneration.current) setLoading(false);
     }
-  }, [baby?.id, selectedDate, timeScale]);
+  }, [baby?.id, scopedRequest, selectedDate, timeScale]);
 
   useEffect(() => {
-    loadData();
+    setDailyAnalysis(null);
+    setMultiDaySummary(null);
+    void loadData();
+    return () => { readGeneration.current += 1; };
   }, [loadData]);
 
   // 监听全局补剂与奶粉计划变更，无需手动刷新即可实时更新

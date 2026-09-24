@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { shouldBypassImageOptimization } from "@/lib/private-image";
 import { useState, useEffect } from "react";
 
 export interface BabyAvatarProps {
@@ -36,8 +37,7 @@ export function BabyAvatar({
   }
 
   const isExternalOrBlob =
-    src.startsWith("data:") ||
-    src.startsWith("blob:") ||
+    shouldBypassImageOptimization(src) ||
     src.startsWith("http://") ||
     src.startsWith("https://");
 

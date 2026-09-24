@@ -11,6 +11,8 @@ import {
   transformWhoPercentilesForLegacy,
 } from "@/lib/growdesk/growth-compat";
 import { loadWebBaby } from "@/lib/growdesk/bridge-identity";
+import { BridgeError, bridgeErrorResponse } from "@/lib/growdesk/bridge-protocol";
+import { projectLegacyGrowthChart, wantsExtendedRepresentation } from "@/lib/growdesk/legacy-projections";
 
 export async function GET(request: Request) {
   try {
@@ -20,6 +22,7 @@ export async function GET(request: Request) {
         return NextResponse.json({ error: "Unauthorized: 会话无效或已过期" }, { status: 401 });
       }
       const { searchParams } = new URL(request.url);
+      const extended = wantsExtendedRepresentation(request);
       const requestedBabyId = searchParams.get("babyId");
       if (!requestedBabyId) {
         return NextResponse.json({ error: "请提供 babyId" }, { status: 400 });
@@ -42,27 +45,22 @@ export async function GET(request: Request) {
 
       const chartData = res.data?.data || res.data || {};
       const rawMeasurements = Array.isArray(chartData.measurements) ? chartData.measurements : [];
-      let birthDate: string | undefined;
-      let babyGender = "female";
-      try {
-        const baby = await loadWebBaby(growdeskFetch, bffSession.accessToken, requestedBabyId);
-        birthDate = baby?.birthDate;
-        if (baby?.gender === "boy" || (baby as any)?.gender === "male") babyGender = "male";
-      } catch {
-        // Fallback to default
-      }
+      const baby = await loadWebBaby(growdeskFetch, bffSession.accessToken, requestedBabyId);
+      const birthDate = baby?.birthDate;
+      const babyGender = baby?.gender === "boy" || (baby as any)?.gender === "male" ? "male" : "female";
 
       const transformedPercentiles = transformWhoPercentilesForLegacy(chartData.whoPercentiles);
-      const hasPoints = Object.values(transformedPercentiles).some((s) => s.P50 && s.P50.length > 0);
+      const hasPoints = transformedPercentiles.months.length > 0;
       const whoPercentiles = hasPoints ? transformedPercentiles : getWhoStandard(babyGender);
 
-      return NextResponse.json({
+      const chart = {
         measurements: rawMeasurements.map((record: Parameters<typeof fromGrowDeskGrowthRecord>[0]) => fromGrowDeskGrowthRecord(record, birthDate)),
         whoPercentiles,
         monthLabels: WHO_MONTHS,
         gender: babyGender,
         rawWhoPercentiles: chartData.whoPercentiles,
-      });
+      };
+      return NextResponse.json(extended ? chart : projectLegacyGrowthChart(chart));
     }
 
     const auth = await requireAuth(request);
@@ -94,6 +92,7 @@ export async function GET(request: Request) {
       gender,
     });
   } catch (error) {
+    if (error instanceof BridgeError) return bridgeErrorResponse(error);
     console.error("GET /api/growth/chart error:", error);
     return NextResponse.json(
       { error: "Failed to fetch chart data" },

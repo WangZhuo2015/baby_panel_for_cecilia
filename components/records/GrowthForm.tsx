@@ -2,6 +2,7 @@
 
 import { useState, useRef } from "react";
 import Image from "next/image";
+import { shouldBypassImageOptimization } from "@/lib/private-image";
 import {
   Upload,
   Loader2,
@@ -15,6 +16,8 @@ import {
   CircleDot,
   TrendingUp,
   RefreshCw,
+  Eye,
+  Trash2,
 } from "lucide-react";
 import { CuteButton } from "@/components/ui/CuteButton";
 import { CuteInput } from "@/components/ui/CuteInput";
@@ -41,7 +44,7 @@ export interface GrowthFormProps {
     weightKg?: number;
     heightCm?: number;
     headCircumferenceCm?: number;
-    imageUrl?: string;
+    imageUrl?: string | null;
   }) => Promise<void>;
   onCancel?: () => void;
   saving?: boolean;
@@ -56,7 +59,8 @@ export function GrowthForm({
 }: GrowthFormProps) {
   const isEdit = formMode === "edit";
   const { showToast } = useToast();
-  const { baby } = useBabyStore();
+  const { baby, family, user, authLoading } = useBabyStore();
+  const uploadScopeReady = !authLoading && Boolean(user?.id && family?.id && baby?.id);
 
   const [inputMode, setInputMode] = useState<InputMode>("manual");
   const [date, setDate] = useState(() => initialData?.date || getLocalDateStr());
@@ -86,6 +90,14 @@ export function GrowthForm({
 
   const handleOcrUpload = async (file: File | null | undefined) => {
     if (!file) return;
+    const startingScope = useBabyStore.getState();
+    const uploadBabyId = startingScope.baby?.id;
+    const uploadFamilyId = startingScope.family?.id;
+    const uploadUserId = startingScope.user?.id;
+    if (!uploadBabyId || !uploadFamilyId || !uploadUserId) {
+      showToast("请等待宝宝信息加载完成后再上传");
+      return;
+    }
     if (!file.type.startsWith("image/")) {
       showToast("请选择图片文件");
       return;
@@ -109,6 +121,7 @@ export function GrowthForm({
 
       const formData = new FormData();
       formData.append("image", compressed);
+      formData.append("babyId", uploadBabyId);
       const res = await fetch("/api/growth/ocr", {
         method: "POST",
         body: formData,
@@ -120,6 +133,12 @@ export function GrowthForm({
       if (!res.ok) {
         setOcrError(data.error || "识别未能提取到有效数据，请手动核对录入");
         return;
+      }
+      const currentScope = useBabyStore.getState();
+      if (currentScope.user?.id !== uploadUserId || currentScope.family?.id !== uploadFamilyId || currentScope.baby?.id !== uploadBabyId) {
+        setImagePreview(null);
+        setUploadedImageUrl(null);
+        throw new Error("宝宝或账号已切换，请为当前宝宝重新上传照片");
       }
       if (data.date) setDate(data.date);
       if (data.weightKg != null) setWeight(String(data.weightKg));
@@ -156,7 +175,7 @@ export function GrowthForm({
         weightKg: weight ? parseFloat(weight) : undefined,
         heightCm: height ? parseFloat(height) : undefined,
         headCircumferenceCm: head ? parseFloat(head) : undefined,
-        imageUrl: uploadedImageUrl || undefined,
+        imageUrl: uploadedImageUrl || null,
       });
     } finally {
       setInternalSaving(false);
@@ -204,6 +223,7 @@ export function GrowthForm({
         <>
           <input
             ref={cameraInputRef}
+            disabled={!uploadScopeReady}
             type="file"
             accept="image/*"
             capture="environment"
@@ -215,6 +235,9 @@ export function GrowthForm({
           />
           <input
             ref={galleryInputRef}
+            data-testid="growth-ocr-gallery-input"
+            data-upload-ready={uploadScopeReady ? "true" : "false"}
+            disabled={!uploadScopeReady}
             type="file"
             accept="image/*"
             className="hidden"
@@ -232,7 +255,7 @@ export function GrowthForm({
                     alt="测量照片预览"
                     width={144}
                     height={144}
-                    unoptimized={imagePreview.startsWith("data:") || imagePreview.startsWith("blob:")}
+                    unoptimized={shouldBypassImageOptimization(imagePreview)}
                     className="w-full h-full object-cover"
                   />
                 </div>
@@ -254,6 +277,7 @@ export function GrowthForm({
                     <div className="flex items-center gap-3">
                       <button
                         type="button"
+                        disabled={!uploadScopeReady}
                         onClick={() => {
                           cameraInputRef.current?.click();
                           setOcrDone(false);
@@ -265,6 +289,7 @@ export function GrowthForm({
                       </button>
                       <button
                         type="button"
+                        disabled={!uploadScopeReady}
                         onClick={() => {
                           galleryInputRef.current?.click();
                           setOcrDone(false);
@@ -283,6 +308,7 @@ export function GrowthForm({
                       <CuteButton
                         variant="primary"
                         size="sm"
+                        disabled={!uploadScopeReady}
                         onClick={() => cameraInputRef.current?.click()}
                         className="flex items-center gap-1.5"
                       >
@@ -292,6 +318,7 @@ export function GrowthForm({
                       <CuteButton
                         variant="secondary"
                         size="sm"
+                        disabled={!uploadScopeReady}
                         onClick={() => galleryInputRef.current?.click()}
                         className="flex items-center gap-1.5"
                       >
@@ -321,6 +348,58 @@ export function GrowthForm({
             </div>
           </CuteCard>
         </>
+      )}
+
+      {isEdit && (
+        <div data-testid="growth-photo-editor">
+          <CuteCard className="p-4">
+            <div className="flex items-center justify-between gap-3 mb-3">
+            <div>
+              <p className="text-xs font-bold text-text-primary">测量照片</p>
+              <p className="text-[11px] text-text-muted mt-0.5">查看或移除这次测量的照片</p>
+            </div>
+            {imagePreview && <span className="text-[10px] text-primary bg-primary-soft px-2 py-1 rounded-full">已保存</span>}
+            </div>
+            {imagePreview ? (
+              <div className="space-y-3">
+              <a
+                href={imagePreview}
+                target="_blank"
+                rel="noreferrer"
+                aria-label="查看生长照片"
+                data-testid="growth-photo-view"
+                className="block w-full rounded-2xl overflow-hidden border border-primary/20 bg-primary-light/20 focus:outline-none focus:ring-2 focus:ring-primary/40"
+              >
+                <Image
+                  src={imagePreview}
+                  alt="已保存的生长测量照片，点击查看原图"
+                  width={640}
+                  height={420}
+                  unoptimized
+                  className="w-full max-h-64 object-contain"
+                />
+                <span className="flex items-center justify-center gap-1.5 py-2 text-xs font-medium text-primary">
+                  <Eye size={14} /> 查看原图
+                </span>
+              </a>
+              <button
+                type="button"
+                onClick={() => {
+                  setImagePreview(null);
+                  setUploadedImageUrl(null);
+                }}
+                aria-label="清除生长照片"
+                data-testid="growth-photo-clear"
+                className="w-full py-2.5 rounded-xl border border-red-200 text-red-600 hover:bg-red-50 text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer btn-press"
+              >
+                <Trash2 size={14} /> 清除照片
+              </button>
+              </div>
+            ) : (
+              <p className="text-center py-4 text-xs text-text-muted bg-primary-light/20 rounded-2xl">当前没有测量照片</p>
+            )}
+          </CuteCard>
+        </div>
       )}
 
       {/* Manual / Verified Fields */}

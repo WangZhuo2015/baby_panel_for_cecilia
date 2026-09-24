@@ -1,4 +1,5 @@
 import test from "node:test";
+import { verifyBffCsrf } from "../../lib/growdesk/csrf";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
@@ -104,6 +105,7 @@ function sessionRoutes(upstream: any, enabled = true, authenticated = true) {
     "@/lib/growdesk/session": { resolveBffSession: async () => authenticated ? { user: { id: "test_user" }, accessToken: "test_token" } : null },
     "@/lib/growdesk/ai-sessions": { bffAiSessionStore: s.store },
     "@/lib/growdesk/bridge-protocol": { BridgeError, bridgeErrorResponse },
+    "@/lib/growdesk/csrf": { verifyBffCsrf },
     "@/lib/growdesk/bridge-identity": { loadWebBaby: async () => ({ id: "test_baby" }) },
     "@/lib/growdesk/client": { growdeskFetch: async () => { throw new Error("Use mocked baby boundary"); } },
     "@/lib/rate-limit": { getClientIp: () => "test_ip", checkRateLimit: () => ({ success: true }) },
@@ -125,6 +127,7 @@ function invokeSessionRoute(routes: ReturnType<typeof sessionRoutes>, target: "c
   const url = `https://test.invalid/api/ai/sessions${target === "item" ? "/test_session" : ""}`;
   return routes[target][method](new Request(url, {
     method,
+    headers: { origin: "https://test.invalid" },
     ...(method === "POST" || method === "PATCH" ? { body: JSON.stringify({ title: "test_title", babyId: "test_baby" }) } : {}),
   }), { params: Promise.resolve({ id: "test_session" }) });
 }

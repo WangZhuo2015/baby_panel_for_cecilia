@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
   Baby,
@@ -41,36 +41,12 @@ import { formatElapsedDuration } from "@/lib/sleep-timer";
 import { APP_VERSION } from "@/lib/version";
 import { openRecordDrawer, RecordDrawerType } from "@/lib/drawer-bus";
 import { openQuickAI } from "@/lib/quickai-bus";
-import { calculateUnreadCount } from "@/lib/notifications-storage";
+import { useNotificationInbox } from "@/lib/hooks/useNotificationInbox";
 import { isWorkbenchViewport } from "@/lib/responsive";
 
 function NotificationBell() {
-  const [unreadCount, setUnreadCount] = useState(0);
   const router = useRouter();
-
-  const fetchCount = useCallback(async () => {
-    try {
-      const res = await fetch("/api/notifications");
-      if (res.ok) {
-        const data = await res.json();
-        const list = Array.isArray(data) ? data : [];
-        setUnreadCount(calculateUnreadCount(list));
-      }
-    } catch {
-      // ignore
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchCount();
-    const handler = () => fetchCount();
-    window.addEventListener("notifications-read", handler);
-    window.addEventListener("baby:data-polled", handler);
-    return () => {
-      window.removeEventListener("notifications-read", handler);
-      window.removeEventListener("baby:data-polled", handler);
-    };
-  }, [fetchCount]);
+  const { unreadCount } = useNotificationInbox();
 
   return (
     <button

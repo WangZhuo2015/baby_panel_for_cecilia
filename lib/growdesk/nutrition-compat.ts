@@ -9,6 +9,7 @@ import type {
   SupplementRecord,
   NutrientsMap,
 } from "@/types/nutrition";
+import { BridgeError } from "./bridge-protocol";
 import { PRESET_FORMULA_PRODUCTS, PRESET_SUPPLEMENT_PRODUCTS } from "@/lib/nutrition/presets";
 import { getLocalDateStr, formatIsoToLocalTime, localTimeToUtcIso, isValidDateStr } from "@/lib/date";
 
@@ -20,6 +21,12 @@ export interface GrowDeskFormulaProduct {
   stage: string | null;
   scoopGrams: string | null;
   waterMlPerScoop: string | null;
+  reconstitutionRatio?: string | null;
+  servingSizeUnit?: string;
+  nutrientsJson?: unknown;
+  notes?: string | null;
+  isActive?: boolean;
+  isDefault?: boolean;
   isArchived: boolean;
   createdAt: string;
   updatedAt: string;
@@ -32,8 +39,29 @@ export interface GrowDeskSupplementRecord {
   supplementName: string;
   occurredAt: string;
   amount: string | null;
+  productId?: string | null;
+  dose?: string | number | null;
+  unitName?: string | null;
   notes: string | null;
+  recordedByUserId?: string | null;
   version: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface GrowDeskSupplementProduct {
+  id: string;
+  familyId: string;
+  name: string;
+  brand: string | null;
+  dosageForm: string | null;
+  unitName: string;
+  defaultDose: string;
+  nutrientsJson?: unknown;
+  notes: string | null;
+  isActive: boolean;
+  isArchived?: boolean;
+  version?: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -45,47 +73,67 @@ export interface SupplementState {
   customFormulaNutrients?: Record<string, NutrientsMap>;
 }
 
-// ─── Nutrients Normalization ────────────────────────────────────────────────
-
 export function normalizeNutrients(raw: unknown): NutrientsMap {
-  if (!raw || typeof raw !== "object") return {};
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
   const standardUnits: Record<string, string> = {
-    vitamin_d: "IU",
-    vitamind: "IU",
-    vitamin_a: "mcg RAE",
-    vitamina: "mcg RAE",
-    vitamin_c: "mg",
-    vitaminc: "mg",
-    calcium: "mg",
-    iron: "mg",
-    zinc: "mg",
-    dha: "mg",
-    energy_kcal: "kcal",
-    protein: "g",
+    vitamin_d: "IU", vitamin_a: "mcg RAE", vitamin_c: "mg",
+    calcium: "mg", iron: "mg", zinc: "mg", dha: "mg",
+    energy_kcal: "kcal", protein: "g",
   };
   const standardKeys: Record<string, string> = {
-    vitamind: "vitamin_d",
-    vitamina: "vitamin_a",
-    vitaminc: "vitamin_c",
+    vitamind: "vitamin_d", vitamina: "vitamin_a", vitaminc: "vitamin_c",
   };
-
   const result: NutrientsMap = {};
-  for (const [k, v] of Object.entries(raw as Record<string, any>)) {
-    const cleanKey = k.toLowerCase().replace(/-/g, "_");
-    const stdKey = standardKeys[cleanKey] || cleanKey;
-    if (typeof v === "number") {
-      result[stdKey] = {
-        amount: Number(v.toFixed(2)),
-        unit: standardUnits[stdKey] || "mg",
-      };
-    } else if (v && typeof v === "object" && typeof v.amount === "number") {
-      result[stdKey] = {
-        amount: Number(v.amount.toFixed(2)),
-        unit: String(v.unit || standardUnits[stdKey] || "mg"),
-      };
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    const normalizedKey = key.trim().toLowerCase().replace(/-/g, "_");
+    const canonicalKey = standardKeys[normalizedKey] || normalizedKey;
+    if (!canonicalKey) continue;
+    if (typeof value === "number" && Number.isFinite(value) && value >= 0) {
+      result[canonicalKey] = { amount: Number(value.toFixed(2)), unit: standardUnits[canonicalKey] || "mg" };
+      continue;
+    }
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      const amount = (value as { amount?: unknown }).amount;
+      const unit = (value as { unit?: unknown }).unit;
+      if (typeof amount === "number" && Number.isFinite(amount) && amount >= 0) {
+        result[canonicalKey] = {
+          amount: Number(amount.toFixed(2)),
+          unit: typeof unit === "string" && unit.trim() ? unit.trim() : standardUnits[canonicalKey] || "mg",
+        };
+      }
     }
   }
   return result;
+}
+
+export function fromGrowDeskSupplementProduct(raw: GrowDeskSupplementProduct): SupplementProduct {
+  let nutrients: NutrientsMap = {};
+  const source = raw.nutrientsJson;
+  if (source !== undefined && source !== null) {
+    let decoded = source;
+    if (typeof decoded === "string") {
+      try { decoded = JSON.parse(decoded); } catch { throw new BridgeError(502, "INVALID_NUTRIENTS", "补剂营养数据格式无效"); }
+    }
+    if (!decoded || typeof decoded !== "object" || Array.isArray(decoded)) {
+      throw new BridgeError(502, "INVALID_NUTRIENTS", "补剂营养数据格式无效");
+    }
+    nutrients = decoded as NutrientsMap;
+  }
+  const defaultDose = Number(raw.defaultDose);
+  return {
+    id: raw.id,
+    familyId: raw.familyId,
+    name: raw.name,
+    brand: raw.brand || raw.name,
+    dosageForm: raw.dosageForm || "drops",
+    unitName: raw.unitName || "滴",
+    defaultDose: Number.isFinite(defaultDose) && defaultDose > 0 ? defaultDose : 1,
+    nutrients,
+    notes: raw.notes,
+    isActive: raw.isActive && !raw.isArchived,
+    createdAt: raw.createdAt,
+    updatedAt: raw.updatedAt,
+  };
 }
 
 // ─── Amount & Dose Parsing ───────────────────────────────────────────────────
@@ -180,19 +228,26 @@ export function fromGrowDeskFormulaProduct(
 
   const scoopWeightG = raw.scoopGrams ? Number(raw.scoopGrams) : preset?.scoopWeightG ?? 4.3;
   const waterPerScoopMl = raw.waterMlPerScoop ? Number(raw.waterMlPerScoop) : preset?.waterPerScoopMl ?? 30.0;
-  const reconstitutionRatio =
-    waterPerScoopMl > 0 ? Number((scoopWeightG / waterPerScoopMl).toFixed(4)) : preset?.reconstitutionRatio ?? 0.135;
+  const reconstitutionRatio = raw.reconstitutionRatio != null ? Number(raw.reconstitutionRatio)
+    : waterPerScoopMl > 0 ? Number((scoopWeightG / waterPerScoopMl).toFixed(4)) : preset?.reconstitutionRatio ?? 0.135;
 
-  const nutrients: NutrientsMap =
-    options?.customNutrients && Object.keys(options.customNutrients).length > 0
-      ? options.customNutrients
-      : (preset?.nutrients as NutrientsMap) || {};
+  const nutrientSource = options?.customNutrients !== undefined ? options.customNutrients
+    : raw.nutrientsJson !== undefined ? raw.nutrientsJson : preset?.nutrients;
+  let nutrients: NutrientsMap = {};
+  if (nutrientSource !== null && nutrientSource !== undefined) {
+    let decoded: unknown = nutrientSource;
+    if (typeof decoded === "string") {
+      try { decoded = JSON.parse(decoded); } catch { throw new BridgeError(502, "INVALID_NUTRIENTS", "奶粉营养数据格式无效"); }
+    }
+    if (!decoded || typeof decoded !== "object" || Array.isArray(decoded)) throw new BridgeError(502, "INVALID_NUTRIENTS", "奶粉营养数据格式无效");
+    nutrients = decoded as NutrientsMap;
+  }
 
   const stage = raw.stage ? parseInt(raw.stage, 10) || null : preset?.stage ?? null;
 
   const isDefault = options?.defaultFormulaId
     ? options.defaultFormulaId === raw.id
-    : Boolean(options?.isFirstActive && !raw.isArchived);
+    : raw.isDefault !== undefined ? raw.isDefault : Boolean(options?.isFirstActive && !raw.isArchived);
 
   return {
     id: raw.id,
@@ -203,10 +258,10 @@ export function fromGrowDeskFormulaProduct(
     scoopWeightG: Number.isFinite(scoopWeightG) && scoopWeightG > 0 ? scoopWeightG : 4.3,
     waterPerScoopMl: Number.isFinite(waterPerScoopMl) && waterPerScoopMl > 0 ? waterPerScoopMl : 30.0,
     reconstitutionRatio: Number.isFinite(reconstitutionRatio) && reconstitutionRatio > 0 ? reconstitutionRatio : 0.135,
-    servingSizeUnit: preset?.servingSizeUnit || "per_100g",
+    servingSizeUnit: raw.servingSizeUnit || preset?.servingSizeUnit || "per_100g",
     nutrients,
-    notes: preset?.notes || null,
-    isActive: !raw.isArchived,
+    notes: raw.notes !== undefined ? raw.notes : preset?.notes || null,
+    isActive: !raw.isArchived && (raw.isActive ?? true),
     isDefault,
     createdAt: raw.createdAt,
     updatedAt: raw.updatedAt,
@@ -279,38 +334,49 @@ export function toGrowDeskFormulaUpdatePayload(body: Record<string, unknown>) {
 
 // ─── Supplement Record Mapping ───────────────────────────────────────────────
 
-export function findMatchingSupplementProduct(
+/** Identity is authoritative. A missing ID never falls through to a same-name product. */
+export function findMatchingSupplementProduct<T extends { id: string; name: string }>(
   supplementName: string,
   taggedProductId: string | null,
-  allProducts: SupplementProduct[]
-): SupplementProduct | undefined {
-  if (taggedProductId) {
-    const byId = allProducts.find((p) => p.id === taggedProductId);
-    if (byId) return byId;
-    const presetById = PRESET_SUPPLEMENT_PRODUCTS.find((p) => (p as any).id === taggedProductId);
-    if (presetById) return { ...presetById, id: taggedProductId, familyId: "" } as SupplementProduct;
-  }
-
+  allProducts: readonly T[],
+): T | undefined {
   const norm = supplementName.toLowerCase().trim();
-  const byName = allProducts.find((p) => p.name.toLowerCase().trim() === norm);
-  if (byName) return byName;
+  const candidates = taggedProductId
+    ? allProducts.filter(product => product.id === taggedProductId)
+    : allProducts.filter(product => product.name.toLowerCase().trim() === norm);
+  // Returning the first match would silently attach another product's nutrient
+  // composition to a historical dose. Preserve unresolved history instead.
+  return candidates.length === 1 ? candidates[0] : undefined;
+}
 
-  const presetByName = PRESET_SUPPLEMENT_PRODUCTS.find((p) => p.name.toLowerCase().trim() === norm);
-  if (presetByName) {
-    return { ...presetByName, id: taggedProductId || norm, familyId: "" } as SupplementProduct;
+export function supplementProductReference(
+  productId: unknown,
+  notes: string | null | undefined,
+): { productId: string | null; cleanNotes: string | null } {
+  const tagged = extractProductIdFromNotes(notes);
+  const valid = (value: unknown): value is string => typeof value === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(value);
+  if (productId !== undefined && productId !== null && !valid(productId)) {
+    throw new BridgeError(502, "UPSTREAM_INVALID_RECORD", "GrowDesk 返回了无效的补剂产品标识");
   }
-
-  return undefined;
+  if (valid(productId)) {
+    return { productId, cleanNotes: tagged.productId === productId ? tagged.cleanNotes : notes ?? null };
+  }
+  if (valid(tagged.productId)) return tagged;
+  return { productId: null, cleanNotes: notes ?? null };
 }
 
 export function fromGrowDeskSupplementRecordEnriched(
   raw: GrowDeskSupplementRecord,
   allProducts: SupplementProduct[] = []
 ): SupplementRecord {
-  const { productId: taggedId, cleanNotes } = extractProductIdFromNotes(raw.notes);
-  const matchedProduct = findMatchingSupplementProduct(raw.supplementName, taggedId, allProducts);
+  const { productId: taggedId, cleanNotes } = supplementProductReference(raw.productId, raw.notes);
+  const matchedProduct = findMatchingSupplementProduct(raw.supplementName, taggedId,
+    allProducts.filter(product => product.familyId === raw.familyId));
 
-  const { dose, unitName } = parseSupplementAmount(raw.amount);
+  const parsedAmount = parseSupplementAmount(raw.amount);
+  const numericDose = raw.dose !== undefined && raw.dose !== null ? Number(raw.dose) : parsedAmount.dose;
+  const dose = Number.isFinite(numericDose) && numericDose > 0 ? numericDose : parsedAmount.dose;
+  const unitName = raw.unitName || parsedAmount.unitName;
 
   const d = new Date(raw.occurredAt);
   const date = !Number.isNaN(d.getTime()) ? getLocalDateStr(d) : raw.occurredAt.slice(0, 10);
@@ -318,7 +384,11 @@ export function fromGrowDeskSupplementRecordEnriched(
 
   const resolvedProductId = taggedId || matchedProduct?.id || raw.id;
 
-  const fallbackProduct: SupplementProduct = matchedProduct || {
+  const fallbackProduct: SupplementProduct = matchedProduct ? {
+    ...matchedProduct,
+    // The record name is a historical fact; current catalog renames must not replace it.
+    name: raw.supplementName || matchedProduct.name,
+  } : {
     id: resolvedProductId,
     familyId: raw.familyId,
     name: raw.supplementName,
@@ -328,7 +398,7 @@ export function fromGrowDeskSupplementRecordEnriched(
     defaultDose: dose,
     nutrients: {},
     notes: cleanNotes,
-    isActive: true,
+    isActive: false,
   };
 
   return {
@@ -341,6 +411,10 @@ export function fromGrowDeskSupplementRecordEnriched(
     dose,
     unitName: unitName || fallbackProduct.unitName,
     notes: cleanNotes,
+    // The canonical supplement record has no persisted client id. Keep the
+    // legacy null slot without inventing a client identity.
+    clientId: null,
+    recordedById: raw.recordedByUserId ?? null,
     createdAt: raw.createdAt,
   };
 }

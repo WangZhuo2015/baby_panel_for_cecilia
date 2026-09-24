@@ -226,8 +226,8 @@ export default function VaccinesPage() {
     setRefreshing(true);
     try {
       const [res, selRes] = await Promise.all([
-        fetch('/api/vaccines'),
-        fetch('/api/vaccines/selections'),
+        fetch('/api/vaccines', { headers: { 'x-growdesk-representation': 'extended' } }),
+        fetch('/api/vaccines/selections', { headers: { 'x-growdesk-representation': 'extended' } }),
       ]);
       if (res.ok) {
         const data = await res.json();
@@ -269,8 +269,8 @@ export default function VaccinesPage() {
     async function fetchVaccines() {
       try {
         const [res, selRes] = await Promise.all([
-          fetch('/api/vaccines'),
-          fetch('/api/vaccines/selections'),
+          fetch('/api/vaccines', { headers: { 'x-growdesk-representation': 'extended' } }),
+          fetch('/api/vaccines/selections', { headers: { 'x-growdesk-representation': 'extended' } }),
         ])
         if (!res.ok) throw new Error('加载失败')
         const data = await res.json()

@@ -18,6 +18,12 @@ import { fromGrowDeskFeedingRecord, type GrowDeskFeedingRecord } from "@/lib/gro
 import { fromGrowDeskSleepRecord, type GrowDeskSleepRecord } from "@/lib/growdesk/sleep-compat";
 import { fromGrowDeskDiaperRecord, type GrowDeskDiaperRecord } from "@/lib/growdesk/diaper-compat";
 import { fromGrowDeskFoodRecord, type GrowDeskFoodRecord } from "@/lib/growdesk/food-compat";
+import { BridgeError, pathId } from "@/lib/growdesk/bridge-protocol";
+import { fetchCompleteList } from "@/lib/growdesk/paged-list";
+import { fromGrowDeskSupplementRecordEnriched } from "@/lib/growdesk/nutrition-compat";
+import type { GrowDeskSupplementRecord } from "@/lib/growdesk/supplement-compat";
+import { fromGrowDeskGrowthRecord, type GrowDeskGrowthRecord } from "@/lib/growdesk/growth-compat";
+import type { GrowDeskMedicalReport } from "@/lib/growdesk/medical-compat";
 import type {
   DailyComprehensiveMetrics,
   DailyFeedingDetail,
@@ -88,16 +94,18 @@ export async function fetchDailyComprehensiveMetrics(
   let dayEndMs = 0;
 
   if (useGrowDesk) {
+    if (!token) throw new BridgeError(401, "UNAUTHORIZED", "缺少 GrowDesk 会话");
     const dateQuery = new URLSearchParams({ date });
-    const [feedingRaw, sleepRaw, diaperRaw, foodRaw, bounds] = await Promise.all([
-      fetchLegacyRecordList<GrowDeskFeedingRecord>(growdeskFetch, token, ctx.babyId, dateQuery, "feeding").catch(() => []),
-      fetchLegacyRecordList<GrowDeskSleepRecord>(growdeskFetch, token, ctx.babyId, dateQuery, "sleep").catch(() => []),
-      fetchLegacyRecordList<GrowDeskDiaperRecord>(growdeskFetch, token, ctx.babyId, dateQuery, "diaper").catch(() => []),
-      fetchLegacyRecordList<GrowDeskFoodRecord>(growdeskFetch, token, ctx.babyId, dateQuery, "food").catch(() => []),
-      familyDayBounds(growdeskFetch, token, ctx.babyId, date).catch(() => {
-        const { start, end } = getLocalDayUtcRange(date);
-        return { start: new Date(start), end: new Date(end) };
-      }),
+    const root = `/api/v1/babies/${pathId(ctx.babyId)}`;
+    const [feedingRaw, sleepRaw, diaperRaw, foodRaw, bounds, supplements, growth, medical] = await Promise.all([
+      fetchLegacyRecordList<GrowDeskFeedingRecord>(growdeskFetch, token, ctx.babyId, dateQuery, "feeding"),
+      fetchLegacyRecordList<GrowDeskSleepRecord>(growdeskFetch, token, ctx.babyId, dateQuery, "sleep"),
+      fetchLegacyRecordList<GrowDeskDiaperRecord>(growdeskFetch, token, ctx.babyId, dateQuery, "diaper"),
+      fetchLegacyRecordList<GrowDeskFoodRecord>(growdeskFetch, token, ctx.babyId, dateQuery, "food"),
+      familyDayBounds(growdeskFetch, token, ctx.babyId, date),
+      fetchCompleteList<GrowDeskSupplementRecord>(growdeskFetch, token, `${root}/records/supplement`),
+      fetchCompleteList<GrowDeskGrowthRecord>(growdeskFetch, token, `${root}/growth-measurements`),
+      fetchCompleteList<GrowDeskMedicalReport>(growdeskFetch, token, `${root}/medical/reports`),
     ]);
     feedingRecords = feedingRaw.map(fromGrowDeskFeedingRecord);
     sleepRecords = sleepRaw.map(fromGrowDeskSleepRecord);
@@ -105,27 +113,15 @@ export async function fetchDailyComprehensiveMetrics(
     foodLogs = foodRaw.map(fromGrowDeskFoodRecord);
     dayStartMs = bounds.start.getTime();
     dayEndMs = bounds.end.getTime();
-
-    // Fetch latest growth measurement in BFF mode
-    try {
-      const growthRes = await growdeskFetch<any>(
-        `/api/v1/babies/${ctx.babyId}/growth-measurements?limit=1`,
-        { accessToken: token }
-      );
-      if (growthRes.ok) {
-        const gmList = Array.isArray(growthRes.data)
-          ? growthRes.data
-          : (growthRes.data as any)?.data || [];
-        if (gmList.length > 0) {
-          const gm = gmList[0];
-          growthRecords = {
-            weightKg: gm.weightKg ?? gm.weight_kg ?? null,
-            heightCm: gm.heightCm ?? gm.height_cm ?? null,
-            headCircumferenceCm: gm.headCircumferenceCm ?? gm.head_circumference_cm ?? null,
-          };
-        }
-      }
-    } catch {}
+    supplementRecords = supplements.filter(record => {
+      const timestamp = Date.parse(record.occurredAt);
+      if (!Number.isFinite(timestamp)) throw new BridgeError(502, "UPSTREAM_INVALID_TIMESTAMP", "补剂时间格式错误");
+      return timestamp >= dayStartMs && timestamp < dayEndMs;
+    }).map(record => fromGrowDeskSupplementRecordEnriched(record));
+    const sameDayGrowth = growth.filter(record => record.measurementDate === date)
+      .sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""))[0];
+    growthRecords = sameDayGrowth ? fromGrowDeskGrowthRecord(sameDayGrowth) : null;
+    medicalReports = medical.filter(record => record.reportDate === date).length;
   } else {
     const { start, end } = getLocalDayUtcRange(date);
     dayStartMs = new Date(start).getTime();

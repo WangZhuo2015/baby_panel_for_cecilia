@@ -109,6 +109,7 @@ test("SH-08: Diaper Compat DTO Layer", async (t) => {
     assert.equal(rec.type, "poop");
     assert.equal(rec.timestamp, "2026-09-12T10:00:00.000Z");
     assert.equal(rec.poopColor, "brown");
+    assert.equal(rec.clientId, null);
     assert.equal(rec.version, "4");
     assert.equal(rec.baseVersion, "4");
   });
@@ -166,6 +167,7 @@ test("SH-08: Sleep Compat DTO Layer", async (t) => {
     assert.equal(rec.startedAt, "2026-09-12T20:00:00.000Z");
     assert.equal(rec.endTime, "2026-09-13T06:00:00.000Z");
     assert.equal(rec.endedAt, "2026-09-13T06:00:00.000Z");
+    assert.equal(rec.clientId, null);
     assert.equal(rec.version, "3");
   });
 });
@@ -338,6 +340,9 @@ test("SH-08: Medical Compat DTO Layer", async (t) => {
     assert.equal(rec.doctorNotes, "Common cold");
     assert.equal(rec.aiSummary, "Rest and fluids");
     assert.equal(rec.imageUrl, "https://example.com/uploads/medical/file.png");
+    assert.equal(rec.recordedById, null);
+    assert.equal(rec.source, "ui_manual");
+    assert.equal(rec.sourceAgent, null);
   });
 });
 
@@ -380,6 +385,31 @@ test("SH-08: Vaccine Compat DTO Layer", async (t) => {
 });
 
 test("SH-08: Timeline Compat DTO Layer", async (t) => {
+  await t.test("fromGrowDeskTimelineEntry: restores numeric supplement dose from Decimal wire strings", () => {
+    const item = fromGrowDeskTimelineEntry({
+      id: "timeline-supplement-1",
+      babyId: "baby-1",
+      entityType: "supplement",
+      entityId: "supplement-1",
+      occurredAt: "2026-09-19T01:00:00.000Z",
+      summary: "Supplement",
+      version: "1",
+    }, {
+      supplements: new Map([["supplement-1", {
+        id: "supplement-1",
+        babyId: "baby-1",
+        supplementName: "Vitamin D",
+        dose: "1.5",
+        unitName: "滴",
+        notes: "[productId:test_product] test_note",
+      }]]),
+    });
+
+    assert.equal(item.rawRecord?.dose, 1.5);
+    assert.equal(item.rawRecord?.notes, "test_note");
+    assert.equal(item.detail, "Vitamin D 1.5 滴 · test_note");
+  });
+
   await t.test("fromGrowDeskTimelineResponse: converts list and sets correct icons and labels", () => {
     const items = fromGrowDeskTimelineResponse([
       {
@@ -403,12 +433,11 @@ test("SH-08: Timeline Compat DTO Layer", async (t) => {
     ]);
 
     assert.equal(items.length, 2);
-    assert.equal(items[0].id, "feed-10");
-    assert.equal(items[0].title, "喂奶");
-    assert.equal(items[0].icon, "🍼");
-    assert.equal(items[1].id, "diaper-20");
-    assert.equal(items[1].title, "尿布");
-    assert.equal(items[1].icon, "🧷");
+    assert.deepEqual(items.map(item => item.id), ["diaper-20", "feed-10"], "legacy timeline is newest first");
+    assert.equal(items[1].title, "喂奶");
+    assert.equal(items[1].icon, "🍼");
+    assert.equal(items[0].title, "尿布");
+    assert.equal(items[0].icon, "🧷");
   });
 
   await t.test("fromGrowDeskTimelineResponse: enriches feeding with formula product and rawRecord", () => {
@@ -570,4 +599,3 @@ test("SH-08: Remote MCP Server Dual-Mode & Scopes", async (t) => {
     assert.ok(server, "Server should be instantiated");
   });
 });
-

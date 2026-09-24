@@ -1,6 +1,6 @@
 "use client";
 import { enqueueOutbox, isRetryableSubmitError } from "@/lib/outbox";
-import { _fetchedAt, isFresh, markFetched, invalidateCache, dedup, toQuery } from "./helpers";
+import { _fetchedAt, isFresh, markFetched, invalidateCache, dedup, toQuery, GROWDESK_EXTENDED_REPRESENTATION_HEADERS } from "./helpers";
 import { request, isAuthError } from "./helpers";
 import { getLocalDateStr } from "@/lib/date";
 import { recordWriteContext } from "@/lib/growdesk/record-write-context";
@@ -36,6 +36,49 @@ export interface RecordsSlice {
   deleteTimelineRecord: (type: TimelineEntry['type'], id: string) => Promise<void>;
 }
 
+function currentBabyId(get: any): string {
+  const state = get();
+  const loadedId = typeof state.baby?.id === "string" ? state.baby.id.trim() : "";
+  const selectedId = typeof state.selectedBabyId === "string" ? state.selectedBabyId.trim() : "";
+  if (loadedId && selectedId && loadedId !== selectedId) throw new Error("宝宝正在切换，请稍后重试");
+  const babyId = selectedId || loadedId;
+  if (!babyId) throw new Error("请先选择宝宝");
+  return babyId;
+}
+
+function isCurrentBaby(get: any, babyId: string): boolean {
+  const state = get();
+  const loadedId = typeof state.baby?.id === "string" ? state.baby.id.trim() : "";
+  const selectedId = typeof state.selectedBabyId === "string" ? state.selectedBabyId.trim() : "";
+  return loadedId === babyId && (!selectedId || selectedId === babyId);
+}
+
+export function verifiedOutboxIdentity(get: any): { userId: string; familyId: string; babyId: string } {
+  const state = get();
+  const userId = typeof state.user?.id === "string" ? state.user.id.trim() : "";
+  const familyId = typeof state.family?.id === "string" ? state.family.id.trim() : "";
+  const babyId = currentBabyId(get);
+  if (!userId || !familyId) {
+    throw new Error("身份尚未加载完成，请联网刷新后重试");
+  }
+  if (state.baby?.familyId && state.baby.familyId !== familyId) {
+    throw new Error("宝宝所属家庭正在切换，请稍后重试");
+  }
+  return { userId, familyId, babyId };
+}
+
+export function isCurrentWriteIdentity(
+  get: any,
+  identity: { userId: string; familyId: string; babyId: string },
+): boolean {
+  const state = get();
+  return state.user?.id === identity.userId
+    && state.family?.id === identity.familyId
+    && state.baby?.id === identity.babyId
+    && state.baby?.familyId === identity.familyId
+    && state.selectedBabyId === identity.babyId;
+}
+
 export const createRecordsSlice = (set: any, get: any): RecordsSlice => ({
   baby: null,
   feedingRecords: [],
@@ -52,10 +95,15 @@ export const createRecordsSlice = (set: any, get: any): RecordsSlice => ({
     if (!get().user && !get().authLoading) return;
     if (!force && get().baby && isFresh('baby')) return;
     if (force) invalidateCache('baby');
+    const selectedId = get().baby?.id;
+    const userId = get().user?.id;
     return dedup('baby', async () => {
       try {
-        const data = await request<Baby>(`/api/baby${toQuery({ babyId: get().baby?.id })}`);
-        if (data) set({ baby: data });
+        const data = await request<Baby>(`/api/baby${toQuery({ babyId: selectedId })}`, {
+          headers: GROWDESK_EXTENDED_REPRESENTATION_HEADERS,
+        });
+        if (get().user?.id !== userId || get().baby?.id !== selectedId) return;
+        set({ baby: data ?? null });
         markFetched('baby');
       } catch (e) {
         if (!isAuthError(e)) console.error("Failed to fetch baby:", e);
@@ -73,6 +121,7 @@ export const createRecordsSlice = (set: any, get: any): RecordsSlice => ({
       });
       set({ baby: updated });
       invalidateCache('baby');
+      invalidateCache('user');
     } catch (e) {
       console.error("Failed to save baby:", e);
       throw e;
@@ -81,14 +130,19 @@ export const createRecordsSlice = (set: any, get: any): RecordsSlice => ({
 
   fetchFeedingRecords: async (date?: string, force?: boolean) => {
     if (!get().user && !get().authLoading) return;
+    if (!get().baby?.id) await get().fetchBaby();
     const babyId = get().baby?.id;
+    if (!babyId) return;
     const key = `feedingRecords:${babyId || ''}:${date || ''}`;
     if (!force && get().feedingRecords.length > 0 && isFresh(key)) return;
     if (force) invalidateCache(key);
     return dedup(key, async () => {
       try {
         const query = toQuery({ date, babyId });
-        const data = await request<FeedingRecord[]>(`/api/records/feeding${query}`);
+        const data = await request<FeedingRecord[]>(`/api/records/feeding${query}`, {
+          headers: GROWDESK_EXTENDED_REPRESENTATION_HEADERS,
+        });
+        if (get().baby?.id !== babyId) return;
         set({ feedingRecords: data || [] });
         markFetched(key);
       } catch (e) {
@@ -99,14 +153,19 @@ export const createRecordsSlice = (set: any, get: any): RecordsSlice => ({
 
   fetchSleepRecords: async (force?: boolean) => {
     if (!get().user && !get().authLoading) return;
+    if (!get().baby?.id) await get().fetchBaby();
     const babyId = get().baby?.id;
+    if (!babyId) return;
     const key = `sleepRecords:${babyId || ''}`;
     if (!force && get().sleepRecords.length > 0 && isFresh(key)) return;
     if (force) invalidateCache(key);
     return dedup(key, async () => {
       try {
         const query = toQuery({ babyId });
-        const data = await request<SleepRecord[]>(`/api/records/sleep${query}`);
+        const data = await request<SleepRecord[]>(`/api/records/sleep${query}`, {
+          headers: GROWDESK_EXTENDED_REPRESENTATION_HEADERS,
+        });
+        if (get().baby?.id !== babyId) return;
         set({ sleepRecords: data || [] });
         markFetched(key);
       } catch (e) {
@@ -117,14 +176,19 @@ export const createRecordsSlice = (set: any, get: any): RecordsSlice => ({
 
   fetchDiaperRecords: async (force?: boolean) => {
     if (!get().user && !get().authLoading) return;
+    if (!get().baby?.id) await get().fetchBaby();
     const babyId = get().baby?.id;
+    if (!babyId) return;
     const key = `diaperRecords:${babyId || ''}`;
     if (!force && get().diaperRecords.length > 0 && isFresh(key)) return;
     if (force) invalidateCache(key);
     return dedup(key, async () => {
       try {
         const query = toQuery({ babyId });
-        const data = await request<DiaperRecord[]>(`/api/records/diaper${query}`);
+        const data = await request<DiaperRecord[]>(`/api/records/diaper${query}`, {
+          headers: GROWDESK_EXTENDED_REPRESENTATION_HEADERS,
+        });
+        if (get().baby?.id !== babyId) return;
         set({ diaperRecords: data || [] });
         markFetched(key);
       } catch (e) {
@@ -135,14 +199,19 @@ export const createRecordsSlice = (set: any, get: any): RecordsSlice => ({
 
   fetchFoodLogRecords: async (date?: string, force?: boolean) => {
     if (!get().user && !get().authLoading) return;
-    const babyId = get().baby?.id;
+    if (!get().baby?.id) await get().fetchBaby();
+    let babyId: string;
+    try { babyId = currentBabyId(get); } catch { return; }
     const key = `foodLogRecords:${babyId || ''}:${date || ''}`;
     if (!force && get().foodLogRecords.length > 0 && isFresh(key)) return;
     if (force) invalidateCache(key);
     return dedup(key, async () => {
       try {
         const query = toQuery({ date, babyId });
-        const data = await request<FoodLogRecord[]>(`/api/food/logs${query}`);
+        const data = await request<FoodLogRecord[]>(`/api/food/logs${query}`, {
+          headers: GROWDESK_EXTENDED_REPRESENTATION_HEADERS,
+        });
+        if (!isCurrentBaby(get, babyId)) return;
         set({ foodLogRecords: data || [] });
         markFetched(key);
       } catch (e) {
@@ -153,14 +222,19 @@ export const createRecordsSlice = (set: any, get: any): RecordsSlice => ({
 
   fetchDailySummary: async (date?: string, force?: boolean) => {
     if (!get().user && !get().authLoading) return;
+    if (!get().baby?.id) await get().fetchBaby();
     const babyId = get().baby?.id;
+    if (!babyId) return;
     const key = `dailySummary:${babyId || ''}:${date || ''}`;
     if (!force && get().dailySummary && isFresh(key)) return;
     if (force) invalidateCache(key);
     return dedup(key, async () => {
       try {
         const query = toQuery({ date, babyId });
-        const data = await request<DailySummary>(`/api/records/daily-summary${query}`);
+        const data = await request<DailySummary>(`/api/records/daily-summary${query}`, {
+          headers: GROWDESK_EXTENDED_REPRESENTATION_HEADERS,
+        });
+        if (get().baby?.id !== babyId) return;
         set({ dailySummary: data });
         markFetched(key);
       } catch (e) {
@@ -171,14 +245,19 @@ export const createRecordsSlice = (set: any, get: any): RecordsSlice => ({
 
   fetchTimeline: async (date?: string, force?: boolean) => {
     if (!get().user && !get().authLoading) return;
+    if (!get().baby?.id) await get().fetchBaby();
     const babyId = get().baby?.id;
+    if (!babyId) return;
     const key = `timeline:${babyId || ''}:${date || ''}`;
     if (!force && get().timeline.length > 0 && isFresh(key)) return;
     if (force) invalidateCache(key);
     return dedup(key, async () => {
       try {
         const query = toQuery({ date, babyId });
-        const data = await request<TimelineEntry[]>(`/api/records/timeline${query}`);
+        const data = await request<TimelineEntry[]>(`/api/records/timeline${query}`, {
+          headers: GROWDESK_EXTENDED_REPRESENTATION_HEADERS,
+        });
+        if (get().baby?.id !== babyId) return;
         set({ timeline: data || [] });
         markFetched(key);
       } catch (e) {
@@ -189,7 +268,9 @@ export const createRecordsSlice = (set: any, get: any): RecordsSlice => ({
 
   fetchAiDailySummary: async (date?: string, force?: boolean) => {
     if (!get().user && !get().authLoading) return null;
+    if (!get().baby?.id) await get().fetchBaby();
     const babyId = get().baby?.id;
+    if (!babyId) return null;
     const key = `aiDailySummary:${babyId || ''}:${date || ''}`;
     if (!force && get().aiDailySummary && get().aiDailySummary.date === (date || getLocalDateStr()) && isFresh(key)) {
       return get().aiDailySummary;
@@ -200,6 +281,7 @@ export const createRecordsSlice = (set: any, get: any): RecordsSlice => ({
       try {
         const query = toQuery({ date, babyId, force: force ? "1" : undefined });
         const res = await request<{ summary: AiDailySummaryResult }>(`/api/ai/daily-summary${query}`);
+        if (get().baby?.id !== babyId) return null;
         if (res?.summary) {
           set({ aiDailySummary: res.summary, aiDailySummaryLoading: false, aiDailySummaryError: null });
           markFetched(key);
@@ -229,8 +311,9 @@ export const createRecordsSlice = (set: any, get: any): RecordsSlice => ({
     invalidateCache("foodLogRecords");
     invalidateCache("growthMeasurements");
     invalidateCache("medicalReports");
+    await get().fetchBaby(true);
+    if (!get().baby?.id) return;
     await Promise.allSettled([
-      get().fetchBaby(true),
       get().fetchDailySummary(date, true),
       get().fetchAiDailySummary(date, true),
       get().fetchTimeline(date, true),
@@ -265,14 +348,16 @@ export const createRecordsSlice = (set: any, get: any): RecordsSlice => ({
   },
 
   addFeedingRecord: async (record) => {
+    const identity = verifiedOutboxIdentity(get);
     const clientId = crypto.randomUUID();
-    const payload = { babyId: get().baby?.id, ...record, clientId };
+    const payload = { ...record, babyId: identity.babyId, clientId };
     try {
       const newRecord = (await request<FeedingRecord>("/api/records/feeding", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { ...GROWDESK_EXTENDED_REPRESENTATION_HEADERS, "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       })) as FeedingRecord;
+      if (!isCurrentWriteIdentity(get, identity)) return;
       invalidateCache("feedingRecords");
       invalidateCache("dailySummary");
       invalidateCache("timeline");
@@ -286,9 +371,7 @@ export const createRecordsSlice = (set: any, get: any): RecordsSlice => ({
           url: "/api/records/feeding",
           body: payload as any,
           createdAt: Date.now(),
-          userId: get().user?.id,
-          familyId: get().family?.id,
-          babyId: get().baby?.id,
+          ...identity,
         });
         throw new Error("当前离线，记录已保存，联网后自动同步 ⏳");
       }
@@ -298,14 +381,16 @@ export const createRecordsSlice = (set: any, get: any): RecordsSlice => ({
   },
 
   addSleepRecord: async (record) => {
+    const identity = verifiedOutboxIdentity(get);
     const clientId = crypto.randomUUID();
-    const payload = { babyId: get().baby?.id, ...record, clientId };
+    const payload = { ...record, babyId: identity.babyId, clientId };
     try {
       const newRecord = (await request<SleepRecord>("/api/records/sleep", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { ...GROWDESK_EXTENDED_REPRESENTATION_HEADERS, "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       })) as SleepRecord;
+      if (!isCurrentWriteIdentity(get, identity)) return;
       invalidateCache("sleepRecords");
       invalidateCache("dailySummary");
       invalidateCache("timeline");
@@ -319,9 +404,7 @@ export const createRecordsSlice = (set: any, get: any): RecordsSlice => ({
           url: "/api/records/sleep",
           body: payload as any,
           createdAt: Date.now(),
-          userId: get().user?.id,
-          familyId: get().family?.id,
-          babyId: get().baby?.id,
+          ...identity,
         });
         throw new Error("当前离线，记录已保存，联网后自动同步 ⏳");
       }
@@ -331,14 +414,16 @@ export const createRecordsSlice = (set: any, get: any): RecordsSlice => ({
   },
 
   addDiaperRecord: async (record) => {
+    const identity = verifiedOutboxIdentity(get);
     const clientId = crypto.randomUUID();
-    const payload = { babyId: get().baby?.id, ...record, clientId };
+    const payload = { ...record, babyId: identity.babyId, clientId };
     try {
       const newRecord = (await request<DiaperRecord>("/api/records/diaper", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { ...GROWDESK_EXTENDED_REPRESENTATION_HEADERS, "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       })) as DiaperRecord;
+      if (!isCurrentWriteIdentity(get, identity)) return;
       invalidateCache("diaperRecords");
       invalidateCache("dailySummary");
       invalidateCache("timeline");
@@ -352,9 +437,7 @@ export const createRecordsSlice = (set: any, get: any): RecordsSlice => ({
           url: "/api/records/diaper",
           body: payload as any,
           createdAt: Date.now(),
-          userId: get().user?.id,
-          familyId: get().family?.id,
-          babyId: get().baby?.id,
+          ...identity,
         });
         throw new Error("当前离线，记录已保存，联网后自动同步 ⏳");
       }
@@ -364,14 +447,17 @@ export const createRecordsSlice = (set: any, get: any): RecordsSlice => ({
   },
 
   addFoodLogRecord: async (record) => {
+    const identity = verifiedOutboxIdentity(get);
     const clientId = crypto.randomUUID();
-    const payload = { babyId: get().baby?.id, ...record, clientId };
+    const babyId = identity.babyId;
+    const payload = { ...record, babyId, clientId };
     try {
       const newRecord = (await request<FoodLogRecord>("/api/food/logs", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { ...GROWDESK_EXTENDED_REPRESENTATION_HEADERS, "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       })) as FoodLogRecord;
+      if (!isCurrentWriteIdentity(get, identity)) return;
       invalidateCache("foodLogRecords");
       invalidateCache("foodPlans");
       invalidateCache("dailySummary");
@@ -386,9 +472,7 @@ export const createRecordsSlice = (set: any, get: any): RecordsSlice => ({
           url: "/api/food/logs",
           body: payload as any,
           createdAt: Date.now(),
-          userId: get().user?.id,
-          familyId: get().family?.id,
-          babyId: get().baby?.id,
+          ...identity,
         });
         throw new Error("当前离线，记录已保存，联网后自动同步 ⏳");
       }
@@ -399,12 +483,14 @@ export const createRecordsSlice = (set: any, get: any): RecordsSlice => ({
 
   updateTimelineRecord: async (type, id, patch) => {
     const endpoint = type === "food" ? "/api/food/logs" : `/api/records/${type}`;
+    const babyId = currentBabyId(get);
     try {
       const updated = await request<Record<string, unknown>>(endpoint, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, ...recordWriteContext(get(), type, id), ...patch }),
+        headers: { ...GROWDESK_EXTENDED_REPRESENTATION_HEADERS, "Content-Type": "application/json" },
+        body: JSON.stringify({ id, ...recordWriteContext(get(), type, id), ...patch, babyId }),
       });
+      if (!isCurrentBaby(get, babyId)) return;
       const listKey = type === "feeding" ? "feedingRecords" : type === "sleep" ? "sleepRecords" : type === "diaper" ? "diaperRecords" : "foodLogRecords";
       set((state: any) => ({
         [listKey]: (state as any)[listKey].map((r: { id: string }) => r.id === id ? { ...r, ...(updated as object) } : r),
@@ -424,12 +510,14 @@ export const createRecordsSlice = (set: any, get: any): RecordsSlice => ({
 
   deleteTimelineRecord: async (type, id) => {
     const endpoint = type === "food" ? "/api/food/logs" : type === "supplement" ? "/api/nutrition/records" : `/api/records/${type}`;
+    const babyId = currentBabyId(get);
     try {
       await request<{ success: boolean }>(endpoint, {
         method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, ...recordWriteContext(get(), type, id) }),
+        headers: { ...GROWDESK_EXTENDED_REPRESENTATION_HEADERS, "Content-Type": "application/json" },
+        body: JSON.stringify({ id, ...recordWriteContext(get(), type, id), babyId }),
       });
+      if (!isCurrentBaby(get, babyId)) return;
       const listKey = type === "feeding" ? "feedingRecords" : type === "sleep" ? "sleepRecords" : type === "diaper" ? "diaperRecords" : type === "food" ? "foodLogRecords" : null;
       if (listKey) {
         set((state: any) => ({

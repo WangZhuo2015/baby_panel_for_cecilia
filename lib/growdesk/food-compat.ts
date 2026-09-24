@@ -22,6 +22,8 @@ export interface LegacyFoodRecord {
   abnormalNotes?: string;
   source?: string;
   sourceAgent?: string | null;
+  clientId?: string | null;
+  recordedById?: string | null;
   version?: string;
   baseVersion?: string;
   createdAt?: string;
@@ -155,27 +157,36 @@ export function toGrowDeskFoodUpdatePayload(body: Record<string, unknown>, exist
   return payload;
 }
 
-export function fromGrowDeskFoodRecord(rec: GrowDeskFoodRecord): LegacyFoodRecord {
+export function fromGrowDeskFoodRecord(rec: GrowDeskFoodRecord, extended: boolean | number = true): LegacyFoodRecord {
   const version = wireVersion(rec.version);
   if (typeof rec.recordDate !== "string") throw new BridgeError(502, "UPSTREAM_INVALID_RECORD", "GrowDesk 返回了不完整的辅食记录");
   calendarDate(rec.recordDate);
   const time = rec.occurredAt ? new Intl.DateTimeFormat("en-GB", { timeZone: FOOD_FAMILY_TIMEZONE, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date(rec.occurredAt)) : null;
   const decoded = decodeNotes(rec.notes);
-  return {
+  const legacy: LegacyFoodRecord = {
     id: rec.id,
     babyId: rec.babyId,
     date: rec.recordDate,
     time,
-    mealType: rec.mealType,
     foods: rec.foodItemIds,
-    foodNames: rec.foodItemIds,
     portion: rec.portionDescription,
-    reaction: rec.reaction,
     ...decoded.observations,
+    clientId: null,
+    recordedById: null,
+    source: "ui_manual",
+    sourceAgent: null,
+    createdAt: rec.createdAt,
+  };
+  const includeExtended = typeof extended === "boolean" ? extended : true;
+  if (!includeExtended) return legacy;
+  return {
+    ...legacy,
+    mealType: rec.mealType,
+    foodNames: rec.foodItemIds,
+    reaction: rec.reaction,
     notes: decoded.notes,
     version,
     baseVersion: version,
-    createdAt: rec.createdAt,
     updatedAt: rec.updatedAt,
   };
 }

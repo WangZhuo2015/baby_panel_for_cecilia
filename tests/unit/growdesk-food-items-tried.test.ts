@@ -38,14 +38,14 @@ test("F3 create-as-tried survives the actual picker store reload", async t => {
   const rows: any[] = [];
   const state: any = {};
   const slice = createGrowthSlice((patch: any) => Object.assign(state, patch), () => state);
-  Object.assign(state, slice);
+  Object.assign(state, slice, { family: { id: "test_family_food" } });
   setup(t, (url, init) => {
     if (url.startsWith("/api/food/items")) {
       return getItems(new Request(`https://test.invalid${url}`, {
         headers: { cookie: `${GROWDESK_CONFIG.cookieName}=${"a".repeat(64)}` },
       }));
     }
-    assert.ok(url.endsWith("/api/v1/food/items"), `unexpected upstream: ${url}`);
+    assert.ok(url.includes("/api/v1/food/items"), `unexpected upstream: ${url}`);
     if (init?.method === "POST") {
       const body = JSON.parse(String(init.body));
       // Persist only what the BFF actually sends, not a canned tried response.

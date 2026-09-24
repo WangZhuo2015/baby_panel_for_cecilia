@@ -13,8 +13,9 @@ import {
   type GrowDeskGrowthRecord,
 } from "@/lib/growdesk/growth-compat";
 import { loadWebBaby } from "@/lib/growdesk/bridge-identity";
-import { wireVersion } from "@/lib/growdesk/bridge-protocol";
+import { BridgeError, bridgeErrorResponse, wireVersion } from "@/lib/growdesk/bridge-protocol";
 import crypto from "node:crypto";
+import { projectLegacyGrowthRecord, wantsExtendedRepresentation } from "@/lib/growdesk/legacy-projections";
 
 export async function GET(request: Request) {
   try {
@@ -24,6 +25,7 @@ export async function GET(request: Request) {
         return NextResponse.json({ error: "Unauthorized: 会话无效或已过期" }, { status: 401 });
       }
       const { searchParams } = new URL(request.url);
+      const extended = wantsExtendedRepresentation(request);
       let babyId = searchParams.get("babyId");
       if (!babyId) {
         const baby = await loadWebBaby(growdeskFetch, bffSession.accessToken);
@@ -48,7 +50,8 @@ export async function GET(request: Request) {
       }
       const rawList = Array.isArray(res.data) ? res.data : (res.data as any)?.data || [];
       const baby = await loadWebBaby(growdeskFetch, bffSession.accessToken, babyId);
-      return NextResponse.json(rawList.map((record: GrowDeskGrowthRecord) => fromGrowDeskGrowthRecord(record, baby?.birthDate)));
+      const mapped = rawList.map((record: GrowDeskGrowthRecord) => fromGrowDeskGrowthRecord(record, baby?.birthDate));
+      return NextResponse.json(extended ? mapped : mapped.map(projectLegacyGrowthRecord));
     }
 
     const auth = await requireAuth(request);
@@ -60,6 +63,7 @@ export async function GET(request: Request) {
     const data = await records.getGrowthMeasurements(ctx, { limit: searchParams.get("limit") || undefined });
     return NextResponse.json(data);
   } catch (e) {
+    if (e instanceof BridgeError) return bridgeErrorResponse(e);
     if (e instanceof ValidationError) return NextResponse.json({ error: e.message }, { status: 400 });
     console.error("GET /api/growth error:", e);
     return NextResponse.json({ error: "Failed to fetch growth measurements" }, { status: 500 });
@@ -125,6 +129,7 @@ export async function POST(request: Request) {
     });
     return NextResponse.json(rec, { status: 201 });
   } catch (e) {
+    if (e instanceof BridgeError) return bridgeErrorResponse(e);
     if (e instanceof ValidationError) return NextResponse.json({ error: (e as Error).message }, { status: 400 });
     console.error("POST /api/growth error:", e);
     return NextResponse.json({ error: "Failed to create growth measurement" }, { status: 500 });
@@ -200,6 +205,7 @@ export async function DELETE(request: Request) {
     await records.deleteRecord({ userId: auth.user.id, babyId: rec.babyId }, "growth", id);
     return NextResponse.json({ success: true, id });
   } catch (e) {
+    if (e instanceof BridgeError) return bridgeErrorResponse(e);
     if (e instanceof ValidationError) return NextResponse.json({ error: e.message }, { status: 400 });
     if (e instanceof NotFoundError) return NextResponse.json({ error: e.message }, { status: 404 });
     if (e instanceof ForbiddenError) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -256,6 +262,7 @@ async function handleUpdate(request: Request) {
 
     return NextResponse.json({ error: "Not implemented in local mode" }, { status: 501 });
   } catch (e: any) {
+    if (e instanceof BridgeError) return bridgeErrorResponse(e);
     console.error("UPDATE /api/growth error:", e);
     return NextResponse.json({ error: e?.message || "Failed to update growth measurement" }, { status: 500 });
   }

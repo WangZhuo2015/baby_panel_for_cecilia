@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { verifyBffCsrf } from "@/lib/growdesk/csrf";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/api-helpers";
 import { safeJsonParse } from "@/lib/json";
@@ -172,6 +173,10 @@ export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  if (GROWDESK_CONFIG.enabled) {
+    const csrf = verifyBffCsrf(request, { enforceInTest: true });
+    if (csrf) return csrf;
+  }
   const { id } = await params;
   const body = await request.json().catch(() => ({}));
   const title = typeof body.title === "string" ? body.title.trim().slice(0, 50) : undefined;
@@ -228,6 +233,10 @@ export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  if (GROWDESK_CONFIG.enabled) {
+    const csrf = verifyBffCsrf(request, { enforceInTest: true });
+    if (csrf) return csrf;
+  }
   const { id } = await params;
 
   if (GROWDESK_CONFIG.enabled) {

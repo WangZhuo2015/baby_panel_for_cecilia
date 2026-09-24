@@ -157,11 +157,42 @@ test("AI Tools: Direct invocation of agent tools", async (t) => {
     createdRecordIds.push({ type: "supplement", id: suppResult.details.id });
   }
 
-  // 11. Tool: get_nutrition_analysis
+  // 11. Tool: create_supplement_product (create then update by family/name)
+  console.log("-> Testing create_supplement_product tool...");
+  const createSupplementTool = toolMap.get("create_supplement_product");
+  assert.ok(createSupplementTool, "create_supplement_product tool must exist");
+  const createSupplementResult: any = await createSupplementTool.execute("call-11", {
+    name: "test_ai_tool_DHA",
+    dosageForm: "capsule",
+    unitName: "粒",
+    defaultDose: 1,
+    nutrients: { dha: 100, "vitamin-d": { amount: 400.126, unit: "IU" } },
+  });
+  assert.ok(createSupplementResult.content[0].text.includes("test_ai_tool_DHA"));
+  const initiallySavedProduct = await prisma.supplementProduct.findFirstOrThrow({
+    where: { familyId: tenant.familyId, name: "test_ai_tool_DHA" },
+  });
+  assert.equal(initiallySavedProduct.brand, "test_ai_tool_DHA");
+  await createSupplementTool.execute("call-11-update", {
+    name: "test_ai_tool_DHA",
+    brand: "test_brand_updated",
+    dosageForm: "capsule",
+    unitName: "粒",
+    defaultDose: 2,
+    nutrients: { dha: { amount: 120, unit: "mg" } },
+  });
+  const savedProducts = await prisma.supplementProduct.findMany({
+    where: { familyId: tenant.familyId, name: "test_ai_tool_DHA" },
+  });
+  assert.equal(savedProducts.length, 1);
+  assert.equal(savedProducts[0]?.brand, "test_brand_updated");
+  assert.equal(Number(savedProducts[0]?.defaultDose), 2);
+
+  // 12. Tool: get_nutrition_analysis
   console.log("-> Testing get_nutrition_analysis tool...");
   const analysisTool = toolMap.get("get_nutrition_analysis");
   assert.ok(analysisTool, "get_nutrition_analysis tool must exist");
-  const analysisResult: any = await analysisTool.execute("call-11", { date: today, days: 1 });
+  const analysisResult: any = await analysisTool.execute("call-12", { date: today, days: 1 });
   assert.ok(analysisResult.content[0].text.includes("totalFeedingMl") || analysisResult.content[0].text.includes("coreMetrics"));
 
   // Clean up created records

@@ -6,11 +6,12 @@ import { BridgeError, isoTimestamp, wireVersion } from "./bridge-protocol";
 import { formatIsoToLocalTime, getLocalDateStr } from "@/lib/date";
 import { getFeedingEffectiveMl } from "@/lib/nutrition/breastmilk";
 import { decodeNotes } from "./food-compat";
+import { extractProductIdFromNotes, parseSupplementAmount, findMatchingSupplementProduct, supplementProductReference } from "./nutrition-compat";
 
 export interface GrowDeskTimelineEntry {
   id: string;
   babyId: string;
-  entityType: "feeding" | "sleep" | "diaper" | "food" | "supplement" | "growth";
+  entityType: "feeding" | "sleep" | "diaper" | "food" | "supplement" | "growth" | "medical" | "vaccine";
   entityId: string;
   occurredAt: string;
   summary: string;
@@ -47,6 +48,8 @@ export interface TimelineEnrichmentContext {
   formulaProducts?: Map<string, any> | Record<string, any>;
   supplementProducts?: Map<string, any> | Record<string, any>;
   memberNames?: Map<string, string> | Record<string, string>;
+  /** UTC start of the requested family-local calendar day. */
+  dayStartMs?: number;
 }
 
 function lookup<T = any>(container: Map<string, T> | Record<string, T> | undefined, id: string | null | undefined): T | undefined {
@@ -97,6 +100,8 @@ const TYPE_LABELS: Record<string, string> = {
   food: "辅食",
   supplement: "补剂",
   growth: "生长测量",
+  medical: "医疗记录",
+  vaccine: "疫苗接种",
 };
 
 const TYPE_ICONS: Record<string, string> = {
@@ -106,6 +111,8 @@ const TYPE_ICONS: Record<string, string> = {
   food: "🥣",
   supplement: "💊",
   growth: "📏",
+  medical: "🩺",
+  vaccine: "💉",
 };
 
 export function fromGrowDeskTimelineEntry(
@@ -119,8 +126,8 @@ export function fromGrowDeskTimelineEntry(
     throw new BridgeError(502, "UPSTREAM_INVALID_RECORD", "GrowDesk 返回了不完整的时间轴记录");
   }
   const entityId = entry.entityId || entry.id;
-  const time = formatIsoToLocalTime(occurredAt);
-  const sortMs = date.getTime();
+  let time = formatIsoToLocalTime(occurredAt);
+  let sortMs = date.getTime();
 
   if (!context) {
     return {
@@ -194,8 +201,7 @@ export function fromGrowDeskTimelineEntry(
         d += `${formulaPart}${breastPart > 0 ? ` + 亲喂约${breastPart}ml (共约${effectiveMl}ml)` : ""}`;
       } else if (feedType === "formula") {
         d += formulaProductName ? `配方${amount}ml (${formulaProductName})` : (amount > 0 ? `${amount}ml` : "");
-      } else if (feedType === "bottle_breast") {
-        d += amount > 0 ? `母乳${amount}ml` : "母乳瓶喂";
+
       } else if (amount > 0) {
         d += `${feedType === "breast" ? "约" : ""}${amount}ml`;
       } else if (effectiveMl > 0) {
@@ -256,6 +262,15 @@ export function fromGrowDeskTimelineEntry(
       const m = durationMin % 60;
       const durationText = h > 0 ? `${h}小时${m > 0 ? `${m}分` : ""}` : `${m}分钟`;
       let d = endStr ? `${durationText}（${startStr}–${endStr}）` : `开始于 ${startStr}`;
+      // The legacy service keeps the complete interval and duration, but
+      // anchors an overnight item at the selected day's local midnight so it
+      // remains visible in the requested timeline and sorts with that day.
+      const isOvernight = Number.isFinite(context.dayStartMs) && startMs < context.dayStartMs!;
+      if (isOvernight) {
+        time = "00:00";
+        sortMs = context.dayStartMs!;
+        title = "跨夜睡眠 (接昨日)";
+      }
       if (sleep.nightWakingCount > 0) d += ` · 夜醒 ${sleep.nightWakingCount}次`;
       if (sleep.notes) d += ` · ${sleep.notes}`;
       detail = d;
@@ -375,13 +390,25 @@ export function fromGrowDeskTimelineEntry(
       sourceAgent = supp.sourceAgent || null;
       const recordedById = supp.recordedByUserId || supp.recordedById;
       recorderName = lookup(context.memberNames, recordedById) || null;
-      const prodId = supp.productId || supp.supplementProductId;
-      const prod = lookup(context.supplementProducts, prodId);
+      const reference = supplementProductReference(supp.productId ?? supp.supplementProductId, supp.notes);
+      const candidates = context.supplementProducts instanceof Map
+        ? Array.from(context.supplementProducts.values())
+        : Object.values(context.supplementProducts || {});
+      const prod = findMatchingSupplementProduct(
+        typeof supp.supplementName === "string" ? supp.supplementName : "",
+        reference.productId,
+        candidates.filter(candidate => candidate && typeof candidate.id === "string" && typeof candidate.name === "string"),
+      );
+      const prodId = reference.productId || prod?.id;
       const prodName = supp.productName || supp.supplementName || prod?.name || "营养补充剂";
-      const unit = supp.unitName || supp.amount || prod?.unitName || "剂";
-      const dose = supp.dose ?? supp.dosage ?? "";
+      const parsedAmount = typeof supp.amount === "string" ? parseSupplementAmount(supp.amount) : null;
+      const unit = supp.unitName || parsedAmount?.unitName || prod?.unitName || "剂";
+      const rawDose = supp.dose ?? supp.dosage ?? parsedAmount?.dose ?? "";
+      const numericDose = typeof rawDose === "string" && rawDose.trim() !== "" ? Number(rawDose) : rawDose;
+      const dose = typeof numericDose === "number" && Number.isFinite(numericDose) ? numericDose : rawDose;
+      const notes = reference.cleanNotes;
       let d = `${prodName} ${dose} ${unit}`.trim();
-      if (supp.notes) d += ` · ${supp.notes}`;
+      if (notes) d += ` · ${notes}`;
       detail = d;
 
       rawRecord = {
@@ -392,7 +419,7 @@ export function fromGrowDeskTimelineEntry(
         productName: prodName,
         dose: dose !== "" ? dose : null,
         unitName: unit,
-        notes: supp.notes || null,
+        notes: notes || null,
         source: supp.source || "ui_manual",
         sourceAgent: supp.sourceAgent || null,
         version: wireVersion(supp.version || entry.version),
@@ -429,5 +456,7 @@ export function fromGrowDeskTimelineResponse(
 ): LegacyTimelineItem[] {
   const list = Array.isArray(raw) ? raw : raw?.data;
   if (!Array.isArray(list)) throw new BridgeError(502, "UPSTREAM_INVALID_PAGE", "GrowDesk 未返回有效的时间轴数据");
-  return list.map(item => fromGrowDeskTimelineEntry(item, context));
+  const typeOrder: Record<string, number> = { feeding: 0, sleep: 1, diaper: 2, food: 3, supplement: 4, growth: 5, medical: 6, vaccine: 7 };
+  return list.map(item => fromGrowDeskTimelineEntry(item, context))
+    .sort((a, b) => b.sortMs - a.sortMs || typeOrder[a.type] - typeOrder[b.type]);
 }

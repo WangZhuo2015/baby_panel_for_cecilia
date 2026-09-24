@@ -171,6 +171,7 @@ test("Fine-Grained MCP Tools & Raw Data Test Suite", async (t) => {
       "record_vaccine",
       "record_medical_report",
       "record_supplement",
+      "create_supplement_product",
       "record_food_plan",
       "delete_record",
       "restore_record",

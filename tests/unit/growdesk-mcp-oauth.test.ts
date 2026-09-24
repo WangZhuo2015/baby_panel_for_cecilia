@@ -502,6 +502,61 @@ test("Issue #5: GrowDesk MCP, OAuth 2.1 & Personal Access Tokens Matrix", async 
         );
       }
 
+      if (url.includes("/nutrition/supplement-products") && method === "POST") {
+        return new Response(
+          JSON.stringify({
+            data: {
+              id: "growdesk-supp-product-1",
+              familyId: "fam-rw",
+              name: body.name,
+              brand: body.brand,
+              dosageForm: body.dosageForm,
+              unitName: body.unitName,
+              defaultDose: body.defaultDose,
+              nutrientsJson: body.nutrientsJson,
+              notes: body.notes,
+              isActive: true,
+              isArchived: false,
+              version: 1,
+              createdAt: "2026-09-15T03:00:00.000Z",
+              updatedAt: "2026-09-15T03:00:00.000Z",
+            },
+          }),
+          { status: 201, headers: { "content-type": "application/json" } },
+        );
+      }
+
+      // Durable delete/restore snapshot endpoints
+      if (url.includes("/record-snapshots/feeding/growdesk-feed-1") && method === "DELETE") {
+        return new Response(
+          JSON.stringify({
+            data: {
+              snapshotId: "test_snapshot_feed_1",
+              deletedId: "growdesk-feed-1",
+              entityType: "feeding",
+              version: "2",
+              replayed: false,
+            },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      }
+
+      if (url.endsWith("/record-snapshots/restore") && method === "POST") {
+        return new Response(
+          JSON.stringify({
+            data: {
+              snapshotId: "test_snapshot_feed_1",
+              restoredId: "growdesk-feed-1",
+              entityType: "feeding",
+              version: "3",
+              replayed: false,
+            },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      }
+
       // Delete endpoint
       if (method === "DELETE") {
         return new Response(
@@ -593,6 +648,25 @@ test("Issue #5: GrowDesk MCP, OAuth 2.1 & Personal Access Tokens Matrix", async 
       const suppData = parseToolJson(suppRes);
       assert.equal(suppData.success, true);
       assert.equal(suppData.record.id, "growdesk-supp-1");
+
+      const productRes = await client.callTool({
+        name: "create_supplement_product",
+        arguments: {
+          name: "test_mcp_DHA",
+          brand: "test_brand",
+          dosageForm: "capsule",
+          unitName: "粒",
+          defaultDose: 1,
+          nutrients: { dha: 100, vitamind: { amount: 400.126 } },
+        },
+      });
+      const productData = parseToolJson(productRes);
+      assert.equal(productData.success, true);
+      assert.equal(productData.product.id, "growdesk-supp-product-1");
+      assert.deepEqual(productData.product.nutrients, {
+        dha: { amount: 100, unit: "mg" },
+        vitamin_d: { amount: 400.13, unit: "IU" },
+      });
 
       // 6. delete_record & restore_record snapshot
       const delRes = await client.callTool({

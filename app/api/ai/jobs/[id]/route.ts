@@ -8,6 +8,16 @@ import { bffAiJobStore } from "@/lib/growdesk/ai-jobs";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
+function goJobsUnavailable() {
+  return NextResponse.json(
+    {
+      error: "AI 任务尚未由 Go 服务端持久化接管",
+      code: "GROWDESK_GO_AI_JOBS_NOT_READY",
+    },
+    { status: 501, headers: { "cache-control": "no-store" } },
+  );
+}
+
 async function getOwnJob(userId: string, id: string) {
   const job = await prisma.aiJob.findUnique({ where: { id } });
   if (!job || job.userId !== userId) return null;
@@ -20,6 +30,7 @@ export async function GET(
 ) {
   const { id } = await context.params;
 
+  if (GROWDESK_CONFIG.enabled && GROWDESK_CONFIG.usesGoBackend) return goJobsUnavailable();
   if (GROWDESK_CONFIG.enabled) {
     const bffSession = await resolveBffSession(request);
     if (!bffSession) {
@@ -87,6 +98,7 @@ export async function PATCH(
 ) {
   const { id } = await context.params;
 
+  if (GROWDESK_CONFIG.enabled && GROWDESK_CONFIG.usesGoBackend) return goJobsUnavailable();
   if (GROWDESK_CONFIG.enabled) {
     const bffSession = await resolveBffSession(request);
     if (!bffSession) {

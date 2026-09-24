@@ -6,11 +6,13 @@ import { AppHeader } from "@/components/ui/AppHeader";
 import { useToast } from "@/components/ui/Toast";
 import { useBabyStore } from "@/stores/useBabyStore";
 import { FoodLogForm } from "@/components/records/FoodLogForm";
+import { useRecordIdentityReady } from "@/lib/hooks/useRecordIdentityReady";
 
 export default function FoodLogPage() {
   const router = useRouter();
   const { showToast } = useToast();
   const addFoodLogRecord = useBabyStore((s) => s.addFoodLogRecord);
+  const identityReady = useRecordIdentityReady();
 
   const [saving, setSaving] = useState(false);
 
@@ -35,7 +37,7 @@ export default function FoodLogPage() {
         <FoodLogForm
           mode="create"
           onSubmit={handleSubmit}
-          saving={saving}
+          saving={saving || !identityReady}
         />
       </div>
     </div>

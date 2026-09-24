@@ -33,8 +33,11 @@ if (echo > /dev/tcp/127.0.0.1/"${PORT}") 2>/dev/null; then
   exit 1
 fi
 
-echo "==> [test-e2e] start server on :${PORT}"
-setsid npx next dev --port "${PORT}" > /tmp/baby-test-server.log 2>&1 &
+if command -v setsid >/dev/null 2>&1; then
+  setsid npx next dev --port "${PORT}" > /tmp/baby-test-server.log 2>&1 &
+else
+  npx next dev --port "${PORT}" > /tmp/baby-test-server.log 2>&1 &
+fi
 SERVER_PID=$!
 cleanup() {
   echo "==> [test-e2e] cleaning up test server and data..."
