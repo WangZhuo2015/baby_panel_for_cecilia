@@ -9,7 +9,7 @@ import { SegmentControl } from "@/components/ui/SegmentControl";
 import { FormSection } from "@/components/ui/FormSection";
 import { QuickAiButton } from "@/components/ui/QuickAiButton";
 import { VoiceConfirmEntry } from "@/components/ui/VoiceConfirmEntry";
-import { localTimeToUtcIso, getLocalDateStr } from "@/lib/date";
+import { localTimeToUtcIso, getLocalDateStr, getLocalTimeStr } from "@/lib/date";
 import type { DiaperType, PoopColor, PoopConsistency, DiaperRecord } from "@/types";
 
 const diaperTypes: { value: DiaperType; label: string; emoji: string }[] = [
@@ -88,8 +88,7 @@ export function DiaperForm({
       const hhmm = isoToLocalHHMM(initialData.timestamp);
       if (hhmm) return hhmm;
     }
-    const now = new Date();
-    return `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+    return getLocalTimeStr();
   });
 
   const showPoopFields = diaperType === "poop" || diaperType === "both";

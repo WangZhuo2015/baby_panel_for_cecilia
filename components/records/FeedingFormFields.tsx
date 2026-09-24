@@ -19,7 +19,7 @@ import { FormSection } from "@/components/ui/FormSection";
 import { SegmentControl } from "@/components/ui/SegmentControl";
 import { QuickAiButton } from "@/components/ui/QuickAiButton";
 import { VoiceConfirmEntry } from "@/components/ui/VoiceConfirmEntry";
-import { localTimeToUtcIso, getLocalDateStr } from "@/lib/date";
+import { localTimeToUtcIso, getLocalDateStr, getLocalTimeStr } from "@/lib/date";
 import { estimateNursingVolumeMl } from "@/lib/nutrition/breastmilk";
 import type { FeedingType, FeedingRecord } from "@/types";
 
@@ -113,8 +113,7 @@ export function FeedingForm({
       const hhmm = isoToLocalHHMM(initialData.timestamp);
       if (hhmm) return hhmm;
     }
-    const now = new Date();
-    return `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+    return getLocalTimeStr();
   });
 
   const [isNow, setIsNow] = useState<boolean>(() => !isEdit && !initialData?.timestamp);
@@ -526,10 +525,7 @@ export function FeedingForm({
               <button
                 type="button"
                 onClick={() => {
-                  const now = new Date();
-                  setTime(
-                    `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`
-                  );
+                  setTime(getLocalTimeStr());
                   setIsNow(true);
                 }}
                 className={`px-4 py-2.5 rounded-2xl text-xs font-bold transition-all whitespace-nowrap btn-press ${

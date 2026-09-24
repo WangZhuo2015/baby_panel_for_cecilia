@@ -60,6 +60,7 @@ test.describe.serial("Baby Panel Core End-to-End Smoke Suite", () => {
     await page.getByRole("button", { name: "登 录" }).click();
 
     await expect(page).toHaveURL(/^http:\/\/127\.0\.0\.1:\d+\/?$/, { timeout: 15_000 });
+    await expect(page.getByText(testUser.babyName).first()).toBeVisible({ timeout: 10_000 });
 
     // 2.2 Navigate to /records/diaper
     await page.goto("/records/diaper");
@@ -70,6 +71,7 @@ test.describe.serial("Baby Panel Core End-to-End Smoke Suite", () => {
     await noteInput.fill("E2E自动化测试尿布排便记录");
 
     const saveBtn = page.getByRole("button", { name: "保存记录" });
+    await expect(saveBtn).toBeEnabled({ timeout: 15_000 });
     await saveBtn.click();
 
     // 2.4 Should redirect back to dashboard and render timeline
@@ -91,7 +93,7 @@ test.describe.serial("Baby Panel Core End-to-End Smoke Suite", () => {
     await expect(page.getByText(testUser.babyName).first()).toBeVisible({ timeout: 10_000 });
 
     // 3.3 Click "生成海报" button
-    const posterBtn = page.getByRole("button", { name: "生成海报" });
+    const posterBtn = page.getByRole("button", { name: "生成海报" }).first();
     await expect(posterBtn).toBeVisible();
     await posterBtn.click();
 
