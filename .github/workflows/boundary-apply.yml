@@ -1,0 +1,49 @@
+name: Apply reviewed boundary patch
+on:
+  pull_request:
+    branches: [codex/web-parity-20260919]
+    paths: [.review/boundary.patch]
+permissions:
+  contents: write
+jobs:
+  apply:
+    if: github.event.pull_request.number == 22 && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'codex/go-web-adapter-20260923'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
+      TARGET_BRANCH: codex/go-web-adapter-20260923
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Validate and apply the tracked patch without executing application code
+        run: |
+          set -eu
+          test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
+          python3 - <<'PY'
+          import pathlib, subprocess
+          patch = pathlib.Path('.review/boundary.patch')
+          data = patch.read_text()
+          assert len(data.encode()) < 200000
+          allowed = ('app/api/nutrition/', 'components/nutrition/', 'lib/nutrition/', 'lib/growdesk/', 'lib/hooks/', 'tests/unit/', 'app/notifications/', 'app/api/notifications/', 'app/(main)/nutrition/')
+          for line in data.splitlines():
+              if line.startswith(('new file mode ', 'old mode ', 'new mode ')):
+                  assert line.endswith('100644'), 'Only regular source files are allowed'
+          rows = subprocess.check_output(['git', 'apply', '--numstat', str(patch)], text=True).splitlines()
+          assert 1 <= len(rows) <= 25
+          for row in rows:
+              path = row.split('\t')[-1]
+              assert path.startswith(allowed) and path.endswith(('.ts', '.tsx')), path
+              assert '..' not in pathlib.PurePosixPath(path).parts
+          PY
+          git apply --check --index .review/boundary.patch
+          git apply --index .review/boundary.patch
+          git diff --cached --check
+          git diff --cached --stat
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'fix(web): apply reviewed nutrition and notification boundary increment'
+          remote=$(git ls-remote origin "refs/heads/$TARGET_BRANCH" | cut -f1)
+          test "$remote" = "$EXPECTED_HEAD"
+          git push origin "HEAD:refs/heads/$TARGET_BRANCH"
