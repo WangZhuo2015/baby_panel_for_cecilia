@@ -42,7 +42,7 @@ diff --git a/app/api/notifications/route.ts b/app/api/notifications/route.ts
 +  assertExpectedActor(request, bffSession.user.id)
 +  const requestedBabyId = new URL(request.url).searchParams.get("babyId")
    const identity = requestedBabyId
-@@ -78,4 +78,10 @@
+@@ -78,5 +78,12 @@
    if (requestedBabyId && !baby) {
      throw new BridgeError(400, "BABY_REQUIRED", "请提供有效的 babyId")
    }
@@ -53,6 +53,8 @@ diff --git a/app/api/notifications/route.ts b/app/api/notifications/route.ts
 +  if (requestedFamilyId && baby?.familyId !== requestedFamilyId) {
 +    throw new BridgeError(409, "BABY_SCOPE_MISMATCH", "所选家庭或宝宝已变更")
 +  }
+ 
+   const items = await fetchGrowDeskNotificationItems(
 @@ -88,4 +88,6 @@
        ? { babyId: baby.id, familyId: baby.familyId, birthDate: baby.birthDate }
        : undefined,
