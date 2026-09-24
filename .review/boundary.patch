@@ -1,197 +1,76 @@
+diff --git a/lib/nutrition/scoped-request.ts b/lib/nutrition/scoped-request.ts
+--- a/lib/nutrition/scoped-request.ts
++++ b/lib/nutrition/scoped-request.ts
+@@ -46,5 +46,10 @@
+       if (body instanceof FormData) {
++        for (const field of ["babyId", "familyId"] as const) {
++          if (body.getAll(field).some(value => value !== identity[field])) {
++            throw new NutritionScopeChanged();
++          }
++        }
+         const form = new FormData();
+         body.forEach((value, name) => form.append(name, value));
+@@ -69,3 +69,3 @@
+     try {
+-      const response = await fetchApi(url.pathname + url.search, { ...init, method, headers, body, signal, cache: "no-store" });
++      const response = await fetchApi(url.pathname + url.search, { ...init, method, headers, body, signal, cache: "no-store", redirect: "error" });
+       const data: unknown = await response.json();
+diff --git a/lib/hooks/useNotificationInbox.ts b/lib/hooks/useNotificationInbox.ts
+--- a/lib/hooks/useNotificationInbox.ts
++++ b/lib/hooks/useNotificationInbox.ts
+@@ -27,4 +27,5 @@
+   const [snapshot, setSnapshot] = useState<{ key: string; items: NotificationViewItem[]; loading: boolean }>({ key: "", items: [], loading: false });
+-  const control = useRef({ epoch: 0, generation: 0, controllers: new Set<AbortController>() });
++  const [failure, setFailure] = useState<{ key: string; message: string } | null>(null);
++  const control = useRef({ epoch: 0, generation: 0, controllers: new Set<AbortController>(), readController: null as AbortController | null });
+   const errorHandler = useRef(onError);
+@@ -35,3 +35,5 @@
+     control.current.controllers.clear();
++    control.current.readController = null;
++    setFailure(null);
+   }, []);
+@@ -88,3 +88,6 @@
+     const generation = ++control.current.generation;
++    control.current.readController?.abort();
+     const controller = new AbortController();
++    control.current.readController = controller;
++    setFailure(null);
+     control.current.controllers.add(controller);
+@@ -110,5 +110,7 @@
+       if (epoch === control.current.epoch && generation === control.current.generation &&
+           sameNotificationIdentity(captured, currentNotificationIdentity())) {
+-        errorHandler.current(error instanceof Error && error.name !== "AbortError" ? error.message : "通知请求超时，请重试");
++        const message = error instanceof Error && error.name !== "AbortError" ? error.message : "通知请求超时，请重试";
++        setFailure({ key, message });
++        errorHandler.current(message);
+       }
+@@ -166,3 +166,4 @@
+     notifications: items,
++    error: failure?.key === key ? failure.message : null,
+     loading: Boolean(key) && (snapshot.key !== key || snapshot.loading),
 diff --git a/app/notifications/page.tsx b/app/notifications/page.tsx
 --- a/app/notifications/page.tsx
 +++ b/app/notifications/page.tsx
-@@ -3,2 +3,2 @@
--import { useEffect, useState, useCallback, useRef } from "react";
-+import { useEffect, useState, useCallback } from "react";
- import { useRouter } from "next/navigation";
-@@ -20,29 +20,12 @@
--import { useBabyStore } from "@/stores/useBabyStore";
- import { useToast } from "@/components/ui/Toast";
- import { InstallGuideModal } from "@/components/ui/InstallGuideModal";
--import {
--  getReadNotificationIds,
--  markNotificationRead,
--  markAllNotificationsRead,
--  setClearedBeforeTime,
--  addDismissedNotificationId,
--  filterVisibleNotifications,
--} from "@/lib/notifications-storage";
--
--interface NotificationItem {
--  id: string;
--  type: "vaccine" | "daily" | "data_release" | "family";
--  title: string;
--  detail: string;
--  time: string;
--  urgent: boolean;
--  icon: string;
--  actorId?: string | null;
--  actorLabel?: string | null;
--  createdAt?: number;
--}
-+import { useNotificationInbox } from "@/lib/hooks/useNotificationInbox";
-+import type { NotificationViewItem as NotificationItem } from "@/lib/notification-actions";
- 
-@@ -61,5 +61,2 @@ export default function NotificationsPage() {
--  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
--  const [loading, setLoading] = useState(true);
--  const [readIds, setReadIds] = useState<Set<string>>(new Set());
-   const [pushEnabled, setPushEnabled] = useState(false);
-@@ -70,6 +67,8 @@
--  const notificationRequestGeneration = useRef(0);
--
--  const baby = useBabyStore((s) => s.baby);
-   const { showToast } = useToast();
-+  const reportNotificationError = useCallback((message: string) => showToast(message, "error"), [showToast]);
-+  const {
-+    notifications, loading, readIds, unreadCount, reload: fetchNotifications,
-+    markRead, dismiss, clearAll,
-+  } = useNotificationInbox(true, reportNotificationError);
- 
-@@ -167,69 +167,11 @@
--  const fetchNotifications = useCallback(async () => {
--    const requestedBabyId = baby?.id ?? null;
--    const requestGeneration = ++notificationRequestGeneration.current;
--    setLoading(true);
--    try {
--      const url = requestedBabyId
--        ? `/api/notifications?babyId=${encodeURIComponent(requestedBabyId)}`
--        : "/api/notifications";
--      const res = await fetch(url);
--      if (res.ok) {
--        const data = await res.json();
--        if (
--          requestGeneration !== notificationRequestGeneration.current
--          || (useBabyStore.getState().baby?.id ?? null) !== requestedBabyId
--        ) {
--          return;
--        }
--        const visible = filterVisibleNotifications(Array.isArray(data) ? data : []);
--        setNotifications(visible);
--        if (visible.length > 0) {
--          markAllNotificationsRead(visible.map((n) => n.id));
--          setReadIds(getReadNotificationIds());
--          window.dispatchEvent(new CustomEvent("notifications-read"));
--        }
--      }
--    } catch {
--      // Offline fallback
--    } finally {
--      if (
--        requestGeneration === notificationRequestGeneration.current
--        && (useBabyStore.getState().baby?.id ?? null) === requestedBabyId
--      ) {
--        setLoading(false);
--      }
--    }
--  }, [baby?.id]);
--
--  const markRead = useCallback((id: string) => {
--    markNotificationRead(id);
--    setReadIds(getReadNotificationIds());
--    window.dispatchEvent(new CustomEvent("notifications-read"));
--  }, []);
--
--  const handleDismiss = useCallback((id: string, e?: React.MouseEvent) => {
-+  const handleDismiss = useCallback(async (id: string, e?: React.MouseEvent) => {
-     e?.stopPropagation();
--    addDismissedNotificationId(id);
--    markNotificationRead(id);
--    setNotifications((prev) => prev.filter((n) => n.id !== id));
--    setReadIds(getReadNotificationIds());
--    window.dispatchEvent(new CustomEvent("notifications-read"));
--    showToast("已清除此条通知 ✨");
--  }, [showToast]);
-+    if (await dismiss(id)) showToast("已在本机清除此条通知 ✨");
-+  }, [dismiss, showToast]);
- 
-   useEffect(() => {
--    setReadIds(getReadNotificationIds());
-     checkAndSyncPush();
--    fetchNotifications();
--  }, [fetchNotifications, checkAndSyncPush]);
--
--  const unreadCount = notifications.filter((n) => !readIds.has(n.id)).length;
-+  }, [checkAndSyncPush]);
- 
-@@ -322,13 +280,8 @@
--  const handleClearAll = () => {
--    setClearedBeforeTime(Date.now());
--    markAllNotificationsRead(notifications.map((n) => n.id));
--    setNotifications([]);
--    setReadIds(getReadNotificationIds());
--    window.dispatchEvent(new CustomEvent("notifications-read"));
--    showToast("已清除全部通知 ✨", "success");
-+  const handleClearAll = async () => {
-+    if (await clearAll()) showToast("已在本机清除全部通知 ✨", "success");
-   };
- 
-   const familyNotifs = notifications.filter((n) => n.type === "family");
-   const vaccineNotifs = notifications.filter((n) => n.type === "vaccine");
--  const dailyNotifs = notifications.filter((n) => n.type === "daily");
-+  const dailyNotifs = notifications.filter((n) => n.type === "daily" || n.type === "ai" || n.type === "data_release");
- 
-@@ -601,8 +601,8 @@ function NotificationCard({
--  onRead: (id: string) => void;
-+  onRead: (id: string) => Promise<boolean>;
-   onDismiss?: (id: string, e: React.MouseEvent) => void;
- }) {
-   const router = useRouter();
- 
--  const handleClick = () => {
--    if (!read) onRead(notification.id);
-+  const handleClick = async () => {
-+    if (!(await onRead(notification.id))) return;
-     if (notification.type === "vaccine") {
-diff --git a/app/(main)/page.tsx b/app/(main)/page.tsx
---- a/app/(main)/page.tsx
-+++ b/app/(main)/page.tsx
-@@ -43,4 +43,4 @@
--import { calculateUnreadCount } from "@/lib/notifications-storage";
-+import { useNotificationInbox } from "@/lib/hooks/useNotificationInbox";
- import { isWorkbenchViewport } from "@/lib/responsive";
- 
- function NotificationBell() {
-@@ -47,41 +47,4 @@ function NotificationBell() {
--  const [unreadCount, setUnreadCount] = useState(0);
-   const router = useRouter();
--  const baby = useBabyStore((s) => s.baby);
--  const notificationRequestGeneration = useRef(0);
--
--  const fetchCount = useCallback(async () => {
--    const requestedBabyId = baby?.id ?? null;
--    const requestGeneration = ++notificationRequestGeneration.current;
--    try {
--      const url = requestedBabyId
--        ? `/api/notifications?babyId=${encodeURIComponent(requestedBabyId)}`
--        : "/api/notifications";
--      const res = await fetch(url);
--      if (res.ok) {
--        const data = await res.json();
--        if (
--          requestGeneration !== notificationRequestGeneration.current
--          || (useBabyStore.getState().baby?.id ?? null) !== requestedBabyId
--        ) {
--          return;
--        }
--        const list = Array.isArray(data) ? data : [];
--        setUnreadCount(calculateUnreadCount(list));
--      }
--    } catch {
--      // ignore
--    }
--  }, [baby?.id]);
--
--  useEffect(() => {
--    fetchCount();
--    const handler = () => fetchCount();
--    window.addEventListener("notifications-read", handler);
--    window.addEventListener("baby:data-polled", handler);
--    return () => {
--      window.removeEventListener("notifications-read", handler);
--      window.removeEventListener("baby:data-polled", handler);
--    };
--  }, [fetchCount]);
-+  const { unreadCount } = useNotificationInbox();
- 
+@@ -50,3 +50,3 @@
+     notifications, loading, readIds, unreadCount, reload: fetchNotifications,
+-    markRead, dismiss, clearAll,
++    markRead, dismiss, clearAll, error: notificationError,
+   } = useNotificationInbox(true, reportNotificationError);
+@@ -380,3 +380,10 @@
+-      ) : notifications.length === 0 ? (
++      ) : notificationError && notifications.length === 0 ? (
++        <div role="alert" className="flex flex-col items-center justify-center py-20 space-y-3">
++          <p className="text-sm text-text-secondary">{notificationError}</p>
++          <button type="button" onClick={fetchNotifications} className="btn-press text-sm text-primary cursor-pointer">
++            重新加载
++          </button>
++        </div>
++      ) : notifications.length === 0 ? (
+         <div className="flex flex-col items-center justify-center py-20">
+diff --git a/tests/unit/notification-actions.test.ts b/tests/unit/notification-actions.test.ts
+--- a/tests/unit/notification-actions.test.ts
++++ b/tests/unit/notification-actions.test.ts
+@@ -56,2 +56,2 @@
+-test("only four acknowledgements run concurrently and queue snapshots cannot be retargeted", async () => {
++test("only four acknowledgements run concurrently and queue snapshots cannot be retargeted", { timeout: 5000 }, async () => {
+   const items = Array.from({ length: 12 }, (_, i) => server(`test_n_${i}`));
