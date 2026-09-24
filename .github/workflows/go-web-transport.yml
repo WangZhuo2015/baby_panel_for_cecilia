@@ -1,7 +1,7 @@
 name: Go Web transport
 on:
   pull_request:
-    branches: [main, codex/web-parity-20260919, codex/go-web-adapter-20260923]
+    branches: [main, codex/web-parity-20260919, codex/go-web-transport-review-20260923]
   push:
     branches: [codex/web-parity-20260919]
 permissions:
@@ -21,17 +21,17 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: 24.14.1
           cache: npm
       - run: npm ci --ignore-scripts --no-audit --no-fund
-      - name: Real loopback HTTP and legacy-reference regression
+      - name: Real loopback HTTP and current legacy-reference regression
         env:
           NODE_ENV: test
           DATABASE_URL: file:./dev_test.db
           JWT_SECRET: test_go_web_transport_secret_no_production_credentials
         run: |
           set -eu
-          node --import tsx --test --test-concurrency=1 tests/unit/growdesk-http-transport.test.ts tests/unit/growdesk-legacy-upload.test.ts
+          node --import tsx --test --test-concurrency=1 tests/unit/growdesk-http-transport.test.ts tests/unit/growdesk-legacy-attachment-route.test.ts
   static-build:
     name: Typecheck, lint and standalone build
     runs-on: ubuntu-latest
@@ -48,7 +48,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: 24.14.1
           cache: npm
       - run: npm ci --ignore-scripts --no-audit --no-fund
       - run: npx prisma generate
@@ -95,7 +95,7 @@ jobs:
           dist-go/growdesk-api --version
       - uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: 24.14.1
           cache: npm
           cache-dependency-path: web/package-lock.json
       - name: Build the actual Web standalone server

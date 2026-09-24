@@ -1,9 +1,11 @@
-import { growdeskCompanionEndpoints } from "@/lib/growdesk/companion-runtime";
 import { NextResponse } from "next/server";
 import { GROWDESK_CONFIG } from "@/lib/config";
 import { resolveBffSession } from "@/lib/growdesk/session";
-import { bridgeErrorResponse, BridgeError } from "@/lib/growdesk/bridge-protocol";
+import { growdeskFetch } from "@/lib/growdesk/client";
+import { bridgeErrorResponse, BridgeError, pathId, requireData } from "@/lib/growdesk/bridge-protocol";
+import { verifyBffCsrf } from "@/lib/growdesk/csrf";
 import { requireAuth } from "@/lib/api-helpers";
+import { assertExpectedActor } from "@/lib/growdesk/nutrition-scope";
 
 export async function POST(
   request: Request,
@@ -14,7 +16,22 @@ export async function POST(
     return NextResponse.json({ error: "Missing notification id" }, { status: 400 });
   }
 
-  if (GROWDESK_CONFIG.enabled) return growdeskCompanionEndpoints.readNotification(request, id);
+  if (GROWDESK_CONFIG.enabled) {
+    try {
+      const csrfErr = verifyBffCsrf(request, { enforceInTest: true });
+      if (csrfErr) return csrfErr;
+      const bffSession = await resolveBffSession(request);
+      if (!bffSession) throw new BridgeError(401, "UNAUTHORIZED", "请先登录");
+      assertExpectedActor(request, bffSession.user.id);
+      const result = requireData(await growdeskFetch<{ success: boolean }>(
+        `/api/v1/notifications/${pathId(id)}/read`, {
+          method: "POST", accessToken: bffSession.accessToken,
+        },
+      ));
+      if (result?.success !== true) throw new BridgeError(502, "UPSTREAM_INVALID_RESPONSE", "服务端未确认已读状态");
+      return NextResponse.json({ success: true }, { headers: { "cache-control": "no-store" } });
+    } catch (error) { return bridgeErrorResponse(error); }
+  }
 
   const auth = await requireAuth(request);
   if (auth.errorResponse) return auth.errorResponse;

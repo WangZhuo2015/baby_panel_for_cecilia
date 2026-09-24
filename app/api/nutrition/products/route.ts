@@ -7,10 +7,10 @@ import { GROWDESK_CONFIG } from "@/lib/config";
 import { resolveBffSession } from "@/lib/growdesk/session";
 import { verifyBffCsrf } from "@/lib/growdesk/csrf";
 import { growdeskFetch } from "@/lib/growdesk/client";
-import { wantsExtendedRepresentation } from "@/lib/growdesk/legacy-projections";
-import { resolveNutritionScope } from "@/lib/growdesk/nutrition-scope";
-import { BridgeError, bridgeErrorResponse, pathId, requireData } from "@/lib/growdesk/bridge-protocol";
+import { assertExpectedActor, resolveNutritionScope } from "@/lib/growdesk/nutrition-scope";
+import { BridgeError, bridgeErrorResponse, requireData, pathId } from "@/lib/growdesk/bridge-protocol";
 import { foodPlanWriteBody, readGrowDeskFoodPlan, type GrowDeskFoodPlanState } from "@/lib/growdesk/food-plan-state";
+import { checkedProduct, checkedProducts, positiveDose, assertCatalogDeletion } from "@/lib/growdesk/nutrition-validation";
 import { fetchCompleteList } from "@/lib/growdesk/paged-list";
 import {
   fromGrowDeskFormulaProduct,
@@ -52,8 +52,13 @@ export async function GET(request: Request) {
         return NextResponse.json({ error: "Unauthorized: 会话无效或已过期" }, { status: 401 });
       }
 
+      assertExpectedActor(request, bffSession.user.id);
       const { searchParams } = new URL(request.url);
-      const { familyId, babyId } = await resolveNutritionScope(growdeskFetch, bffSession.accessToken, request.url);
+      const scope = await resolveNutritionScope(growdeskFetch, bffSession.accessToken, {
+        babyId: searchParams.get("babyId"), familyId: searchParams.get("familyId"),
+      });
+      const familyId = scope?.familyId;
+      const babyId = scope?.baby?.id ?? null;
 
       if (!familyId) {
         return NextResponse.json({
@@ -93,7 +98,7 @@ export async function GET(request: Request) {
         );
 
         let firstActiveSeen = false;
-        formulas = rawList.map((raw) => {
+        formulas = checkedProducts(rawList, familyId).map((raw) => {
           const isFirst = !firstActiveSeen && !raw.isArchived;
           if (isFirst) firstActiveSeen = true;
 
@@ -121,7 +126,7 @@ export async function GET(request: Request) {
           bffSession.accessToken,
           `/api/v1/families/${pathId(familyId)}/nutrition/supplement-products${includeInactive ? "?includeArchived=true" : ""}`,
         );
-        supplements = rawSupplements.map(raw => fromGrowDeskSupplementProduct(raw, wantsExtendedRepresentation(request)));
+        supplements = checkedProducts(rawSupplements, familyId).map(fromGrowDeskSupplementProduct);
         if (!includeInactive) {
           supplements = supplements.filter((s) => s.isActive !== false);
         }
@@ -233,8 +238,14 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "Unauthorized: 会话无效或已过期" }, { status: 401 });
       }
 
-      const body = await request.json().catch(() => ({}));
-      const { familyId, babyId } = await resolveNutritionScope(growdeskFetch, bffSession.accessToken, request.url, body);
+      assertExpectedActor(request, bffSession.user.id);
+      const body = await request.json().catch(() => null);
+      if (!body || typeof body !== "object" || Array.isArray(body)) {
+        throw new BridgeError(400, "INVALID_JSON", "请求正文必须是 JSON 对象");
+      }
+      const scope = await resolveNutritionScope(growdeskFetch, bffSession.accessToken, body);
+      const familyId = scope?.familyId;
+      const babyId = scope?.baby?.id;
 
       if (!familyId) {
         return NextResponse.json({ error: "请先加入家庭" }, { status: 400 });
@@ -263,7 +274,7 @@ export async function POST(request: Request) {
           );
         }
 
-        const createdRaw: GrowDeskFormulaProduct = res.data.data || res.data;
+        const createdRaw = checkedProduct<GrowDeskFormulaProduct>(res.data.data || res.data, familyId);
 
         // If isDefault or custom nutrients provided, update food-plan
         if (babyId) {
@@ -329,7 +340,7 @@ export async function POST(request: Request) {
               brand: (brand || name).trim(),
               dosageForm: dosageForm || "drops",
               unitName: unitName || "滴",
-              defaultDose: String(Number(defaultDose) || 1.0),
+              defaultDose: String(positiveDose(defaultDose, "defaultDose")),
               nutrientsJson: nutrients || {},
               notes: notes ? String(notes).trim() : null,
             },
@@ -338,7 +349,7 @@ export async function POST(request: Request) {
         if (!res.ok || !res.data) {
           return NextResponse.json({ error: res.error?.message || "添加补剂失败" }, { status: res.status });
         }
-        const newSupp = fromGrowDeskSupplementProduct((res.data as any).data || res.data, wantsExtendedRepresentation(request));
+        const newSupp = fromGrowDeskSupplementProduct(checkedProduct<GrowDeskSupplementProduct>((res.data as any).data || res.data, familyId));
         return NextResponse.json(newSupp, { status: 201 });
       } else {
         return NextResponse.json({ error: "type 必须为 formula 或 supplement" }, { status: 400 });
@@ -480,10 +491,18 @@ export async function PUT(request: Request) {
         return NextResponse.json({ error: "Unauthorized: 会话无效或已过期" }, { status: 401 });
       }
 
-      const body = await request.json().catch(() => ({}));
-      const { familyId, babyId } = await resolveNutritionScope(growdeskFetch, bffSession.accessToken, request.url, body);
+      assertExpectedActor(request, bffSession.user.id);
+      const body = await request.json().catch(() => null);
+      if (!body || typeof body !== "object" || Array.isArray(body)) {
+        throw new BridgeError(400, "INVALID_JSON", "请求正文必须是 JSON 对象");
+      }
+      const scope = await resolveNutritionScope(growdeskFetch, bffSession.accessToken, body);
+      const familyId = scope?.familyId;
+      const babyId = scope?.baby?.id;
 
       const { id, type = "formula" } = body;
+      if (!familyId) throw new BridgeError(400, "FAMILY_REQUIRED", "请先加入家庭");
+      pathId(id);
 
       if (!id || typeof id !== "string") {
         return NextResponse.json({ error: "请提供要修改的产品 ID" }, { status: 400 });
@@ -510,7 +529,7 @@ export async function PUT(request: Request) {
           );
         }
 
-        const updatedRaw: GrowDeskFormulaProduct = res.data.data || res.data;
+        const updatedRaw = checkedProduct<GrowDeskFormulaProduct>(res.data.data || res.data, familyId, id);
 
         // Update defaultFormulaId or custom nutrients if provided. The product
         // PATCH has already committed, so a later plan failure is reported as a
@@ -558,12 +577,11 @@ export async function PUT(request: Request) {
             method: "PATCH",
             accessToken: bffSession.accessToken,
             body: {
-              ...(body.baseVersion !== undefined ? { baseVersion: body.baseVersion } : {}),
               ...(body.name !== undefined ? { name: String(body.name).trim() } : {}),
               ...(body.brand !== undefined ? { brand: body.brand ? String(body.brand).trim() : null } : {}),
               ...(body.dosageForm !== undefined ? { dosageForm: body.dosageForm ? String(body.dosageForm).trim() : null } : {}),
               ...(body.unitName !== undefined ? { unitName: String(body.unitName).trim() } : {}),
-              ...(body.defaultDose !== undefined ? { defaultDose: String(Number(body.defaultDose)) } : {}),
+              ...(body.defaultDose !== undefined ? { defaultDose: String(positiveDose(body.defaultDose, "defaultDose")) } : {}),
               ...(body.nutrients !== undefined ? { nutrientsJson: body.nutrients } : {}),
               ...(body.notes !== undefined ? { notes: body.notes ? String(body.notes).trim() : null } : {}),
               ...(body.isActive !== undefined ? { isActive: Boolean(body.isActive), isArchived: !Boolean(body.isActive) } : {}),
@@ -573,7 +591,7 @@ export async function PUT(request: Request) {
         if (!res.ok || !res.data) {
           return NextResponse.json({ error: res.error?.message || "更新补剂失败" }, { status: res.status });
         }
-        return NextResponse.json(fromGrowDeskSupplementProduct((res.data as any).data || res.data, wantsExtendedRepresentation(request)));
+        return NextResponse.json(fromGrowDeskSupplementProduct(checkedProduct<GrowDeskSupplementProduct>((res.data as any).data || res.data, familyId, id)));
       }
 
       return NextResponse.json({ error: "无效的产品类型" }, { status: 400 });
@@ -688,10 +706,15 @@ export async function DELETE(request: Request) {
         return NextResponse.json({ error: "Unauthorized: 会话无效或已过期" }, { status: 401 });
       }
 
-      const { familyId } = await resolveNutritionScope(growdeskFetch, bffSession.accessToken, request.url);
-
+      assertExpectedActor(request, bffSession.user.id);
       const { searchParams } = new URL(request.url);
+      const scope = await resolveNutritionScope(growdeskFetch, bffSession.accessToken, {
+        babyId: searchParams.get("babyId"), familyId: searchParams.get("familyId"),
+      });
+      const familyId = scope?.familyId;
+      if (!familyId) throw new BridgeError(400, "FAMILY_REQUIRED", "请先加入家庭");
       const id = searchParams.get("id");
+      pathId(id);
       const type = searchParams.get("type") || "formula";
 
       if (!id) {
@@ -714,6 +737,7 @@ export async function DELETE(request: Request) {
           );
         }
 
+        assertCatalogDeletion(requireData(res), id);
         return NextResponse.json({
           success: true,
           id,
@@ -728,6 +752,7 @@ export async function DELETE(request: Request) {
         if (!res.ok && res.status !== 404) {
           return NextResponse.json({ error: res.error?.message || "删除补剂失败" }, { status: res.status });
         }
+        if (res.ok) assertCatalogDeletion(requireData(res), id);
         return NextResponse.json({ success: true, id });
       }
 

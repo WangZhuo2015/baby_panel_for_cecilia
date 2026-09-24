@@ -12,11 +12,13 @@ import {
   type TimelineEnrichmentContext,
 } from "@/lib/growdesk/timeline-compat";
 import { fetchTimelineDetailMaps } from "@/lib/growdesk/timeline-details";
+import { fetchNativeTimelineDetailMaps } from "@/lib/growdesk/native-timeline-details";
+import { fetchNativeTimelineSupplementProducts } from "@/lib/growdesk/native-timeline-products";
 import { familyDayBounds, fetchLegacyRecordList } from "@/lib/growdesk/record-list";
 import { fetchCompleteList } from "@/lib/growdesk/paged-list";
 import { getLocalDateStr } from "@/lib/date";
 import { loadWebBaby } from "@/lib/growdesk/bridge-identity";
-import { fromGrowDeskSupplementProduct, type GrowDeskSupplementProduct } from "@/lib/growdesk/nutrition-compat";
+import { extractSupplementStateFromFoodPlan } from "@/lib/growdesk/nutrition-compat";
 import { projectLegacyTimelineResponse, wantsExtendedRepresentation } from "@/lib/growdesk/legacy-projections";
 
 function objectData(value: unknown): Record<string, unknown> {
@@ -34,7 +36,29 @@ async function listData(path: string, accessToken: string): Promise<Record<strin
   return data.map(objectData);
 }
 
+async function supplementPlanData(babyId: string, accessToken: string): Promise<Record<string, unknown>> {
+  const response = await growdeskFetch<unknown>(`/api/v1/babies/${pathId(babyId)}/food-plan`, { accessToken });
+  // Retained only for the pre-existing TypeScript compatibility mode.
+  if (!response.ok && response.status === 404) return {};
+  const plan = objectData(requireData(response));
+  return plan.planData === null || plan.planData === undefined ? {} : objectData(plan.planData);
+}
 
+async function supplementProductsData(babyId: string, familyId: string, accessToken: string): Promise<Map<string, Record<string, unknown>>> {
+  if (GROWDESK_CONFIG.usesGoBackend) {
+    return fetchNativeTimelineSupplementProducts(growdeskFetch, accessToken, familyId);
+  }
+  const result = new Map<string, Record<string, unknown>>();
+  const state = extractSupplementStateFromFoodPlan(await supplementPlanData(babyId, accessToken));
+  for (const product of state.supplementProducts || []) {
+    const item = objectData(product);
+    if (typeof item.id !== "string" || !item.id) {
+      throw new BridgeError(502, "UPSTREAM_INVALID_RECORD", "GrowDesk 返回了无效的补剂档案");
+    }
+    result.set(item.id, item);
+  }
+  return result;
+}
 
 export async function GET(request: Request) {
   try {
@@ -48,8 +72,7 @@ export async function GET(request: Request) {
       const babyId = searchParams.get("babyId");
       if (!babyId) return NextResponse.json({ error: "请提供 babyId" }, { status: 400 });
       const token = bffSession.accessToken;
-      // The legacy public timeline defaults to today; an omitted date must not
-      // silently become all historical records. Explicit dates retain family bounds.
+      // Preserve the public default day and family-local interval semantics.
       if (!searchParams.get("date")) searchParams.set("date", getLocalDateStr());
       const list = await fetchLegacyRecordList<GrowDeskTimelineEntry>(growdeskFetch, token, babyId, searchParams, "timeline");
       if (list.length === 0) {
@@ -59,7 +82,6 @@ export async function GET(request: Request) {
       const dayBounds = dateParam
         ? await familyDayBounds(growdeskFetch, token, babyId, dateParam)
         : undefined;
-
       const baby = await loadWebBaby(growdeskFetch, token, babyId);
       if (!baby?.familyId) {
         throw new BridgeError(502, "UPSTREAM_INVALID_RECORD", "GrowDesk 未返回宝宝所属家庭");
@@ -67,16 +89,14 @@ export async function GET(request: Request) {
       const familyPath = `/api/v1/families/${pathId(baby.familyId)}`;
       const hasFeeding = list.some(entry => entry.entityType === "feeding");
       const hasSupplement = list.some(entry => entry.entityType === "supplement");
-
       const [details, formulaProducts, supplementProducts, members] = await Promise.all([
-        fetchTimelineDetailMaps(growdeskFetch, token, babyId, list, {
-          lookup: GROWDESK_CONFIG.usesGoBackend ? "by-id" : "paged", signal: request.signal,
-        }),
+        GROWDESK_CONFIG.usesGoBackend
+          ? fetchNativeTimelineDetailMaps(growdeskFetch, token, babyId, baby.familyId, list)
+          : fetchTimelineDetailMaps(growdeskFetch, token, babyId, list),
         hasFeeding ? fetchCompleteList<Record<string, unknown>>(growdeskFetch, token, `${familyPath}/nutrition/products?includeArchived=true`) : Promise.resolve([]),
-        hasSupplement ? fetchCompleteList<GrowDeskSupplementProduct>(growdeskFetch, token, `${familyPath}/nutrition/supplement-products?includeArchived=true`) : Promise.resolve([]),
+        hasSupplement ? supplementProductsData(babyId, baby.familyId, token) : Promise.resolve(new Map<string, Record<string, unknown>>()),
         listData(`${familyPath}/members`, token),
       ]);
-
       const formulaProductsMap = new Map<string, Record<string, unknown>>();
       for (const product of formulaProducts) {
         if (typeof product.id !== "string" || !product.id) {
@@ -84,19 +104,6 @@ export async function GET(request: Request) {
         }
         formulaProductsMap.set(product.id, product);
       }
-
-      const supplementProductsMap = new Map<string, Record<string, unknown>>();
-      for (const product of supplementProducts) {
-        if (product.familyId !== baby.familyId) {
-          throw new BridgeError(502, "UPSTREAM_INVALID_RECORD", "补剂档案不属于当前家庭");
-        }
-        const item = objectData(fromGrowDeskSupplementProduct(product));
-        if (typeof item.id !== "string" || !item.id) {
-          throw new BridgeError(502, "UPSTREAM_INVALID_RECORD", "GrowDesk 返回了无效的补剂档案");
-        }
-        supplementProductsMap.set(item.id, item);
-      }
-
       const memberNames = new Map<string, string>();
       for (const member of members) {
         if (typeof member.userId !== "string" || typeof member.displayName !== "string") {
@@ -104,11 +111,10 @@ export async function GET(request: Request) {
         }
         memberNames.set(member.userId, member.displayName);
       }
-
       const context: TimelineEnrichmentContext = {
         ...details,
         formulaProducts: formulaProductsMap,
-        supplementProducts: supplementProductsMap,
+        supplementProducts,
         memberNames,
         dayStartMs: dayBounds?.start.getTime(),
       };

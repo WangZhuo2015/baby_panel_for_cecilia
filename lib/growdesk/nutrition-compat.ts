@@ -106,7 +106,7 @@ export function normalizeNutrients(raw: unknown): NutrientsMap {
   return result;
 }
 
-export function fromGrowDeskSupplementProduct(raw: GrowDeskSupplementProduct, extended = false): SupplementProduct {
+export function fromGrowDeskSupplementProduct(raw: GrowDeskSupplementProduct): SupplementProduct {
   let nutrients: NutrientsMap = {};
   const source = raw.nutrientsJson;
   if (source !== undefined && source !== null) {
@@ -122,7 +122,6 @@ export function fromGrowDeskSupplementProduct(raw: GrowDeskSupplementProduct, ex
   const defaultDose = Number(raw.defaultDose);
   return {
     id: raw.id,
-    ...(extended && Number.isSafeInteger(raw.version) && raw.version! > 0 ? { version: raw.version } : {}),
     familyId: raw.familyId,
     name: raw.name,
     brand: raw.brand || raw.name,
@@ -335,38 +334,44 @@ export function toGrowDeskFormulaUpdatePayload(body: Record<string, unknown>) {
 
 // ─── Supplement Record Mapping ───────────────────────────────────────────────
 
-export function findMatchingSupplementProduct(
+/** Identity is authoritative. A missing ID never falls through to a same-name product. */
+export function findMatchingSupplementProduct<T extends { id: string; name: string }>(
   supplementName: string,
   taggedProductId: string | null,
-  allProducts: SupplementProduct[]
-): SupplementProduct | undefined {
-  if (taggedProductId) {
-    const byId = allProducts.find((p) => p.id === taggedProductId);
-    if (byId) return byId;
-    const presetById = PRESET_SUPPLEMENT_PRODUCTS.find((p) => (p as any).id === taggedProductId);
-    if (presetById) return { ...presetById, id: taggedProductId, familyId: "" } as SupplementProduct;
-  }
-
+  allProducts: readonly T[],
+): T | undefined {
   const norm = supplementName.toLowerCase().trim();
-  const byName = allProducts.find((p) => p.name.toLowerCase().trim() === norm);
-  if (byName) return byName;
+  const candidates = taggedProductId
+    ? allProducts.filter(product => product.id === taggedProductId)
+    : allProducts.filter(product => product.name.toLowerCase().trim() === norm);
+  // Returning the first match would silently attach another product's nutrient
+  // composition to a historical dose. Preserve unresolved history instead.
+  return candidates.length === 1 ? candidates[0] : undefined;
+}
 
-  const presetByName = PRESET_SUPPLEMENT_PRODUCTS.find((p) => p.name.toLowerCase().trim() === norm);
-  if (presetByName) {
-    return { ...presetByName, id: taggedProductId || norm, familyId: "" } as SupplementProduct;
+export function supplementProductReference(
+  productId: unknown,
+  notes: string | null | undefined,
+): { productId: string | null; cleanNotes: string | null } {
+  const tagged = extractProductIdFromNotes(notes);
+  const valid = (value: unknown): value is string => typeof value === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(value);
+  if (productId !== undefined && productId !== null && !valid(productId)) {
+    throw new BridgeError(502, "UPSTREAM_INVALID_RECORD", "GrowDesk 返回了无效的补剂产品标识");
   }
-
-  return undefined;
+  if (valid(productId)) {
+    return { productId, cleanNotes: tagged.productId === productId ? tagged.cleanNotes : notes ?? null };
+  }
+  if (valid(tagged.productId)) return tagged;
+  return { productId: null, cleanNotes: notes ?? null };
 }
 
 export function fromGrowDeskSupplementRecordEnriched(
   raw: GrowDeskSupplementRecord,
   allProducts: SupplementProduct[] = []
 ): SupplementRecord {
-  const noteProduct = extractProductIdFromNotes(raw.notes);
-  const taggedId = raw.productId || noteProduct.productId;
-  const cleanNotes = raw.productId ? raw.notes : noteProduct.cleanNotes;
-  const matchedProduct = findMatchingSupplementProduct(raw.supplementName, taggedId, allProducts);
+  const { productId: taggedId, cleanNotes } = supplementProductReference(raw.productId, raw.notes);
+  const matchedProduct = findMatchingSupplementProduct(raw.supplementName, taggedId,
+    allProducts.filter(product => product.familyId === raw.familyId));
 
   const parsedAmount = parseSupplementAmount(raw.amount);
   const numericDose = raw.dose !== undefined && raw.dose !== null ? Number(raw.dose) : parsedAmount.dose;
@@ -379,7 +384,11 @@ export function fromGrowDeskSupplementRecordEnriched(
 
   const resolvedProductId = taggedId || matchedProduct?.id || raw.id;
 
-  const fallbackProduct: SupplementProduct = matchedProduct || {
+  const fallbackProduct: SupplementProduct = matchedProduct ? {
+    ...matchedProduct,
+    // The record name is a historical fact; current catalog renames must not replace it.
+    name: raw.supplementName || matchedProduct.name,
+  } : {
     id: resolvedProductId,
     familyId: raw.familyId,
     name: raw.supplementName,
@@ -389,7 +398,7 @@ export function fromGrowDeskSupplementRecordEnriched(
     defaultDose: dose,
     nutrients: {},
     notes: cleanNotes,
-    isActive: true,
+    isActive: false,
   };
 
   return {

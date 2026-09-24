@@ -1,9 +1,9 @@
 "use client";
 
-import { useNutritionFetch } from "@/lib/hooks/useNutritionFetch";
-
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Plus, Check, AlertTriangle, Sparkles, RefreshCw, ShieldAlert, X } from "lucide-react";
+import { useNutritionScopeKey, useScopedNutritionRequest } from "@/lib/hooks/useScopedNutritionRequest";
+import { NutritionScopeChanged } from "@/lib/nutrition/scoped-request";
 import { CuteCard } from "@/components/ui/CuteCard";
 import { CuteButton } from "@/components/ui/CuteButton";
 import { getLocalDateStr } from "@/lib/date";
@@ -19,8 +19,14 @@ export interface SupplementQuickCheckInProps {
   className?: string;
 }
 
-export function SupplementQuickCheckIn({ babyId, date, refreshKey, onRecordSuccess, className = "" }: SupplementQuickCheckInProps) {
-  const nutritionFetch = useNutritionFetch(babyId);
+export function SupplementQuickCheckIn(props: SupplementQuickCheckInProps) {
+  const scopeKey = useNutritionScopeKey(props.babyId);
+  return <ScopedSupplementQuickCheckIn key={`${scopeKey}:${props.date ?? "today"}`} {...props} />;
+}
+
+function ScopedSupplementQuickCheckIn({ babyId, date, refreshKey, onRecordSuccess, className = "" }: SupplementQuickCheckInProps) {
+  const scopedRequest = useScopedNutritionRequest(babyId);
+  const readGeneration = useRef(0);
   const [schedules, setSchedules] = useState<SupplementSchedule[]>([]);
   const [supplements, setSupplements] = useState<SupplementProduct[]>([]);
   const [completedProductIds, setCompletedProductIds] = useState<string[]>([]);
@@ -36,7 +42,9 @@ export function SupplementQuickCheckIn({ babyId, date, refreshKey, onRecordSucce
     product: SupplementProduct | null;
     warnings: string[];
     details: ConflictCheckResult["details"];
+    dose: number;
   }>({
+    dose: 1,
     isOpen: false,
     product: null,
     warnings: [],
@@ -44,31 +52,37 @@ export function SupplementQuickCheckIn({ babyId, date, refreshKey, onRecordSucce
   });
 
   const fetchData = useCallback(async () => {
+    const generation = ++readGeneration.current;
     try {
       setLoading(true);
       const [schedulesRes, productsRes] = await Promise.all([
-        nutritionFetch(`/api/nutrition/schedules?date=${targetDate}${babyId ? `&babyId=${babyId}` : ""}`),
-        nutritionFetch("/api/nutrition/products?type=supplement"),
+        scopedRequest(`/api/nutrition/schedules?date=${targetDate}`),
+        scopedRequest("/api/nutrition/products?type=supplement"),
       ]);
 
+      const [scheduleData, productData] = await Promise.all([schedulesRes.json(), productsRes.json()]);
+      if (generation !== readGeneration.current) return false;
       if (schedulesRes.ok) {
-        const data = await schedulesRes.json();
+        const data = scheduleData;
         setSchedules(data.schedules || []);
         setCompletedProductIds(data.completedProductIds || []);
       }
       if (productsRes.ok) {
-        const data = await productsRes.json();
+        const data = productData;
         setSupplements(data.supplements || []);
       }
+      return true;
     } catch (e) {
       console.error("Failed to fetch supplement data:", e);
+      return false;
     } finally {
-      setLoading(false);
+      if (generation === readGeneration.current) setLoading(false);
     }
-  }, [babyId, targetDate, nutritionFetch]);
+  }, [scopedRequest, targetDate]);
 
   useEffect(() => {
-    fetchData();
+    void fetchData();
+    return () => { readGeneration.current += 1; };
   }, [fetchData, refreshKey]);
 
   // 全局营养/计划变动与数据轮询自动刷新监听
@@ -84,26 +98,28 @@ export function SupplementQuickCheckIn({ babyId, date, refreshKey, onRecordSucce
     };
   }, [fetchData]);
 
-  const handleCheckIn = async (product: SupplementProduct, forceOverride = false) => {
+  const handleCheckIn = async (product: SupplementProduct, forceOverride = false, intendedDose = product.defaultDose) => {
     setSubmittingId(product.id);
     try {
-      const res = await nutritionFetch("/api/nutrition/records", {
+      const res = await scopedRequest("/api/nutrition/records", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           babyId,
           productId: product.id,
-          dose: product.defaultDose || 1.0,
+          dose: intendedDose,
           unitName: product.unitName,
           date: targetDate,
           forceOverride,
         }),
-      });
+      }, [409]);
 
       if (res.status === 409) {
         // 触发冲突拦截！
         const conflictData = await res.json();
+        if (conflictData.requiresConfirmation !== true) throw new Error(conflictData.error || "记录已变更，请刷新后重试");
         setConflictModal({
+          dose: intendedDose,
           isOpen: true,
           product,
           warnings: conflictData.warnings || [],
@@ -113,8 +129,8 @@ export function SupplementQuickCheckIn({ babyId, date, refreshKey, onRecordSucce
       }
 
       if (res.ok) {
-        setConflictModal({ isOpen: false, product: null, warnings: [], details: [] });
-        await fetchData();
+        setConflictModal({ isOpen: false, product: null, warnings: [], details: [], dose: 1 });
+        if (!(await fetchData())) return;
         if (onRecordSuccess) onRecordSuccess();
         window.dispatchEvent(new CustomEvent("baby:nutrition-updated"));
         // 刷新时间轴与每日概览，确保打卡流水立即呈现在时间轴上
@@ -128,7 +144,7 @@ export function SupplementQuickCheckIn({ babyId, date, refreshKey, onRecordSucce
       }
     } catch (e) {
       console.error("Check in error:", e);
-      alert("网络请求失败，请稍后重试");
+      if (!(e instanceof NutritionScopeChanged)) alert(e instanceof Error ? e.message : "网络请求失败，请稍后重试");
     } finally {
       setSubmittingId(null);
     }
@@ -230,7 +246,7 @@ export function SupplementQuickCheckIn({ babyId, date, refreshKey, onRecordSucce
                       <button
                         type="button"
                         disabled={isSubmitting}
-                        onClick={() => handleCheckIn(product, false)}
+                        onClick={() => handleCheckIn(product, false, item.targetDose)}
                         className="px-3.5 py-1.5 rounded-full bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-white text-xs font-bold flex items-center gap-1 shadow-button transition-all disabled:opacity-50 cursor-pointer"
                       >
                         {isSubmitting ? (
@@ -272,7 +288,7 @@ export function SupplementQuickCheckIn({ babyId, date, refreshKey, onRecordSucce
                 </div>
               </div>
               <button
-                onClick={() => setConflictModal({ isOpen: false, product: null, warnings: [], details: [] })}
+                onClick={() => setConflictModal({ isOpen: false, product: null, warnings: [], details: [], dose: 1 })}
                 className="p-1 rounded-full text-text-muted hover:bg-gray-100 dark:hover:bg-gray-800"
               >
                 <X size={16} />
@@ -314,7 +330,7 @@ export function SupplementQuickCheckIn({ babyId, date, refreshKey, onRecordSucce
             <div className="flex gap-2 pt-3 border-t border-divider shrink-0">
               <button
                 type="button"
-                onClick={() => setConflictModal({ isOpen: false, product: null, warnings: [], details: [] })}
+                onClick={() => setConflictModal({ isOpen: false, product: null, warnings: [], details: [], dose: 1 })}
                 className="flex-1 py-2.5 rounded-full border border-gray-300 dark:border-gray-700 text-xs text-text-secondary dark:text-gray-300 font-bold hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
               >
                 取消打卡
@@ -324,7 +340,7 @@ export function SupplementQuickCheckIn({ babyId, date, refreshKey, onRecordSucce
                 className="flex-1 text-xs shadow-button"
                 onClick={() => {
                   if (conflictModal.product) {
-                    handleCheckIn(conflictModal.product, true);
+                    handleCheckIn(conflictModal.product, true, conflictModal.dose);
                   }
                 }}
               >

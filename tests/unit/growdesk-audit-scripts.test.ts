@@ -16,7 +16,7 @@ function compare(left: string, right: string, extra: string[] = []) {
     const growdesk = path.join(directory, "test_growdesk.json");
     writeFileSync(legacy, left, { mode: 0o600 });
     writeFileSync(growdesk, right, { mode: 0o600 });
-    return spawnSync("python3", ["-I", "-S", comparator, "--legacy-json", legacy, "--growdesk-json", growdesk, ...extra], {
+    return spawnSync("python3", [comparator, "--legacy-json", legacy, "--growdesk-json", growdesk, ...extra], {
       encoding: "utf8", timeout: 10_000,
     });
   } finally {
@@ -122,7 +122,7 @@ connection.commit()
 connection.close()
 `;
   try {
-    const setup = spawnSync("python3", ["-I", "-S", "-c", fixture, database, extraFamilies ? "1" : "0", orphan ? "1" : "0"], {
+    const setup = spawnSync("python3", ["-c", fixture, database, extraFamilies ? "1" : "0", orphan ? "1" : "0"], {
       encoding: "utf8", timeout: 10_000,
     });
     assert.equal(setup.status, 0, setup.stderr);
@@ -132,7 +132,7 @@ connection.close()
   }
 }
 function inspect(database: string, extra: string[] = []) {
-  return spawnSync("python3", ["-I", "-S", preflight, "--snapshot", database, "--check-only", ...extra], {
+  return spawnSync("python3", [preflight, "--snapshot", database, "--check-only", ...extra], {
     encoding: "utf8", timeout: 10_000,
   });
 }

@@ -1,9 +1,12 @@
-import { growdeskCompanionEndpoints } from "@/lib/growdesk/companion-runtime";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/api-helpers";
 import { GROWDESK_CONFIG } from "@/lib/config";
+import { resolveBffSession } from "@/lib/growdesk/session";
 import { BridgeError } from "@/lib/growdesk/bridge-protocol";
+import { acknowledgeGrowDeskVoiceLog, getGrowDeskVoiceLog } from "@/lib/growdesk/voice-log-api";
+import { growdeskFetch } from "@/lib/growdesk/client";
+import { verifyBffCsrf } from "@/lib/growdesk/csrf";
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +16,16 @@ export async function GET(
 ) {
   try {
     if (GROWDESK_CONFIG.enabled) {
-      return growdeskCompanionEndpoints.getVoiceLog(request, (await props.params).id);
+      const bffSession = await resolveBffSession(request);
+      if (!bffSession) {
+        return NextResponse.json({ success: false, error: "Unauthorized: 会话无效或已过期" }, { status: 401 });
+      }
+      const { id } = await props.params;
+      const log = await getGrowDeskVoiceLog(growdeskFetch, bffSession.accessToken, id);
+      if (log.id !== id || log.userId !== bffSession.user.id) {
+        throw new BridgeError(502, "UPSTREAM_SCOPE_MISMATCH", "服务端返回了其他用户的语音记录");
+      }
+      return NextResponse.json({ success: true, log }, { headers: { "cache-control": "no-store" } });
     }
 
     const auth = await requireAuth(request);
@@ -37,7 +49,7 @@ export async function GET(
     return NextResponse.json({ success: true, log });
   } catch (error: any) {
     if (GROWDESK_CONFIG.enabled && error instanceof BridgeError) {
-      return NextResponse.json({ success: false, error: error.message }, { status: error.status });
+      return NextResponse.json({ success: false, error: error.message, code: error.code }, { status: error.status, headers: { "cache-control": "no-store" } });
     }
     console.error("GET /api/agent/voice/logs/[id] error:", error);
     return NextResponse.json(
@@ -53,7 +65,21 @@ export async function PATCH(
 ) {
   try {
     if (GROWDESK_CONFIG.enabled) {
-      return growdeskCompanionEndpoints.acknowledgeVoiceLog(request, (await props.params).id);
+      const csrf = verifyBffCsrf(request, { enforceInTest: true });
+      if (csrf) return csrf;
+      const bffSession = await resolveBffSession(request);
+      if (!bffSession) {
+        return NextResponse.json({ success: false, error: "Unauthorized: 会话无效或已过期" }, { status: 401 });
+      }
+      const { id } = await props.params;
+      const body: unknown = await request.json().catch(() => null);
+      const value = body && typeof body === "object" && !Array.isArray(body)
+        ? (body as Record<string, unknown>).acknowledged : undefined;
+      if (value !== true && value !== false && value !== "true" && value !== "false") {
+        throw new BridgeError(400, "INVALID_ACKNOWLEDGEMENT", "acknowledged 必须为布尔值");
+      }
+      await acknowledgeGrowDeskVoiceLog(growdeskFetch, bffSession.accessToken, id, value === true || value === "true");
+      return NextResponse.json({ success: true }, { headers: { "cache-control": "no-store" } });
     }
 
     const auth = await requireAuth(request);
@@ -78,7 +104,7 @@ export async function PATCH(
     return NextResponse.json({ success: true });
   } catch (error: any) {
     if (GROWDESK_CONFIG.enabled && error instanceof BridgeError) {
-      return NextResponse.json({ success: false, error: error.message }, { status: error.status });
+      return NextResponse.json({ success: false, error: error.message, code: error.code }, { status: error.status, headers: { "cache-control": "no-store" } });
     }
     console.error("PATCH /api/agent/voice/logs/[id] error:", error);
     return NextResponse.json(

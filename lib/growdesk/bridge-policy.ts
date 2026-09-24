@@ -80,12 +80,6 @@ export function isBridgedMethod(
   // The Go preview must never silently fall back to Web-local AI/PAT state.
   if (backend === "go" && isPendingGoRoute(pathname)) return false;
 
-  if (/^\/api\/agent\/voice\/logs\/[a-f0-9-]{36}$/i.test(pathname)) {
-    return ["GET", "PATCH"].includes(upperMethod);
-  }
-  if (/^\/api\/notifications\/[a-f0-9-]{36}$/i.test(pathname)) {
-    return ["POST", "PATCH"].includes(upperMethod);
-  }
   // Dynamic session-item handlers implement GET/PATCH/DELETE (POST stays 404-ish upstream).
   if (/^\/api\/ai\/sessions\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(pathname)) {
     return ["GET", "PATCH", "DELETE"].includes(upperMethod);
@@ -93,8 +87,11 @@ export function isBridgedMethod(
   if (/^\/api\/ai\/jobs\/[^/]+$/.test(pathname)) {
     return backend === "typescript" && ["GET", "PATCH"].includes(upperMethod);
   }
+  if (/^\/api\/notifications\/[^/]+$/.test(pathname)) return ["POST", "PATCH"].includes(upperMethod);
+  if (/^\/api\/agent\/voice\/logs\/[^/]+$/.test(pathname)) return ["GET", "PATCH"].includes(upperMethod);
+  if (pathname.startsWith("/api/legacy-attachments/")) return ["GET", "HEAD"].includes(upperMethod);
   if (/^\/api\/books\/[^/]+$/.test(pathname)) return upperMethod === "PATCH";
   if (/^\/api\/medical\/reports\/[a-f0-9-]{36}$/i.test(pathname)) return ["GET", "PUT", "PATCH", "DELETE"].includes(upperMethod);
-  if (/^\/api\/attachments\/[a-f0-9-]{36}$/i.test(pathname)) return upperMethod === "GET";
+  if (/^\/api\/attachments\/[a-f0-9-]{36}$/i.test(pathname)) return ["GET", "HEAD"].includes(upperMethod);
   return BRIDGED_METHODS[pathname]?.includes(upperMethod) ?? false;
 }

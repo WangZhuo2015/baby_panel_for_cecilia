@@ -1,11 +1,11 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React from "react";
 import { useRouter } from "next/navigation";
 import { Bell } from "lucide-react";
 import { useBabyStore } from "@/stores/useBabyStore";
 import { calculateAge } from "@/lib/age";
-import { calculateUnreadCount } from "@/lib/notifications-storage";
+import { useNotificationInbox } from "@/lib/hooks/useNotificationInbox";
 import { BabyAvatar } from "@/components/ui/BabyAvatar";
 
 interface BabyProfileHeaderProps {
@@ -26,43 +26,7 @@ export const BabyProfileHeader: React.FC<BabyProfileHeaderProps> = ({
 }) => {
   const baby = useBabyStore((s) => s.baby);
   const router = useRouter();
-  const [unreadCount, setUnreadCount] = useState(0);
-  const notificationRequestGeneration = useRef(0);
-
-  const fetchCount = useCallback(async () => {
-    const requestedBabyId = baby?.id ?? null;
-    const requestGeneration = ++notificationRequestGeneration.current;
-    try {
-      const url = requestedBabyId
-        ? `/api/notifications?babyId=${encodeURIComponent(requestedBabyId)}`
-        : "/api/notifications";
-      const res = await fetch(url);
-      if (res.ok) {
-        const data = await res.json();
-        if (
-          requestGeneration !== notificationRequestGeneration.current
-          || (useBabyStore.getState().baby?.id ?? null) !== requestedBabyId
-        ) {
-          return;
-        }
-        const list = Array.isArray(data) ? data : [];
-        setUnreadCount(calculateUnreadCount(list));
-      }
-    } catch {
-      // ignore
-    }
-  }, [baby?.id]);
-
-  useEffect(() => {
-    fetchCount();
-    const handler = () => fetchCount();
-    window.addEventListener("notifications-read", handler);
-    window.addEventListener("baby:data-polled", handler);
-    return () => {
-      window.removeEventListener("notifications-read", handler);
-      window.removeEventListener("baby:data-polled", handler);
-    };
-  }, [fetchCount]);
+  const { unreadCount } = useNotificationInbox();
 
   if (!baby) return null;
 

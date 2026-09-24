@@ -4,6 +4,18 @@ import { isBridgedMethod } from "@/lib/growdesk/bridge-policy";
 
 /** Routing fence only. Session and BabyMember authorization remain in the handlers/API. */
 export function proxy(request: NextRequest) {
+  // Rewrite before public-file routing: otherwise a surviving file under
+  // public/uploads could bypass the dynamic /uploads handler entirely.
+  if (GROWDESK_CONFIG.enabled && request.nextUrl.pathname.startsWith("/uploads/")) {
+    if (!["GET", "HEAD"].includes(request.method)) {
+      return NextResponse.json({ error: "Method not allowed" }, {
+        status: 405, headers: { allow: "GET, HEAD", "cache-control": "no-store" },
+      });
+    }
+    const target = request.nextUrl.clone();
+    target.pathname = `/api/legacy-attachments${request.nextUrl.pathname.slice("/uploads".length)}`;
+    return NextResponse.rewrite(target);
+  }
   if (
     !GROWDESK_CONFIG.enabled ||
     isBridgedMethod(request.nextUrl.pathname, request.method, GROWDESK_CONFIG.backend)
@@ -20,5 +32,5 @@ export function proxy(request: NextRequest) {
   }, { status: 501, headers: { "cache-control": "no-store" } });
 }
 export const config = {
-  matcher: ["/api/:path*", "/mcp/:path*", "/oauth/:path*", "/.well-known/:path*"],
+  matcher: ["/uploads/:path*", "/api/:path*", "/mcp/:path*", "/oauth/:path*", "/.well-known/:path*"],
 };
