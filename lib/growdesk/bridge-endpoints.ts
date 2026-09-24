@@ -30,6 +30,8 @@ export { GROWDESK_REPRESENTATION_HEADER } from "./legacy-projections";
 export interface WebSession {
   accessToken: string;
   user: { id: string; username: string; displayName: string };
+  sessionSecret?: string;
+  isNewSession?: boolean;
 }
 
 export interface LegacyFamily {
@@ -247,11 +249,15 @@ export function createIdentityEndpoints(deps: EndpointDependencies) {
             };
           }
         }
-        return json({
+        const response = json({
           user: extended ? session.user : legacyUser(session.user),
           ...identityResponse(identity, extended),
           membership,
         });
+        if (session.isNewSession && session.sessionSecret) {
+          deps.setSessionCookie?.(response, session.sessionSecret);
+        }
+        return response;
       } catch (error) {
         return bridgeErrorResponse(error);
       }

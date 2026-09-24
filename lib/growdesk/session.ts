@@ -20,6 +20,7 @@ export interface ActiveBffSession {
   accessToken: string;
   user: BffSessionUser;
   sessionSecret: string;
+  isNewSession?: boolean;
 }
 export interface BffFamily {
   id: string;
@@ -58,6 +59,28 @@ export async function getBffSessionSecret(request?: Request): Promise<string | n
   }
   try { return validSecret((await cookies()).get(GROWDESK_CONFIG.cookieName)?.value); } catch { return null; }
 }
+
+export async function getLegacyAuthToken(request?: Request): Promise<string | null> {
+  if (request) {
+    const authHeader = request.headers.get("authorization");
+    if (authHeader?.startsWith("Bearer ")) return authHeader.slice(7);
+    const cookieHeader = request.headers.get("cookie");
+    if (cookieHeader) {
+      const match = cookieHeader.match(/(?:^|;\s*)(?:baby_auth_token|auth_token)=([^;]*)/);
+      if (match) {
+        try { return decodeURIComponent(match[1]!); } catch { return null; }
+      }
+    }
+  }
+  try {
+    const cookieStore = await cookies();
+    const token = cookieStore.get("baby_auth_token")?.value || cookieStore.get("auth_token")?.value;
+    return token || null;
+  } catch {
+    return null;
+  }
+}
+
 const requestSessions = new WeakMap<Request, Promise<ActiveBffSession | null>>();
 export function resolveBffSession(request?: Request): Promise<ActiveBffSession | null> {
   if (request) {
@@ -71,7 +94,23 @@ export function resolveBffSession(request?: Request): Promise<ActiveBffSession |
 }
 async function exchangeSession(request?: Request): Promise<ActiveBffSession | null> {
   const sessionSecret = await getBffSessionSecret(request);
-  if (!sessionSecret) return null;
+  if (!sessionSecret) {
+    const legacyToken = await getLegacyAuthToken(request);
+    if (!legacyToken) return null;
+    const candidateSecret = crypto.randomBytes(32).toString("hex");
+    const result = await growdeskFetch<{ accessToken: string; user: BffSessionUser }>("/api/v1/auth/bff/session", {
+      method: "POST",
+      body: {
+        sessionSecretHash: hashSessionSecret(candidateSecret),
+        legacyAuthToken: legacyToken,
+        deviceLabel: "GrowDesk Web",
+      },
+    });
+    if (!result.ok && (result.status === 401 || result.status === 404)) return null;
+    const data = requireData(result);
+    if (!data.accessToken || !data.user?.id) throw new BridgeError(502, "UPSTREAM_INVALID_SESSION", "GrowDesk 会话响应无效");
+    return { accessToken: data.accessToken, user: data.user, sessionSecret: candidateSecret, isNewSession: true };
+  }
   const result = await growdeskFetch<{ accessToken: string; user: BffSessionUser }>("/api/v1/auth/bff/session", {
     method: "POST", body: { sessionSecretHash: hashSessionSecret(sessionSecret) },
   });
