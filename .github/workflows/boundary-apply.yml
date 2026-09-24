@@ -21,12 +21,16 @@ jobs:
         run: |
           set -eu
           test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
+          digest=$(sha256sum .review/boundary.patch | cut -d' ' -f1)
+          if test -f .review/boundary-applied && test "$(cat .review/boundary-applied)" = "$digest"; then
+            echo 'This exact patch was already applied'; exit 0
+          fi
           python3 - <<'PY'
           import pathlib, subprocess
           patch = pathlib.Path('.review/boundary.patch')
           data = patch.read_text()
           assert len(data.encode()) < 200000
-          allowed = ('app/api/nutrition/', 'components/nutrition/', 'lib/nutrition/', 'lib/growdesk/', 'lib/hooks/', 'tests/unit/', 'app/notifications/', 'app/api/notifications/', 'app/(main)/nutrition/')
+          allowed = ('app/api/nutrition/', 'components/nutrition/', 'lib/nutrition/', 'lib/growdesk/', 'lib/hooks/', 'tests/unit/', 'app/notifications/', 'app/api/notifications/', 'app/(main)/nutrition/', 'app/(main)/page.tsx', 'components/ui/BabyProfileHeader.tsx', 'lib/notification')
           for line in data.splitlines():
               if line.startswith(('new file mode ', 'old mode ', 'new mode ')):
                   assert line.endswith('100644'), 'Only regular source files are allowed'
@@ -37,8 +41,14 @@ jobs:
               assert path.startswith(allowed) and path.endswith(('.ts', '.tsx')), path
               assert '..' not in pathlib.PurePosixPath(path).parts
           PY
-          git apply --check --index .review/boundary.patch
-          git apply --index .review/boundary.patch
+          if git apply --reverse --check .review/boundary.patch 2>/dev/null; then
+            echo 'Patch content already present; recording its receipt'
+          else
+            git apply --check --index .review/boundary.patch
+            git apply --index .review/boundary.patch
+          fi
+          printf '%s\n' "$digest" > .review/boundary-applied
+          git add .review/boundary-applied
           git diff --cached --check
           git diff --cached --stat
           git config user.name 'github-actions[bot]'
