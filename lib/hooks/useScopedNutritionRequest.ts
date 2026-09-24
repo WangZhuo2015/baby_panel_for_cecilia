@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useMemo } from "react";
 import { useBabyStore } from "@/stores/useBabyStore";
 import { useToast } from "@/components/ui/Toast";
-import { createScopedNutritionRequest, NutritionScopeChanged, type NutritionClientScope } from "@/lib/nutrition/scoped-request";
+import { createScopedNutritionRequest, NutritionScopeChanged, sameNutritionScope, type NutritionClientScope } from "@/lib/nutrition/scoped-request";
 
 function currentScope(babyId?: string): NutritionClientScope | null {
   const state = useBabyStore.getState();
@@ -21,7 +21,20 @@ export function useScopedNutritionRequest(babyId?: string) {
   const scopeKey = useNutritionScopeKey(babyId);
   const { showToast } = useToast();
   const client = useMemo(() => createScopedNutritionRequest(currentScope(babyId), () => currentScope(babyId)), [babyId, scopeKey]);
-  useEffect(() => { client.activate(); return () => client.dispose(); }, [client]);
+  useEffect(() => {
+    client.activate();
+    let observed = currentScope(babyId);
+    const unsubscribe = useBabyStore.subscribe(() => {
+      const next = currentScope(babyId);
+      if ((next === null && observed === null) || sameNutritionScope(next, observed)) return;
+      observed = next;
+      // React can batch A -> B -> A into one render. Advance the request epoch
+      // synchronously on each store transition, not only during effect cleanup.
+      client.dispose();
+      client.activate();
+    });
+    return () => { unsubscribe(); client.dispose(); };
+  }, [client, babyId]);
   return useCallback(async (path: string, init?: RequestInit, allowStatuses?: readonly number[]) => {
     try { return await client.request(path, init, allowStatuses); }
     catch (error) {
