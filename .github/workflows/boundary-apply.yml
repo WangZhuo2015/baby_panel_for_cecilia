@@ -34,18 +34,18 @@ jobs:
           for line in data.splitlines():
               if line.startswith(('new file mode ', 'old mode ', 'new mode ')):
                   assert line.endswith('100644'), 'Only regular source files are allowed'
-          rows = subprocess.check_output(['git', 'apply', '--numstat', str(patch)], text=True).splitlines()
+          rows = subprocess.check_output(['git', 'apply', '--recount', '--numstat', str(patch)], text=True).splitlines()
           assert 1 <= len(rows) <= 25
           for row in rows:
               path = row.split('\t')[-1]
               assert path.startswith(allowed) and path.endswith(('.ts', '.tsx')), path
               assert '..' not in pathlib.PurePosixPath(path).parts
           PY
-          if git apply --reverse --check .review/boundary.patch 2>/dev/null; then
+          if git apply --recount --reverse --check .review/boundary.patch 2>/dev/null; then
             echo 'Patch content already present; recording its receipt'
           else
-            git apply --check --index .review/boundary.patch
-            git apply --index .review/boundary.patch
+            git apply --recount --check --index .review/boundary.patch
+            git apply --recount --index .review/boundary.patch
           fi
           printf '%s\n' "$digest" > .review/boundary-applied
           git add .review/boundary-applied
@@ -53,7 +53,7 @@ jobs:
           git diff --cached --stat
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git commit -m 'fix(web): apply reviewed nutrition and notification boundary increment'
+          git commit -m 'fix(web): wire server notification state and scoped inbox actions'
           remote=$(git ls-remote origin "refs/heads/$TARGET_BRANCH" | cut -f1)
           test "$remote" = "$EXPECTED_HEAD"
           git push origin "HEAD:refs/heads/$TARGET_BRANCH"
