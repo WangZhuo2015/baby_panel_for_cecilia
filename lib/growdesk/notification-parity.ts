@@ -10,6 +10,7 @@ import {
 import { dayBoundsInTimeZone } from "./record-list";
 import { fetchCompleteList } from "./paged-list";
 import { fromGrowDeskNotification } from "./notifications";
+import { projectNotificationReadState } from "./notification-state";
 import { decodeNotes } from "./food-compat";
 import { extractProductIdFromNotes } from "./nutrition-compat";
 import { readLegacyPendingVaccines, readPendingPlan } from "./vaccine-pending-compat";
@@ -43,6 +44,7 @@ interface CanonicalNotification {
   title: string;
   body: string;
   data?: JsonObject | null;
+  readAt?: unknown;
   createdAt: string;
 }
 
@@ -163,7 +165,7 @@ function validateCanonicalNotification(
   }
   const data = value.data === null || value.data === undefined ? null : value.data;
   if (!notificationMatchesScope(data ?? {}, scope)) return null;
-  return { id, userId: ownerId, eventKey, title, body, data, createdAt };
+  return { id, userId: ownerId, eventKey, title, body, data, createdAt, readAt: value.readAt };
 }
 
 export function legacyMemberLabel(relation: string, displayName: string, username = ""): string {
@@ -551,12 +553,13 @@ export async function fetchGrowDeskNotificationItems(
   userId: string,
   scope?: GrowDeskNotificationScope,
   nowMs = Date.now(),
+  extended = false,
 ): Promise<NotificationItem[]> {
   const rawRemote = await fetchCompleteList<unknown>(fetchApi, token, "/api/v1/notifications");
   const remote = rawRemote
     .map(item => validateCanonicalNotification(item, userId, scope))
     .filter((item): item is CanonicalNotification => item !== null)
-    .map(item => fromGrowDeskNotification(item));
+    .map(item => projectNotificationReadState(fromGrowDeskNotification(item), item, extended));
 
   if (!scope) {
     const seen = new Set<string>();

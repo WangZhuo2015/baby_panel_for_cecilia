@@ -6,7 +6,7 @@ import { BridgeError, isoTimestamp, wireVersion } from "./bridge-protocol";
 import { formatIsoToLocalTime, getLocalDateStr } from "@/lib/date";
 import { getFeedingEffectiveMl } from "@/lib/nutrition/breastmilk";
 import { decodeNotes } from "./food-compat";
-import { extractProductIdFromNotes, parseSupplementAmount } from "./nutrition-compat";
+import { extractProductIdFromNotes, parseSupplementAmount, findMatchingSupplementProduct, supplementProductReference } from "./nutrition-compat";
 
 export interface GrowDeskTimelineEntry {
   id: string;
@@ -390,22 +390,23 @@ export function fromGrowDeskTimelineEntry(
       sourceAgent = supp.sourceAgent || null;
       const recordedById = supp.recordedByUserId || supp.recordedById;
       recorderName = lookup(context.memberNames, recordedById) || null;
-      const explicitProdId = supp.productId || supp.supplementProductId;
-      let prod = lookup(context.supplementProducts, explicitProdId);
-      if (!prod && typeof supp.supplementName === "string") {
-        const candidates = context.supplementProducts instanceof Map
-          ? Array.from(context.supplementProducts.values())
-          : Object.values(context.supplementProducts || {});
-        prod = candidates.find(candidate => candidate && typeof candidate === "object" && candidate.name === supp.supplementName);
-      }
-      const prodId = explicitProdId || prod?.id;
+      const reference = supplementProductReference(supp.productId ?? supp.supplementProductId, supp.notes);
+      const candidates = context.supplementProducts instanceof Map
+        ? Array.from(context.supplementProducts.values())
+        : Object.values(context.supplementProducts || {});
+      const prod = findMatchingSupplementProduct(
+        typeof supp.supplementName === "string" ? supp.supplementName : "",
+        reference.productId,
+        candidates.filter(candidate => candidate && typeof candidate.id === "string" && typeof candidate.name === "string"),
+      );
+      const prodId = reference.productId || prod?.id;
       const prodName = supp.productName || supp.supplementName || prod?.name || "营养补充剂";
       const parsedAmount = typeof supp.amount === "string" ? parseSupplementAmount(supp.amount) : null;
       const unit = supp.unitName || parsedAmount?.unitName || prod?.unitName || "剂";
       const rawDose = supp.dose ?? supp.dosage ?? parsedAmount?.dose ?? "";
       const numericDose = typeof rawDose === "string" && rawDose.trim() !== "" ? Number(rawDose) : rawDose;
       const dose = typeof numericDose === "number" && Number.isFinite(numericDose) ? numericDose : rawDose;
-      const notes = extractProductIdFromNotes(supp.notes).cleanNotes;
+      const notes = reference.cleanNotes;
       let d = `${prodName} ${dose} ${unit}`.trim();
       if (notes) d += ` · ${notes}`;
       detail = d;

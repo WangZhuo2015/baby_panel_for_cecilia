@@ -43,7 +43,7 @@ test("attachment BFF streams canonical content without requesting a signed read 
 
   assert.equal(response.status, 200);
   assert.equal(response.headers.get("content-type"), "image/png");
-  assert.equal(response.headers.get("content-length"), "21");
+  assert.equal(response.headers.get("content-length"), null, "the decoded stream must not inherit a possibly compressed upstream length");
   assert.equal(response.headers.get("cache-control"), "private, no-store");
   assert.equal(await response.text(), "test_attachment_bytes");
   assert.equal(requests.some(({ url }) => url.includes("/download-url")), false);

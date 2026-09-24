@@ -9,16 +9,19 @@ import type { FeedingRecord } from "@/types";
 import { GROWDESK_CONFIG } from "@/lib/config";
 import { resolveBffSession } from "@/lib/growdesk/session";
 import { growdeskFetch } from "@/lib/growdesk/client";
-import { loadWebBaby } from "@/lib/growdesk/bridge-identity";
+import { assertExpectedActor, requireNutritionBaby } from "@/lib/growdesk/nutrition-scope";
+import { checkedProducts } from "@/lib/growdesk/nutrition-validation";
 import {
   fromGrowDeskFormulaProduct,
   fromGrowDeskSupplementRecordEnriched,
   extractSupplementStateFromFoodPlan,
   type GrowDeskFormulaProduct,
   type GrowDeskSupplementRecord,
+  type GrowDeskSupplementProduct,
+  fromGrowDeskSupplementProduct,
 } from "@/lib/growdesk/nutrition-compat";
 import { fetchCompleteList } from "@/lib/growdesk/paged-list";
-import { requireData, bridgeErrorResponse } from "@/lib/growdesk/bridge-protocol";
+import { requireData, bridgeErrorResponse, BridgeError } from "@/lib/growdesk/bridge-protocol";
 import { fromGrowDeskFeedingRecord, type GrowDeskFeedingRecord } from "@/lib/growdesk/feeding-compat";
 import { fromGrowDeskFoodRecord, type GrowDeskFoodRecord } from "@/lib/growdesk/food-compat";
 import { PRESET_SUPPLEMENT_PRODUCTS } from "@/lib/nutrition/presets";
@@ -33,7 +36,8 @@ export async function GET(request: Request) {
 
       const { searchParams } = new URL(request.url);
       const requestedBabyId = searchParams.get("babyId");
-      const baby = await loadWebBaby(growdeskFetch, bffSession.accessToken, requestedBabyId);
+      assertExpectedActor(request, bffSession.user.id);
+      const baby = await requireNutritionBaby(growdeskFetch, bffSession.accessToken, { babyId: requestedBabyId, familyId: searchParams.get("familyId") });
       if (!baby) {
         return NextResponse.json({ error: "请提供有效的 babyId" }, { status: 400 });
       }
@@ -41,26 +45,35 @@ export async function GET(request: Request) {
       const babyId = baby.id;
       const familyId = baby.familyId;
       const dateParam = searchParams.get("date");
-      const date = dateParam && isValidDateStr(dateParam) ? dateParam : getLocalDateStr();
-      const days = Math.min(90, Math.max(1, parseInt(searchParams.get("days") || "1", 10)));
+      if (dateParam !== null && !isValidDateStr(dateParam)) throw new BridgeError(400, "INVALID_DATE", "date 必须是有效的 YYYY-MM-DD 日期");
+      const date = dateParam ?? getLocalDateStr();
+      const daysParam = searchParams.get("days") ?? "1";
+      if (!/^[1-9]\d*$/.test(daysParam) || Number(daysParam) > 90) throw new BridgeError(400, "INVALID_DAYS", "days 必须为 1–90 的整数");
+      const days = Number(daysParam);
 
       const ageSummary = calculateAge(baby.birthDate);
       const babyAgeMonths = ageSummary.months;
 
       // Statistics require the complete history, including records beyond the first page.
       const token = bffSession.accessToken;
-      const [rawFormulas, fpRes, rawFeedings, rawSupps, rawFoods] = await Promise.all([
-        fetchCompleteList<GrowDeskFormulaProduct>(growdeskFetch, token, `/api/v1/families/${familyId}/nutrition/products`),
-        growdeskFetch<{ planData?: unknown }>(`/api/v1/babies/${babyId}/food-plan`, { accessToken: token }),
+      const [rawFormulas, fpRes, rawFeedings, rawSupps, rawFoods, rawProducts] = await Promise.all([
+        fetchCompleteList<GrowDeskFormulaProduct>(growdeskFetch, token, `/api/v1/families/${familyId}/nutrition/products?includeArchived=true`),
+        growdeskFetch<{ babyId: string; planData?: unknown }>(`/api/v1/babies/${babyId}/food-plan`, { accessToken: token }),
         fetchCompleteList<GrowDeskFeedingRecord>(growdeskFetch, token, `/api/v1/babies/${babyId}/records/feeding`),
         fetchCompleteList<GrowDeskSupplementRecord>(growdeskFetch, token, `/api/v1/babies/${babyId}/records/supplement`),
         fetchCompleteList<GrowDeskFoodRecord>(growdeskFetch, token, `/api/v1/babies/${babyId}/records/food`),
+        fetchCompleteList<GrowDeskSupplementProduct>(growdeskFetch, token, `/api/v1/families/${familyId}/nutrition/supplement-products?includeArchived=true`),
       ]);
-      const planData = requireData(fpRes)?.planData || {};
+      const plan = requireData(fpRes);
+      if (plan.babyId !== babyId) throw new BridgeError(502, "UPSTREAM_SCOPE_MISMATCH", "GrowDesk 返回了其他宝宝的计划");
+      for (const record of [...rawFeedings, ...rawSupps, ...rawFoods]) {
+        if (record.babyId !== babyId || record.familyId !== familyId) throw new BridgeError(502, "UPSTREAM_SCOPE_MISMATCH", "GrowDesk 返回了其他宝宝或家庭的营养记录");
+      }
+      const planData = plan.planData || {};
       const suppState = extractSupplementStateFromFoodPlan(planData);
 
       const allKnownSupplements: SupplementProduct[] = [
-        ...suppState.supplementProducts,
+        ...checkedProducts(rawProducts, familyId).map(fromGrowDeskSupplementProduct),
         ...PRESET_SUPPLEMENT_PRODUCTS.map((p, idx) => ({
           ...p,
           id: (p as any).id || `preset_${idx}`,
@@ -74,7 +87,7 @@ export async function GET(request: Request) {
       }
 
       const formulaProductsMap: Record<string, FormulaProduct> = {};
-      for (const rawF of rawFormulas) {
+      for (const rawF of checkedProducts(rawFormulas, familyId)) {
         formulaProductsMap[rawF.id] = fromGrowDeskFormulaProduct(rawF, {
           defaultFormulaId: suppState.defaultFormulaId,
           customNutrients: suppState.customFormulaNutrients?.[rawF.id],

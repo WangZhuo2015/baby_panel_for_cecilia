@@ -41,7 +41,8 @@ export const BRIDGED_METHODS: Readonly<Record<string, readonly string[]>> = {
   "/api/vaccines/selections": ["GET", "PUT"],
   "/api/records/timeline": ["GET"],
   "/api/notifications": ["GET"],
-  "/api/push/subscribe": ["POST"],
+  "/api/push/subscribe": ["POST", "DELETE"],
+  "/api/push/vapid-key": ["GET"],
   "/api/agent/voice": ["POST"],
   "/api/agent/voice/logs": ["GET"],
   "/api/ai/sessions": ["GET", "POST"],
@@ -86,8 +87,11 @@ export function isBridgedMethod(
   if (/^\/api\/ai\/jobs\/[^/]+$/.test(pathname)) {
     return backend === "typescript" && ["GET", "PATCH"].includes(upperMethod);
   }
+  if (/^\/api\/notifications\/[^/]+$/.test(pathname)) return ["POST", "PATCH"].includes(upperMethod);
+  if (/^\/api\/agent\/voice\/logs\/[^/]+$/.test(pathname)) return ["GET", "PATCH"].includes(upperMethod);
+  if (pathname.startsWith("/api/legacy-attachments/")) return ["GET", "HEAD"].includes(upperMethod);
   if (/^\/api\/books\/[^/]+$/.test(pathname)) return upperMethod === "PATCH";
   if (/^\/api\/medical\/reports\/[a-f0-9-]{36}$/i.test(pathname)) return ["GET", "PUT", "PATCH", "DELETE"].includes(upperMethod);
-  if (/^\/api\/attachments\/[a-f0-9-]{36}$/i.test(pathname)) return upperMethod === "GET";
+  if (/^\/api\/attachments\/[a-f0-9-]{36}$/i.test(pathname)) return ["GET", "HEAD"].includes(upperMethod);
   return BRIDGED_METHODS[pathname]?.includes(upperMethod) ?? false;
 }
