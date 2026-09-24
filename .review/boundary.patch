@@ -1,309 +1,323 @@
-diff --git a/app/api/nutrition/analysis/route.ts b/app/api/nutrition/analysis/route.ts
-index 13b072f..94a2b72 100644
---- a/app/api/nutrition/analysis/route.ts
-+++ b/app/api/nutrition/analysis/route.ts
-@@ -11,3 +11,4 @@
- import { growdeskFetch } from "@/lib/growdesk/client";
--import { loadWebBaby } from "@/lib/growdesk/bridge-identity";
-+import { assertExpectedActor, requireNutritionBaby } from "@/lib/growdesk/nutrition-scope";
-+import { checkedProducts } from "@/lib/growdesk/nutrition-validation";
- import {
-@@ -18,5 +19,7 @@
-   type GrowDeskSupplementRecord,
-+  type GrowDeskSupplementProduct,
-+  fromGrowDeskSupplementProduct,
- } from "@/lib/growdesk/nutrition-compat";
- import { fetchCompleteList } from "@/lib/growdesk/paged-list";
--import { requireData, bridgeErrorResponse } from "@/lib/growdesk/bridge-protocol";
-+import { requireData, bridgeErrorResponse, BridgeError } from "@/lib/growdesk/bridge-protocol";
- import { fromGrowDeskFeedingRecord, type GrowDeskFeedingRecord } from "@/lib/growdesk/feeding-compat";
-@@ -35,3 +38,4 @@
-       const requestedBabyId = searchParams.get("babyId");
--      const baby = await loadWebBaby(growdeskFetch, bffSession.accessToken, requestedBabyId);
-+      assertExpectedActor(request, bffSession.user.id);
-+      const baby = await requireNutritionBaby(growdeskFetch, bffSession.accessToken, { babyId: requestedBabyId, familyId: searchParams.get("familyId") });
-       if (!baby) {
-@@ -43,4 +47,7 @@
-       const dateParam = searchParams.get("date");
--      const date = dateParam && isValidDateStr(dateParam) ? dateParam : getLocalDateStr();
--      const days = Math.min(90, Math.max(1, parseInt(searchParams.get("days") || "1", 10)));
-+      if (dateParam !== null && !isValidDateStr(dateParam)) throw new BridgeError(400, "INVALID_DATE", "date 必须是有效的 YYYY-MM-DD 日期");
-+      const date = dateParam ?? getLocalDateStr();
-+      const daysParam = searchParams.get("days") ?? "1";
-+      if (!/^[1-9]\d*$/.test(daysParam) || Number(daysParam) > 90) throw new BridgeError(400, "INVALID_DAYS", "days 必须为 1–90 的整数");
-+      const days = Number(daysParam);
- 
-@@ -51,5 +58,5 @@
-       const token = bffSession.accessToken;
--      const [rawFormulas, fpRes, rawFeedings, rawSupps, rawFoods] = await Promise.all([
--        fetchCompleteList<GrowDeskFormulaProduct>(growdeskFetch, token, `/api/v1/families/${familyId}/nutrition/products`),
--        growdeskFetch<{ planData?: unknown }>(`/api/v1/babies/${babyId}/food-plan`, { accessToken: token }),
-+      const [rawFormulas, fpRes, rawFeedings, rawSupps, rawFoods, rawProducts] = await Promise.all([
-+        fetchCompleteList<GrowDeskFormulaProduct>(growdeskFetch, token, `/api/v1/families/${familyId}/nutrition/products?includeArchived=true`),
-+        growdeskFetch<{ babyId: string; planData?: unknown }>(`/api/v1/babies/${babyId}/food-plan`, { accessToken: token }),
-         fetchCompleteList<GrowDeskFeedingRecord>(growdeskFetch, token, `/api/v1/babies/${babyId}/records/feeding`),
-@@ -57,4 +64,10 @@
-         fetchCompleteList<GrowDeskFoodRecord>(growdeskFetch, token, `/api/v1/babies/${babyId}/records/food`),
-+        fetchCompleteList<GrowDeskSupplementProduct>(growdeskFetch, token, `/api/v1/families/${familyId}/nutrition/supplement-products?includeArchived=true`),
-       ]);
--      const planData = requireData(fpRes)?.planData || {};
-+      const plan = requireData(fpRes);
-+      if (plan.babyId !== babyId) throw new BridgeError(502, "UPSTREAM_SCOPE_MISMATCH", "GrowDesk 返回了其他宝宝的计划");
-+      for (const record of [...rawFeedings, ...rawSupps, ...rawFoods]) {
-+        if (record.babyId !== babyId || record.familyId !== familyId) throw new BridgeError(502, "UPSTREAM_SCOPE_MISMATCH", "GrowDesk 返回了其他宝宝或家庭的营养记录");
-+      }
-+      const planData = plan.planData || {};
-       const suppState = extractSupplementStateFromFoodPlan(planData);
-@@ -62,3 +75,3 @@
-       const allKnownSupplements: SupplementProduct[] = [
--        ...suppState.supplementProducts,
-+        ...checkedProducts(rawProducts, familyId).map(fromGrowDeskSupplementProduct),
-         ...PRESET_SUPPLEMENT_PRODUCTS.map((p, idx) => ({
-@@ -76,3 +89,3 @@
-       const formulaProductsMap: Record<string, FormulaProduct> = {};
--      for (const rawF of rawFormulas) {
-+      for (const rawF of checkedProducts(rawFormulas, familyId)) {
-         formulaProductsMap[rawF.id] = fromGrowDeskFormulaProduct(rawF, {
-diff --git a/app/api/nutrition/records/route.ts b/app/api/nutrition/records/route.ts
-index e1691c1..a0dae75 100644
---- a/app/api/nutrition/records/route.ts
-+++ b/app/api/nutrition/records/route.ts
-@@ -11,3 +11,4 @@
- import { growdeskFetch } from "@/lib/growdesk/client";
--import { loadWebBaby, loadWebIdentity } from "@/lib/growdesk/bridge-identity";
-+import { assertExpectedActor, requireNutritionBaby } from "@/lib/growdesk/nutrition-scope";
-+import { checkedProducts, positiveDose } from "@/lib/growdesk/nutrition-validation";
- import {
-@@ -15,3 +16,2 @@
-   formatSupplementAmount,
--  encodeProductIdInNotes,
-   findMatchingSupplementProduct,
-@@ -27,3 +27,3 @@
- import { fetchCompleteList } from "@/lib/growdesk/paged-list";
--import { BridgeError, bridgeErrorResponse, isoTimestamp, requireData, pathId } from "@/lib/growdesk/bridge-protocol";
-+import { BridgeError, bridgeErrorResponse, isoTimestamp, requireData, pathId, wireVersion } from "@/lib/growdesk/bridge-protocol";
- import { projectLegacySupplementRecord, wantsExtendedRepresentation } from "@/lib/growdesk/legacy-projections";
-@@ -88,3 +88,4 @@
-       const requestedBabyId = searchParams.get("babyId");
--      const baby = await loadWebBaby(growdeskFetch, bffSession.accessToken, requestedBabyId);
-+      assertExpectedActor(request, bffSession.user.id);
-+      const baby = await requireNutritionBaby(growdeskFetch, bffSession.accessToken, { babyId: requestedBabyId, familyId: searchParams.get("familyId") });
-       if (!baby) {
-@@ -118,3 +119,3 @@
-       const allKnownProducts: SupplementProduct[] = [
--        ...rawProducts.map(fromGrowDeskSupplementProduct),
-+        ...checkedProducts(rawProducts, baby.familyId).map(fromGrowDeskSupplementProduct),
-         ...PRESET_SUPPLEMENT_PRODUCTS.map((p, idx) => ({
-@@ -227,5 +228,6 @@
- 
--      const body = await request.json().catch(() => ({}));
--      const requestedBabyId = body.babyId;
--      const baby = await loadWebBaby(growdeskFetch, bffSession.accessToken, requestedBabyId);
-+      const body = await request.json().catch(() => null);
-+      if (!body || typeof body !== "object" || Array.isArray(body)) throw new BridgeError(400, "INVALID_JSON", "请求正文必须是 JSON 对象");
-+      assertExpectedActor(request, bffSession.user.id);
-+      const baby = await requireNutritionBaby(growdeskFetch, bffSession.accessToken, body);
-       if (!baby) {
-@@ -279,3 +281,3 @@
-       const allKnownProducts: SupplementProduct[] = [
--        ...rawProducts.map(fromGrowDeskSupplementProduct),
-+        ...checkedProducts(rawProducts, baby.familyId).map(fromGrowDeskSupplementProduct),
-         ...PRESET_SUPPLEMENT_PRODUCTS.map((p, idx) => ({
-@@ -287,5 +289,13 @@
- 
--      const product =
--        findMatchingSupplementProduct(customSuppName || productId, productId, allKnownProducts) || {
--          id: productId || crypto.randomUUID(),
-+      const incomingDose = positiveDose(dose);
-+      const catalogProducts = checkedProducts(rawProducts, familyId).map(fromGrowDeskSupplementProduct);
-+      if (productId !== undefined && productId !== null) pathId(productId);
-+      const selectedProduct = findMatchingSupplementProduct(customSuppName || "", productId || null, catalogProducts);
-+      if (productId && !selectedProduct) throw new BridgeError(404, "SUPPLEMENT_PRODUCT_NOT_FOUND", "所选补剂产品不存在，请刷新产品库");
-+      if (!productId && !selectedProduct && catalogProducts.filter(product => product.name.trim().toLowerCase() === String(customSuppName).trim().toLowerCase()).length > 1) {
-+        throw new BridgeError(409, "SUPPLEMENT_SELECTION_REQUIRED", "存在同名补剂，请明确选择产品");
-+      }
-+      if (selectedProduct?.isActive === false) throw new BridgeError(409, "SUPPLEMENT_PRODUCT_INACTIVE", "所选补剂已停用，请重新选择");
-+      const product = selectedProduct || {
-+          id: "",
-           familyId,
-@@ -295,3 +305,3 @@
-           unitName: unitName || "剂",
--          defaultDose: Number(dose) || 1.0,
-+          defaultDose: incomingDose,
-           nutrients: {},
-@@ -337,3 +347,3 @@
-         incomingSupplement: product,
--        incomingDose: Number(dose) || 1.0,
-+        incomingDose,
-         existingRecordsToday: adaptedSuppRecords,
-@@ -358,4 +368,5 @@
-       const occurredAt = localTimeToUtcIso(time, date);
--      const formattedAmount = formatSupplementAmount(Number(dose) || 1.0, unitName || product.unitName);
--      const encodedNotes = encodeProductIdInNotes(product.id, notes);
-+      const formattedAmount = formatSupplementAmount(incomingDose, unitName || product.unitName);
-+      // Canonical productId is stored separately; do not add a second identity to notes.
-+      const cleanNotes = notes === undefined || notes === null ? null : String(notes);
-       const idempotencyKey = clientId || request.headers.get("idempotency-key") || crypto.randomUUID();
-@@ -370,8 +381,8 @@
-             supplementName: product.name,
--            productId: product.id,
-+            productId: selectedProduct?.id ?? null,
-             occurredAt,
-             amount: formattedAmount,
--            dose: String(Number(dose) || 1),
-+            dose: String(incomingDose),
-             unitName: unitName || product.unitName,
--            notes: encodedNotes,
-+            notes: cleanNotes,
-           },
-@@ -598,3 +609,3 @@
-       const requestedBabyId = searchParams.get("babyId") || body.babyId;
--      const baseVersion = searchParams.get("baseVersion") || body.baseVersion || "1";
-+      const baseVersion = wireVersion(searchParams.get("baseVersion") ?? body.baseVersion ?? body.version);
- 
-@@ -604,3 +615,4 @@
- 
--      const baby = await loadWebBaby(growdeskFetch, bffSession.accessToken, requestedBabyId);
-+      assertExpectedActor(request, bffSession.user.id);
-+      const baby = await requireNutritionBaby(growdeskFetch, bffSession.accessToken, { babyId: requestedBabyId, familyId: searchParams.get("familyId") });
-       if (!baby) {
-@@ -610,3 +622,3 @@
-       const res = await growdeskFetch(
--        `/api/v1/babies/${baby.id}/records/supplement/${id}?baseVersion=${baseVersion}`,
-+        `/api/v1/babies/${pathId(baby.id)}/records/supplement/${pathId(id)}?baseVersion=${encodeURIComponent(baseVersion)}`,
-         {
-diff --git a/lib/growdesk/nutrition-compat.ts b/lib/growdesk/nutrition-compat.ts
-index 96569e2..35d6cc7 100644
---- a/lib/growdesk/nutrition-compat.ts
-+++ b/lib/growdesk/nutrition-compat.ts
-@@ -336,24 +336,31 @@
- 
--export function findMatchingSupplementProduct(
-+/** Identity is authoritative. A missing ID never falls through to a same-name product. */
-+export function findMatchingSupplementProduct<T extends { id: string; name: string }>(
-   supplementName: string,
-   taggedProductId: string | null,
--  allProducts: SupplementProduct[]
--): SupplementProduct | undefined {
--  if (taggedProductId) {
--    const byId = allProducts.find((p) => p.id === taggedProductId);
--    if (byId) return byId;
--    const presetById = PRESET_SUPPLEMENT_PRODUCTS.find((p) => (p as any).id === taggedProductId);
--    if (presetById) return { ...presetById, id: taggedProductId, familyId: "" } as SupplementProduct;
--  }
--
-+  allProducts: readonly T[],
-+): T | undefined {
-   const norm = supplementName.toLowerCase().trim();
--  const byName = allProducts.find((p) => p.name.toLowerCase().trim() === norm);
--  if (byName) return byName;
-+  const candidates = taggedProductId
-+    ? allProducts.filter(product => product.id === taggedProductId)
-+    : allProducts.filter(product => product.name.toLowerCase().trim() === norm);
-+  // Returning the first match would silently attach another product's nutrient
-+  // composition to a historical dose. Preserve unresolved history instead.
-+  return candidates.length === 1 ? candidates[0] : undefined;
-+}
- 
--  const presetByName = PRESET_SUPPLEMENT_PRODUCTS.find((p) => p.name.toLowerCase().trim() === norm);
--  if (presetByName) {
--    return { ...presetByName, id: taggedProductId || norm, familyId: "" } as SupplementProduct;
-+export function supplementProductReference(
-+  productId: unknown,
-+  notes: string | null | undefined,
-+): { productId: string | null; cleanNotes: string | null } {
-+  const tagged = extractProductIdFromNotes(notes);
-+  const valid = (value: unknown): value is string => typeof value === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(value);
-+  if (productId !== undefined && productId !== null && !valid(productId)) {
-+    throw new BridgeError(502, "UPSTREAM_INVALID_RECORD", "GrowDesk 返回了无效的补剂产品标识");
-   }
--
--  return undefined;
-+  if (valid(productId)) {
-+    return { productId, cleanNotes: tagged.productId === productId ? tagged.cleanNotes : notes ?? null };
-+  }
-+  if (valid(tagged.productId)) return tagged;
-+  return { productId: null, cleanNotes: notes ?? null };
- }
-@@ -364,6 +371,5 @@
- ): SupplementRecord {
--  const noteProduct = extractProductIdFromNotes(raw.notes);
--  const taggedId = raw.productId || noteProduct.productId;
--  const cleanNotes = raw.productId ? raw.notes : noteProduct.cleanNotes;
--  const matchedProduct = findMatchingSupplementProduct(raw.supplementName, taggedId, allProducts);
-+  const { productId: taggedId, cleanNotes } = supplementProductReference(raw.productId, raw.notes);
-+  const matchedProduct = findMatchingSupplementProduct(raw.supplementName, taggedId,
-+    allProducts.filter(product => product.familyId === raw.familyId));
- 
-@@ -380,3 +386,7 @@
- 
--  const fallbackProduct: SupplementProduct = matchedProduct || {
-+  const fallbackProduct: SupplementProduct = matchedProduct ? {
-+    ...matchedProduct,
-+    // The record name is a historical fact; current catalog renames must not replace it.
-+    name: raw.supplementName || matchedProduct.name,
-+  } : {
-     id: resolvedProductId,
-@@ -390,3 +400,3 @@
-     notes: cleanNotes,
--    isActive: true,
-+    isActive: false,
-   };
-diff --git a/lib/growdesk/timeline-compat.ts b/lib/growdesk/timeline-compat.ts
-index 535931b..b10574e 100644
---- a/lib/growdesk/timeline-compat.ts
-+++ b/lib/growdesk/timeline-compat.ts
-@@ -8,3 +8,3 @@
+diff --git a/lib/growdesk/notification-parity.ts b/lib/growdesk/notification-parity.ts
+--- a/lib/growdesk/notification-parity.ts
++++ b/lib/growdesk/notification-parity.ts
+@@ -12,3 +12,4 @@
+ import { fromGrowDeskNotification } from "./notifications";
++import { projectNotificationReadState } from "./notification-state";
  import { decodeNotes } from "./food-compat";
--import { extractProductIdFromNotes, parseSupplementAmount } from "./nutrition-compat";
-+import { extractProductIdFromNotes, parseSupplementAmount, findMatchingSupplementProduct, supplementProductReference } from "./nutrition-compat";
+@@ -45,3 +45,4 @@ interface CanonicalNotification {
+   data?: JsonObject | null;
++  readAt?: unknown;
+   createdAt: string;
+ }
+@@ -165,3 +165,3 @@
+   if (!notificationMatchesScope(data ?? {}, scope)) return null;
+-  return { id, userId: ownerId, eventKey, title, body, data, createdAt };
++  return { id, userId: ownerId, eventKey, title, body, data, createdAt, readAt: value.readAt };
+ }
+@@ -551,4 +551,5 @@ export async function fetchGrowDeskNotificationItems(
+   scope?: GrowDeskNotificationScope,
+   nowMs = Date.now(),
++  extended = false,
+ ): Promise<NotificationItem[]> {
+@@ -558,2 +559,2 @@
+-    .map(item => fromGrowDeskNotification(item));
++    .map(item => projectNotificationReadState(fromGrowDeskNotification(item), item, extended));
  
-@@ -392,11 +392,12 @@
-       recorderName = lookup(context.memberNames, recordedById) || null;
--      const explicitProdId = supp.productId || supp.supplementProductId;
--      let prod = lookup(context.supplementProducts, explicitProdId);
--      if (!prod && typeof supp.supplementName === "string") {
--        const candidates = context.supplementProducts instanceof Map
--          ? Array.from(context.supplementProducts.values())
--          : Object.values(context.supplementProducts || {});
--        prod = candidates.find(candidate => candidate && typeof candidate === "object" && candidate.name === supp.supplementName);
+ diff --git a/app/api/notifications/route.ts b/app/api/notifications/route.ts
+--- a/app/api/notifications/route.ts
++++ b/app/api/notifications/route.ts
+@@ -16,3 +16,5 @@ export interface NotificationItem {
+   createdAt?: number
++  serverNotificationId?: string
++  readAt?: string | null
+ }
+@@ -58,3 +58,5 @@
+ import { fetchGrowDeskNotificationItems } from "@/lib/growdesk/notification-parity"
++import { wantsExtendedRepresentation } from "@/lib/growdesk/legacy-projections"
++import { assertExpectedActor } from "@/lib/growdesk/nutrition-scope"
+ 
+@@ -66,2 +66,3 @@ async function getGrowDeskNotifications(request: Request): Promise<Response> {
+-  const requestedBabyId = new URL(request.url).searchParams.get("babyId")
++  assertExpectedActor(request, bffSession.user.id)
++  const requestedBabyId = new URL(request.url).searchParams.get("babyId")
+   const identity = requestedBabyId
+@@ -78,4 +78,10 @@
+   if (requestedBabyId && !baby) {
+     throw new BridgeError(400, "BABY_REQUIRED", "请提供有效的 babyId")
+   }
++  if (requestedBabyId && baby?.id !== requestedBabyId) {
++    throw new BridgeError(502, "UPSTREAM_SCOPE_MISMATCH", "GrowDesk 返回了其他宝宝的资料")
++  }
++  const requestedFamilyId = new URL(request.url).searchParams.get("familyId")
++  if (requestedFamilyId && baby?.familyId !== requestedFamilyId) {
++    throw new BridgeError(409, "BABY_SCOPE_MISMATCH", "所选家庭或宝宝已变更")
++  }
+@@ -88,4 +88,6 @@
+       ? { babyId: baby.id, familyId: baby.familyId, birthDate: baby.birthDate }
+       : undefined,
++    Date.now(),
++    wantsExtendedRepresentation(request),
+   )
+-  return NextResponse.json(items)
++  return NextResponse.json(items, { headers: { "cache-control": "no-store" } })
+ }
+ diff --git a/app/api/notifications/[id]/route.ts b/app/api/notifications/[id]/route.ts
+--- a/app/api/notifications/[id]/route.ts
++++ b/app/api/notifications/[id]/route.ts
+@@ -7,2 +7,3 @@
+ import { requireAuth } from "@/lib/api-helpers";
++import { assertExpectedActor } from "@/lib/growdesk/nutrition-scope";
+ 
+@@ -24,3 +24,4 @@
+       if (!bffSession) throw new BridgeError(401, "UNAUTHORIZED", "请先登录");
++      assertExpectedActor(request, bffSession.user.id);
+       const result = requireData(await growdeskFetch<{ success: boolean }>(
+ diff --git a/app/notifications/page.tsx b/app/notifications/page.tsx
+--- a/app/notifications/page.tsx
++++ b/app/notifications/page.tsx
+@@ -3,2 +3,2 @@
+-import { useEffect, useState, useCallback, useRef } from "react";
++import { useEffect, useState, useCallback } from "react";
+ import { useRouter } from "next/navigation";
+@@ -20,29 +20,12 @@
+-import { useBabyStore } from "@/stores/useBabyStore";
+ import { useToast } from "@/components/ui/Toast";
+ import { InstallGuideModal } from "@/components/ui/InstallGuideModal";
+-import {
+-  getReadNotificationIds,
+-  markNotificationRead,
+-  markAllNotificationsRead,
+-  setClearedBeforeTime,
+-  addDismissedNotificationId,
+-  filterVisibleNotifications,
+-} from "@/lib/notifications-storage";
+-
+-interface NotificationItem {
+-  id: string;
+-  type: "vaccine" | "daily" | "data_release" | "family";
+-  title: string;
+-  detail: string;
+-  time: string;
+-  urgent: boolean;
+-  icon: string;
+-  actorId?: string | null;
+-  actorLabel?: string | null;
+-  createdAt?: number;
+-}
++import { useNotificationInbox } from "@/lib/hooks/useNotificationInbox";
++import type { NotificationViewItem as NotificationItem } from "@/lib/notification-actions";
+ 
+@@ -61,5 +61,2 @@ export default function NotificationsPage() {
+-  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+-  const [loading, setLoading] = useState(true);
+-  const [readIds, setReadIds] = useState<Set<string>>(new Set());
+   const [pushEnabled, setPushEnabled] = useState(false);
+@@ -70,6 +67,8 @@
+-  const notificationRequestGeneration = useRef(0);
+-
+-  const baby = useBabyStore((s) => s.baby);
+   const { showToast } = useToast();
++  const reportNotificationError = useCallback((message: string) => showToast(message, "error"), [showToast]);
++  const {
++    notifications, loading, readIds, unreadCount, reload: fetchNotifications,
++    markRead, dismiss, clearAll,
++  } = useNotificationInbox(true, reportNotificationError);
+ 
+@@ -167,69 +167,11 @@
+-  const fetchNotifications = useCallback(async () => {
+-    const requestedBabyId = baby?.id ?? null;
+-    const requestGeneration = ++notificationRequestGeneration.current;
+-    setLoading(true);
+-    try {
+-      const url = requestedBabyId
+-        ? `/api/notifications?babyId=${encodeURIComponent(requestedBabyId)}`
+-        : "/api/notifications";
+-      const res = await fetch(url);
+-      if (res.ok) {
+-        const data = await res.json();
+-        if (
+-          requestGeneration !== notificationRequestGeneration.current
+-          || (useBabyStore.getState().baby?.id ?? null) !== requestedBabyId
+-        ) {
+-          return;
+-        }
+-        const visible = filterVisibleNotifications(Array.isArray(data) ? data : []);
+-        setNotifications(visible);
+-        if (visible.length > 0) {
+-          markAllNotificationsRead(visible.map((n) => n.id));
+-          setReadIds(getReadNotificationIds());
+-          window.dispatchEvent(new CustomEvent("notifications-read"));
+-        }
 -      }
--      const prodId = explicitProdId || prod?.id;
-+      const reference = supplementProductReference(supp.productId ?? supp.supplementProductId, supp.notes);
-+      const candidates = context.supplementProducts instanceof Map
-+        ? Array.from(context.supplementProducts.values())
-+        : Object.values(context.supplementProducts || {});
-+      const prod = findMatchingSupplementProduct(
-+        typeof supp.supplementName === "string" ? supp.supplementName : "",
-+        reference.productId,
-+        candidates.filter(candidate => candidate && typeof candidate.id === "string" && typeof candidate.name === "string"),
-+      );
-+      const prodId = reference.productId || prod?.id;
-       const prodName = supp.productName || supp.supplementName || prod?.name || "营养补充剂";
-@@ -407,3 +408,3 @@
-       const dose = typeof numericDose === "number" && Number.isFinite(numericDose) ? numericDose : rawDose;
--      const notes = extractProductIdFromNotes(supp.notes).cleanNotes;
-+      const notes = reference.cleanNotes;
-       let d = `${prodName} ${dose} ${unit}`.trim();
-diff --git a/tests/unit/growdesk-nutrition-completeness.test.ts b/tests/unit/growdesk-nutrition-completeness.test.ts
-index f78f19a..8f32003 100644
---- a/tests/unit/growdesk-nutrition-completeness.test.ts
-+++ b/tests/unit/growdesk-nutrition-completeness.test.ts
-@@ -14,2 +14,4 @@
- import * as food from "../../lib/growdesk/food-compat";
-+import * as nutritionScope from "../../lib/growdesk/nutrition-scope";
-+import * as nutritionValidation from "../../lib/growdesk/nutrition-validation";
- import * as nutrition from "../../lib/growdesk/nutrition-compat";
-@@ -27,4 +29,6 @@
-     "@/lib/growdesk/nutrition-compat": nutrition,
-+    "@/lib/growdesk/nutrition-validation": nutritionValidation,
-+    "@/lib/growdesk/nutrition-scope": { ...nutritionScope, requireNutritionBaby: async () => ({ id: "test_baby", familyId: "test_family", birthDate: "2026-01-01" }) },
-     "@/lib/growdesk/client": { growdeskFetch: fetchApi },
--    "@/lib/growdesk/session": { resolveBffSession: async () => ({ accessToken: "test_token" }) },
-+    "@/lib/growdesk/session": { resolveBffSession: async () => ({ accessToken: "test_token", user: { id: "test_user" } }) },
-     "@/lib/growdesk/bridge-identity": { loadWebBaby: async () => ({ id: "test_baby", familyId: "test_family", birthDate: "2026-01-01" }) },
-@@ -49,3 +53,3 @@
-     const url = new URL(endpoint, "https://test.invalid"); seen.push(endpoint);
--    if (url.pathname.endsWith("/food-plan")) return { ok: true, status: 200, data: { planData: {} } };
-+    if (url.pathname.endsWith("/food-plan")) return { ok: true, status: 200, data: { babyId: "test_baby", planData: {} } };
-     if (url.pathname.endsWith("/records/feeding")) {
+-    } catch {
+-      // Offline fallback
+-    } finally {
+-      if (
+-        requestGeneration === notificationRequestGeneration.current
+-        && (useBabyStore.getState().baby?.id ?? null) === requestedBabyId
+-      ) {
+-        setLoading(false);
+-      }
+-    }
+-  }, [baby?.id]);
+-
+-  const markRead = useCallback((id: string) => {
+-    markNotificationRead(id);
+-    setReadIds(getReadNotificationIds());
+-    window.dispatchEvent(new CustomEvent("notifications-read"));
+-  }, []);
+-
+-  const handleDismiss = useCallback((id: string, e?: React.MouseEvent) => {
++  const handleDismiss = useCallback(async (id: string, e?: React.MouseEvent) => {
+     e?.stopPropagation();
+-    addDismissedNotificationId(id);
+-    markNotificationRead(id);
+-    setNotifications((prev) => prev.filter((n) => n.id !== id));
+-    setReadIds(getReadNotificationIds());
+-    window.dispatchEvent(new CustomEvent("notifications-read"));
+-    showToast("已清除此条通知 ✨");
+-  }, [showToast]);
++    if (await dismiss(id)) showToast("已在本机清除此条通知 ✨");
++  }, [dismiss, showToast]);
+ 
+   useEffect(() => {
+-    setReadIds(getReadNotificationIds());
+     checkAndSyncPush();
+-    fetchNotifications();
+-  }, [fetchNotifications, checkAndSyncPush]);
+-
+-  const unreadCount = notifications.filter((n) => !readIds.has(n.id)).length;
++  }, [checkAndSyncPush]);
+ 
+@@ -322,13 +280,8 @@
+-  const handleClearAll = () => {
+-    setClearedBeforeTime(Date.now());
+-    markAllNotificationsRead(notifications.map((n) => n.id));
+-    setNotifications([]);
+-    setReadIds(getReadNotificationIds());
+-    window.dispatchEvent(new CustomEvent("notifications-read"));
+-    showToast("已清除全部通知 ✨", "success");
++  const handleClearAll = async () => {
++    if (await clearAll()) showToast("已在本机清除全部通知 ✨", "success");
+   };
+ 
+   const familyNotifs = notifications.filter((n) => n.type === "family");
+   const vaccineNotifs = notifications.filter((n) => n.type === "vaccine");
+-  const dailyNotifs = notifications.filter((n) => n.type === "daily");
++  const dailyNotifs = notifications.filter((n) => n.type === "daily" || n.type === "ai" || n.type === "data_release");
+@@ -601,8 +601,8 @@ function NotificationCard({
+-  onRead: (id: string) => void;
++  onRead: (id: string) => Promise<boolean>;
+   onDismiss?: (id: string, e: React.MouseEvent) => void;
+ }) {
+   const router = useRouter();
+ 
+-  const handleClick = () => {
+-    if (!read) onRead(notification.id);
++  const handleClick = async () => {
++    if (!(await onRead(notification.id))) return;
+     if (notification.type === "vaccine") {
+ diff --git a/components/ui/BabyProfileHeader.tsx b/components/ui/BabyProfileHeader.tsx
+--- a/components/ui/BabyProfileHeader.tsx
++++ b/components/ui/BabyProfileHeader.tsx
+@@ -3,3 +3,3 @@
+-import React, { useState, useEffect, useCallback, useRef } from "react";
++import React from "react";
+ import { useRouter } from "next/navigation";
+@@ -8,2 +8,2 @@
+-import { calculateUnreadCount } from "@/lib/notifications-storage";
++import { useNotificationInbox } from "@/lib/hooks/useNotificationInbox";
+ import { BabyAvatar } from "@/components/ui/BabyAvatar";
+@@ -29,42 +29,3 @@
+   const router = useRouter();
+-  const [unreadCount, setUnreadCount] = useState(0);
+-  const notificationRequestGeneration = useRef(0);
+-
+-  const fetchCount = useCallback(async () => {
+-    const requestedBabyId = baby?.id ?? null;
+-    const requestGeneration = ++notificationRequestGeneration.current;
+-    try {
+-      const url = requestedBabyId
+-        ? `/api/notifications?babyId=${encodeURIComponent(requestedBabyId)}`
+-        : "/api/notifications";
+-      const res = await fetch(url);
+-      if (res.ok) {
+-        const data = await res.json();
+-        if (
+-          requestGeneration !== notificationRequestGeneration.current
+-          || (useBabyStore.getState().baby?.id ?? null) !== requestedBabyId
+-        ) {
+-          return;
+-        }
+-        const list = Array.isArray(data) ? data : [];
+-        setUnreadCount(calculateUnreadCount(list));
+-      }
+-    } catch {
+-      // ignore
+-    }
+-  }, [baby?.id]);
+-
+-  useEffect(() => {
+-    fetchCount();
+-    const handler = () => fetchCount();
+-    window.addEventListener("notifications-read", handler);
+-    window.addEventListener("baby:data-polled", handler);
+-    return () => {
+-      window.removeEventListener("notifications-read", handler);
+-      window.removeEventListener("baby:data-polled", handler);
+-    };
+-  }, [fetchCount]);
++  const { unreadCount } = useNotificationInbox();
+ 
+ diff --git a/app/(main)/page.tsx b/app/(main)/page.tsx
+--- a/app/(main)/page.tsx
++++ b/app/(main)/page.tsx
+@@ -43,4 +43,4 @@
+-import { calculateUnreadCount } from "@/lib/notifications-storage";
++import { useNotificationInbox } from "@/lib/hooks/useNotificationInbox";
+ import { isWorkbenchViewport } from "@/lib/responsive";
+ 
+ function NotificationBell() {
+@@ -47,41 +47,4 @@ function NotificationBell() {
+-  const [unreadCount, setUnreadCount] = useState(0);
+   const router = useRouter();
+-  const baby = useBabyStore((s) => s.baby);
+-  const notificationRequestGeneration = useRef(0);
+-
+-  const fetchCount = useCallback(async () => {
+-    const requestedBabyId = baby?.id ?? null;
+-    const requestGeneration = ++notificationRequestGeneration.current;
+-    try {
+-      const url = requestedBabyId
+-        ? `/api/notifications?babyId=${encodeURIComponent(requestedBabyId)}`
+-        : "/api/notifications";
+-      const res = await fetch(url);
+-      if (res.ok) {
+-        const data = await res.json();
+-        if (
+-          requestGeneration !== notificationRequestGeneration.current
+-          || (useBabyStore.getState().baby?.id ?? null) !== requestedBabyId
+-        ) {
+-          return;
+-        }
+-        const list = Array.isArray(data) ? data : [];
+-        setUnreadCount(calculateUnreadCount(list));
+-      }
+-    } catch {
+-      // ignore
+-    }
+-  }, [baby?.id]);
+-
+-  useEffect(() => {
+-    fetchCount();
+-    const handler = () => fetchCount();
+-    window.addEventListener("notifications-read", handler);
+-    window.addEventListener("baby:data-polled", handler);
+-    return () => {
+-      window.removeEventListener("notifications-read", handler);
+-      window.removeEventListener("baby:data-polled", handler);
+-    };
+-  }, [fetchCount]);
++  const { unreadCount } = useNotificationInbox();
+ 
