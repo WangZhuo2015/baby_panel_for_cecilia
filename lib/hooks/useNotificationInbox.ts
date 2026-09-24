@@ -25,6 +25,8 @@ export function useNotificationInbox(autoRead = false, onError: (message: string
   const familyId = useBabyStore(s => s.family?.id);
   const selectedBabyId = useBabyStore(s => s.selectedBabyId);
   const babyFamilyId = useBabyStore(s => s.baby?.familyId);
+  const authLoading = useBabyStore(s => s.authLoading);
+  const fetchUser = useBabyStore(s => s.fetchUser);
   const key = userId && babyId && familyId && selectedBabyId === babyId && babyFamilyId === familyId
     ? JSON.stringify([userId, familyId, babyId]) : "";
   const [snapshot, setSnapshot] = useState<{ key: string; items: NotificationViewItem[]; loading: boolean }>({ key: "", items: [], loading: false });
@@ -57,6 +59,11 @@ export function useNotificationInbox(autoRead = false, onError: (message: string
     return () => { unsubscribe(); invalidate(); };
   }, [invalidate]);
 
+  // /notifications is outside the main layout. A hard reload creates an empty
+  // store; bootstrap from the real session, never from a cached private record.
+  // fetchUser already deduplicates concurrent layout/badge requests.
+  useEffect(() => { void fetchUser(); }, [fetchUser]);
+
   const acknowledge = useCallback(async (
     items: readonly NotificationViewItem[],
     captured: NotificationIdentity,
@@ -85,7 +92,10 @@ export function useNotificationInbox(autoRead = false, onError: (message: string
 
   const reload = useCallback(async () => {
     const captured = currentNotificationIdentity();
-    if (!captured || identityKey(captured) !== key) return;
+    if (!captured || identityKey(captured) !== key) {
+      await fetchUser();
+      return;
+    }
     const epoch = control.current.epoch;
     const generation = ++control.current.generation;
     control.current.readController?.abort();
@@ -123,7 +133,7 @@ export function useNotificationInbox(autoRead = false, onError: (message: string
         setSnapshot(previous => previous.key === key ? { ...previous, loading: false } : previous);
       }
     }
-  }, [key, autoRead, acknowledge]);
+  }, [key, autoRead, acknowledge, fetchUser]);
 
   useEffect(() => {
     void reload();
@@ -172,8 +182,10 @@ export function useNotificationInbox(autoRead = false, onError: (message: string
   const readIds = new Set(items.filter(item => isNotificationRead(item, localRead)).map(item => item.id));
   return {
     notifications: items,
-    error: failure?.key === key ? failure.message : null,
-    loading: Boolean(key) && (snapshot.key !== key || snapshot.loading),
+    error: failure?.key === key ? failure.message : !authLoading && !key
+      ? userId ? "请先选择有效的家庭和宝宝后加载通知" : "请先登录后加载通知"
+      : null,
+    loading: authLoading || (Boolean(key) && (snapshot.key !== key || snapshot.loading)),
     readIds,
     unreadCount: items.length - readIds.size,
     reload,
