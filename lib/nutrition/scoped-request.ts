@@ -52,6 +52,11 @@ export function createScopedNutritionRequest(
     let body = init.body;
     if (method !== "GET" && method !== "HEAD" && method !== "DELETE") {
       if (body instanceof FormData) {
+        for (const field of ["babyId", "familyId"] as const) {
+          if (body.getAll(field).some(value => value !== identity[field])) {
+            throw new NutritionScopeChanged();
+          }
+        }
         const form = new FormData();
         body.forEach((value, name) => form.append(name, value));
         form.set("babyId", identity.babyId);
@@ -74,7 +79,7 @@ export function createScopedNutritionRequest(
     pending.add(controller);
     const signal = init.signal ? AbortSignal.any([init.signal, controller.signal]) : controller.signal;
     try {
-      const response = await fetchApi(url.pathname + url.search, { ...init, method, headers, body, signal, cache: "no-store" });
+      const response = await fetchApi(url.pathname + url.search, { ...init, method, headers, body, signal, cache: "no-store", redirect: "error" });
       const data: unknown = await response.json();
       check();
       if ((!response.ok && !allowStatuses.includes(response.status)) ||

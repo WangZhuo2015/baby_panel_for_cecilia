@@ -47,7 +47,7 @@ export default function NotificationsPage() {
   const reportNotificationError = useCallback((message: string) => showToast(message, "error"), [showToast]);
   const {
     notifications, loading, readIds, unreadCount, reload: fetchNotifications,
-    markRead, dismiss, clearAll,
+    markRead, dismiss, clearAll, error: notificationError,
   } = useNotificationInbox(true, reportNotificationError);
 
   /** 强制生成最新有效的推送订阅并同步至服务端 */
@@ -387,6 +387,13 @@ export default function NotificationsPage() {
             <Clock size={20} className="text-primary animate-pulse" />
           </div>
           <p className="text-sm text-text-muted">加载中...</p>
+        </div>
+      ) : notificationError && notifications.length === 0 ? (
+        <div role="alert" className="flex flex-col items-center justify-center py-20 space-y-3">
+          <p className="text-sm text-text-secondary">{notificationError}</p>
+          <button type="button" onClick={fetchNotifications} className="btn-press text-sm text-primary cursor-pointer">
+            重新加载
+          </button>
         </div>
       ) : notifications.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20">

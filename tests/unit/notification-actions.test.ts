@@ -52,7 +52,7 @@ test("HTTP success without explicit positive acknowledgement is rejected", async
   }
 });
 
-test("only four acknowledgements run concurrently and queue snapshots cannot be retargeted", async () => {
+test("only four acknowledgements run concurrently and queue snapshots cannot be retargeted", { timeout: 5000 }, async () => {
   const items = Array.from({ length: 12 }, (_, i) => server(`test_n_${i}`));
   const captured = { ...identity };
   const paths: string[] = [];

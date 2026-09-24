@@ -28,7 +28,8 @@ export function useNotificationInbox(autoRead = false, onError: (message: string
   const key = userId && babyId && familyId && selectedBabyId === babyId && babyFamilyId === familyId
     ? JSON.stringify([userId, familyId, babyId]) : "";
   const [snapshot, setSnapshot] = useState<{ key: string; items: NotificationViewItem[]; loading: boolean }>({ key: "", items: [], loading: false });
-  const control = useRef({ epoch: 0, generation: 0, controllers: new Set<AbortController>() });
+  const [failure, setFailure] = useState<{ key: string; message: string } | null>(null);
+  const control = useRef({ epoch: 0, generation: 0, controllers: new Set<AbortController>(), readController: null as AbortController | null });
   const errorHandler = useRef(onError);
   useEffect(() => { errorHandler.current = onError; }, [onError]);
 
@@ -37,6 +38,8 @@ export function useNotificationInbox(autoRead = false, onError: (message: string
     control.current.generation += 1;
     for (const controller of control.current.controllers) controller.abort();
     control.current.controllers.clear();
+    control.current.readController = null;
+    setFailure(null);
   }, []);
 
   useEffect(() => {
@@ -85,7 +88,10 @@ export function useNotificationInbox(autoRead = false, onError: (message: string
     if (!captured || identityKey(captured) !== key) return;
     const epoch = control.current.epoch;
     const generation = ++control.current.generation;
+    control.current.readController?.abort();
     const controller = new AbortController();
+    control.current.readController = controller;
+    setFailure(null);
     control.current.controllers.add(controller);
     const active = () => !controller.signal.aborted && epoch === control.current.epoch &&
       generation === control.current.generation && sameNotificationIdentity(captured, currentNotificationIdentity());
@@ -106,7 +112,9 @@ export function useNotificationInbox(autoRead = false, onError: (message: string
     } catch (error) {
       if (epoch === control.current.epoch && generation === control.current.generation &&
           sameNotificationIdentity(captured, currentNotificationIdentity())) {
-        errorHandler.current(error instanceof Error && error.name !== "AbortError" ? error.message : "通知请求超时，请重试");
+        const message = error instanceof Error && error.name !== "AbortError" ? error.message : "通知请求超时，请重试";
+        setFailure({ key, message });
+        errorHandler.current(message);
       }
     } finally {
       clearTimeout(timer);
@@ -164,6 +172,7 @@ export function useNotificationInbox(autoRead = false, onError: (message: string
   const readIds = new Set(items.filter(item => isNotificationRead(item, localRead)).map(item => item.id));
   return {
     notifications: items,
+    error: failure?.key === key ? failure.message : null,
     loading: Boolean(key) && (snapshot.key !== key || snapshot.loading),
     readIds,
     unreadCount: items.length - readIds.size,
