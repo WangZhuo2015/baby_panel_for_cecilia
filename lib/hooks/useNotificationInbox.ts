@@ -29,6 +29,7 @@ export function useNotificationInbox(autoRead = false, onError: (message: string
   const fetchUser = useBabyStore(s => s.fetchUser);
   const key = userId && babyId && familyId && selectedBabyId === babyId && babyFamilyId === familyId
     ? JSON.stringify([userId, familyId, babyId]) : "";
+  const [identityRevision, setIdentityRevision] = useState(0);
   const [snapshot, setSnapshot] = useState<{ key: string; items: NotificationViewItem[]; loading: boolean }>({ key: "", items: [], loading: false });
   const [failure, setFailure] = useState<{ key: string; message: string } | null>(null);
   const control = useRef({ epoch: 0, generation: 0, controllers: new Set<AbortController>(), readController: null as AbortController | null });
@@ -54,6 +55,9 @@ export function useNotificationInbox(autoRead = false, onError: (message: string
         // React renders. Comparing the final identity alone misses that race.
         invalidate();
         setSnapshot({ key: next, items: [], loading: Boolean(next) });
+        // Even when the final key is unchanged, launch a new load after aborting
+        // the old one; otherwise a batched round trip can leave an empty spinner.
+        setIdentityRevision(value => value + 1);
       }
     });
     return () => { unsubscribe(); invalidate(); };
@@ -133,7 +137,7 @@ export function useNotificationInbox(autoRead = false, onError: (message: string
         setSnapshot(previous => previous.key === key ? { ...previous, loading: false } : previous);
       }
     }
-  }, [key, autoRead, acknowledge, fetchUser]);
+  }, [key, identityRevision, autoRead, acknowledge, fetchUser]);
 
   useEffect(() => {
     void reload();
