@@ -34,7 +34,8 @@ jobs:
           npm ci
           npx prisma generate
           npm run build
-          python3 -m py_compile scripts/review/check-native-go-web.py
+          python3 -m py_compile scripts/review/check-native-go-web.py scripts/review/check-native-boundaries.py
+          node --check scripts/review/check-notification-browser.mjs
       - name: Read immutable Go reference
         id: native
         run: |
@@ -71,9 +72,11 @@ jobs:
           CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X main.revision=$(git rev-parse HEAD)" -o "$RUNNER_TEMP/native-web-bin/growdesk-api" ./cmd/growdesk-api
           git status --short
           test -z "$(git status --porcelain)"
-      - name: Exercise actual Web HTTP and native persistent effects
+      - name: Install isolated CI browser
+        run: npx playwright install --with-deps chromium
+      - name: Exercise actual Web HTTP, Chromium and native persistent effects
         run: |
-          python3 scripts/review/check-native-go-web.py \
+          python3 scripts/review/check-native-boundaries.py \
             --server-root node_modules/.growdesk-test-reference \
             --binary "$RUNNER_TEMP/native-web-bin/growdesk-api" \
             --report "$RUNNER_TEMP/native-web-evidence/report.json"
