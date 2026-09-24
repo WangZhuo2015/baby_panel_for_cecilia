@@ -153,8 +153,8 @@ test("pending POST replay keeps the same legacy record while forwarding idempote
   const calls: Array<{ body: any; idempotencyKey?: string }> = [];
   setupRoute(t, (_url, init) => {
     const body = JSON.parse(String(init?.body));
-    const headers = init?.headers as Record<string, string> | undefined;
-    calls.push({ body, idempotencyKey: headers?.["idempotency-key"] });
+    const headers = new Headers(init?.headers);
+    calls.push({ body, idempotencyKey: headers.get("idempotency-key") ?? undefined });
     if (calls.length === 3) {
       return Response.json({ error: { code: "IDEMPOTENCY_KEY_REUSED", message: "test_payload_mismatch" } }, { status: 409 });
     }
