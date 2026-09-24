@@ -1,440 +1,309 @@
-diff --git a/app/(main)/nutrition/page.tsx b/app/(main)/nutrition/page.tsx
-index b841ba6..6aac41b 100644
---- a/app/(main)/nutrition/page.tsx
-+++ b/app/(main)/nutrition/page.tsx
-@@ -2,3 +2,3 @@
+diff --git a/app/api/nutrition/analysis/route.ts b/app/api/nutrition/analysis/route.ts
+index 13b072f..94a2b72 100644
+--- a/app/api/nutrition/analysis/route.ts
++++ b/app/api/nutrition/analysis/route.ts
+@@ -11,3 +11,4 @@
+ import { growdeskFetch } from "@/lib/growdesk/client";
+-import { loadWebBaby } from "@/lib/growdesk/bridge-identity";
++import { assertExpectedActor, requireNutritionBaby } from "@/lib/growdesk/nutrition-scope";
++import { checkedProducts } from "@/lib/growdesk/nutrition-validation";
+ import {
+@@ -18,5 +19,7 @@
+   type GrowDeskSupplementRecord,
++  type GrowDeskSupplementProduct,
++  fromGrowDeskSupplementProduct,
+ } from "@/lib/growdesk/nutrition-compat";
+ import { fetchCompleteList } from "@/lib/growdesk/paged-list";
+-import { requireData, bridgeErrorResponse } from "@/lib/growdesk/bridge-protocol";
++import { requireData, bridgeErrorResponse, BridgeError } from "@/lib/growdesk/bridge-protocol";
+ import { fromGrowDeskFeedingRecord, type GrowDeskFeedingRecord } from "@/lib/growdesk/feeding-compat";
+@@ -35,3 +38,4 @@
+       const requestedBabyId = searchParams.get("babyId");
+-      const baby = await loadWebBaby(growdeskFetch, bffSession.accessToken, requestedBabyId);
++      assertExpectedActor(request, bffSession.user.id);
++      const baby = await requireNutritionBaby(growdeskFetch, bffSession.accessToken, { babyId: requestedBabyId, familyId: searchParams.get("familyId") });
+       if (!baby) {
+@@ -43,4 +47,7 @@
+       const dateParam = searchParams.get("date");
+-      const date = dateParam && isValidDateStr(dateParam) ? dateParam : getLocalDateStr();
+-      const days = Math.min(90, Math.max(1, parseInt(searchParams.get("days") || "1", 10)));
++      if (dateParam !== null && !isValidDateStr(dateParam)) throw new BridgeError(400, "INVALID_DATE", "date 必须是有效的 YYYY-MM-DD 日期");
++      const date = dateParam ?? getLocalDateStr();
++      const daysParam = searchParams.get("days") ?? "1";
++      if (!/^[1-9]\d*$/.test(daysParam) || Number(daysParam) > 90) throw new BridgeError(400, "INVALID_DAYS", "days 必须为 1–90 的整数");
++      const days = Number(daysParam);
  
--import { useState, useEffect, useCallback } from "react";
-+import { useState, useEffect, useCallback, useRef } from "react";
- import { useRouter } from "next/navigation";
-@@ -13,2 +13,3 @@
- } from "lucide-react";
-+import { useScopedNutritionRequest } from "@/lib/hooks/useScopedNutritionRequest";
- import { useBabyStore } from "@/stores/useBabyStore";
-@@ -59,2 +60,4 @@
-   const fetchUser = useBabyStore((s) => s.fetchUser);
-+  const scopedRequest = useScopedNutritionRequest(baby?.id);
-+  const readGeneration = useRef(0);
- 
-@@ -74,3 +77,4 @@
-   const loadData = useCallback(async () => {
--    if (!baby?.id) return;
-+    const generation = ++readGeneration.current;
-+    if (!baby?.id) { setDailyAnalysis(null); setMultiDaySummary(null); setLoading(false); return; }
-     setLoading(true);
-@@ -78,5 +82,6 @@
-       if (timeScale === "today") {
--        const res = await fetch(`/api/nutrition/analysis?babyId=${baby.id}&date=${selectedDate}&days=1`);
-+        const res = await scopedRequest(`/api/nutrition/analysis?babyId=${baby.id}&date=${selectedDate}&days=1`);
-         if (res.ok) {
-           const data = await res.json();
-+          if (generation !== readGeneration.current) return;
-           setDailyAnalysis(data.analysis);
-@@ -85,5 +90,6 @@
-         const days = timeScale === "7d" ? 7 : 30;
--        const res = await fetch(`/api/nutrition/analysis?babyId=${baby.id}&date=${selectedDate}&days=${days}`);
-+        const res = await scopedRequest(`/api/nutrition/analysis?babyId=${baby.id}&date=${selectedDate}&days=${days}`);
-         if (res.ok) {
-           const data = await res.json();
-+          if (generation !== readGeneration.current) return;
-           setMultiDaySummary(data.summary);
-@@ -95,8 +101,11 @@
-     } finally {
--      setLoading(false);
-+      if (generation === readGeneration.current) setLoading(false);
-     }
--  }, [baby?.id, selectedDate, timeScale]);
-+  }, [baby?.id, scopedRequest, selectedDate, timeScale]);
- 
-   useEffect(() => {
--    loadData();
-+    setDailyAnalysis(null);
-+    setMultiDaySummary(null);
-+    void loadData();
-+    return () => { readGeneration.current += 1; };
-   }, [loadData]);
-diff --git a/components/nutrition/ProductCatalogModal.tsx b/components/nutrition/ProductCatalogModal.tsx
-index 16b8844..e878521 100644
---- a/components/nutrition/ProductCatalogModal.tsx
-+++ b/components/nutrition/ProductCatalogModal.tsx
-@@ -17,2 +17,4 @@
- } from "lucide-react";
-+import { useToast } from "@/components/ui/Toast";
-+import { NutritionScopeChanged } from "@/lib/nutrition/scoped-request";
- import { CuteButton } from "@/components/ui/CuteButton";
-@@ -21,2 +23,3 @@
- import { SegmentControl } from "@/components/ui/SegmentControl";
-+import { useNutritionScopeKey, useScopedNutritionRequest } from "@/lib/hooks/useScopedNutritionRequest";
- import { StandardReconstitutionModal } from "./StandardReconstitutionModal";
-@@ -31,3 +34,11 @@
- 
--export function ProductCatalogModal({ isOpen, onClose, babyId, onUpdated }: ProductCatalogModalProps) {
-+export function ProductCatalogModal(props: ProductCatalogModalProps) {
-+  const scopeKey = useNutritionScopeKey(props.babyId);
-+  return <ScopedProductCatalogModal key={`${scopeKey}:${props.isOpen}`} {...props} />;
-+}
-+
-+function ScopedProductCatalogModal({ isOpen, onClose, babyId, onUpdated }: ProductCatalogModalProps) {
-+  const scopedRequest = useScopedNutritionRequest(babyId);
-+  const { showToast } = useToast();
-+  const readGeneration = useRef(0);
-   const [activeTab, setActiveTab] = useState<string>("formula");
-@@ -88,32 +99,29 @@
-   const fetchData = useCallback(async () => {
-+    if (!isOpen) return false;
-+    const generation = ++readGeneration.current;
-+    setLoading(true);
-     try {
--      setLoading(true);
-       const [prodRes, schedRes] = await Promise.all([
--        fetch("/api/nutrition/products?includeInactive=true"),
--        fetch(`/api/nutrition/schedules${babyId ? `?babyId=${babyId}` : ""}`),
-+        scopedRequest("/api/nutrition/products?includeInactive=true"),
-+        scopedRequest("/api/nutrition/schedules"),
+@@ -51,5 +58,5 @@
+       const token = bffSession.accessToken;
+-      const [rawFormulas, fpRes, rawFeedings, rawSupps, rawFoods] = await Promise.all([
+-        fetchCompleteList<GrowDeskFormulaProduct>(growdeskFetch, token, `/api/v1/families/${familyId}/nutrition/products`),
+-        growdeskFetch<{ planData?: unknown }>(`/api/v1/babies/${babyId}/food-plan`, { accessToken: token }),
++      const [rawFormulas, fpRes, rawFeedings, rawSupps, rawFoods, rawProducts] = await Promise.all([
++        fetchCompleteList<GrowDeskFormulaProduct>(growdeskFetch, token, `/api/v1/families/${familyId}/nutrition/products?includeArchived=true`),
++        growdeskFetch<{ babyId: string; planData?: unknown }>(`/api/v1/babies/${babyId}/food-plan`, { accessToken: token }),
+         fetchCompleteList<GrowDeskFeedingRecord>(growdeskFetch, token, `/api/v1/babies/${babyId}/records/feeding`),
+@@ -57,4 +64,10 @@
+         fetchCompleteList<GrowDeskFoodRecord>(growdeskFetch, token, `/api/v1/babies/${babyId}/records/food`),
++        fetchCompleteList<GrowDeskSupplementProduct>(growdeskFetch, token, `/api/v1/families/${familyId}/nutrition/supplement-products?includeArchived=true`),
        ]);
--
--      if (prodRes.ok) {
--        const pData = await prodRes.json();
--        setFormulas(pData.formulas || []);
--        setSupplements(pData.supplements || []);
--        setPresets(pData.presets || { formulas: [], supplements: [] });
--      }
--
--      if (schedRes.ok) {
--        const sData = await schedRes.json();
--        setSchedules(sData.schedules || []);
--      }
-+      const [products, plans] = await Promise.all([prodRes.json(), schedRes.json()]);
-+      if (generation !== readGeneration.current) return false;
-+      setFormulas(products.formulas || []);
-+      setSupplements(products.supplements || []);
-+      setPresets(products.presets || { formulas: [], supplements: [] });
-+      setSchedules(plans.schedules || []);
-+      return true;
-     } catch (e) {
-       console.error("Failed to fetch product catalog:", e);
-+      return false;
-     } finally {
--      setLoading(false);
-+      if (generation === readGeneration.current) setLoading(false);
-     }
--  }, [babyId]);
-+  }, [isOpen, scopedRequest]);
- 
-   useEffect(() => {
--    if (isOpen) {
--      fetchData();
--    }
--  }, [isOpen, fetchData]);
-+    void fetchData();
-+    return () => { readGeneration.current += 1; };
-+  }, [fetchData]);
- 
-@@ -169,3 +177,3 @@
-     try {
--      const res = await fetch("/api/nutrition/products", {
-+      const res = await scopedRequest("/api/nutrition/products", {
-         method: "POST",
-@@ -178,3 +186,3 @@
-       if (res.ok) {
--        await fetchData();
-+        if (!(await fetchData())) return;
-         if (onUpdated) onUpdated();
-@@ -189,4 +197,5 @@
-   const handleImportPresetSupp = async (preset: any, frequency: "daily" | "alternate_day" = "daily") => {
-+    let created = false;
-     try {
--      const res = await fetch("/api/nutrition/products", {
-+      const res = await scopedRequest("/api/nutrition/products", {
-         method: "POST",
-@@ -200,4 +209,5 @@
-         const prod = await res.json();
-+        created = true;
-         if (babyId && prod.id) {
--          await fetch("/api/nutrition/schedules", {
-+          await scopedRequest("/api/nutrition/schedules", {
-             method: "POST",
-@@ -208,3 +218,3 @@
-               frequency,
--              targetDose: prod.defaultDose || 1.0,
-+              targetDose: prod.defaultDose ?? 1.0,
-             }),
-@@ -212,3 +222,3 @@
-         }
--        await fetchData();
-+        if (!(await fetchData())) return;
-         if (onUpdated) onUpdated();
-@@ -218,2 +228,5 @@
-       console.error("Import preset supplement error:", e);
-+      if (created && !(e instanceof NutritionScopeChanged) && await fetchData()) {
-+        showToast("补剂已保存，但计划未完成；请在已有产品上设置计划，勿重复导入", "error");
+-      const planData = requireData(fpRes)?.planData || {};
++      const plan = requireData(fpRes);
++      if (plan.babyId !== babyId) throw new BridgeError(502, "UPSTREAM_SCOPE_MISMATCH", "GrowDesk 返回了其他宝宝的计划");
++      for (const record of [...rawFeedings, ...rawSupps, ...rawFoods]) {
++        if (record.babyId !== babyId || record.familyId !== familyId) throw new BridgeError(502, "UPSTREAM_SCOPE_MISMATCH", "GrowDesk 返回了其他宝宝或家庭的营养记录");
 +      }
-     }
-@@ -227,3 +240,3 @@
-         if (existingSched) {
--          await fetch(`/api/nutrition/schedules?id=${existingSched.id}`, {
-+          await scopedRequest(`/api/nutrition/schedules?id=${existingSched.id}`, {
-             method: "DELETE",
-@@ -232,3 +245,3 @@
-       } else {
--        await fetch("/api/nutrition/schedules", {
-+        await scopedRequest("/api/nutrition/schedules", {
-           method: "POST",
-@@ -240,3 +253,3 @@
-             frequency,
--            targetDose: 1.0,
-+            targetDose: existingSched?.targetDose ?? supplements.find(product => product.id === productId)?.defaultDose ?? 1,
-             isActive: true,
-@@ -245,3 +258,3 @@
-       }
--      await fetchData();
-+      if (!(await fetchData())) return;
-       if (onUpdated) onUpdated();
-@@ -257,3 +270,3 @@
-     try {
--      const res = await fetch(`/api/nutrition/products?type=${type}&id=${id}`, {
-+      const res = await scopedRequest(`/api/nutrition/products?type=${type}&id=${id}`, {
-         method: "DELETE",
-@@ -265,3 +278,3 @@
-         }
--        await fetchData();
-+        if (!(await fetchData())) return;
-         if (onUpdated) onUpdated();
-@@ -279,3 +292,3 @@
-     try {
--      const res = await fetch("/api/nutrition/products", {
-+      const res = await scopedRequest("/api/nutrition/products", {
-         method: "PUT",
-@@ -285,3 +298,3 @@
-       if (res.ok) {
--        await fetchData();
-+        if (!(await fetchData())) return;
-         if (onUpdated) onUpdated();
-@@ -297,3 +310,3 @@
-     try {
--      const res = await fetch("/api/nutrition/products", {
-+      const res = await scopedRequest("/api/nutrition/products", {
-         method: "PUT",
-@@ -303,3 +316,3 @@
-       if (res.ok) {
--        await fetchData();
-+        if (!(await fetchData())) return;
-         if (onUpdated) onUpdated();
-@@ -315,3 +328,3 @@
-     try {
--      const res = await fetch(`/api/nutrition/schedules?id=${id}`, {
-+      const res = await scopedRequest(`/api/nutrition/schedules?id=${id}`, {
-         method: "DELETE",
-@@ -319,3 +332,3 @@
-       if (res.ok) {
--        await fetchData();
-+        if (!(await fetchData())) return;
-         if (onUpdated) onUpdated();
-@@ -344,3 +357,3 @@
++      const planData = plan.planData || {};
+       const suppState = extractSupplementStateFromFoodPlan(planData);
+@@ -62,3 +75,3 @@
+       const allKnownSupplements: SupplementProduct[] = [
+-        ...suppState.supplementProducts,
++        ...checkedProducts(rawProducts, familyId).map(fromGrowDeskSupplementProduct),
+         ...PRESET_SUPPLEMENT_PRODUCTS.map((p, idx) => ({
+@@ -76,3 +89,3 @@
+       const formulaProductsMap: Record<string, FormulaProduct> = {};
+-      for (const rawF of rawFormulas) {
++      for (const rawF of checkedProducts(rawFormulas, familyId)) {
+         formulaProductsMap[rawF.id] = fromGrowDeskFormulaProduct(rawF, {
+diff --git a/app/api/nutrition/records/route.ts b/app/api/nutrition/records/route.ts
+index e1691c1..a0dae75 100644
+--- a/app/api/nutrition/records/route.ts
++++ b/app/api/nutrition/records/route.ts
+@@ -11,3 +11,4 @@
+ import { growdeskFetch } from "@/lib/growdesk/client";
+-import { loadWebBaby, loadWebIdentity } from "@/lib/growdesk/bridge-identity";
++import { assertExpectedActor, requireNutritionBaby } from "@/lib/growdesk/nutrition-scope";
++import { checkedProducts, positiveDose } from "@/lib/growdesk/nutrition-validation";
+ import {
+@@ -15,3 +16,2 @@
+   formatSupplementAmount,
+-  encodeProductIdInNotes,
+   findMatchingSupplementProduct,
+@@ -27,3 +27,3 @@
+ import { fetchCompleteList } from "@/lib/growdesk/paged-list";
+-import { BridgeError, bridgeErrorResponse, isoTimestamp, requireData, pathId } from "@/lib/growdesk/bridge-protocol";
++import { BridgeError, bridgeErrorResponse, isoTimestamp, requireData, pathId, wireVersion } from "@/lib/growdesk/bridge-protocol";
+ import { projectLegacySupplementRecord, wantsExtendedRepresentation } from "@/lib/growdesk/legacy-projections";
+@@ -88,3 +88,4 @@
+       const requestedBabyId = searchParams.get("babyId");
+-      const baby = await loadWebBaby(growdeskFetch, bffSession.accessToken, requestedBabyId);
++      assertExpectedActor(request, bffSession.user.id);
++      const baby = await requireNutritionBaby(growdeskFetch, bffSession.accessToken, { babyId: requestedBabyId, familyId: searchParams.get("familyId") });
+       if (!baby) {
+@@ -118,3 +119,3 @@
+       const allKnownProducts: SupplementProduct[] = [
+-        ...rawProducts.map(fromGrowDeskSupplementProduct),
++        ...checkedProducts(rawProducts, baby.familyId).map(fromGrowDeskSupplementProduct),
+         ...PRESET_SUPPLEMENT_PRODUCTS.map((p, idx) => ({
+@@ -227,5 +228,6 @@
  
--      const res = await fetch("/api/ai/parse-nutrition", {
-+      const res = await scopedRequest("/api/ai/parse-nutrition", {
-         method: "POST",
-@@ -390,3 +403,3 @@
-       console.error("OCR parse error:", err);
--      alert("上传识别失败，请检查网络");
-+      if (!(err instanceof NutritionScopeChanged)) alert("上传识别失败，请检查网络");
-     } finally {
-@@ -523,4 +536,5 @@
-                       onClick={async () => {
-+                        try {
-                         if (!formulaForm.name.trim()) return alert("请输入奶粉名称");
--                        await fetch("/api/nutrition/products", {
-+                        await scopedRequest("/api/nutrition/products", {
-                           method: "POST",
-@@ -533,5 +547,6 @@
-                         setIsCreatingFormula(false);
--                        await fetchData();
-+                        if (!(await fetchData())) return;
-                         if (onUpdated) onUpdated();
-                         window.dispatchEvent(new CustomEvent("baby:nutrition-updated"));
-+                        } catch { /* The scoped client reports errors without closing the form. */ }
-                       }}
-@@ -819,3 +834,3 @@
-                         value={String(suppForm.defaultDose)}
--                        onChange={(e) => setSuppForm({ ...suppForm, defaultDose: Number(e.target.value) || 1.0 })}
-+                        onChange={(e) => setSuppForm({ ...suppForm, defaultDose: Number(e.target.value) })}
-                       />
-@@ -862,2 +877,4 @@
-                       onClick={async () => {
-+                        let created = false;
-+                        try {
-                         if (!suppForm.name.trim()) return alert("请输入补剂名称");
-@@ -869,3 +886,3 @@
+-      const body = await request.json().catch(() => ({}));
+-      const requestedBabyId = body.babyId;
+-      const baby = await loadWebBaby(growdeskFetch, bffSession.accessToken, requestedBabyId);
++      const body = await request.json().catch(() => null);
++      if (!body || typeof body !== "object" || Array.isArray(body)) throw new BridgeError(400, "INVALID_JSON", "请求正文必须是 JSON 对象");
++      assertExpectedActor(request, bffSession.user.id);
++      const baby = await requireNutritionBaby(growdeskFetch, bffSession.accessToken, body);
+       if (!baby) {
+@@ -279,3 +281,3 @@
+       const allKnownProducts: SupplementProduct[] = [
+-        ...rawProducts.map(fromGrowDeskSupplementProduct),
++        ...checkedProducts(rawProducts, baby.familyId).map(fromGrowDeskSupplementProduct),
+         ...PRESET_SUPPLEMENT_PRODUCTS.map((p, idx) => ({
+@@ -287,5 +289,13 @@
  
--                        const res = await fetch("/api/nutrition/products", {
-+                        const res = await scopedRequest("/api/nutrition/products", {
-                           method: "POST",
-@@ -881,4 +898,6 @@
-                           const prod = await res.json();
-+                          created = true;
-+                          setIsCreatingSupp(false);
-                           if (babyId && prod.id) {
--                            await fetch("/api/nutrition/schedules", {
-+                            await scopedRequest("/api/nutrition/schedules", {
-                               method: "POST",
-@@ -889,3 +908,3 @@
-                                 frequency: "daily",
--                                targetDose: Number(suppForm.defaultDose) || 1.0,
-+                                targetDose: Number(suppForm.defaultDose),
-                               }),
-@@ -894,3 +913,3 @@
-                           setIsCreatingSupp(false);
--                          await fetchData();
-+                          if (!(await fetchData())) return;
-                           if (onUpdated) onUpdated();
-@@ -898,2 +917,7 @@
-                         }
-+                         } catch (error) {
-+                          if (created && !(error instanceof NutritionScopeChanged) && await fetchData()) {
-+                            showToast("补剂已保存，但计划未完成；请在已有产品上重试计划设置", "error");
-+                          }
-+                        }
-                       }}
-@@ -1196,4 +1220,5 @@
-           onConfirm={async (data) => {
-+            try {
-             if (reconstitutionModal.product) {
--              await fetch("/api/nutrition/products", {
-+              await scopedRequest("/api/nutrition/products", {
-                 method: "PUT",
-@@ -1206,5 +1231,6 @@
-               });
--              await fetchData();
-+              if (!(await fetchData())) return;
-               if (onUpdated) onUpdated();
-             }
-+            } catch { /* The scoped client already reports the failure. */ }
-           }}
-diff --git a/components/nutrition/SupplementQuickCheckIn.tsx b/components/nutrition/SupplementQuickCheckIn.tsx
-index 6a85d3d..e4ba1cc 100644
---- a/components/nutrition/SupplementQuickCheckIn.tsx
-+++ b/components/nutrition/SupplementQuickCheckIn.tsx
-@@ -2,4 +2,6 @@
+-      const product =
+-        findMatchingSupplementProduct(customSuppName || productId, productId, allKnownProducts) || {
+-          id: productId || crypto.randomUUID(),
++      const incomingDose = positiveDose(dose);
++      const catalogProducts = checkedProducts(rawProducts, familyId).map(fromGrowDeskSupplementProduct);
++      if (productId !== undefined && productId !== null) pathId(productId);
++      const selectedProduct = findMatchingSupplementProduct(customSuppName || "", productId || null, catalogProducts);
++      if (productId && !selectedProduct) throw new BridgeError(404, "SUPPLEMENT_PRODUCT_NOT_FOUND", "所选补剂产品不存在，请刷新产品库");
++      if (!productId && !selectedProduct && catalogProducts.filter(product => product.name.trim().toLowerCase() === String(customSuppName).trim().toLowerCase()).length > 1) {
++        throw new BridgeError(409, "SUPPLEMENT_SELECTION_REQUIRED", "存在同名补剂，请明确选择产品");
++      }
++      if (selectedProduct?.isActive === false) throw new BridgeError(409, "SUPPLEMENT_PRODUCT_INACTIVE", "所选补剂已停用，请重新选择");
++      const product = selectedProduct || {
++          id: "",
+           familyId,
+@@ -295,3 +305,3 @@
+           unitName: unitName || "剂",
+-          defaultDose: Number(dose) || 1.0,
++          defaultDose: incomingDose,
+           nutrients: {},
+@@ -337,3 +347,3 @@
+         incomingSupplement: product,
+-        incomingDose: Number(dose) || 1.0,
++        incomingDose,
+         existingRecordsToday: adaptedSuppRecords,
+@@ -358,4 +368,5 @@
+       const occurredAt = localTimeToUtcIso(time, date);
+-      const formattedAmount = formatSupplementAmount(Number(dose) || 1.0, unitName || product.unitName);
+-      const encodedNotes = encodeProductIdInNotes(product.id, notes);
++      const formattedAmount = formatSupplementAmount(incomingDose, unitName || product.unitName);
++      // Canonical productId is stored separately; do not add a second identity to notes.
++      const cleanNotes = notes === undefined || notes === null ? null : String(notes);
+       const idempotencyKey = clientId || request.headers.get("idempotency-key") || crypto.randomUUID();
+@@ -370,8 +381,8 @@
+             supplementName: product.name,
+-            productId: product.id,
++            productId: selectedProduct?.id ?? null,
+             occurredAt,
+             amount: formattedAmount,
+-            dose: String(Number(dose) || 1),
++            dose: String(incomingDose),
+             unitName: unitName || product.unitName,
+-            notes: encodedNotes,
++            notes: cleanNotes,
+           },
+@@ -598,3 +609,3 @@
+       const requestedBabyId = searchParams.get("babyId") || body.babyId;
+-      const baseVersion = searchParams.get("baseVersion") || body.baseVersion || "1";
++      const baseVersion = wireVersion(searchParams.get("baseVersion") ?? body.baseVersion ?? body.version);
  
--import { useState, useEffect, useCallback } from "react";
-+import { useState, useEffect, useCallback, useRef } from "react";
- import { Plus, Check, AlertTriangle, Sparkles, RefreshCw, ShieldAlert, X } from "lucide-react";
-+import { useNutritionScopeKey, useScopedNutritionRequest } from "@/lib/hooks/useScopedNutritionRequest";
-+import { NutritionScopeChanged } from "@/lib/nutrition/scoped-request";
- import { CuteCard } from "@/components/ui/CuteCard";
-@@ -19,3 +21,10 @@
+@@ -604,3 +615,4 @@
  
--export function SupplementQuickCheckIn({ babyId, date, refreshKey, onRecordSuccess, className = "" }: SupplementQuickCheckInProps) {
-+export function SupplementQuickCheckIn(props: SupplementQuickCheckInProps) {
-+  const scopeKey = useNutritionScopeKey(props.babyId);
-+  return <ScopedSupplementQuickCheckIn key={`${scopeKey}:${props.date ?? "today"}`} {...props} />;
+-      const baby = await loadWebBaby(growdeskFetch, bffSession.accessToken, requestedBabyId);
++      assertExpectedActor(request, bffSession.user.id);
++      const baby = await requireNutritionBaby(growdeskFetch, bffSession.accessToken, { babyId: requestedBabyId, familyId: searchParams.get("familyId") });
+       if (!baby) {
+@@ -610,3 +622,3 @@
+       const res = await growdeskFetch(
+-        `/api/v1/babies/${baby.id}/records/supplement/${id}?baseVersion=${baseVersion}`,
++        `/api/v1/babies/${pathId(baby.id)}/records/supplement/${pathId(id)}?baseVersion=${encodeURIComponent(baseVersion)}`,
+         {
+diff --git a/lib/growdesk/nutrition-compat.ts b/lib/growdesk/nutrition-compat.ts
+index 96569e2..35d6cc7 100644
+--- a/lib/growdesk/nutrition-compat.ts
++++ b/lib/growdesk/nutrition-compat.ts
+@@ -336,24 +336,31 @@
+ 
+-export function findMatchingSupplementProduct(
++/** Identity is authoritative. A missing ID never falls through to a same-name product. */
++export function findMatchingSupplementProduct<T extends { id: string; name: string }>(
+   supplementName: string,
+   taggedProductId: string | null,
+-  allProducts: SupplementProduct[]
+-): SupplementProduct | undefined {
+-  if (taggedProductId) {
+-    const byId = allProducts.find((p) => p.id === taggedProductId);
+-    if (byId) return byId;
+-    const presetById = PRESET_SUPPLEMENT_PRODUCTS.find((p) => (p as any).id === taggedProductId);
+-    if (presetById) return { ...presetById, id: taggedProductId, familyId: "" } as SupplementProduct;
+-  }
+-
++  allProducts: readonly T[],
++): T | undefined {
+   const norm = supplementName.toLowerCase().trim();
+-  const byName = allProducts.find((p) => p.name.toLowerCase().trim() === norm);
+-  if (byName) return byName;
++  const candidates = taggedProductId
++    ? allProducts.filter(product => product.id === taggedProductId)
++    : allProducts.filter(product => product.name.toLowerCase().trim() === norm);
++  // Returning the first match would silently attach another product's nutrient
++  // composition to a historical dose. Preserve unresolved history instead.
++  return candidates.length === 1 ? candidates[0] : undefined;
 +}
-+
-+function ScopedSupplementQuickCheckIn({ babyId, date, refreshKey, onRecordSuccess, className = "" }: SupplementQuickCheckInProps) {
-+  const scopedRequest = useScopedNutritionRequest(babyId);
-+  const readGeneration = useRef(0);
-   const [schedules, setSchedules] = useState<SupplementSchedule[]>([]);
-@@ -35,3 +44,5 @@
-     details: ConflictCheckResult["details"];
-+    dose: number;
-   }>({
-+    dose: 1,
-     isOpen: false,
-@@ -43,2 +54,3 @@
-   const fetchData = useCallback(async () => {
-+    const generation = ++readGeneration.current;
-     try {
-@@ -46,8 +58,10 @@
-       const [schedulesRes, productsRes] = await Promise.all([
--        fetch(`/api/nutrition/schedules?date=${targetDate}${babyId ? `&babyId=${babyId}` : ""}`),
--        fetch("/api/nutrition/products?type=supplement"),
-+        scopedRequest(`/api/nutrition/schedules?date=${targetDate}`),
-+        scopedRequest("/api/nutrition/products?type=supplement"),
-       ]);
  
-+      const [scheduleData, productData] = await Promise.all([schedulesRes.json(), productsRes.json()]);
-+      if (generation !== readGeneration.current) return false;
-       if (schedulesRes.ok) {
--        const data = await schedulesRes.json();
-+        const data = scheduleData;
-         setSchedules(data.schedules || []);
-@@ -56,14 +70,17 @@
-       if (productsRes.ok) {
--        const data = await productsRes.json();
-+        const data = productData;
-         setSupplements(data.supplements || []);
-       }
-+      return true;
-     } catch (e) {
-       console.error("Failed to fetch supplement data:", e);
-+      return false;
-     } finally {
--      setLoading(false);
-+      if (generation === readGeneration.current) setLoading(false);
-     }
--  }, [babyId, targetDate]);
-+  }, [scopedRequest, targetDate]);
+-  const presetByName = PRESET_SUPPLEMENT_PRODUCTS.find((p) => p.name.toLowerCase().trim() === norm);
+-  if (presetByName) {
+-    return { ...presetByName, id: taggedProductId || norm, familyId: "" } as SupplementProduct;
++export function supplementProductReference(
++  productId: unknown,
++  notes: string | null | undefined,
++): { productId: string | null; cleanNotes: string | null } {
++  const tagged = extractProductIdFromNotes(notes);
++  const valid = (value: unknown): value is string => typeof value === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(value);
++  if (productId !== undefined && productId !== null && !valid(productId)) {
++    throw new BridgeError(502, "UPSTREAM_INVALID_RECORD", "GrowDesk 返回了无效的补剂产品标识");
+   }
+-
+-  return undefined;
++  if (valid(productId)) {
++    return { productId, cleanNotes: tagged.productId === productId ? tagged.cleanNotes : notes ?? null };
++  }
++  if (valid(tagged.productId)) return tagged;
++  return { productId: null, cleanNotes: notes ?? null };
+ }
+@@ -364,6 +371,5 @@
+ ): SupplementRecord {
+-  const noteProduct = extractProductIdFromNotes(raw.notes);
+-  const taggedId = raw.productId || noteProduct.productId;
+-  const cleanNotes = raw.productId ? raw.notes : noteProduct.cleanNotes;
+-  const matchedProduct = findMatchingSupplementProduct(raw.supplementName, taggedId, allProducts);
++  const { productId: taggedId, cleanNotes } = supplementProductReference(raw.productId, raw.notes);
++  const matchedProduct = findMatchingSupplementProduct(raw.supplementName, taggedId,
++    allProducts.filter(product => product.familyId === raw.familyId));
  
-   useEffect(() => {
--    fetchData();
-+    void fetchData();
-+    return () => { readGeneration.current += 1; };
-   }, [fetchData, refreshKey]);
-@@ -83,6 +100,6 @@
+@@ -380,3 +386,7 @@
  
--  const handleCheckIn = async (product: SupplementProduct, forceOverride = false) => {
-+  const handleCheckIn = async (product: SupplementProduct, forceOverride = false, intendedDose = product.defaultDose) => {
-     setSubmittingId(product.id);
-     try {
--      const res = await fetch("/api/nutrition/records", {
-+      const res = await scopedRequest("/api/nutrition/records", {
-         method: "POST",
-@@ -92,3 +109,3 @@
-           productId: product.id,
--          dose: product.defaultDose || 1.0,
-+          dose: intendedDose,
-           unitName: product.unitName,
-@@ -97,3 +114,3 @@
-         }),
--      });
-+      }, [409]);
+-  const fallbackProduct: SupplementProduct = matchedProduct || {
++  const fallbackProduct: SupplementProduct = matchedProduct ? {
++    ...matchedProduct,
++    // The record name is a historical fact; current catalog renames must not replace it.
++    name: raw.supplementName || matchedProduct.name,
++  } : {
+     id: resolvedProductId,
+@@ -390,3 +400,3 @@
+     notes: cleanNotes,
+-    isActive: true,
++    isActive: false,
+   };
+diff --git a/lib/growdesk/timeline-compat.ts b/lib/growdesk/timeline-compat.ts
+index 535931b..b10574e 100644
+--- a/lib/growdesk/timeline-compat.ts
++++ b/lib/growdesk/timeline-compat.ts
+@@ -8,3 +8,3 @@
+ import { decodeNotes } from "./food-compat";
+-import { extractProductIdFromNotes, parseSupplementAmount } from "./nutrition-compat";
++import { extractProductIdFromNotes, parseSupplementAmount, findMatchingSupplementProduct, supplementProductReference } from "./nutrition-compat";
  
-@@ -102,3 +119,5 @@
-         const conflictData = await res.json();
-+        if (conflictData.requiresConfirmation !== true) throw new Error(conflictData.error || "记录已变更，请刷新后重试");
-         setConflictModal({
-+          dose: intendedDose,
-           isOpen: true,
-@@ -112,4 +131,4 @@
-       if (res.ok) {
--        setConflictModal({ isOpen: false, product: null, warnings: [], details: [] });
--        await fetchData();
-+        setConflictModal({ isOpen: false, product: null, warnings: [], details: [], dose: 1 });
-+        if (!(await fetchData())) return;
-         if (onRecordSuccess) onRecordSuccess();
-@@ -127,3 +146,3 @@
-       console.error("Check in error:", e);
--      alert("网络请求失败，请稍后重试");
-+      if (!(e instanceof NutritionScopeChanged)) alert(e instanceof Error ? e.message : "网络请求失败，请稍后重试");
-     } finally {
-@@ -229,3 +248,3 @@
-                         disabled={isSubmitting}
--                        onClick={() => handleCheckIn(product, false)}
-+                        onClick={() => handleCheckIn(product, false, item.targetDose)}
-                         className="px-3.5 py-1.5 rounded-full bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-white text-xs font-bold flex items-center gap-1 shadow-button transition-all disabled:opacity-50 cursor-pointer"
-@@ -271,3 +290,3 @@
-               <button
--                onClick={() => setConflictModal({ isOpen: false, product: null, warnings: [], details: [] })}
-+                onClick={() => setConflictModal({ isOpen: false, product: null, warnings: [], details: [], dose: 1 })}
-                 className="p-1 rounded-full text-text-muted hover:bg-gray-100 dark:hover:bg-gray-800"
-@@ -313,3 +332,3 @@
-                 type="button"
--                onClick={() => setConflictModal({ isOpen: false, product: null, warnings: [], details: [] })}
-+                onClick={() => setConflictModal({ isOpen: false, product: null, warnings: [], details: [], dose: 1 })}
-                 className="flex-1 py-2.5 rounded-full border border-gray-300 dark:border-gray-700 text-xs text-text-secondary dark:text-gray-300 font-bold hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-@@ -323,3 +342,3 @@
-                   if (conflictModal.product) {
--                    handleCheckIn(conflictModal.product, true);
-+                    handleCheckIn(conflictModal.product, true, conflictModal.dose);
-                   }
+@@ -392,11 +392,12 @@
+       recorderName = lookup(context.memberNames, recordedById) || null;
+-      const explicitProdId = supp.productId || supp.supplementProductId;
+-      let prod = lookup(context.supplementProducts, explicitProdId);
+-      if (!prod && typeof supp.supplementName === "string") {
+-        const candidates = context.supplementProducts instanceof Map
+-          ? Array.from(context.supplementProducts.values())
+-          : Object.values(context.supplementProducts || {});
+-        prod = candidates.find(candidate => candidate && typeof candidate === "object" && candidate.name === supp.supplementName);
+-      }
+-      const prodId = explicitProdId || prod?.id;
++      const reference = supplementProductReference(supp.productId ?? supp.supplementProductId, supp.notes);
++      const candidates = context.supplementProducts instanceof Map
++        ? Array.from(context.supplementProducts.values())
++        : Object.values(context.supplementProducts || {});
++      const prod = findMatchingSupplementProduct(
++        typeof supp.supplementName === "string" ? supp.supplementName : "",
++        reference.productId,
++        candidates.filter(candidate => candidate && typeof candidate.id === "string" && typeof candidate.name === "string"),
++      );
++      const prodId = reference.productId || prod?.id;
+       const prodName = supp.productName || supp.supplementName || prod?.name || "营养补充剂";
+@@ -407,3 +408,3 @@
+       const dose = typeof numericDose === "number" && Number.isFinite(numericDose) ? numericDose : rawDose;
+-      const notes = extractProductIdFromNotes(supp.notes).cleanNotes;
++      const notes = reference.cleanNotes;
+       let d = `${prodName} ${dose} ${unit}`.trim();
+diff --git a/tests/unit/growdesk-nutrition-completeness.test.ts b/tests/unit/growdesk-nutrition-completeness.test.ts
+index f78f19a..8f32003 100644
+--- a/tests/unit/growdesk-nutrition-completeness.test.ts
++++ b/tests/unit/growdesk-nutrition-completeness.test.ts
+@@ -14,2 +14,4 @@
+ import * as food from "../../lib/growdesk/food-compat";
++import * as nutritionScope from "../../lib/growdesk/nutrition-scope";
++import * as nutritionValidation from "../../lib/growdesk/nutrition-validation";
+ import * as nutrition from "../../lib/growdesk/nutrition-compat";
+@@ -27,4 +29,6 @@
+     "@/lib/growdesk/nutrition-compat": nutrition,
++    "@/lib/growdesk/nutrition-validation": nutritionValidation,
++    "@/lib/growdesk/nutrition-scope": { ...nutritionScope, requireNutritionBaby: async () => ({ id: "test_baby", familyId: "test_family", birthDate: "2026-01-01" }) },
+     "@/lib/growdesk/client": { growdeskFetch: fetchApi },
+-    "@/lib/growdesk/session": { resolveBffSession: async () => ({ accessToken: "test_token" }) },
++    "@/lib/growdesk/session": { resolveBffSession: async () => ({ accessToken: "test_token", user: { id: "test_user" } }) },
+     "@/lib/growdesk/bridge-identity": { loadWebBaby: async () => ({ id: "test_baby", familyId: "test_family", birthDate: "2026-01-01" }) },
+@@ -49,3 +53,3 @@
+     const url = new URL(endpoint, "https://test.invalid"); seen.push(endpoint);
+-    if (url.pathname.endsWith("/food-plan")) return { ok: true, status: 200, data: { planData: {} } };
++    if (url.pathname.endsWith("/food-plan")) return { ok: true, status: 200, data: { babyId: "test_baby", planData: {} } };
+     if (url.pathname.endsWith("/records/feeding")) {
