@@ -34,8 +34,11 @@ if (echo > /dev/tcp/127.0.0.1/"${PORT}") 2>/dev/null; then
 fi
 
 echo "==> [test-api] start server on :${PORT}"
-# setsid 独立进程组：trap 按组杀，避免 next dev 的 next-server 子进程成孤儿占库
-setsid npx next dev --port "${PORT}" > /tmp/baby-test-server.log 2>&1 &
+if command -v setsid >/dev/null 2>&1; then
+  setsid npx next dev --port "${PORT}" > /tmp/baby-test-server.log 2>&1 &
+else
+  npx next dev --port "${PORT}" > /tmp/baby-test-server.log 2>&1 &
+fi
 SERVER_PID=$!
 cleanup() {
   kill -- -"$SERVER_PID" 2>/dev/null || kill "$SERVER_PID" 2>/dev/null || true

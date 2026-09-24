@@ -64,9 +64,11 @@ PY
 chmod 600 "$DEST"
 
 # 按文件名排序保留最近 KEEP 份（文件名内嵌时间戳，避免 mtime 时钟回拨误删）
-PRUNE_TARGETS=$(ls -1 "$DEST_DIR"/"$(basename "${DB%.db}")_"*.db 2>/dev/null | sort | head -n -"$KEEP" || true)
-if [ -n "$PRUNE_TARGETS" ]; then
-  echo "$PRUNE_TARGETS" | while IFS= read -r f; do
+ALL_BACKUPS=$(ls -1 "$DEST_DIR"/"$(basename "${DB%.db}")_"*.db 2>/dev/null | sort || true)
+TOTAL_FOUND=$(echo "$ALL_BACKUPS" | grep -c . || true)
+if [ "$TOTAL_FOUND" -gt "$KEEP" ]; then
+  EXCESS=$((TOTAL_FOUND - KEEP))
+  echo "$ALL_BACKUPS" | head -n "$EXCESS" | while IFS= read -r f; do
     if [ -n "$f" ] && [ -f "$f" ]; then
       rm -f "$f"
       echo "🧹 清理过期历史备份: $(basename "$f")"
