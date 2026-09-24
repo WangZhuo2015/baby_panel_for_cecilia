@@ -84,8 +84,16 @@ test("Smart Polling: SmartPollingHost is mounted in MainLayout", () => {
   assert.ok(content.includes("SmartPollingHost"), "layout.tsx should import and render SmartPollingHost");
 });
 
-test("Smart Polling: NotificationBell listens to baby:data-polled event", () => {
-  const pagePath = path.join(process.cwd(), "app/(main)/page.tsx");
-  const content = fs.readFileSync(pagePath, "utf-8");
-  assert.ok(content.includes("baby:data-polled"), "page.tsx NotificationBell should listen to baby:data-polled");
+test("Smart Polling: both notification badges delegate polling and cleanup to the shared inbox", () => {
+  for (const filename of ["app/(main)/page.tsx", "components/ui/BabyProfileHeader.tsx"]) {
+    const content = fs.readFileSync(path.join(process.cwd(), filename), "utf-8");
+    assert.match(content, /import\s*\{\s*useNotificationInbox\s*\}\s*from\s*["']@\/lib\/hooks\/useNotificationInbox["']/);
+    assert.match(content, /const\s*\{\s*unreadCount\s*\}\s*=\s*useNotificationInbox\(\)/);
+    assert.ok(!content.includes("calculateUnreadCount"), "persisted notifications must not use only browser-local read IDs");
+  }
+  const hook = fs.readFileSync(path.join(process.cwd(), "lib/hooks/useNotificationInbox.ts"), "utf-8");
+  assert.match(hook, /window\.addEventListener\("baby:data-polled", refresh\)/);
+  assert.match(hook, /window\.removeEventListener\("baby:data-polled", refresh\)/);
+  assert.match(hook, /const refresh = \(\) => \{ void reload\(\); \}/);
+  assert.ok(hook.includes("sameNotificationIdentity"), "poll results remain identity-scoped");
 });
