@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repository": "WangZhuo2015/growdesk-server",
-  "commit": "62e03ee6516791402994d25ca4bb63aeb65515f4",
+  "commit": "98064ba4566be7e2a99106efdfb6628af461343e",
   "referenceCommit": "f0f046f9f01ee34b1ed3f59ed993e4acb5d5bdf4",
   "scope": "Implemented native API operations; not full Worker or production acceptance"
 }
