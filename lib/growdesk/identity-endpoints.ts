@@ -1,27 +1,43 @@
 import { growdeskFetch } from "./client";
-import { registerBffSession, resolveBffSession } from "./session";
+import { logoutBffSession, registerBffSession, resolveBffSession } from "./session";
 import { verifyBffCsrf } from "./csrf";
 import { createIdentityEndpoints } from "./bridge-endpoints";
+import { clearLegacyAuthCookies, mayBootstrapLegacySession } from "./legacy-session-policy";
+import { GROWDESK_CONFIG, config } from "@/lib/config";
 
-export const growdeskIdentityEndpoints = createIdentityEndpoints({
+if (typeof window !== "undefined") throw new Error("This module can only be loaded on the server.");
+
+const endpoints = createIdentityEndpoints({
   fetchApi: growdeskFetch,
   resolveSession: resolveBffSession,
   verifyCsrf: verifyBffCsrf,
   registerSession: registerBffSession,
   setSessionCookie(response, sessionSecret) {
     const attributes = [
-      `${GROWDESK_COOKIE_NAME}=${encodeURIComponent(sessionSecret)}`,
-      "Path=/",
-      "HttpOnly",
-      "SameSite=Lax",
-      `Max-Age=${30 * 24 * 60 * 60}`,
+      `${GROWDESK_CONFIG.cookieName}=${encodeURIComponent(sessionSecret)}`,
+      "Path=/", "HttpOnly", "SameSite=Lax", `Max-Age=${30 * 24 * 60 * 60}`,
     ];
-    if (GROWDESK_COOKIE_SECURE) attributes.push("Secure");
+    if (config.isProduction) attributes.push("Secure");
     response.headers.append("set-cookie", attributes.join("; "));
+    clearLegacyAuthCookies(response, config.isProduction);
   },
 });
 
-import { GROWDESK_CONFIG, config } from "@/lib/config";
-const GROWDESK_COOKIE_NAME = GROWDESK_CONFIG.cookieName;
-const GROWDESK_COOKIE_SECURE = config.isProduction;
-if (typeof window !== "undefined") throw new Error("This module can only be loaded on the server.");
+export const growdeskIdentityEndpoints = {
+  ...endpoints,
+  async me(request: Request): Promise<Response> {
+    const response = await endpoints.me(request);
+    if (!response.ok && mayBootstrapLegacySession(request, GROWDESK_CONFIG.cookieName, GROWDESK_CONFIG.usesGoBackend)) {
+      try {
+        // This resolves the same Request's cached promise, not a new exchange.
+        // Failed family/member hydration must not leak a session without a cookie.
+        const session = await resolveBffSession(request);
+        if (session?.isNewSession) await logoutBffSession(session.sessionSecret);
+      } catch {
+        // Keep the original failure visible; do not clear the old cookie on an
+        // outage. Revocation is best effort while the upstream is unavailable.
+      }
+    }
+    return response;
+  },
+};
