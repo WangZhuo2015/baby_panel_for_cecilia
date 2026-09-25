@@ -8,6 +8,7 @@ import { createServer } from "node:http";
 import { once } from "node:events";
 import { transformSync } from "esbuild";
 import * as protocol from "../../lib/growdesk/bridge-protocol";
+import * as legacySessionPolicy from "../../lib/growdesk/legacy-session-policy";
 import { isBridgedMethod } from "../../lib/growdesk/bridge-policy";
 
 const require = createRequire(import.meta.url);
@@ -65,6 +66,7 @@ function fixture(options: { enabled?: boolean; upstreamStatus?: number; legacySt
   const session = load("lib/growdesk/session.ts", {
     "next/headers": { cookies: () => { throw new Error("Explicit requests must not use ambient cookies"); } },
     "@/lib/config": config,
+    "./legacy-session-policy": legacySessionPolicy,
     "./client": { growdeskFetch: async (url: string, init: any) => {
       calls.exchange++;
       assert.equal(url, "/api/v1/auth/bff/session");

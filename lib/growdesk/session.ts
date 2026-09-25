@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import crypto from "node:crypto";
 import { GROWDESK_CONFIG } from "@/lib/config";
 import { growdeskFetch } from "./client";
+import { legacyTokenFromRequest, mayBootstrapLegacySession } from "./legacy-session-policy";
 import {
   type ApiFamily,
   type LegacyBaby,
@@ -61,21 +62,14 @@ export async function getBffSessionSecret(request?: Request): Promise<string | n
 }
 
 export async function getLegacyAuthToken(request?: Request): Promise<string | null> {
-  if (request) {
-    const authHeader = request.headers.get("authorization");
-    if (authHeader?.startsWith("Bearer ")) return authHeader.slice(7);
-    const cookieHeader = request.headers.get("cookie");
-    if (cookieHeader) {
-      const match = cookieHeader.match(/(?:^|;\s*)(?:baby_auth_token|auth_token)=([^;]*)/);
-      if (match) {
-        try { return decodeURIComponent(match[1]!); } catch { return null; }
-      }
-    }
-  }
+  if (request) return legacyTokenFromRequest(request);
   try {
     const cookieStore = await cookies();
-    const token = cookieStore.get("baby_auth_token")?.value || cookieStore.get("auth_token")?.value;
-    return token || null;
+    const values = [cookieStore.get("baby_auth_token")?.value, cookieStore.get("auth_token")?.value]
+      .filter((value): value is string => Boolean(value));
+    const tokens = new Set(values);
+    const token = tokens.size === 1 ? [...tokens][0] : undefined;
+    return token && token.length <= 8192 && token.trim() === token ? token : null;
   } catch {
     return null;
   }
@@ -95,6 +89,9 @@ export function resolveBffSession(request?: Request): Promise<ActiveBffSession |
 async function exchangeSession(request?: Request): Promise<ActiveBffSession | null> {
   const sessionSecret = await getBffSessionSecret(request);
   if (!sessionSecret) {
+    // Only /api/auth/me can return the new cookie. Other reads, mutations and
+    // server-only callers must not create persistent but unreachable sessions.
+    if (!mayBootstrapLegacySession(request, GROWDESK_CONFIG.cookieName, GROWDESK_CONFIG.usesGoBackend)) return null;
     const legacyToken = await getLegacyAuthToken(request);
     if (!legacyToken) return null;
     const candidateSecret = crypto.randomBytes(32).toString("hex");
