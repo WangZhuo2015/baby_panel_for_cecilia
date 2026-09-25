@@ -55,7 +55,7 @@ export interface Baby {
 
 // ===== Record Types =====
 export type FeedingType = 'breast' | 'formula' | 'bottle_breast' | 'mixed' | 'solid';
-export type SleepType = 'night' | 'day';
+export type SleepType = 'night' | 'day' | 'nap';
 export type DiaperType = 'pee' | 'poop' | 'both';
 export type PoopColor = 'yellow' | 'green' | 'brown' | 'other';
 export type PoopConsistency = 'loose' | 'paste' | 'formed';

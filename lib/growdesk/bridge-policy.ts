@@ -54,14 +54,7 @@ export const BRIDGED_METHODS: Readonly<Record<string, readonly string[]>> = {
   "/api/user/tokens": ["GET", "POST"],
 };
 const GO_PENDING_WEB_ROUTES = new Set([
-  "/api/agent/voice",
-  "/api/ai/chat",
-  "/api/ai/chat/cancel",
-  "/api/ai/daily-summary",
   "/api/ai/jobs",
-  "/api/ai/tips",
-  "/api/growth/ocr",
-  "/api/medical/ocr",
   "/api/user/tokens",
 ]);
 

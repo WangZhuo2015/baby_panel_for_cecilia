@@ -8,7 +8,7 @@ import { legacyVersion, nonNegativeInteger, optionalText, optionalTimestamp, req
 export interface LegacySleepRecord {
   id: string;
   babyId: string;
-  type?: "nap" | "night";
+  type?: "nap" | "night" | "day";
   sleepType?: "nap" | "night";
   startTime?: string;
   endTime?: string | null;
@@ -47,7 +47,9 @@ export interface GrowDeskSleepRecord {
 const SLEEP_TYPES = ["nap", "night"] as const;
 
 function sleepType(body: Record<string, unknown>): "nap" | "night" {
-  return requiredEnum(body.sleepType ?? body.type, SLEEP_TYPES, "sleepType");
+  const raw = body.sleepType ?? body.type;
+  const normalized = raw === "day" ? "nap" : raw;
+  return requiredEnum(normalized, SLEEP_TYPES, "sleepType");
 }
 
 function startValue(body: Record<string, unknown>): unknown {
@@ -95,7 +97,7 @@ export function fromGrowDeskSleepRecord(rec: GrowDeskSleepRecord): LegacySleepRe
   return {
     id: rec.id,
     babyId: rec.babyId,
-    type: rec.sleepType,
+    type: rec.sleepType === "nap" ? "day" : rec.sleepType,
     sleepType: rec.sleepType,
     startTime: rec.startedAt,
     startedAt: rec.startedAt,

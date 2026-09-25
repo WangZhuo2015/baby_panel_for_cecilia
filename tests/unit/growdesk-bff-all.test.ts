@@ -170,6 +170,41 @@ test("SH-08: Sleep Compat DTO Layer", async (t) => {
     assert.equal(rec.clientId, null);
     assert.equal(rec.version, "3");
   });
+
+  await t.test("fromGrowDeskSleepRecord: maps nap to day for legacy type and preserves sleepType", () => {
+    const rec = fromGrowDeskSleepRecord({
+      id: "sleep-456",
+      babyId: "baby-1",
+      familyId: "family-1",
+      sleepType: "nap",
+      startedAt: "2026-09-12T13:00:00.000Z",
+      endedAt: "2026-09-12T14:30:00.000Z",
+      nightWakingCount: 0,
+      notes: "Daytime nap",
+      source: "ui_manual",
+      sourceAgent: null,
+      version: "1",
+      createdAt: "2026-09-12T14:30:00.000Z",
+      updatedAt: "2026-09-12T14:30:00.000Z",
+    });
+
+    assert.equal(rec.type, "day");
+    assert.equal(rec.sleepType, "nap");
+  });
+
+  await t.test("toGrowDeskSleepCreatePayload & UpdatePayload: accepts type 'day' and maps to 'nap'", () => {
+    const createP = toGrowDeskSleepCreatePayload({
+      type: "day",
+      startTime: "2026-09-12T13:00:00.000Z",
+    });
+    assert.equal(createP.sleepType, "nap");
+
+    const updateP = toGrowDeskSleepUpdatePayload({
+      baseVersion: 1,
+      type: "day",
+    });
+    assert.equal(updateP.sleepType, "nap");
+  });
 });
 
 test("SH-08: Food Compat DTO Layer", async (t) => {

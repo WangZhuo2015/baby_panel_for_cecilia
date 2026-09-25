@@ -51,6 +51,12 @@ test("Go mode keeps canonical BFF routes but blocks Web-local state and executio
     ["/api/vaccines/selections", "PUT"],
     ["/api/notifications", "GET"],
     ["/api/ai/sessions", "GET"],
+    ["/api/agent/voice", "POST"],
+    ["/api/ai/chat", "POST"],
+    ["/api/ai/daily-summary", "GET"],
+    ["/api/ai/tips", "GET"],
+    ["/api/growth/ocr", "POST"],
+    ["/api/medical/ocr", "POST"],
   ] as const) {
     assert.equal(isBridgedMethod(path, method, "go"), true, `${method} ${path}`);
   }
@@ -61,12 +67,6 @@ test("Go mode keeps canonical BFF routes but blocks Web-local state and executio
     ["/api/ai/jobs/550e8400-e29b-41d4-a716-446655440000", "PATCH"],
     ["/api/user/tokens", "GET"],
     ["/api/user/tokens", "POST"],
-    ["/api/agent/voice", "POST"],
-    ["/api/ai/chat", "POST"],
-    ["/api/ai/daily-summary", "GET"],
-    ["/api/ai/tips", "GET"],
-    ["/api/growth/ocr", "POST"],
-    ["/api/medical/ocr", "POST"],
   ] as const) {
     assert.equal(isBridgedMethod(path, method, "go"), false, `${method} ${path}`);
   }

@@ -107,7 +107,9 @@ export function SleepForm({
   });
 
   const [sleepType, setSleepType] = useState<SleepType>(() => {
-    return (initialData?.type as SleepType) || "night";
+    const rawType = initialData?.type ?? initialData?.sleepType;
+    if (rawType === "nap" || rawType === "day") return "day";
+    return "night";
   });
 
   const [nightWaking, setNightWaking] = useState<number>(() => {
@@ -154,7 +156,9 @@ export function SleepForm({
         if (storedStart && !Number.isNaN(new Date(storedStart).getTime())) {
           setIsLiveSleeping(true);
           setLiveStartTime(storedStart);
-          if (storedType) setSleepType(storedType as SleepType);
+          if (storedType) {
+            setSleepType(storedType === "nap" || storedType === "day" ? "day" : "night");
+          }
         } else {
           setIsLiveSleeping(false);
           setLiveStartTime(null);
