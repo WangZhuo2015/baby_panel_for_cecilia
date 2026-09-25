@@ -20,7 +20,6 @@ export async function POST(request: Request) {
 
   const response = NextResponse.json({ success: true }, { headers: { "cache-control": "no-store" } });
   if (GROWDESK_CONFIG.enabled) {
-    clearLegacyAuthCookies(response, config.isProduction);
     response.cookies.set({
       name: GROWDESK_CONFIG.cookieName,
       value: "",
@@ -30,6 +29,8 @@ export async function POST(request: Request) {
       path: "/",
       maxAge: 0,
     });
+    // ResponseCookies serializes its own map; append other aliases afterwards.
+    clearLegacyAuthCookies(response, config.isProduction);
   } else {
     response.cookies.set({
       name: AUTH_COOKIE_NAME,
