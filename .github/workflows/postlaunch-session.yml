@@ -1,0 +1,52 @@
+name: Post-launch session lifecycle
+on:
+  pull_request:
+    branches: [main]
+    paths: ['lib/growdesk/**', 'app/api/auth/**', 'tests/unit/growdesk-legacy-*.test.ts', '.github/workflows/postlaunch-session.yml']
+  push:
+    branches: [main]
+    paths: ['lib/growdesk/**', 'app/api/auth/**', 'tests/unit/growdesk-legacy-*.test.ts', '.github/workflows/postlaunch-session.yml']
+permissions:
+  contents: read
+concurrency:
+  group: postlaunch-session-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  session-lifecycle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      NODE_ENV: test
+      DATABASE_URL: file:./dev_test.db
+      JWT_SECRET: test_postlaunch_session_secret_not_production
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npx prisma generate
+      - name: Actual handler lifecycle and input policy
+        run: node --import tsx --test --test-concurrency=1 tests/unit/growdesk-legacy-session-policy.test.ts tests/unit/growdesk-legacy-bootstrap.test.ts
+      - name: Preserve full suite outcome with concise failure context
+        shell: bash
+        run: |
+          set +e
+          npm test > "$RUNNER_TEMP/postlaunch-unit.log" 2>&1
+          result=$?
+          python3 - "$RUNNER_TEMP/postlaunch-unit.log" <<'PY'
+          import re, sys
+          from pathlib import Path
+          lines = Path(sys.argv[1]).read_text(errors='replace').splitlines()
+          wanted = set(range(max(0, len(lines)-25), len(lines)))
+          for i, line in enumerate(lines):
+              if re.search(r'not ok|ERR_ASSERTION|error:|Error:', line):
+                  wanted.update(range(max(0,i-3), min(len(lines),i+35)))
+          for i in sorted(wanted):
+              print(lines[i])
+          PY
+          exit "$result"

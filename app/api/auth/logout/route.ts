@@ -5,6 +5,7 @@ import { validateCsrfOrigin } from "@/lib/api-helpers";
 import { getBffSessionSecret, logoutBffSession } from "@/lib/growdesk/session";
 import { verifyBffCsrf } from "@/lib/growdesk/csrf";
 import { bridgeErrorResponse } from "@/lib/growdesk/bridge-protocol";
+import { clearLegacyAuthCookies } from "@/lib/growdesk/legacy-session-policy";
 
 export async function POST(request: Request) {
   const csrfError = GROWDESK_CONFIG.enabled ? verifyBffCsrf(request) : validateCsrfOrigin(request);
@@ -17,20 +18,22 @@ export async function POST(request: Request) {
     }
   }
 
-  const response = NextResponse.json({ success: true });
-  response.cookies.set({
-    name: AUTH_COOKIE_NAME,
-    value: "",
-    httpOnly: true,
-    secure: config.isProduction,
-    sameSite: "lax",
-    path: "/",
-    maxAge: 0,
-  });
-
+  const response = NextResponse.json({ success: true }, { headers: { "cache-control": "no-store" } });
   if (GROWDESK_CONFIG.enabled) {
     response.cookies.set({
       name: GROWDESK_CONFIG.cookieName,
+      value: "",
+      httpOnly: true,
+      secure: config.isProduction,
+      sameSite: "lax",
+      path: "/",
+      maxAge: 0,
+    });
+    // ResponseCookies serializes its own map; append other aliases afterwards.
+    clearLegacyAuthCookies(response, config.isProduction);
+  } else {
+    response.cookies.set({
+      name: AUTH_COOKIE_NAME,
       value: "",
       httpOnly: true,
       secure: config.isProduction,
