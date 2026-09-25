@@ -98,4 +98,7 @@ test("native push routes expose both subscription directions and authenticated k
   assert.equal(isBridgedMethod("/api/push/subscribe", "PATCH", "go"), false);
   assert.equal(isBridgedMethod("/api/push/vapid-key", "GET", "go"), true);
   assert.equal(isBridgedMethod("/api/push/vapid-key", "POST", "go"), false);
+  assert.equal(isBridgedMethod("/api/push/test", "POST", "go"), true);
+  assert.equal(isBridgedMethod("/api/push/test", "GET", "go"), false);
 });
+

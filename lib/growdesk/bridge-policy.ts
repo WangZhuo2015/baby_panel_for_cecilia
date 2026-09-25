@@ -43,6 +43,7 @@ export const BRIDGED_METHODS: Readonly<Record<string, readonly string[]>> = {
   "/api/notifications": ["GET"],
   "/api/push/subscribe": ["POST", "DELETE"],
   "/api/push/vapid-key": ["GET"],
+  "/api/push/test": ["POST"],
   "/api/agent/voice": ["POST"],
   "/api/agent/voice/logs": ["GET"],
   "/api/ai/sessions": ["GET", "POST"],
