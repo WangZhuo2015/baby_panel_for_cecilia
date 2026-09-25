@@ -17,7 +17,7 @@ jobs:
     timeout-minutes: 10
     env:
       NODE_ENV: test
-      DATABASE_URL: file:./test_postlaunch.db
+      DATABASE_URL: file:./dev_test.db
       JWT_SECRET: test_postlaunch_session_secret_not_production
     steps:
       - uses: actions/checkout@v4
@@ -32,3 +32,21 @@ jobs:
       - run: npx prisma generate
       - name: Actual handler lifecycle and input policy
         run: node --import tsx --test --test-concurrency=1 tests/unit/growdesk-legacy-session-policy.test.ts tests/unit/growdesk-legacy-bootstrap.test.ts
+      - name: Preserve full suite outcome with concise failure context
+        shell: bash
+        run: |
+          set +e
+          npm test > "$RUNNER_TEMP/postlaunch-unit.log" 2>&1
+          result=$?
+          python3 - "$RUNNER_TEMP/postlaunch-unit.log" <<'PY'
+          import re, sys
+          from pathlib import Path
+          lines = Path(sys.argv[1]).read_text(errors='replace').splitlines()
+          wanted = set(range(max(0, len(lines)-25), len(lines)))
+          for i, line in enumerate(lines):
+              if re.search(r'not ok|ERR_ASSERTION|error:|Error:', line):
+                  wanted.update(range(max(0,i-3), min(len(lines),i+35)))
+          for i in sorted(wanted):
+              print(lines[i])
+          PY
+          exit "$result"
