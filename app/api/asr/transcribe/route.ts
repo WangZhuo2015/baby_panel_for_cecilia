@@ -8,6 +8,10 @@ import crypto from "crypto";
 import { execFile } from "child_process";
 import { archiveBuffer, archiveText } from "@/lib/archive";
 
+import { GROWDESK_CONFIG } from "@/lib/config";
+import { resolveBffSession } from "@/lib/growdesk/session";
+import { verifyBffCsrf } from "@/lib/growdesk/csrf";
+
 export const maxDuration = 120;
 
 /**
@@ -23,10 +27,22 @@ export const maxDuration = 120;
  */
 export async function POST(request: Request) {
   try {
-    const auth = await requireAuth(request);
-    if (auth.errorResponse) return auth.errorResponse;
+    let userId: string;
+    if (GROWDESK_CONFIG.enabled) {
+      const csrfErr = verifyBffCsrf(request);
+      if (csrfErr) return csrfErr;
+      const bffSession = await resolveBffSession(request);
+      if (!bffSession) {
+        return NextResponse.json({ error: "Unauthorized: 会话无效或已过期" }, { status: 401 });
+      }
+      userId = bffSession.user.id;
+    } else {
+      const auth = await requireAuth(request);
+      if (auth.errorResponse) return auth.errorResponse;
+      userId = auth.user.id;
+    }
 
-    const rateLimit = checkRateLimit(`asr:${auth.user.id || getClientIp(request)}`, 20, 60_000);
+    const rateLimit = checkRateLimit(`asr:${userId || getClientIp(request)}`, 20, 60_000);
     if (!rateLimit.success) {
       return NextResponse.json(
         { error: "请求过于频繁，请稍后再试" },

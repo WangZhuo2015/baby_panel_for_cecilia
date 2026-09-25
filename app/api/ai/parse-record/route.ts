@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 import { requireAuth, requireBaby } from "@/lib/api-helpers";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
-import { AI_CONFIG } from "@/lib/config";
+import { GROWDESK_CONFIG, AI_CONFIG } from "@/lib/config";
+import { resolveBffSession } from "@/lib/growdesk/session";
+import { verifyBffCsrf } from "@/lib/growdesk/csrf";
+import { loadWebBaby } from "@/lib/growdesk/bridge-identity";
+import { growdeskFetch } from "@/lib/growdesk/client";
 import { getLocalDateStr } from "@/lib/date";
 import { extractActionCards } from "@/lib/extract-actions";
 
@@ -18,10 +22,25 @@ const HINT: Record<string, string> = {
 };
 
 export async function POST(request: Request) {
-  const auth = await requireAuth(request);
-  if (auth.errorResponse) return auth.errorResponse;
+  let userId: string;
+  let accessToken: string | undefined;
 
-  const rateLimit = checkRateLimit(`parse_record:${auth.user.id || getClientIp(request)}`, 20, 60_000);
+  if (GROWDESK_CONFIG.enabled) {
+    const csrfErr = verifyBffCsrf(request);
+    if (csrfErr) return csrfErr;
+    const bffSession = await resolveBffSession(request);
+    if (!bffSession) {
+      return NextResponse.json({ error: "Unauthorized: 会话无效或已过期" }, { status: 401 });
+    }
+    userId = bffSession.user.id;
+    accessToken = bffSession.accessToken;
+  } else {
+    const auth = await requireAuth(request);
+    if (auth.errorResponse) return auth.errorResponse;
+    userId = auth.user.id;
+  }
+
+  const rateLimit = checkRateLimit(`parse_record:${userId || getClientIp(request)}`, 20, 60_000);
   if (!rateLimit.success) {
     return NextResponse.json(
       { error: `提问过于频繁，请 ${rateLimit.resetSeconds} 秒后再试` },
@@ -41,11 +60,20 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "请先说出一条记录" }, { status: 400 });
   }
 
-  const babyResult = await requireBaby(auth.user, babyId);
-  if (babyResult.errorResponse) return babyResult.errorResponse;
+  let babyNickname = "宝宝";
+  if (GROWDESK_CONFIG.enabled) {
+    if (babyId && accessToken) {
+      const baby = await loadWebBaby(growdeskFetch, accessToken, babyId);
+      if (baby?.nickname) babyNickname = baby.nickname;
+    }
+  } else {
+    const babyResult = await requireBaby(userId, babyId);
+    if (babyResult.errorResponse) return babyResult.errorResponse;
+    if (babyResult.baby?.nickname) babyNickname = babyResult.baby.nickname;
+  }
 
   const system = `你把家长口述整理成待确认的日常记录。只输出 JSON，不要 markdown。
-今天日期 ${getLocalDateStr()}。宝宝昵称 ${babyResult.baby.nickname || "宝宝"}。
+今天日期 ${getLocalDateStr()}。宝宝昵称 ${babyNickname}。
 ${HINT[contextType] || "按实际内容选择类型。"}
 一句话里有多件事就输出多条。不确定的字段省略。
 时间 HH:mm，日期 YYYY-MM-DD。
