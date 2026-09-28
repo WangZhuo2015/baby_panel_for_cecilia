@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   Sparkles,
@@ -89,6 +89,9 @@ export default function DailySummaryPage() {
 
   const [summary, setSummary] = useState<AiDailySummaryResult | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+  const requestSeqRef = useRef(0);
+  const abortRef = useRef<AbortController | null>(null);
   const [regenerating, setRegenerating] = useState<boolean>(false);
   const [copied, setCopied] = useState<boolean>(false);
   const [showPosterModal, setShowPosterModal] = useState<boolean>(false);
@@ -113,7 +116,10 @@ export default function DailySummaryPage() {
     summary.metrics.totalFeedingMl === 0 &&
     summary.metrics.totalSleepMinutes === 0 &&
     summary.metrics.diaperCount === 0 &&
-    summary.metrics.foodCount === 0;
+    summary.metrics.foodCount === 0 &&
+    summary.metrics.supplementsCount === 0 &&
+    !summary.metrics.growthMeasurement &&
+    summary.metrics.medicalReportsCount === 0;
 
   // Persist date change to URL without full-page reloads
   const updateSelectedDate = (newDate: string) => {
@@ -124,25 +130,42 @@ export default function DailySummaryPage() {
     });
   };
 
-  // Fetch summary for date
-  const loadDailySummary = async (date: string, force: boolean = false) => {
-    if (force) setRegenerating(true);
-    else setLoading(true);
+  // GET is a deterministic, no-AI read. Every request is scoped to one baby/date.
+  const loadDailySummary = async (babyId: string, date: string) => {
+    const requestId = ++requestSeqRef.current;
+    abortRef.current?.abort();
+    setRegenerating(false);
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    if (summary && (summary.babyId !== babyId || summary.date !== date)) {
+      setSummary(null);
+    }
+    setError(null);
+    setLoading(true);
 
     try {
-      const url = `/api/ai/daily-summary?date=${date}${force ? "&force=1" : ""}`;
-      const res = await fetch(url);
-      if (res.ok) {
-        const data = await res.json();
-        if (data.summary) {
-          setSummary(data.summary);
-        }
+      const query = new URLSearchParams({ babyId, date });
+      const res = await fetch("/api/ai/daily-summary?" + query.toString(), {
+        cache: "no-store",
+        signal: controller.signal,
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(typeof body?.error === "string" ? body.error : "读取日报统计失败");
+      if (!body.summary || body.summary.babyId !== babyId || body.summary.date !== date) {
+        throw new Error("日报返回了不匹配的宝宝或日期");
       }
-    } catch (e) {
-      console.error("Failed to load daily summary:", e);
+      if (requestId === requestSeqRef.current) {
+        setSummary(body.summary);
+        setError(null);
+      }
+    } catch (caught) {
+      if (caught instanceof DOMException && caught.name === "AbortError") return;
+      if (requestId === requestSeqRef.current) {
+        setError(caught instanceof Error ? caught.message : "读取日报统计失败");
+      }
     } finally {
-      setLoading(false);
-      setRegenerating(false);
+      if (requestId === requestSeqRef.current) setLoading(false);
     }
   };
 
@@ -153,9 +176,11 @@ export default function DailySummaryPage() {
   }, [baby, fetchBaby]);
 
   useEffect(() => {
-    loadDailySummary(selectedDate);
-    fetchTimeline(selectedDate, true);
-  }, [selectedDate, fetchTimeline]);
+    if (!baby?.id) return;
+    void loadDailySummary(baby.id, selectedDate);
+    void fetchTimeline(selectedDate, true);
+    return () => abortRef.current?.abort();
+  }, [baby?.id, selectedDate, fetchTimeline]);
 
   const handlePrevDay = () => {
     updateSelectedDate(addDays(selectedDate, -1));
@@ -177,14 +202,55 @@ export default function DailySummaryPage() {
     }
   };
 
-  const handleRegenerate = () => {
-    loadDailySummary(selectedDate, true);
+  const handleRegenerate = async () => {
+    if (!baby?.id) return;
+    const requestId = ++requestSeqRef.current;
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    setRegenerating(true);
+    setError(null);
+
+    try {
+      const res = await fetch("/api/ai/daily-summary", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ babyId: baby.id, date: selectedDate, force: true }),
+        signal: controller.signal,
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(typeof body?.error === "string" ? body.error : "AI 解读暂时不可用");
+      if (!body.summary || body.summary.babyId !== baby.id || body.summary.date !== selectedDate) {
+        throw new Error("AI 返回了不匹配的宝宝或日期");
+      }
+      if (requestId === requestSeqRef.current) {
+        setSummary(body.summary);
+        setError(null);
+      }
+    } catch (caught) {
+      if (caught instanceof DOMException && caught.name === "AbortError") return;
+      if (requestId === requestSeqRef.current) {
+        setError(caught instanceof Error ? caught.message : "AI 解读暂时不可用");
+      }
+    } finally {
+      if (requestId === requestSeqRef.current) setRegenerating(false);
+    }
+  };
+
+  const handleRetry = () => {
+    if (baby?.id) void loadDailySummary(baby.id, selectedDate);
   };
 
   const handleCopyReport = () => {
     if (!summary) return;
     const metrics = summary.metrics;
     const totalSleepHours = (metrics.totalSleepMinutes / 60).toFixed(1);
+    const recordedMilk = metrics.recordedFeedingMl ?? metrics.totalFeedingMl;
+    const estimatedMilk = metrics.estimatedBreastMilkMl ?? 0;
+    const milkText = estimatedMilk > 0
+      ? recordedMilk + "ml 已记录，另估算亲喂 " + estimatedMilk + "ml（合计约 " + metrics.totalFeedingMl + "ml）"
+      : recordedMilk + "ml 已记录";
+    const sourceText = summary.isAiGenerated ? "AI 儿科解读" : "系统规则提示（非 AI）";
 
     const text = `🌟【${summary.babyName}】${selectedDate} 成长日报 🌟
 月龄：${summary.babyAgeLabel}
@@ -195,13 +261,13 @@ ${summary.headline}
 🏷️ ${summary.highlights.join(" · ")}
 
 📊 累计作息数据：
-🍼 奶量摄入：${metrics.totalFeedingMl}ml (共${metrics.feedingCount}次${metrics.totalBreastMinutes > 0 ? `，亲喂${metrics.totalBreastMinutes}分` : ""})
+🍼 奶量摄入：${milkText}（共${metrics.feedingCount}次）
 😴 睡眠时长：${totalSleepHours}小时 (夜间${(metrics.nightSleepMinutes/60).toFixed(1)}h · 白天${(metrics.daySleepMinutes/60).toFixed(1)}h · 夜醒${metrics.nightWakingCount}次)
 💧 换尿布：${metrics.diaperCount}次 (嘘嘘${metrics.peeCount}次 · 便便${metrics.poopCount}次)
 🥣 辅食打卡：${metrics.foodCount}顿${metrics.foodsTried.length > 0 ? ` (${metrics.foodsTried.join("、")})` : ""}
 💊 补剂打卡：${metrics.supplements.length > 0 ? metrics.supplements.map(s => s.name).join("、") : "未打卡"}
 
-📋 AI 儿科点评：
+📋 ${sourceText}：
 🍼 喂养：${summary.sections.feeding}
 😴 睡眠：${summary.sections.sleep}
 💩 排便：${summary.sections.diaper}
@@ -209,7 +275,7 @@ ${summary.headline}
 💡 明日贴士：
 ${summary.sections.tomorrowTips}
 
-—— 宝宝成长工作台 AI 智能生成 ——`;
+—— 宝宝成长工作台日报 ——`;
 
     if (navigator.clipboard) {
       navigator.clipboard.writeText(text).then(() => {
@@ -321,7 +387,7 @@ ${summary.sections.tomorrowTips}
               onClick={handleRegenerate}
               disabled={regenerating || loading}
               className="p-2 rounded-xl bg-white dark:bg-card border border-primary/15 text-text-secondary hover:text-primary btn-press disabled:opacity-50 cursor-pointer shadow-xs"
-              title="重新用 AI 生成总结"
+              title="按需生成 AI 解读"
             >
               <RefreshCw size={14} className={regenerating ? "animate-spin text-primary" : ""} />
             </button>
@@ -352,6 +418,24 @@ ${summary.sections.tomorrowTips}
         </div>
       </div>
 
+      {error && (
+        <div
+          role="alert"
+          className="flex items-center justify-between p-3.5 rounded-2xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800 text-xs text-rose-800 dark:text-rose-200 shadow-xs"
+        >
+          <div className="flex items-center gap-2">
+            <AlertCircle size={16} className="text-rose-500 shrink-0" />
+            <span>{error}</span>
+          </div>
+          <button
+            onClick={handleRetry}
+            className="px-2.5 py-1 rounded-lg bg-rose-100 dark:bg-rose-900/50 hover:bg-rose-200 text-rose-900 dark:text-rose-100 font-bold transition-all cursor-pointer"
+          >
+            重试
+          </button>
+        </div>
+      )}
+
       {/* 2. Loading State */}
       {loading ? (
         <div className="space-y-4 py-8 animate-pulse">
@@ -359,8 +443,8 @@ ${summary.sections.tomorrowTips}
             <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center mx-auto text-primary animate-bounce">
               <Sparkles size={24} />
             </div>
-            <p className="text-sm font-bold text-text-primary">AI 正在深度分析今日作息与健康数据...</p>
-            <p className="text-xs text-text-muted">正在汇总奶量、睡眠、排便与辅食指标，结合儿科指南生成总结</p>
+            <p className="text-sm font-bold text-text-primary">正在读取当日真实记录并计算统计...</p>
+            <p className="text-xs text-text-muted">统计完成后可按需生成 AI 解读，当前不会等待 AI</p>
           </CuteCard>
         </div>
       ) : summary ? (
@@ -375,7 +459,7 @@ ${summary.sections.tomorrowTips}
                     今日（{selectedDate.slice(5)} {getWeekdayStr(selectedDate)}）作息仍在进行中
                   </p>
                   <p className="text-[11px] text-text-muted">
-                    每日成长手账于次日生成全天完整复盘与评分
+                    统计随记录更新；AI 解读需要点击按需生成
                   </p>
                 </div>
               </div>
@@ -401,7 +485,7 @@ ${summary.sections.tomorrowTips}
                 </span>
               </div>
               <span className="text-[10px] text-text-muted flex items-center gap-1">
-                {summary.isAiGenerated ? "🤖 AI 深度生成" : "📋 儿科规则生成"}
+                {summary.isAiGenerated ? "🤖 AI 深度生成" : "📊 实时统计与系统规则（非 AI）"}
               </span>
             </div>
 
@@ -454,8 +538,8 @@ ${summary.sections.tomorrowTips}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
               <StatCard
                 icon={<Droplets size={16} className="text-sky-500" />}
-                label="总奶量"
-                value={String(metrics?.totalFeedingMl || 0)}
+                label="已记录奶量"
+                value={String(metrics?.recordedFeedingMl ?? metrics?.totalFeedingMl ?? 0)}
                 unit="ml"
                 color="bg-sky-500/10"
               />
@@ -510,7 +594,7 @@ ${summary.sections.tomorrowTips}
             <div className="flex items-center justify-between px-1">
               <h3 className="text-xs font-bold text-text-secondary uppercase tracking-wider flex items-center gap-1.5">
                 <Sparkles size={14} className="text-primary" />
-                AI 儿科与生长发育分析
+                当日记录与可选解读
               </h3>
             </div>
 

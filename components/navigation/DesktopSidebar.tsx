@@ -37,7 +37,8 @@ import { AiUsageModal } from "@/components/mcp/AiUsageModal";
 
 const mainNavItems = [
   { path: "/", label: "今日看板", icon: Home },
-  { path: "/daily-summary", label: "每日总结与AI日报", icon: FileText },
+  { path: "/daily-summary", label: "每日统计与AI解读", icon: FileText },
+  { path: "/dashboard", label: "奶量与照护趋势", icon: TrendingUp },
   { path: "/growth", label: "WHO 生长曲线", icon: TrendingUp },
   { path: "/food", label: "辅食食谱与日记", icon: UtensilsCrossed },
   { path: "/nutrition", label: "DRIs 全量营养", icon: Sparkles },

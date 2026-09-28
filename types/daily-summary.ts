@@ -4,6 +4,9 @@ export interface DailyFeedingDetail {
   type: string;
   typeName: string;
   amountMl?: number | null;
+  /** True when amountMl is derived from nursing duration rather than recorded. */
+  amountMlIsEstimated?: boolean;
+  estimatedAmountMl?: number | null;
   leftMinutes?: number | null;
   rightMinutes?: number | null;
   spitUp: boolean;
@@ -52,6 +55,11 @@ export interface DailySupplementDetail {
 
 export interface DailyComprehensiveMetrics {
   date: string;
+  /** Sum of amounts explicitly recorded on bottle/formula/breast records. */
+  recordedFeedingMl: number;
+  /** Sum inferred from nursing duration when a volume was not recorded. */
+  estimatedBreastMilkMl: number;
+  /** Backwards-compatible effective total: recorded amount plus nursing estimates. */
   totalFeedingMl: number;
   totalBreastMinutes: number;
   feedingCount: number;
@@ -117,5 +125,7 @@ export interface AiDailySummaryResult {
   metrics: DailyComprehensiveMetrics;
   disclaimer: string;
   isAiGenerated: boolean;
+  /** Declares whether the text came from deterministic rules or an AI provider. */
+  source: "deterministic" | "ai";
   generatedAt: string;
 }

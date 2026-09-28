@@ -25,6 +25,7 @@ export const BRIDGED_METHODS: Readonly<Record<string, readonly string[]>> = {
   "/api/records/sleep": ["GET", "POST", "PUT", "PATCH", "DELETE"],
   "/api/records/diaper": ["GET", "POST", "PUT", "DELETE"],
   "/api/records/daily-summary": ["GET"],
+  "/api/records/trends": ["GET"],
   "/api/food/logs": ["GET", "POST", "PUT", "DELETE"],
   "/api/food/items": ["GET", "POST"],
   "/api/food/plans": ["GET", "POST"],
