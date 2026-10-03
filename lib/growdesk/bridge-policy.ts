@@ -61,6 +61,8 @@ export const BRIDGED_METHODS: Readonly<Record<string, readonly string[]>> = {
   "/api/cron/backup": ["GET", "POST"],
   "/api/ai/jobs": ["GET", "POST"],
   "/api/user/tokens": ["GET", "POST"],
+  "/api/passport/pairings/claim": ["POST"],
+  "/api/passport/devices": ["GET"],
 };
 const GO_PENDING_WEB_ROUTES = new Set([
   "/api/ai/jobs",
@@ -88,6 +90,9 @@ export function isBridgedMethod(
   }
   if (/^\/api\/ai\/jobs\/[^/]+$/.test(pathname)) {
     return backend === "typescript" && ["GET", "PATCH"].includes(upperMethod);
+  }
+  if (/^\/api\/passport\/devices\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(pathname)) {
+    return upperMethod === "DELETE";
   }
   if (/^\/api\/notifications\/[^/]+$/.test(pathname)) return ["POST", "PATCH"].includes(upperMethod);
   if (/^\/api\/agent\/voice\/logs\/[^/]+$/.test(pathname)) return ["GET", "PATCH"].includes(upperMethod);

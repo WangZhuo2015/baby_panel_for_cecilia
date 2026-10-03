@@ -2,13 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { AppHeader } from "@/components/ui/AppHeader";
 import { CuteCard } from "@/components/ui/CuteCard";
 import { CuteButton } from "@/components/ui/CuteButton";
 import { CuteInput } from "@/components/ui/CuteInput";
 import { useToast } from "@/components/ui/Toast";
 import { useBabyStore } from "@/stores/useBabyStore";
-import { Users, Copy, Check, UserPlus, LogOut, ShieldCheck, Smartphone, Sparkles, ChevronRight, Baby, Camera, Link as LinkIcon, Share2, BookOpen, Key, Bot } from "lucide-react";
+import { Users, Copy, Check, UserPlus, LogOut, ShieldCheck, Smartphone, Sparkles, ChevronRight, Baby, Camera, Link as LinkIcon, Share2, BookOpen, Key, Bot, Mic } from "lucide-react";
 import { InstallGuideModal } from "@/components/ui/InstallGuideModal";
 import { FeatureTourModal } from "@/components/ui/FeatureTourModal";
 import { PersonalTokenModal } from "@/components/user/PersonalTokenModal";
@@ -282,6 +283,27 @@ export default function FamilyPage() {
           )}
         </div>
       </CuteCard>
+
+      <Link
+        href="/family/passport"
+        aria-label="打开 Passport 语音设备配对与管理"
+        className="block mb-5 rounded-[24px] outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+      >
+        <CuteCard className="p-4 bg-gradient-to-r from-sky-50/80 via-primary-light/50 to-indigo-50/60 dark:from-sky-950/20 dark:via-primary/10 dark:to-indigo-950/20 border border-primary/25 hover:shadow-md transition-all">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-primary to-sky-600 text-white flex items-center justify-center shadow-button shrink-0">
+                <Mic size={20} />
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-bold text-text-primary">Passport 语音设备</p>
+                <p className="text-xs text-text-secondary mt-0.5">配对设备、查看连接记录或撤销访问</p>
+              </div>
+            </div>
+            <ChevronRight size={18} className="text-text-muted shrink-0" />
+          </div>
+        </CuteCard>
+      </Link>
 
 
       {families.length > 1 && (
