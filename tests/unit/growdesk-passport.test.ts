@@ -158,6 +158,17 @@ test("claim rejects an unauthorized baby before calling the claim endpoint", asy
   assert.deepEqual(state.calls, []);
 });
 
+test("claim preserves a deleted or revoked baby's 404 and never calls the claim endpoint", async () => {
+  const state = dependencies({ babyError: new BridgeError(404, "BABY_NOT_FOUND", "test baby not found") });
+  const response = await state.endpoints.claim(request(
+    "/api/passport/pairings/claim", "POST", JSON.stringify({ pairCode: "AB2D-EFGH", babyId }),
+  ));
+  assert.equal(response.status, 404);
+  assert.deepEqual(await body(response), { error: "test baby not found", code: "BABY_NOT_FOUND" });
+  assert.deepEqual(state.events, ["csrf", "session", "baby"]);
+  assert.deepEqual(state.calls, []);
+});
+
 test("claim rejects malformed JSON, untrusted family input, invalid IDs, and overlong labels before reads/writes", async () => {
   const invalidRequests = [
     request("/api/passport/pairings/claim", "POST", "{"),

@@ -92,8 +92,11 @@ function explainRequestError(error: unknown, operation: "claim" | "devices" | "r
   if (operation === "claim" && (code === "PAIRING_ALREADY_CLAIMED" || error.status === 409)) {
     return "此设备码已使用，请在 Passport 上重新生成配对码后再试。";
   }
-  if (operation === "claim" && (code === "PAIRING_NOT_FOUND" || error.status === 404)) {
+  if (operation === "claim" && error.status === 404 && code === "PAIRING_NOT_FOUND") {
     return "没有找到此设备码。请核对设备上显示的 8 位配对码，或重新生成后再试。";
+  }
+  if (operation === "claim" && error.status === 404) {
+    return "宝宝授权或资料可能已发生变化，请刷新页面后重试。";
   }
   if (error.status === 403) return "当前账号没有所选宝宝的设备绑定权限。";
   if (error.status >= 500) return "Passport 服务暂时不可用，请稍后重试。";
@@ -191,17 +194,48 @@ export default function PassportDevicesPage() {
 
   const devicesAbortRef = useRef<AbortController | null>(null);
   const visitedCursorsRef = useRef<Set<string>>(new Set());
+  const focusRevokeTriggerRef = useRef<string | null>(null);
+  const focusLoginAfterRevokeRef = useRef(false);
 
   useEffect(() => {
     let active = true;
+    const controller = new AbortController();
     setSessionStatus("checking");
 
     void fetchUser()
-      .then((result) => {
+      .then(async (result) => {
         if (!active) return;
-        if (result) setSessionStatus("signed-in");
-        else if (result === null) setSessionStatus("signed-out");
-        else setSessionStatus("unavailable");
+        if (result) {
+          setSessionStatus("signed-in");
+          return;
+        }
+        if (result !== null) {
+          setSessionStatus("unavailable");
+          return;
+        }
+
+        try {
+          const response = await fetch("/api/auth/me", {
+            cache: "no-store",
+            headers: { "x-growdesk-representation": "extended" },
+            signal: controller.signal,
+          });
+          if (!active) return;
+          if (response.status === 401) {
+            setSessionStatus("signed-out");
+            return;
+          }
+          if (!response.ok) {
+            setSessionStatus("unavailable");
+            return;
+          }
+
+          const identity = await readJson(response);
+          if (!active) return;
+          setSessionStatus(isRecord(identity) && identity.user === null ? "signed-out" : "unavailable");
+        } catch {
+          if (active && !controller.signal.aborted) setSessionStatus("unavailable");
+        }
       })
       .catch(() => {
         if (active) setSessionStatus("unavailable");
@@ -209,6 +243,7 @@ export default function PassportDevicesPage() {
 
     return () => {
       active = false;
+      controller.abort();
       devicesAbortRef.current?.abort();
       devicesAbortRef.current = null;
     };
@@ -229,7 +264,7 @@ export default function PassportDevicesPage() {
     });
   }, [authorizedBabyIds, currentAuthorizedBabyId]);
 
-  const loadDevices = useCallback(async (cursor: string | null = null, append = false): Promise<boolean> => {
+  const loadDevices = useCallback(async (cursor: string | null = null, append = false): Promise<boolean | "unauthenticated"> => {
     if (append && !cursor) return false;
 
     devicesAbortRef.current?.abort();
@@ -286,6 +321,7 @@ export default function PassportDevicesPage() {
       if (isAbortError(error)) return false;
       if (error instanceof PassportHttpError && error.status === 401) {
         setSessionStatus("signed-out");
+        return "unauthenticated";
       }
       setListError(explainRequestError(error, "devices"));
       if (!append) setListStatus("error");
@@ -306,6 +342,26 @@ export default function PassportDevicesPage() {
       devicesAbortRef.current = null;
     };
   }, [loadDevices, sessionStatus]);
+
+  useEffect(() => {
+    if (revokeTargetId) {
+      document.getElementById(`passport-revoke-cancel-${revokeTargetId}`)?.focus();
+      return;
+    }
+
+    const triggerId = focusRevokeTriggerRef.current;
+    if (triggerId) {
+      focusRevokeTriggerRef.current = null;
+      document.getElementById(triggerId)?.focus();
+    }
+  }, [revokeTargetId]);
+
+  useEffect(() => {
+    if (sessionStatus === "signed-out" && focusLoginAfterRevokeRef.current) {
+      focusLoginAfterRevokeRef.current = false;
+      document.getElementById("passport-login-link")?.focus();
+    }
+  }, [sessionStatus]);
 
   useEffect(() => {
     if (sessionStatus === "signed-in" && !user) setSessionStatus("signed-out");
@@ -360,6 +416,7 @@ export default function PassportDevicesPage() {
     setManagementError("");
     setManagementNotice("");
     setRevokingDeviceId(deviceId);
+    focusLoginAfterRevokeRef.current = true;
     try {
       const response = await fetch(`/api/passport/devices/${encodeURIComponent(deviceId)}`, {
         method: "DELETE",
@@ -371,13 +428,21 @@ export default function PassportDevicesPage() {
       }
 
       setRevokeTargetId(null);
-      const refreshed = await loadDevices();
+      document.getElementById("passport-device-list-refresh")?.focus();
+      const refreshResult = await loadDevices();
+      const refreshed = refreshResult === true;
       setManagementNotice(refreshed
         ? "设备访问已撤销，状态已从服务端刷新。"
         : "服务端已确认撤销，但最新列表暂时无法读取；请刷新核对状态。");
+      if (refreshResult !== "unauthenticated") {
+        focusLoginAfterRevokeRef.current = false;
+        document.getElementById("passport-device-list-refresh")?.focus();
+      }
     } catch (error) {
       if (error instanceof PassportHttpError && error.status === 401) {
         setSessionStatus("signed-out");
+      } else {
+        focusLoginAfterRevokeRef.current = false;
       }
       setManagementError(explainRequestError(error, "revoke"));
     } finally {
@@ -422,7 +487,7 @@ export default function PassportDevicesPage() {
             <CuteCard className="p-4 border border-amber-300/60">
               <h2 className="text-sm font-bold text-text-primary">当前未登录</h2>
               <p className="mt-1 text-xs text-text-secondary">请登录后查看设备或提交绑定。</p>
-              <Link href="/login" className="mt-3 inline-flex items-center gap-1 text-sm font-semibold text-primary underline underline-offset-4">
+              <Link id="passport-login-link" href="/login" className="mt-3 inline-flex items-center gap-1 text-sm font-semibold text-primary underline underline-offset-4">
                 前往登录 <ChevronRight size={16} />
               </Link>
             </CuteCard>
@@ -433,7 +498,7 @@ export default function PassportDevicesPage() {
           <div role="alert">
             <CuteCard className="p-4 border border-amber-300/60">
               <h2 className="text-sm font-bold text-text-primary">暂时无法确认登录状态</h2>
-              <p className="mt-1 text-xs text-text-secondary">身份服务暂时没有响应，请重试；如果登录已过期，请重新登录。</p>
+              <p className="mt-1 text-xs text-text-secondary">身份服务或宝宝资料暂时无法读取，请重试；如果登录已过期，请重新登录。</p>
               <CuteButton size="sm" variant="secondary" className="mt-3" onClick={() => setSessionRetry((value) => value + 1)}>
                 <RefreshCw size={14} className="mr-1.5" />
                 重试
@@ -551,7 +616,7 @@ export default function PassportDevicesPage() {
                   <h2 className="text-sm font-bold text-text-primary">已登记的 Passport 设备</h2>
                   <p className="mt-0.5 text-[11px] text-text-secondary">设备完成连接后，可在这里查看最后连接时间和撤销状态。</p>
                 </div>
-                <CuteButton size="sm" variant="secondary" onClick={() => void loadDevices()} disabled={listStatus === "loading" || loadingMore}>
+                <CuteButton id="passport-device-list-refresh" size="sm" variant="secondary" onClick={() => void loadDevices()} disabled={listStatus === "loading" || loadingMore}>
                   {listStatus === "loading" ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : <RefreshCw size={14} className="mr-1.5" />}
                   刷新列表
                 </CuteButton>
@@ -614,10 +679,24 @@ export default function PassportDevicesPage() {
                         {!isRevoked && (
                           <div className="mt-3 border-t border-divider pt-3">
                             {revokeTargetId === device.id ? (
-                              <div className="rounded-xl bg-amber-50 p-3 dark:bg-amber-950/20" role="group" aria-label={`确认撤销 ${device.deviceLabel || "Passport 设备"}`}>
-                                <p className="text-xs font-medium text-text-primary">确定撤销此设备的访问权限吗？设备将无法继续访问该账号的数据。</p>
+                              <div
+                                className="rounded-xl bg-amber-50 p-3 dark:bg-amber-950/20"
+                                role="group"
+                                aria-labelledby={`passport-revoke-title-${device.id}`}
+                                aria-describedby={`passport-revoke-description-${device.id}`}
+                                aria-live="polite"
+                              >
+                                <h4 id={`passport-revoke-title-${device.id}`} className="text-xs font-semibold text-text-primary">
+                                  确认撤销 {device.deviceLabel || "Passport 设备"}
+                                </h4>
+                                <p id={`passport-revoke-description-${device.id}`} className="mt-1 text-xs text-text-primary">
+                                  撤销后，此设备将无法继续访问该账号的数据。确定继续吗？
+                                </p>
                                 <div className="mt-2.5 flex gap-2">
-                                  <CuteButton size="sm" variant="ghost" onClick={() => setRevokeTargetId(null)} disabled={isRevoking}>
+                                  <CuteButton id={`passport-revoke-cancel-${device.id}`} size="sm" variant="ghost" onClick={() => {
+                                    focusRevokeTriggerRef.current = `passport-revoke-trigger-${device.id}`;
+                                    setRevokeTargetId(null);
+                                  }} disabled={isRevoking}>
                                     取消
                                   </CuteButton>
                                   <CuteButton size="sm" variant="secondary" onClick={() => void handleRevoke(device.id)} disabled={isRevoking}>
@@ -627,6 +706,7 @@ export default function PassportDevicesPage() {
                               </div>
                             ) : (
                               <CuteButton
+                                id={`passport-revoke-trigger-${device.id}`}
                                 size="sm"
                                 variant="ghost"
                                 onClick={() => {
