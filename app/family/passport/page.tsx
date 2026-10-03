@@ -191,6 +191,7 @@ export default function PassportDevicesPage() {
   const [revokingDeviceId, setRevokingDeviceId] = useState<string | null>(null);
   const [managementNotice, setManagementNotice] = useState("");
   const [managementError, setManagementError] = useState("");
+  const [focusRefreshAfterRevoke, setFocusRefreshAfterRevoke] = useState(false);
 
   const devicesAbortRef = useRef<AbortController | null>(null);
   const visitedCursorsRef = useRef<Set<string>>(new Set());
@@ -273,6 +274,7 @@ export default function PassportDevicesPage() {
 
     if (!append) {
       setListStatus("loading");
+      setLoadingMore(false);
       if (!cursor) visitedCursorsRef.current.clear();
     } else {
       setLoadingMore(true);
@@ -364,6 +366,17 @@ export default function PassportDevicesPage() {
   }, [sessionStatus]);
 
   useEffect(() => {
+    if (!focusRefreshAfterRevoke
+        || sessionStatus !== "signed-in"
+        || listStatus === "loading"
+        || loadingMore) {
+      return;
+    }
+    setFocusRefreshAfterRevoke(false);
+    document.getElementById("passport-device-list-refresh")?.focus();
+  }, [focusRefreshAfterRevoke, listStatus, loadingMore, sessionStatus]);
+
+  useEffect(() => {
     if (sessionStatus === "signed-in" && !user) setSessionStatus("signed-out");
   }, [sessionStatus, user]);
 
@@ -428,7 +441,6 @@ export default function PassportDevicesPage() {
       }
 
       setRevokeTargetId(null);
-      document.getElementById("passport-device-list-refresh")?.focus();
       const refreshResult = await loadDevices();
       const refreshed = refreshResult === true;
       setManagementNotice(refreshed
@@ -436,7 +448,7 @@ export default function PassportDevicesPage() {
         : "服务端已确认撤销，但最新列表暂时无法读取；请刷新核对状态。");
       if (refreshResult !== "unauthenticated") {
         focusLoginAfterRevokeRef.current = false;
-        document.getElementById("passport-device-list-refresh")?.focus();
+        setFocusRefreshAfterRevoke(true);
       }
     } catch (error) {
       if (error instanceof PassportHttpError && error.status === 401) {
