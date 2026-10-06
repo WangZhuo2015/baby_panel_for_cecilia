@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState } from "react";
+import dynamic from "next/dynamic";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   Baby,
@@ -15,6 +17,9 @@ import {
   Sparkles,
   Star,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
+  TrendingUp,
   Camera,
   FileText,
   MessageSquare,
@@ -43,6 +48,16 @@ import { openRecordDrawer, RecordDrawerType } from "@/lib/drawer-bus";
 import { openQuickAI } from "@/lib/quickai-bus";
 import { useNotificationInbox } from "@/lib/hooks/useNotificationInbox";
 import { isWorkbenchViewport } from "@/lib/responsive";
+import type { HomeMetricKey } from "@/components/home/DailyMetricTrends";
+
+const DailyMetricTrends = dynamic(() => import("@/components/home/DailyMetricTrends"), {
+  ssr: false,
+  loading: () => (
+    <div role="status" className="mt-3 flex h-28 items-center justify-center rounded-2xl border border-primary/15 bg-card text-xs text-text-muted">
+      正在打开趋势…
+    </div>
+  ),
+});
 
 function NotificationBell() {
   const router = useRouter();
@@ -99,6 +114,8 @@ export default function HomePage() {
   const [liveSleepStart, setLiveSleepStart] = useState<string | null>(null);
   const [liveSleepElapsed, setLiveSleepElapsed] = useState<string>("");
   const [isTourModalOpen, setIsTourModalOpen] = useState(false);
+  const [dailyTrendsOpen, setDailyTrendsOpen] = useState(false);
+  const [dailyTrendMetric, setDailyTrendMetric] = useState<HomeMetricKey>("milk");
 
   const refreshAll = useBabyStore((s) => s.refreshAll);
 
@@ -119,6 +136,11 @@ export default function HomePage() {
     } else {
       router.push(fallbackUrl);
     }
+  };
+
+  const openDailyTrend = (metric: HomeMetricKey) => {
+    setDailyTrendMetric(metric);
+    setDailyTrendsOpen(true);
   };
 
   useEffect(() => {
@@ -465,11 +487,51 @@ export default function HomePage() {
                 查看完整日报 <ChevronRight size={12} />
               </button>
             </div>
+            <div className="mb-2.5 grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <Link
+                href="/nutrition"
+                className="group flex min-h-[64px] items-center gap-3 rounded-2xl border border-primary/20 bg-gradient-to-r from-primary-light/80 to-sky-50 px-3 py-2.5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+              >
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/80 text-primary shadow-sm">
+                  <UtensilsCrossed size={17} />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-xs font-bold text-text-primary group-hover:text-primary">全量营养</span>
+                  <span className="mt-0.5 block truncate text-[10px] text-text-secondary">奶量、辅食与营养素明细</span>
+                </span>
+                <ChevronRight size={16} className="shrink-0 text-primary" />
+              </Link>
+              <button
+                type="button"
+                onClick={() => setDailyTrendsOpen((open) => !open)}
+                aria-expanded={dailyTrendsOpen}
+                aria-controls="home-daily-trends-panel"
+                className="group flex min-h-[64px] items-center gap-3 rounded-2xl border border-sky-200 bg-gradient-to-r from-sky-50 to-white px-3 py-2.5 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2"
+              >
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-sky-100 text-sky-700">
+                  <TrendingUp size={17} />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-xs font-bold text-text-primary group-hover:text-sky-700">照护趋势</span>
+                  <span className="mt-0.5 block truncate text-[10px] text-text-secondary">近 7 / 30 天奶量、睡眠等</span>
+                </span>
+                {dailyTrendsOpen ? <ChevronUp size={16} className="shrink-0 text-sky-700" /> : <ChevronDown size={16} className="shrink-0 text-sky-700" />}
+              </button>
+            </div>
             <div className="grid grid-cols-4 gap-2">
-              <StatCard icon={<Droplets size={16} className="text-sky" />} label="奶量" value={String(summary.totalFeedingMl)} unit="ml" color="bg-sky/10" />
-              <StatCard icon={<Moon size={16} className="text-lavender" />} label="睡眠" value={formatSleep(summary.totalSleepMinutes)} color="bg-lavender/10" />
-              <StatCard icon={<Wind size={16} className="text-mint" />} label="尿布" value={String(summary.diaperCount)} unit="次" color="bg-mint/10" />
-              <StatCard icon={<UtensilsCrossed size={16} className="text-peach" />} label="辅食" value={String(summary.foodCount)} unit="顿" color="bg-peach/10" />
+              <StatCard icon={<Droplets size={16} className="text-sky" />} label="奶量" value={String(summary.totalFeedingMl)} unit="ml" color="bg-sky/10" onClick={() => openDailyTrend("milk")} active={dailyTrendsOpen && dailyTrendMetric === "milk"} />
+              <StatCard icon={<Moon size={16} className="text-lavender" />} label="睡眠" value={formatSleep(summary.totalSleepMinutes)} color="bg-lavender/10" onClick={() => openDailyTrend("sleep")} active={dailyTrendsOpen && dailyTrendMetric === "sleep"} />
+              <StatCard icon={<Wind size={16} className="text-mint" />} label="尿布" value={String(summary.diaperCount)} unit="次" color="bg-mint/10" onClick={() => openDailyTrend("diaper")} active={dailyTrendsOpen && dailyTrendMetric === "diaper"} />
+              <StatCard icon={<UtensilsCrossed size={16} className="text-peach" />} label="辅食" value={String(summary.foodCount)} unit="顿" color="bg-peach/10" onClick={() => openDailyTrend("food")} active={dailyTrendsOpen && dailyTrendMetric === "food"} />
+            </div>
+            <div id="home-daily-trends-panel">
+              {dailyTrendsOpen && (
+                <DailyMetricTrends
+                  babyId={baby?.id}
+                  metric={dailyTrendMetric}
+                  onMetricChange={setDailyTrendMetric}
+                />
+              )}
             </div>
 
             {/* 🤖 每日成长日报 Banner */}

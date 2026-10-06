@@ -184,6 +184,9 @@ export interface MultiDayTrendItem {
   iron: number;
   zinc?: number;
   dha?: number;
+  /** Full deterministic daily projection, keyed by nutrientId. */
+  nutrients?: Record<string, number>;
+  hasRecords?: boolean;
 }
 
 export interface MultiDayNutritionSummary {

@@ -1,156 +1,85 @@
 "use client";
 
-import { useState } from "react";
-import {
-  ResponsiveContainer,
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ReferenceLine,
-} from "recharts";
+import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ReferenceLine } from "recharts";
 import { CuteCard } from "@/components/ui/CuteCard";
-import { TrendingUp, Droplets, Sparkles } from "lucide-react";
-import type { MultiDayTrendItem } from "@/types/nutrition";
+import { TrendingUp } from "lucide-react";
+import { nutritionTrendValue, summarizeTrend } from "@/lib/nutrition/trends";
+import type { MultiDayNutritionSummary, NutrientIntakeItem } from "@/types/nutrition";
 
 export interface NutritionTrendChartProps {
-  trends: MultiDayTrendItem[];
-  daysCount?: number;
-  className?: string;
+  summary: MultiDayNutritionSummary;
+  metric: string;
+  onMetricChange: (metric: string) => void;
+  references?: NutrientIntakeItem[];
 }
+const coreIds = ["vitamin_d", "calcium", "iron", "vitamin_a", "zinc", "dha"];
+const format = (value: number | null) => value === null ? "—" : Number(value.toFixed(2)).toLocaleString();
 
-export function NutritionTrendChart({ trends, daysCount = 7, className = "" }: NutritionTrendChartProps) {
-  const [metric, setMetric] = useState<"milk" | "vitaminD" | "calcium" | "iron">("vitaminD");
-
-  if (!trends || trends.length === 0) {
-    return (
-      <CuteCard className={`p-4 text-center text-text-muted text-xs ${className}`}>
-        暂无多日趋势数据
-      </CuteCard>
-    );
-  }
-
-  // 格式化 X 轴日期 (MM-DD)
-  const chartData = trends.map((t) => ({
-    ...t,
-    displayDate: t.date.slice(5),
+export function NutritionTrendChart({ summary, metric, onMetricChange, references = [] }: NutritionTrendChartProps) {
+  const options = [
+    { id: "milk", name: "总奶量", unit: "ml" },
+    ...Object.entries(summary.averageIntakes).map(([id, item]) => ({ id, name: item.name, unit: item.unit })),
+  ];
+  const selected = options.find(item => item.id === metric) ?? options[0];
+  const activeMetric = selected.id;
+  const reference = references.find(item => item.nutrientId === activeMetric);
+  const target = summary.averageIntakes[activeMetric]?.targetAmount;
+  const chart = summary.dailyTrends.map(day => ({
+    ...day, displayDate: day.date.slice(5), value: nutritionTrendValue(day, activeMetric),
+    formula: day.hasRecords === false ? null : day.formulaMl,
+    breast: day.hasRecords === false ? null : day.breastMl,
   }));
+  const stats = summarizeTrend(chart.map(day => day.value));
+  const quickOptions = options.filter(item => item.id === "milk" || coreIds.includes(item.id));
 
-  return (
-    <CuteCard className={`p-4 space-y-3 bg-white border border-primary/20 shadow-2xs ${className}`}>
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-1.5">
-          <TrendingUp size={16} className="text-primary" />
-          <h3 className="text-xs font-bold text-text-primary">
-            近 {daysCount} 天摄入趋势与基准线
-          </h3>
-        </div>
-        <span className="text-[10px] text-text-muted">历史追踪</span>
-      </div>
-
-      {/* 指标切换 */}
-      <div className="flex gap-1.5 bg-gray-100/80 p-1 rounded-2xl">
-        <button
-          type="button"
-          onClick={() => setMetric("vitaminD")}
-          className={`flex-1 py-1.5 text-xs font-bold rounded-xl transition-all ${
-            metric === "vitaminD" ? "bg-white text-primary shadow-xs" : "text-text-secondary"
-          }`}
-        >
-          维生素D (IU)
-        </button>
-        <button
-          type="button"
-          onClick={() => setMetric("milk")}
-          className={`flex-1 py-1.5 text-xs font-bold rounded-xl transition-all ${
-            metric === "milk" ? "bg-white text-sky-600 shadow-xs" : "text-text-secondary"
-          }`}
-        >
-          奶量 (ml)
-        </button>
-        <button
-          type="button"
-          onClick={() => setMetric("calcium")}
-          className={`flex-1 py-1.5 text-xs font-bold rounded-xl transition-all ${
-            metric === "calcium" ? "bg-white text-emerald-600 shadow-xs" : "text-text-secondary"
-          }`}
-        >
-          钙 (mg)
-        </button>
-        <button
-          type="button"
-          onClick={() => setMetric("iron")}
-          className={`flex-1 py-1.5 text-xs font-bold rounded-xl transition-all ${
-            metric === "iron" ? "bg-white text-amber-600 shadow-xs" : "text-text-secondary"
-          }`}
-        >
-          铁 (mg)
-        </button>
-      </div>
-
-      {/* 图表展示 */}
-      <div className="h-[220px] -mx-2 pt-2">
+  return <CuteCard className="p-4 space-y-4 border border-primary/20">
+    <div className="flex flex-wrap items-center gap-1.5">
+      <TrendingUp size={16} className="text-primary" />
+      <h3 className="text-sm font-bold text-text-primary">{selected.name}趋势</h3>
+      <span className="ml-auto text-[10px] text-text-muted">{summary.startDate} 至 {summary.endDate}</span>
+    </div>
+    <div className="flex flex-wrap gap-1.5" aria-label="营养趋势指标">
+      {quickOptions.map(item => <button type="button" key={item.id} aria-pressed={activeMetric === item.id}
+        onClick={() => onMetricChange(item.id)}
+        className={`px-3 py-2 rounded-xl text-xs font-bold cursor-pointer ${activeMetric === item.id ? "bg-primary text-white" : "bg-primary/5 text-text-secondary"}`}>
+        {item.name}
+      </button>)}
+    </div>
+    <label className="flex items-center gap-3 text-xs text-text-secondary">
+      全部营养指标
+      <select aria-label="选择营养趋势指标" value={activeMetric} onChange={event => onMetricChange(event.target.value)}
+        className="flex-1 min-w-0 rounded-xl border border-divider bg-card px-3 py-2 text-text-primary">
+        {options.map(item => <option key={item.id} value={item.id}>{item.name} ({item.unit})</option>)}
+      </select>
+    </label>
+    <div className="flex justify-between gap-2 text-xs">
+      <span>有记录日均 <strong className="text-text-primary">{format(stats.average)} {selected.unit}</strong></span>
+      <span className="text-text-muted">{stats.recordedDays} / {summary.daysCount} 天有数据</span>
+    </div>
+    {stats.recordedDays === 0 ? <p className="py-8 text-center text-xs text-text-muted">这段时间还没有该指标的记录</p> :
+      <div className="h-60 w-full min-w-0" role="img" aria-label={`${selected.name}每日趋势，逐日数据见下方明细`}>
         <ResponsiveContainer width="100%" height="100%">
-          {metric === "vitaminD" ? (
-            <LineChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#F0F0F0" />
-              <XAxis dataKey="displayDate" tick={{ fontSize: 10, fill: "#999" }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 10, fill: "#999" }} axisLine={false} tickLine={false} domain={[0, "auto"]} />
-              <Tooltip
-                contentStyle={{
-                  background: "white",
-                  border: "1px solid #FFE0EB",
-                  borderRadius: "16px",
-                  boxShadow: "0 4px 12px rgba(0,0,0,0.06)",
-                  fontSize: "12px",
-                }}
-              />
-              <ReferenceLine y={400} stroke="#10B981" strokeDasharray="4 4" label={{ value: "目标 400 IU", fill: "#10B981", fontSize: 10, position: "insideTopRight" }} />
-              <ReferenceLine y={800} stroke="#EF4444" strokeDasharray="4 4" label={{ value: "上限 800 IU", fill: "#EF4444", fontSize: 10, position: "insideTopRight" }} />
-              <Line type="monotone" dataKey="vitaminD" stroke="#FF6F9F" strokeWidth={2.5} dot={{ fill: "#FF6F9F", r: 4 }} name="实测维生素D (IU)" animationDuration={250} animationEasing="ease-out" />
-            </LineChart>
-          ) : metric === "milk" ? (
-            <LineChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#F0F0F0" />
-              <XAxis dataKey="displayDate" tick={{ fontSize: 10, fill: "#999" }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 10, fill: "#999" }} axisLine={false} tickLine={false} />
-              <Tooltip
-                contentStyle={{
-                  background: "white",
-                  border: "1px solid #E0F2FE",
-                  borderRadius: "16px",
-                  fontSize: "12px",
-                }}
-              />
-              <Line type="monotone" dataKey="totalFeedingMl" stroke="#0284C7" strokeWidth={2.5} dot={{ fill: "#0284C7", r: 4 }} name="总奶量 (ml)" animationDuration={250} animationEasing="ease-out" />
-              <Line type="monotone" dataKey="formulaMl" stroke="#38BDF8" strokeWidth={1.5} dot={false} strokeDasharray="3 3" name="配方奶 (ml)" isAnimationActive={false} />
-              <Line type="monotone" dataKey="breastMl" stroke="#F472B6" strokeWidth={1.5} dot={false} strokeDasharray="3 3" name="母乳 (ml)" isAnimationActive={false} />
-              <Legend wrapperStyle={{ fontSize: "11px", paddingTop: "8px" }} />
-            </LineChart>
-          ) : metric === "calcium" ? (
-            <LineChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#F0F0F0" />
-              <XAxis dataKey="displayDate" tick={{ fontSize: 10, fill: "#999" }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 10, fill: "#999" }} axisLine={false} tickLine={false} />
-              <Tooltip contentStyle={{ background: "white", borderRadius: "16px", fontSize: "12px" }} />
-              <ReferenceLine y={250} stroke="#10B981" strokeDasharray="4 4" label={{ value: "参考 250mg", fill: "#10B981", fontSize: 10 }} />
-              <Line type="monotone" dataKey="calcium" stroke="#10B981" strokeWidth={2.5} dot={{ fill: "#10B981", r: 4 }} name="钙摄入 (mg)" animationDuration={250} animationEasing="ease-out" />
-            </LineChart>
-          ) : (
-            <LineChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#F0F0F0" />
-              <XAxis dataKey="displayDate" tick={{ fontSize: 10, fill: "#999" }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 10, fill: "#999" }} axisLine={false} tickLine={false} />
-              <Tooltip contentStyle={{ background: "white", borderRadius: "16px", fontSize: "12px" }} />
-              <ReferenceLine y={10} stroke="#F59E0B" strokeDasharray="4 4" label={{ value: "参考 10mg", fill: "#F59E0B", fontSize: 10 }} />
-              <Line type="monotone" dataKey="iron" stroke="#F59E0B" strokeWidth={2.5} dot={{ fill: "#F59E0B", r: 4 }} name="铁摄入 (mg)" animationDuration={250} animationEasing="ease-out" />
-            </LineChart>
-          )}
+          <LineChart data={chart} margin={{ top: 18, right: 12, left: -15, bottom: 0 }} accessibilityLayer>
+            <CartesianGrid strokeDasharray="3 3" opacity={0.25} />
+            <XAxis dataKey="displayDate" tick={{ fontSize: 10 }} minTickGap={18} />
+            <YAxis tick={{ fontSize: 10 }} domain={[0, "auto"]} />
+            <Tooltip formatter={value => value == null ? "未记录" : `${format(Number(value))} ${selected.unit}`} contentStyle={{ borderRadius: 12, fontSize: 12 }} />
+            {target != null && <ReferenceLine y={target} ifOverflow="extendDomain" stroke="#10b981" strokeDasharray="4 4" label={{ value: `适龄参考 ${target} ${selected.unit}`, fontSize: 10, position: "insideTopRight" }} />}
+            {reference?.ul != null && <ReferenceLine y={reference.ul} ifOverflow="extendDomain" stroke="#ef4444" strokeDasharray="4 4" label={{ value: `上限 ${reference.ul} ${selected.unit}`, fontSize: 10, position: "insideTopRight" }} />}
+            <Line type="linear" dataKey="value" name={selected.name} stroke="#0284c7" strokeWidth={2.5} dot={{ r: 3 }} connectNulls={false} isAnimationActive={false} />
+            {activeMetric === "milk" && <Line type="linear" dataKey="formula" name="配方奶" stroke="#38bdf8" strokeDasharray="3 3" dot={false} connectNulls={false} isAnimationActive={false} />}
+            {activeMetric === "milk" && <Line type="linear" dataKey="breast" name="母乳（含亲喂估算）" stroke="#f472b6" strokeDasharray="3 3" dot={false} connectNulls={false} isAnimationActive={false} />}
+            <Legend wrapperStyle={{ fontSize: 10 }} />
+          </LineChart>
         </ResponsiveContainer>
-      </div>
-    </CuteCard>
-  );
+      </div>}
+    <p className="text-[10px] leading-relaxed text-text-muted">按已有喂养、辅食与补剂记录计算，亲喂奶量和食物营养含估算。未记录日留空，日均不含未记录日；今天仍在累计，不能直接与完整一天比较。</p>
+    <details className="text-xs">
+      <summary className="cursor-pointer text-primary py-1">查看逐日明细</summary>
+      <div className="max-h-60 overflow-auto mt-2"><table className="w-full text-right">
+        <thead><tr><th className="text-left p-2">日期</th><th className="p-2">{selected.name} ({selected.unit})</th></tr></thead>
+        <tbody>{[...chart].reverse().map(day => <tr key={day.date} className="border-t border-divider"><td className="text-left p-2">{day.date}</td><td className="p-2">{format(day.value)}</td></tr>)}</tbody>
+      </table></div>
+    </details>
+  </CuteCard>;
 }

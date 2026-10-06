@@ -8,6 +8,23 @@ function day(result: CareTrends, date: string) {
   return value;
 }
 
+test("food trends use the recorded calendar day, including food-only days and range boundaries", () => {
+  const result = aggregateCareTrends({
+    babyId: "test_baby_food_trends", timeZone: "America/Los_Angeles", endDate: "2026-10-06", days: 7,
+    feeding: [], sleep: [], diaper: [], food: [
+      { date: "2026-09-29" }, { date: "2026-09-30" },
+      { date: "2026-10-06" }, { date: "2026-10-06" }, { date: "2026-10-07" },
+    ],
+  });
+  assert.equal(day(result, "2026-09-30").foodCount, 1);
+  assert.equal(day(result, "2026-10-06").foodCount, 2);
+  assert.equal(day(result, "2026-10-06").hasRecords, true);
+  assert.equal(day(result, "2026-10-06").recordedMilkMl, null);
+  assert.equal(day(result, "2026-10-05").hasRecords, false);
+  assert.equal(result.days.reduce((sum, d) => sum + d.foodCount, 0), 3);
+  assert.throws(() => aggregateCareTrends({ babyId: "test_baby_food_bad", timeZone: "Asia/Shanghai", endDate: "2026-10-06", days: 7, feeding: [], sleep: [], diaper: [], food: [{ date: "2026-02-31" }] }));
+});
+
 test("care trends uses the family-local Shanghai day boundary", () => {
   const result = aggregateCareTrends({
     babyId: "test_baby_trends_shanghai",
