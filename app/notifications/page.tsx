@@ -510,7 +510,7 @@ function NotificationCard({
         <div className="flex-1 min-w-0 pr-6">
           <div className="flex items-center gap-2">
             <p
-              className={`text-sm ${!read ? "font-semibold" : "font-medium"} text-text-primary truncate`}
+              className={`text-sm ${!read ? "font-semibold" : "font-medium"} text-text-primary break-words`}
             >
               {notification.title}
             </p>
