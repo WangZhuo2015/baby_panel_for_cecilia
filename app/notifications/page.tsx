@@ -518,7 +518,7 @@ function NotificationCard({
               <span className="w-2 h-2 rounded-full bg-primary flex-shrink-0" />
             )}
           </div>
-          <p className="text-xs text-text-secondary mt-0.5 leading-relaxed line-clamp-2">
+          <p className="text-xs text-text-secondary mt-0.5 leading-relaxed whitespace-pre-wrap break-words">
             {notification.detail}
           </p>
           <p className="text-[10px] text-text-muted mt-1.5">
