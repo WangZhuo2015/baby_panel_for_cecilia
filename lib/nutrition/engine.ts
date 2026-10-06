@@ -669,6 +669,11 @@ export function calculateMultiDayNutritionTrend(params: {
       dha,
       nutrients: Object.fromEntries(analysis.allNutrients.map(item => [item.nutrientId, item.totalAmount])),
       hasRecords: day.feedings.length > 0 || day.supplements.length > 0 || (day.foodLogs?.length ?? 0) > 0,
+      recordedMetrics: [
+        ...(day.feedings.some(feeding => feeding.type !== "solid" &&
+          (feeding.amountMl != null || (feeding.leftMinutes ?? 0) > 0 || (feeding.rightMinutes ?? 0) > 0)) ? ["milk"] : []),
+        ...analysis.allNutrients.filter(item => item.sources.length > 0).map(item => item.nutrientId),
+      ],
     });
 
     for (const item of analysis.allNutrients) {

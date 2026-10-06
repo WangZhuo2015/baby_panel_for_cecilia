@@ -19,7 +19,19 @@ test("full nutrition trend preserves all nutrient projections, empty days, and a
   assert.equal(nutritionTrendValue(summary.dailyTrends[1], "vitamin_d"), 10);
   assert.equal(nutritionTrendValue(summary.dailyTrends[2], "milk"), 0);
   assert.equal(nutritionTrendValue(summary.dailyTrends[1], "nonexistent"), null);
-  assert.deepEqual(summarizeTrend(summary.dailyTrends.map(day => nutritionTrendValue(day, "energy_kcal"))), { recordedDays: 2, average: 33.5, latest: 0 });
+  assert.deepEqual(summarizeTrend(summary.dailyTrends.map(day => nutritionTrendValue(day, "energy_kcal"))), { recordedDays: 1, average: 67, latest: 67 });
+});
+
+test("food-only days do not become zero milk and unknown nutrient sources stay blank", () => {
+  const summary = calculateMultiDayNutritionTrend({ babyAgeMonths: 8, dailyDataList: [
+    { date: "2026-10-06", feedings: [], supplements: [], foodLogs: [{ foods: ["米粉"], portion: "most" }] },
+  ], formulaProductsMap: {}, supplementProductsMap: {} });
+  const day = summary.dailyTrends[0];
+  assert.equal(day.hasRecords, true);
+  assert.equal(nutritionTrendValue(day, "milk"), null);
+  assert.equal(nutritionTrendValue(day, "vitamin_d"), null);
+  assert.ok(nutritionTrendValue(day, "energy_kcal")! > 0);
+  assert.equal(nutritionTrendValue({ ...day, nutrients: { vitamin_d: 0 }, recordedMetrics: ["vitamin_d"] }, "vitamin_d"), 0);
 });
 
 test("older responses keep supported core values and never manufacture absent metrics", () => {

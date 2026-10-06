@@ -8,6 +8,7 @@ const legacyKeys = {
 /** Keep a missing day/field distinct from a recorded zero, including older responses. */
 export function nutritionTrendValue(day: MultiDayTrendItem, metric: string): number | null {
   if (day.hasRecords === false) return null;
+  if (day.recordedMetrics && !day.recordedMetrics.includes(metric)) return null;
   const key = legacyKeys[metric as keyof typeof legacyKeys];
   const value = metric === "milk" ? day.totalFeedingMl : day.nutrients?.[metric] ?? (key ? day[key] : undefined);
   return typeof value === "number" && Number.isFinite(value) ? value : null;
