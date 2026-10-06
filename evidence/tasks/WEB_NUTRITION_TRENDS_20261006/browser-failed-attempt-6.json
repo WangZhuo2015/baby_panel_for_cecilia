@@ -1,0 +1,18 @@
+{
+  "scope": "Chromium UI acceptance over local SSH tunnel",
+  "status": "FAIL",
+  "webPort": 45176,
+  "checks": [
+    "real test_ account login and protected BFF session in Chromium",
+    "homepage exposes a working 全量营养 entry",
+    "homepage opens a real 7-day milk trend",
+    "homepage trend switches between real 7-day and 30-day data",
+    "trend window changes do not show cancellation error toasts",
+    "all four homepage stat cards open their matching trend"
+  ],
+  "injectedFailures": [],
+  "failure": "ui_element_not_visible:injected nutrition error state",
+  "visibleAlerts": [
+    ""
+  ]
+}

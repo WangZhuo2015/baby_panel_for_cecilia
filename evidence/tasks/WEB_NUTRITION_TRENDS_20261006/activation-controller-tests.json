@@ -1,0 +1,26 @@
+{
+  "status": "PASS",
+  "productionAccess": false,
+  "scenarios": [
+    {
+      "scenario": "success",
+      "status": "PASS"
+    },
+    {
+      "scenario": "tampered_artifact",
+      "status": "PASS"
+    },
+    {
+      "scenario": "rollback_copy_failure",
+      "status": "PASS"
+    },
+    {
+      "scenario": "missing_runtime_source_preserves_target",
+      "status": "PASS"
+    },
+    {
+      "scenario": "stage_copy_failure_preserves_old_runtime",
+      "status": "PASS"
+    }
+  ]
+}

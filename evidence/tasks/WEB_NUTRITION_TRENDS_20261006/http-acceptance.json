@@ -1,0 +1,417 @@
+{
+  "scope": "Web nutrition/care trend HTTP acceptance against owned temporary backend",
+  "status": "PASS_HTTP_UI_PENDING",
+  "backendRevision": "8b9edd3be223c2e784bf3ba617d7f11eac27323a",
+  "backendRevisionEvidence": "caller_attested_archive_revision",
+  "backendSourceDigest": "e25e867ad6d44217aed10eb636372721a88fa27edd8259f287db5ed437ad858b",
+  "webRevision": "5fa673c23c8886a097477e01cf200d5279f98348",
+  "webRevisionEvidence": "caller_attested",
+  "dockerTarget": "unix:///var/run/docker.sock",
+  "webLoopbackUrl": "http://127.0.0.1:45176",
+  "webPort": 45176,
+  "browserOrigin": "http://127.0.0.1:45176",
+  "checks": [
+    "frozen Go API and migrator built; binary revision probe matched",
+    "existing standalone artifact provenance and SHA-256 verified",
+    "native PostgreSQL migrations applied twice with checksum replay",
+    "standalone Web ready on a dedicated 127.0.0.1 port",
+    "records/trends 7d includes real milk, sleep, diaper, foodCount series",
+    "nutrition/analysis 7d dailyTrends has all 38 nutrient IDs",
+    "nutrition/analysis 7d exposes no-record days for blank chart gaps",
+    "records/trends 30d includes real milk, sleep, diaper, foodCount series",
+    "nutrition/analysis 30d dailyTrends has all 38 nutrient IDs",
+    "nutrition/analysis 30d exposes no-record days for blank chart gaps",
+    "cross-tenant baby reads are denied; expected-user mismatch returns 409"
+  ],
+  "httpObservations": [
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/register",
+      "status": 201,
+      "expectedStatus": [
+        201
+      ],
+      "errorCode": null
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/register",
+      "status": 201,
+      "expectedStatus": [
+        201
+      ],
+      "errorCode": null
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/families",
+      "status": 201,
+      "expectedStatus": [
+        201
+      ],
+      "errorCode": null
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/families/907ba8aa-6d02-4041-95c9-eb76b8462a8a/babies",
+      "status": 201,
+      "expectedStatus": [
+        201
+      ],
+      "errorCode": null
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/families",
+      "status": 201,
+      "expectedStatus": [
+        201
+      ],
+      "errorCode": null
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/families/9224f209-86ae-4ac7-b132-ce223806a5cc/babies",
+      "status": 201,
+      "expectedStatus": [
+        201
+      ],
+      "errorCode": null
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/babies/3835f571-89e7-4464-9d0b-ddf3f6df03fc/records/feeding",
+      "status": 201,
+      "expectedStatus": [
+        201
+      ],
+      "errorCode": null
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/babies/3835f571-89e7-4464-9d0b-ddf3f6df03fc/records/feeding",
+      "status": 201,
+      "expectedStatus": [
+        201
+      ],
+      "errorCode": null
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/babies/3835f571-89e7-4464-9d0b-ddf3f6df03fc/records/feeding",
+      "status": 201,
+      "expectedStatus": [
+        201
+      ],
+      "errorCode": null
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/babies/3835f571-89e7-4464-9d0b-ddf3f6df03fc/records/feeding",
+      "status": 201,
+      "expectedStatus": [
+        201
+      ],
+      "errorCode": null
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/babies/3835f571-89e7-4464-9d0b-ddf3f6df03fc/records/feeding",
+      "status": 201,
+      "expectedStatus": [
+        201
+      ],
+      "errorCode": null
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/babies/3835f571-89e7-4464-9d0b-ddf3f6df03fc/records/feeding",
+      "status": 201,
+      "expectedStatus": [
+        201
+      ],
+      "errorCode": null
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/babies/3835f571-89e7-4464-9d0b-ddf3f6df03fc/records/feeding",
+      "status": 201,
+      "expectedStatus": [
+        201
+      ],
+      "errorCode": null
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/babies/3835f571-89e7-4464-9d0b-ddf3f6df03fc/records/sleep",
+      "status": 201,
+      "expectedStatus": [
+        201
+      ],
+      "errorCode": null
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/babies/3835f571-89e7-4464-9d0b-ddf3f6df03fc/records/sleep",
+      "status": 201,
+      "expectedStatus": [
+        201
+      ],
+      "errorCode": null
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/babies/3835f571-89e7-4464-9d0b-ddf3f6df03fc/records/sleep",
+      "status": 201,
+      "expectedStatus": [
+        201
+      ],
+      "errorCode": null
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/babies/3835f571-89e7-4464-9d0b-ddf3f6df03fc/records/sleep",
+      "status": 201,
+      "expectedStatus": [
+        201
+      ],
+      "errorCode": null
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/babies/3835f571-89e7-4464-9d0b-ddf3f6df03fc/records/diaper",
+      "status": 201,
+      "expectedStatus": [
+        201
+      ],
+      "errorCode": null
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/babies/3835f571-89e7-4464-9d0b-ddf3f6df03fc/records/diaper",
+      "status": 201,
+      "expectedStatus": [
+        201
+      ],
+      "errorCode": null
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/babies/3835f571-89e7-4464-9d0b-ddf3f6df03fc/records/diaper",
+      "status": 201,
+      "expectedStatus": [
+        201
+      ],
+      "errorCode": null
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/babies/3835f571-89e7-4464-9d0b-ddf3f6df03fc/records/diaper",
+      "status": 201,
+      "expectedStatus": [
+        201
+      ],
+      "errorCode": null
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/babies/3835f571-89e7-4464-9d0b-ddf3f6df03fc/records/food",
+      "status": 201,
+      "expectedStatus": [
+        201
+      ],
+      "errorCode": null
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/babies/3835f571-89e7-4464-9d0b-ddf3f6df03fc/records/food",
+      "status": 201,
+      "expectedStatus": [
+        201
+      ],
+      "errorCode": null
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/babies/3835f571-89e7-4464-9d0b-ddf3f6df03fc/records/food",
+      "status": 201,
+      "expectedStatus": [
+        201
+      ],
+      "errorCode": null
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/babies/3835f571-89e7-4464-9d0b-ddf3f6df03fc/records/food",
+      "status": 201,
+      "expectedStatus": [
+        201
+      ],
+      "errorCode": null
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/families/907ba8aa-6d02-4041-95c9-eb76b8462a8a/nutrition/supplement-products",
+      "status": 201,
+      "expectedStatus": [
+        201
+      ],
+      "errorCode": null
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/babies/3835f571-89e7-4464-9d0b-ddf3f6df03fc/records/supplement",
+      "status": 201,
+      "expectedStatus": [
+        201
+      ],
+      "errorCode": null
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/babies/3835f571-89e7-4464-9d0b-ddf3f6df03fc/records/supplement",
+      "status": 201,
+      "expectedStatus": [
+        201
+      ],
+      "errorCode": null
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/babies/3835f571-89e7-4464-9d0b-ddf3f6df03fc/records/supplement",
+      "status": 201,
+      "expectedStatus": [
+        201
+      ],
+      "errorCode": null
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/babies/3835f571-89e7-4464-9d0b-ddf3f6df03fc/records/supplement",
+      "status": 201,
+      "expectedStatus": [
+        201
+      ],
+      "errorCode": null
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/login",
+      "status": 200,
+      "expectedStatus": [
+        200
+      ],
+      "errorCode": null
+    },
+    {
+      "method": "GET",
+      "path": "/api/records/trends",
+      "status": 200,
+      "expectedStatus": [
+        200
+      ],
+      "errorCode": null
+    },
+    {
+      "method": "GET",
+      "path": "/api/nutrition/analysis",
+      "status": 200,
+      "expectedStatus": [
+        200
+      ],
+      "errorCode": null
+    },
+    {
+      "method": "GET",
+      "path": "/api/records/trends",
+      "status": 200,
+      "expectedStatus": [
+        200
+      ],
+      "errorCode": null
+    },
+    {
+      "method": "GET",
+      "path": "/api/nutrition/analysis",
+      "status": 200,
+      "expectedStatus": [
+        200
+      ],
+      "errorCode": null
+    },
+    {
+      "method": "GET",
+      "path": "/api/records/trends",
+      "status": 404,
+      "expectedStatus": [
+        404
+      ],
+      "errorCode": null
+    },
+    {
+      "method": "GET",
+      "path": "/api/nutrition/analysis",
+      "status": 404,
+      "expectedStatus": [
+        404
+      ],
+      "errorCode": null
+    },
+    {
+      "method": "GET",
+      "path": "/api/records/trends",
+      "status": 409,
+      "expectedStatus": [
+        409
+      ],
+      "errorCode": null
+    },
+    {
+      "method": "GET",
+      "path": "/api/nutrition/analysis",
+      "status": 409,
+      "expectedStatus": [
+        409
+      ],
+      "errorCode": null
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/babies/60147344-7ee8-4485-ba64-fd3d0424d6c4/records/feeding",
+      "status": 403,
+      "expectedStatus": [
+        403,
+        404
+      ],
+      "errorCode": "FAMILY_ACCESS_DENIED"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/babies/3835f571-89e7-4464-9d0b-ddf3f6df03fc/records/feeding",
+      "status": 403,
+      "expectedStatus": [
+        403,
+        404
+      ],
+      "errorCode": "FAMILY_ACCESS_DENIED"
+    }
+  ],
+  "externalProviderCalls": 0,
+  "providerKeys": "virtual-test-only",
+  "browserStatus": "PENDING_SEPARATE_PLAYWRIGHT_RUN",
+  "cleanup": {
+    "status": "PASS",
+    "ownedContainers": "removed",
+    "trackedProcesses": "stopped",
+    "loopbackPorts": "released"
+  },
+  "webBuildProvenance": {
+    "sourceGitSha": "5fa673c23c8886a097477e01cf200d5279f98348",
+    "sourceDirty": false,
+    "buildId": "SEwv3xzJ7OJ9tdoPoqiea",
+    "artifactSha256": "a78a1955b06ca8ad2a6d00cbba5527ac3f92e7da14ec1b60e9fec3ef02036794",
+    "builtAt": "2026-10-06T14:24:32.100Z"
+  },
+  "backendLoopbackUrl": "http://127.0.0.1:59993",
+  "browserFixture": "/tmp/test_nutrition_ui_20261006.json"
+}

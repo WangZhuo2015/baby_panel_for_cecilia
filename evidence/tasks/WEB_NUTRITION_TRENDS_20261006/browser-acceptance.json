@@ -1,0 +1,29 @@
+{
+  "scope": "Chromium UI acceptance over local SSH tunnel",
+  "status": "PASS_BROWSER",
+  "webPort": 45176,
+  "checks": [
+    "real test_ account login and protected BFF session in Chromium",
+    "homepage exposes a working 全量营养 entry",
+    "homepage opens a real 7-day milk trend",
+    "homepage trend switches between real 7-day and 30-day data",
+    "trend window changes do not show cancellation error toasts",
+    "all four homepage stat cards open their matching trend",
+    "nutrition API error is visible and retry recovers on actual backend data",
+    "no-record nutrition days remain blank in the visible daily detail",
+    "each of six core nutrient cards selects its own daily trend",
+    "full nutrient dropdown includes and renders non-core metrics",
+    "nutrition analysis and chart switch between complete 7-day and 30-day data",
+    "desktop homepage entry and 7/30-day trend layout works"
+  ],
+  "injectedFailures": [
+    {
+      "route": "/api/nutrition/analysis",
+      "status": 503,
+      "purpose": "UI retry control only"
+    }
+  ],
+  "nutritionAlert": [
+    "test-only injected outage"
+  ]
+}

@@ -1,0 +1,1212 @@
+diff --git a/app/(main)/nutrition/page.tsx b/app/(main)/nutrition/page.tsx
+index 6aac41b..a4b6bfc 100644
+--- a/app/(main)/nutrition/page.tsx
++++ b/app/(main)/nutrition/page.tsx
+@@ -11,7 +11,7 @@ import {
+   ChevronRight,
+   Info,
+ } from "lucide-react";
+-import { useScopedNutritionRequest } from "@/lib/hooks/useScopedNutritionRequest";
++import { useScopedNutritionRequest, useNutritionScopeKey } from "@/lib/hooks/useScopedNutritionRequest";
+ import { useBabyStore } from "@/stores/useBabyStore";
+ import { calculateAge } from "@/lib/age";
+ import { getLocalDateStr, addDays, getWeekdayStr } from "@/lib/date";
+@@ -55,6 +55,11 @@ function generateWeeklyDates() {
+ }
+ 
+ export default function NutritionPage() {
++  const scopeKey = useNutritionScopeKey();
++  return <NutritionPageContent key={scopeKey} />;
++}
++
++function NutritionPageContent() {
+   const router = useRouter();
+   const baby = useBabyStore((s) => s.baby);
+   const fetchUser = useBabyStore((s) => s.fetchUser);
+@@ -66,6 +71,9 @@ export default function NutritionPage() {
+   const [dailyAnalysis, setDailyAnalysis] = useState<DailyNutritionAnalysis | null>(null);
+   const [multiDaySummary, setMultiDaySummary] = useState<MultiDayNutritionSummary | null>(null);
+   const [loading, setLoading] = useState<boolean>(true);
++  const [error, setError] = useState<string | null>(null);
++  const [trendMetric, setTrendMetric] = useState("milk");
++  const trendSection = useRef<HTMLDivElement>(null);
+   const [isCatalogOpen, setIsCatalogOpen] = useState<boolean>(false);
+ 
+   const weeklyDates = generateWeeklyDates();
+@@ -78,6 +86,7 @@ export default function NutritionPage() {
+     const generation = ++readGeneration.current;
+     if (!baby?.id) { setDailyAnalysis(null); setMultiDaySummary(null); setLoading(false); return; }
+     setLoading(true);
++    setError(null);
+     try {
+       if (timeScale === "today") {
+         const res = await scopedRequest(`/api/nutrition/analysis?babyId=${baby.id}&date=${selectedDate}&days=1`);
+@@ -97,7 +106,7 @@ export default function NutritionPage() {
+         }
+       }
+     } catch (e) {
+-      console.error("Failed to load nutrition analysis:", e);
++      if (generation === readGeneration.current) setError(e instanceof Error ? e.message : "营养数据加载失败，请重试");
+     } finally {
+       if (generation === readGeneration.current) setLoading(false);
+     }
+@@ -135,6 +144,12 @@ export default function NutritionPage() {
+   }
+ 
+   const age = calculateAge(baby.birthDate);
++  const viewTrend = (metric: string) => {
++    setTrendMetric(metric);
++    if (timeScale === "today") setTimeScale("7d");
++    if (selectedDate > getLocalDateStr()) setSelectedDate(getLocalDateStr());
++    requestAnimationFrame(() => trendSection.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
++  };
+ 
+   return (
+     <div className="px-4 pt-safe-6 pb-36 workbench:pb-12 max-w-md md:max-w-xl workbench:max-w-none lg:max-w-7xl mx-auto space-y-5">
+@@ -207,7 +222,8 @@ export default function NutritionPage() {
+               key={dateItem.date}
+               type="button"
+               onClick={() => setSelectedDate(dateItem.date)}
+-              className={`flex-shrink-0 flex flex-col items-center justify-center w-13 h-16 rounded-2xl transition-all btn-press cursor-pointer ${
++              disabled={timeScale !== "today" && dateItem.date > getLocalDateStr()}
++              className={`flex-shrink-0 flex flex-col items-center justify-center w-13 h-16 rounded-2xl transition-all btn-press cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${
+                 isSelected
+                   ? "bg-primary text-white shadow-button ring-2 ring-primary/30 font-bold"
+                   : dateItem.isToday
+@@ -227,12 +243,18 @@ export default function NutritionPage() {
+         options={[
+           { value: "today", label: "今日全量营养" },
+           { value: "7d", label: "近 7 天趋势" },
+-          { value: "30d", label: "近 30 天周期" },
++          { value: "30d", label: "近 30 天趋势" },
+         ]}
+         value={timeScale}
+-        onChange={(v) => setTimeScale(v as any)}
++        onChange={(v) => {
++          setTimeScale(v as "today" | "7d" | "30d");
++          if (v !== "today" && selectedDate > getLocalDateStr()) setSelectedDate(getLocalDateStr());
++        }}
+       />
+ 
++      {error && <CuteCard className="p-4 text-sm text-text-secondary" ><p role="alert">{error}</p><CuteButton className="mt-2" onClick={loadData}>重新加载营养数据</CuteButton></CuteCard>}
++      {loading && <p role="status" className="text-xs text-text-muted text-center">正在读取营养数据…</p>}
++
+       {/* ⚠️ 警示消息（如有过量风险或未补充） */}
+       {dailyAnalysis?.alerts && dailyAnalysis.alerts.length > 0 && (
+         <div className="space-y-2">
+@@ -318,23 +340,27 @@ export default function NutritionPage() {
+               </div>
+ 
+               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3 gap-2.5">
+-                <CoreNutrientCard item={dailyAnalysis.coreMetrics.vitaminD} icon="☀️" />
+-                <CoreNutrientCard item={dailyAnalysis.coreMetrics.calcium} icon="🦴" />
+-                <CoreNutrientCard item={dailyAnalysis.coreMetrics.iron} icon="🩸" />
+-                <CoreNutrientCard item={dailyAnalysis.coreMetrics.vitaminA} icon="🥕" />
+-                <CoreNutrientCard item={dailyAnalysis.coreMetrics.zinc} icon="🛡️" />
+-                <CoreNutrientCard item={dailyAnalysis.coreMetrics.dha} icon="🐟" />
++                <CoreNutrientCard item={dailyAnalysis.coreMetrics.vitaminD} icon="☀️" onViewTrend={() => viewTrend("vitamin_d")} />
++                <CoreNutrientCard item={dailyAnalysis.coreMetrics.calcium} icon="🦴" onViewTrend={() => viewTrend("calcium")} />
++                <CoreNutrientCard item={dailyAnalysis.coreMetrics.iron} icon="🩸" onViewTrend={() => viewTrend("iron")} />
++                <CoreNutrientCard item={dailyAnalysis.coreMetrics.vitaminA} icon="🥕" onViewTrend={() => viewTrend("vitamin_a")} />
++                <CoreNutrientCard item={dailyAnalysis.coreMetrics.zinc} icon="🛡️" onViewTrend={() => viewTrend("zinc")} />
++                <CoreNutrientCard item={dailyAnalysis.coreMetrics.dha} icon="🐟" onViewTrend={() => viewTrend("dha")} />
+               </div>
+             </div>
+           )}
+ 
+           {/* 📊 7天 / 30天 周期趋势图 */}
+-          {multiDaySummary && multiDaySummary.dailyTrends.length > 0 && (
++          <div ref={trendSection} className="scroll-mt-6">
++          {multiDaySummary && !error && !loading && (
+             <NutritionTrendChart
+-              trends={multiDaySummary.dailyTrends}
+-              daysCount={timeScale === "30d" ? 30 : 7}
++              summary={multiDaySummary}
++              metric={trendMetric}
++              onMetricChange={setTrendMetric}
++              references={dailyAnalysis?.allNutrients}
+             />
+           )}
++          </div>
+         </div>
+ 
+         {/* ===== 右栏：产品库快捷、多源穿透与明细表 (Col 5) ===== */}
+diff --git a/app/(main)/page.tsx b/app/(main)/page.tsx
+index 2346c8f..603437b 100644
+--- a/app/(main)/page.tsx
++++ b/app/(main)/page.tsx
+@@ -1,6 +1,8 @@
+ "use client";
+ 
+-import { useEffect, useState, useCallback, useRef } from "react";
++import { useEffect, useState } from "react";
++import dynamic from "next/dynamic";
++import Link from "next/link";
+ import { useRouter } from "next/navigation";
+ import {
+   Baby,
+@@ -15,6 +17,9 @@ import {
+   Sparkles,
+   Star,
+   ChevronRight,
++  ChevronDown,
++  ChevronUp,
++  TrendingUp,
+   Camera,
+   FileText,
+   MessageSquare,
+@@ -43,6 +48,16 @@ import { openRecordDrawer, RecordDrawerType } from "@/lib/drawer-bus";
+ import { openQuickAI } from "@/lib/quickai-bus";
+ import { useNotificationInbox } from "@/lib/hooks/useNotificationInbox";
+ import { isWorkbenchViewport } from "@/lib/responsive";
++import type { HomeMetricKey } from "@/components/home/DailyMetricTrends";
++
++const DailyMetricTrends = dynamic(() => import("@/components/home/DailyMetricTrends"), {
++  ssr: false,
++  loading: () => (
++    <div role="status" className="mt-3 flex h-28 items-center justify-center rounded-2xl border border-primary/15 bg-card text-xs text-text-muted">
++      正在打开趋势…
++    </div>
++  ),
++});
+ 
+ function NotificationBell() {
+   const router = useRouter();
+@@ -99,6 +114,8 @@ export default function HomePage() {
+   const [liveSleepStart, setLiveSleepStart] = useState<string | null>(null);
+   const [liveSleepElapsed, setLiveSleepElapsed] = useState<string>("");
+   const [isTourModalOpen, setIsTourModalOpen] = useState(false);
++  const [dailyTrendsOpen, setDailyTrendsOpen] = useState(false);
++  const [dailyTrendMetric, setDailyTrendMetric] = useState<HomeMetricKey>("milk");
+ 
+   const refreshAll = useBabyStore((s) => s.refreshAll);
+ 
+@@ -121,6 +138,11 @@ export default function HomePage() {
+     }
+   };
+ 
++  const openDailyTrend = (metric: HomeMetricKey) => {
++    setDailyTrendMetric(metric);
++    setDailyTrendsOpen(true);
++  };
++
+   useEffect(() => {
+     fetchWeather();
+     fetchUser();
+@@ -465,11 +487,51 @@ export default function HomePage() {
+                 查看完整日报 <ChevronRight size={12} />
+               </button>
+             </div>
++            <div className="mb-2.5 grid grid-cols-1 gap-2 sm:grid-cols-2">
++              <Link
++                href="/nutrition"
++                className="group flex min-h-[64px] items-center gap-3 rounded-2xl border border-primary/20 bg-gradient-to-r from-primary-light/80 to-sky-50 px-3 py-2.5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
++              >
++                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/80 text-primary shadow-sm">
++                  <UtensilsCrossed size={17} />
++                </span>
++                <span className="min-w-0 flex-1">
++                  <span className="block text-xs font-bold text-text-primary group-hover:text-primary">全量营养</span>
++                  <span className="mt-0.5 block truncate text-[10px] text-text-secondary">奶量、辅食与营养素明细</span>
++                </span>
++                <ChevronRight size={16} className="shrink-0 text-primary" />
++              </Link>
++              <button
++                type="button"
++                onClick={() => setDailyTrendsOpen((open) => !open)}
++                aria-expanded={dailyTrendsOpen}
++                aria-controls="home-daily-trends-panel"
++                className="group flex min-h-[64px] items-center gap-3 rounded-2xl border border-sky-200 bg-gradient-to-r from-sky-50 to-white px-3 py-2.5 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2"
++              >
++                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-sky-100 text-sky-700">
++                  <TrendingUp size={17} />
++                </span>
++                <span className="min-w-0 flex-1">
++                  <span className="block text-xs font-bold text-text-primary group-hover:text-sky-700">照护趋势</span>
++                  <span className="mt-0.5 block truncate text-[10px] text-text-secondary">近 7 / 30 天奶量、睡眠等</span>
++                </span>
++                {dailyTrendsOpen ? <ChevronUp size={16} className="shrink-0 text-sky-700" /> : <ChevronDown size={16} className="shrink-0 text-sky-700" />}
++              </button>
++            </div>
+             <div className="grid grid-cols-4 gap-2">
+-              <StatCard icon={<Droplets size={16} className="text-sky" />} label="奶量" value={String(summary.totalFeedingMl)} unit="ml" color="bg-sky/10" />
+-              <StatCard icon={<Moon size={16} className="text-lavender" />} label="睡眠" value={formatSleep(summary.totalSleepMinutes)} color="bg-lavender/10" />
+-              <StatCard icon={<Wind size={16} className="text-mint" />} label="尿布" value={String(summary.diaperCount)} unit="次" color="bg-mint/10" />
+-              <StatCard icon={<UtensilsCrossed size={16} className="text-peach" />} label="辅食" value={String(summary.foodCount)} unit="顿" color="bg-peach/10" />
++              <StatCard icon={<Droplets size={16} className="text-sky" />} label="奶量" value={String(summary.totalFeedingMl)} unit="ml" color="bg-sky/10" onClick={() => openDailyTrend("milk")} active={dailyTrendsOpen && dailyTrendMetric === "milk"} />
++              <StatCard icon={<Moon size={16} className="text-lavender" />} label="睡眠" value={formatSleep(summary.totalSleepMinutes)} color="bg-lavender/10" onClick={() => openDailyTrend("sleep")} active={dailyTrendsOpen && dailyTrendMetric === "sleep"} />
++              <StatCard icon={<Wind size={16} className="text-mint" />} label="尿布" value={String(summary.diaperCount)} unit="次" color="bg-mint/10" onClick={() => openDailyTrend("diaper")} active={dailyTrendsOpen && dailyTrendMetric === "diaper"} />
++              <StatCard icon={<UtensilsCrossed size={16} className="text-peach" />} label="辅食" value={String(summary.foodCount)} unit="顿" color="bg-peach/10" onClick={() => openDailyTrend("food")} active={dailyTrendsOpen && dailyTrendMetric === "food"} />
++            </div>
++            <div id="home-daily-trends-panel">
++              {dailyTrendsOpen && (
++                <DailyMetricTrends
++                  babyId={baby?.id}
++                  metric={dailyTrendMetric}
++                  onMetricChange={setDailyTrendMetric}
++                />
++              )}
+             </div>
+ 
+             {/* 🤖 每日成长日报 Banner */}
+diff --git a/app/api/nutrition/analysis/route.ts b/app/api/nutrition/analysis/route.ts
+index 94a2b72..9bf4d1d 100644
+--- a/app/api/nutrition/analysis/route.ts
++++ b/app/api/nutrition/analysis/route.ts
+@@ -50,6 +50,7 @@ export async function GET(request: Request) {
+       const daysParam = searchParams.get("days") ?? "1";
+       if (!/^[1-9]\d*$/.test(daysParam) || Number(daysParam) > 90) throw new BridgeError(400, "INVALID_DAYS", "days 必须为 1–90 的整数");
+       const days = Number(daysParam);
++      if (days > 1 && date > getLocalDateStr()) throw new BridgeError(400, "INVALID_DATE", "趋势结束日期不能在未来");
+ 
+       const ageSummary = calculateAge(baby.birthDate);
+       const babyAgeMonths = ageSummary.months;
+@@ -202,6 +203,7 @@ export async function GET(request: Request) {
+     const dateParam = searchParams.get("date");
+     const date = dateParam && isValidDateStr(dateParam) ? dateParam : getLocalDateStr();
+     const days = Math.min(90, Math.max(1, parseInt(searchParams.get("days") || "1", 10)));
++    if (days > 1 && date > getLocalDateStr()) return NextResponse.json({ error: "趋势结束日期不能在未来" }, { status: 400 });
+ 
+     const ageSummary = calculateAge(baby.birthDate);
+     const babyAgeMonths = ageSummary.months;
+diff --git a/app/api/records/trends/route.ts b/app/api/records/trends/route.ts
+index 237b44a..203fe5f 100644
+--- a/app/api/records/trends/route.ts
++++ b/app/api/records/trends/route.ts
+@@ -4,12 +4,13 @@ import { prisma } from "@/lib/prisma";
+ import { GROWDESK_CONFIG } from "@/lib/config";
+ import { resolveBffSession } from "@/lib/growdesk/session";
+ import { growdeskFetch } from "@/lib/growdesk/client";
+-import { loadWebBaby } from "@/lib/growdesk/bridge-identity";
++import { assertExpectedActor, requireNutritionBaby } from "@/lib/growdesk/nutrition-scope";
+ import { BridgeError, bridgeErrorResponse } from "@/lib/growdesk/bridge-protocol";
+ import { dayBoundsInTimeZone, familyTimeZone, fetchLegacyRecordList } from "@/lib/growdesk/record-list";
+ import { fromGrowDeskFeedingRecord, type GrowDeskFeedingRecord } from "@/lib/growdesk/feeding-compat";
+ import { type GrowDeskSleepRecord } from "@/lib/growdesk/sleep-compat";
+ import { type GrowDeskDiaperRecord } from "@/lib/growdesk/diaper-compat";
++import { type GrowDeskFoodRecord } from "@/lib/growdesk/food-compat";
+ import { aggregateCareTrends, dateInTimeZone } from "@/lib/care-trends";
+ import { addDays, isValidDateStr } from "@/lib/date";
+ 
+@@ -31,35 +32,40 @@ export async function GET(request: Request) {
+     if (GROWDESK_CONFIG.enabled) {
+       const session = await resolveBffSession(request);
+       if (!session) return NextResponse.json({ error: "请重新登录" }, { status: 401 });
+-      const baby = await loadWebBaby(growdeskFetch, session.accessToken, requested);
++      assertExpectedActor(request, session.user.id);
++      const baby = await requireNutritionBaby(growdeskFetch, session.accessToken, { babyId: requested, familyId: query.get("familyId") });
+       if (!baby) return NextResponse.json({ error: "未找到宝宝" }, { status: 404 });
+       const period = range(await familyTimeZone(growdeskFetch, session.accessToken, baby.id));
+       // Each history is scanned once, never once per chart day. Pagination fails closed.
+-      const [feeding, sleep, diaper] = await Promise.all([
++      const [feeding, sleep, diaper, food] = await Promise.all([
+         fetchLegacyRecordList<GrowDeskFeedingRecord>(growdeskFetch, session.accessToken, baby.id, new URLSearchParams(), "feeding"),
+         fetchLegacyRecordList<GrowDeskSleepRecord>(growdeskFetch, session.accessToken, baby.id, new URLSearchParams(), "sleep"),
+         fetchLegacyRecordList<GrowDeskDiaperRecord>(growdeskFetch, session.accessToken, baby.id, new URLSearchParams(), "diaper"),
++        fetchLegacyRecordList<GrowDeskFoodRecord>(growdeskFetch, session.accessToken, baby.id, new URLSearchParams(), "food"),
+       ]);
+       result = aggregateCareTrends({ ...period, babyId: baby.id,
+         feeding: feeding.map(fromGrowDeskFeedingRecord),
+         sleep: sleep.map(r => ({ startTime: r.startedAt, endTime: r.endedAt })),
+         diaper: diaper.map(r => ({ timestamp: r.occurredAt })),
++        food: food.map(r => ({ date: r.recordDate })),
+       });
+     } else {
+       const auth = await requireAuth(request);
+       if (auth.errorResponse) return auth.errorResponse;
++      assertExpectedActor(request, auth.user.id);
+       const selected = await requireBaby(auth.user.id, requested);
+       if (selected.errorResponse) return selected.errorResponse;
+       const babyId = selected.baby.id;
+       const period = range("Asia/Shanghai");
+       const start = dayBoundsInTimeZone(addDays(period.endDate, 1 - days), period.timeZone).start.toISOString();
+       const end = dayBoundsInTimeZone(period.endDate, period.timeZone).end.toISOString();
+-      const [feeding, sleep, diaper] = await Promise.all([
++      const [feeding, sleep, diaper, food] = await Promise.all([
+         prisma.feedingRecord.findMany({ where: { babyId, timestamp: { gte: start, lt: end } } }),
+         prisma.sleepRecord.findMany({ where: { babyId, startTime: { lt: end }, endTime: { gt: start } } }),
+         prisma.diaperRecord.findMany({ where: { babyId, timestamp: { gte: start, lt: end } } }),
++        prisma.foodLogRecord.findMany({ where: { babyId, date: { gte: addDays(period.endDate, 1 - days), lte: period.endDate } } }),
+       ]);
+-      result = aggregateCareTrends({ ...period, babyId, feeding, sleep, diaper });
++      result = aggregateCareTrends({ ...period, babyId, feeding, sleep, diaper, food });
+     }
+     return NextResponse.json(result, { headers: { "Cache-Control": "private, no-store" } });
+   } catch (error) {
+diff --git a/components/home/DailyMetricTrends.tsx b/components/home/DailyMetricTrends.tsx
+new file mode 100644
+index 0000000..76770f7
+--- /dev/null
++++ b/components/home/DailyMetricTrends.tsx
+@@ -0,0 +1,306 @@
++"use client";
++
++import { useEffect, useMemo, useRef, useState } from "react";
++import {
++  CartesianGrid,
++  Line,
++  LineChart,
++  ResponsiveContainer,
++  Tooltip,
++  XAxis,
++  YAxis,
++} from "recharts";
++import { RefreshCw, TrendingUp } from "lucide-react";
++import { useNutritionScopeKey, useScopedNutritionRequest } from "@/lib/hooks/useScopedNutritionRequest";
++import { NutritionScopeChanged } from "@/lib/nutrition/scoped-request";
++
++export type HomeMetricKey = "milk" | "sleep" | "diaper" | "food";
++type TrendPeriod = 7 | 30;
++
++interface DailyTrendDay {
++  date: string;
++  recordedMilkMl: number | null;
++  feedingCount: number;
++  breastMinutes: number;
++  sleepMinutes: number | null;
++  diaperCount: number;
++  foodCount: number;
++  hasRecords: boolean;
++}
++
++interface DailyTrendResponse {
++  babyId: string;
++  timeZone: string;
++  startDate: string;
++  endDate: string;
++  today: string;
++  days: DailyTrendDay[];
++}
++
++interface DailyMetricTrendsProps {
++  babyId?: string;
++  metric: HomeMetricKey;
++  onMetricChange: (metric: HomeMetricKey) => void;
++}
++
++const METRICS: Array<{
++  key: HomeMetricKey;
++  label: string;
++  color: string;
++  activeStyle: string;
++}> = [
++  { key: "milk", label: "记录奶量", color: "#0284C7", activeStyle: "bg-sky-50 text-sky-700" },
++  { key: "sleep", label: "睡眠", color: "#8B5CF6", activeStyle: "bg-violet-50 text-violet-700" },
++  { key: "diaper", label: "尿布", color: "#059669", activeStyle: "bg-emerald-50 text-emerald-700" },
++  { key: "food", label: "辅食", color: "#EA580C", activeStyle: "bg-orange-50 text-orange-700" },
++];
++
++function isTrendResponse(value: unknown): value is DailyTrendResponse {
++  if (!value || typeof value !== "object") return false;
++  const response = value as Partial<DailyTrendResponse>;
++  return typeof response.babyId === "string" &&
++    typeof response.timeZone === "string" &&
++    typeof response.startDate === "string" &&
++    typeof response.endDate === "string" &&
++    typeof response.today === "string" &&
++    Array.isArray(response.days) &&
++    response.days.every((day) => day && typeof day.date === "string" &&
++      (day.recordedMilkMl === null || typeof day.recordedMilkMl === "number") &&
++      (day.sleepMinutes === null || typeof day.sleepMinutes === "number") &&
++      typeof day.diaperCount === "number" &&
++      typeof day.foodCount === "number");
++}
++
++function valueForMetric(day: DailyTrendDay, metric: HomeMetricKey): number | null {
++  switch (metric) {
++    case "milk":
++      return day.recordedMilkMl;
++    case "sleep":
++      return day.sleepMinutes === null ? null : day.sleepMinutes / 60;
++    case "diaper":
++      return day.diaperCount > 0 ? day.diaperCount : null;
++    case "food":
++      return day.foodCount > 0 ? day.foodCount : null;
++  }
++}
++
++function formatSleepMinutes(minutes: number): string {
++  const rounded = Math.max(0, Math.round(minutes));
++  const hours = Math.floor(rounded / 60);
++  const remainder = rounded % 60;
++  return hours > 0 ? `${hours}小时${remainder}分` : `${remainder}分钟`;
++}
++
++function formatValue(metric: HomeMetricKey, value: number): string {
++  if (metric === "sleep") return formatSleepMinutes(value * 60);
++  const formatted = value.toLocaleString("zh-CN", { maximumFractionDigits: 1 });
++  if (metric === "milk") return `${formatted} ml`;
++  return `${formatted}${metric === "diaper" ? " 次" : " 顿"}`;
++}
++
++function formatFullDate(date: string): string {
++  const [year, month, day] = date.split("-");
++  if (!year || !month || !day) return date;
++  return `${year}年${Number(month)}月${Number(day)}日`;
++}
++
++function MetricTrendsContent({ babyId, metric, onMetricChange }: DailyMetricTrendsProps) {
++  const scopedRequest = useScopedNutritionRequest(babyId);
++  const [period, setPeriod] = useState<TrendPeriod>(7);
++  const [retryVersion, setRetryVersion] = useState(0);
++  const [trends, setTrends] = useState<DailyTrendResponse | null>(null);
++  const [loading, setLoading] = useState(true);
++  const [error, setError] = useState<string | null>(null);
++  const requestVersion = useRef(0);
++
++  useEffect(() => {
++    const controller = new AbortController();
++    const version = ++requestVersion.current;
++    setLoading(true);
++    setError(null);
++    setTrends(null);
++
++    const load = async () => {
++      try {
++        if (!babyId) throw new Error("请先选择宝宝，再查看趋势。");
++        const response = await scopedRequest(
++          `/api/records/trends?babyId=${encodeURIComponent(babyId)}&days=${period}`,
++          { signal: controller.signal },
++        );
++        const payload: unknown = await response.json();
++        if (controller.signal.aborted || version !== requestVersion.current) return;
++        if (!isTrendResponse(payload) || payload.babyId !== babyId || payload.days.length !== period) {
++          throw new Error("趋势数据暂时无法识别，请重试。");
++        }
++        setTrends(payload);
++      } catch (requestError) {
++        if (controller.signal.aborted || version !== requestVersion.current || requestError instanceof NutritionScopeChanged) return;
++        setError(requestError instanceof Error ? requestError.message : "趋势数据暂时无法读取，请重试。");
++      } finally {
++        if (!controller.signal.aborted && version === requestVersion.current) setLoading(false);
++      }
++    };
++
++    void load();
++    return () => {
++      controller.abort();
++      if (requestVersion.current === version) requestVersion.current += 1;
++    };
++  }, [babyId, period, retryVersion, scopedRequest]);
++
++  const selectedMetric = METRICS.find((item) => item.key === metric) ?? METRICS[0];
++  const chartData = useMemo(() => {
++    if (!trends) return [];
++    return [...trends.days]
++      .sort((left, right) => left.date.localeCompare(right.date))
++      .map((day) => ({ ...day, value: valueForMetric(day, metric) }));
++  }, [metric, trends]);
++  const values = chartData.flatMap((day) => day.value === null ? [] : [day.value]);
++  const average = values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
++
++  return (
++    <section
++      id="home-daily-trends"
++      aria-labelledby="home-daily-trends-title"
++      className="mt-3 rounded-2xl border border-primary/15 bg-card p-3 shadow-card sm:p-4"
++    >
++      <div className="flex flex-wrap items-start justify-between gap-2">
++        <div className="min-w-0">
++          <h4 id="home-daily-trends-title" className="flex items-center gap-1.5 text-sm font-bold text-text-primary">
++            <TrendingUp size={16} className="shrink-0 text-primary" />
++            近 {period} 天{selectedMetric.label}趋势
++          </h4>
++          {trends && (
++            <p className="mt-1 text-[11px] text-text-muted">
++              {formatFullDate(trends.startDate)} 至 {formatFullDate(trends.endDate)}
++            </p>
++          )}
++        </div>
++        <div role="group" aria-label="趋势时间范围" className="flex shrink-0 rounded-xl bg-gray-100/80 p-0.5">
++          {([7, 30] as const).map((days) => (
++            <button
++              key={days}
++              type="button"
++              aria-pressed={period === days}
++              onClick={() => setPeriod(days)}
++              className={`min-h-8 rounded-lg px-3 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${period === days ? "bg-white text-primary shadow-xs" : "text-text-secondary hover:text-text-primary"}`}
++            >
++              近 {days} 天
++            </button>
++          ))}
++        </div>
++      </div>
++
++      <button type="button" onClick={() => setRetryVersion(version => version + 1)} disabled={loading}
++        className="mt-2 inline-flex items-center gap-1 py-1 text-xs text-primary cursor-pointer disabled:opacity-50">
++        <RefreshCw size={12} />刷新趋势
++      </button>
++
++      <div role="group" aria-label="趋势指标" className="mt-3 grid grid-cols-4 gap-1 rounded-xl bg-gray-100/80 p-1">
++        {METRICS.map((item) => (
++          <button
++            key={item.key}
++            type="button"
++            aria-pressed={metric === item.key}
++            onClick={() => onMetricChange(item.key)}
++            className={`min-h-9 rounded-lg px-1 text-[11px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary sm:text-xs ${metric === item.key ? `${item.activeStyle} shadow-xs` : "text-text-secondary hover:text-text-primary"}`}
++          >
++            {item.label}
++          </button>
++        ))}
++      </div>
++
++      {loading ? (
++        <div role="status" aria-live="polite" className="flex h-44 items-center justify-center gap-2 text-xs text-text-muted">
++          <span className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
++          正在读取趋势…
++        </div>
++      ) : error ? (
++        <div role="alert" className="my-3 flex min-h-32 flex-col items-center justify-center gap-2 rounded-xl bg-red-50/70 px-4 text-center">
++          <p className="text-xs text-red-700">{error}</p>
++          <button
++            type="button"
++            onClick={() => setRetryVersion((version) => version + 1)}
++            className="inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-white px-3 text-xs font-bold text-red-700 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
++          >
++            <RefreshCw size={13} />
++            重试
++          </button>
++        </div>
++      ) : trends && average !== null ? (
++        <>
++          <div className="mt-3 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
++            <p className="text-xs font-bold text-text-primary">日均 {formatValue(metric, average)}</p>
++            <p className="text-[10px] text-text-muted">按 {values.length} 个有记录日期计算</p>
++          </div>
++          <div className="-mx-2 mt-2 h-52 min-w-0 sm:mx-0">
++            <ResponsiveContainer width="100%" height="100%">
++              <LineChart
++                data={chartData}
++                accessibilityLayer
++                aria-label={`近 ${period} 天${selectedMetric.label}趋势折线图`}
++                margin={{ top: 8, right: 12, left: -16, bottom: 0 }}
++              >
++                <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="#E5E7EB" />
++                <XAxis
++                  dataKey="date"
++                  tickFormatter={(date: string) => date.slice(5)}
++                  tick={{ fontSize: 10, fill: "#737373" }}
++                  axisLine={false}
++                  tickLine={false}
++                  minTickGap={16}
++                />
++                <YAxis
++                  domain={[0, "auto"]}
++                  allowDecimals={metric === "milk" || metric === "sleep"}
++                  tickFormatter={(value: number) => metric === "sleep" ? `${value}h` : String(value)}
++                  tick={{ fontSize: 10, fill: "#737373" }}
++                  axisLine={false}
++                  tickLine={false}
++                  width={42}
++                />
++                <Tooltip
++                  labelFormatter={(date) => formatFullDate(String(date))}
++                  formatter={(value) => formatValue(metric, Number(value))}
++                  contentStyle={{
++                    background: "white",
++                    border: "1px solid #E5E7EB",
++                    borderRadius: "12px",
++                    boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
++                    fontSize: "12px",
++                  }}
++                />
++                <Line
++                  type="monotone"
++                  dataKey="value"
++                  name={selectedMetric.label}
++                  stroke={selectedMetric.color}
++                  strokeWidth={2.5}
++                  dot={{ fill: selectedMetric.color, r: 3 }}
++                  activeDot={{ r: 5 }}
++                  connectNulls={false}
++                  isAnimationActive={false}
++                />
++              </LineChart>
++            </ResponsiveContainer>
++          </div>
++          <p className="mt-1 text-[10px] leading-relaxed text-text-muted">
++            折线断开表示当天没有该项记录；日均只计算有记录日期，不把未记录日按 0 计入。记录奶量只合计有毫升数值的喂奶，亲喂不折算。
++          </p>
++        </>
++      ) : (
++        <div className="my-3 flex min-h-40 flex-col items-center justify-center rounded-xl bg-gray-50 px-4 text-center">
++          <p className="text-sm font-semibold text-text-secondary">这段时间还没有{selectedMetric.label}记录</p>
++          <p className="mt-1 max-w-sm text-xs leading-relaxed text-text-muted">
++            图表会在出现对应记录后显示；尿布和辅食的未记录日期会留空，不会当作 0 次或 0 顿。
++          </p>
++        </div>
++      )}
++    </section>
++  );
++}
++
++export default function DailyMetricTrends(props: DailyMetricTrendsProps) {
++  const scopeKey = useNutritionScopeKey(props.babyId);
++  return <MetricTrendsContent key={scopeKey} {...props} />;
++}
+diff --git a/components/nutrition/CoreNutrientCard.tsx b/components/nutrition/CoreNutrientCard.tsx
+index 8438efa..92997d0 100644
+--- a/components/nutrition/CoreNutrientCard.tsx
++++ b/components/nutrition/CoreNutrientCard.tsx
+@@ -2,15 +2,15 @@
+ 
+ import type { NutrientIntakeItem } from "@/types/nutrition";
+ import { CuteCard } from "@/components/ui/CuteCard";
+-import { AlertCircle, CheckCircle2, ShieldAlert } from "lucide-react";
+ 
+ export interface CoreNutrientCardProps {
+   item?: NutrientIntakeItem;
+   icon?: string;
+   className?: string;
++  onViewTrend?: () => void;
+ }
+ 
+-export function CoreNutrientCard({ item, icon = "✨", className = "" }: CoreNutrientCardProps) {
++export function CoreNutrientCard({ item, icon = "✨", className = "", onViewTrend }: CoreNutrientCardProps) {
+   if (!item) return null;
+ 
+   const rate = item.achievementRate || 0;
+@@ -82,6 +82,8 @@ export function CoreNutrientCard({ item, icon = "✨", className = "" }: CoreNut
+         <span>补剂: {item.supplementAmount}</span>
+         <span>母乳: {item.breastmilkAmount}</span>
+       </div>
++      {onViewTrend && <button type="button" onClick={onViewTrend} aria-label={`查看${item.name}趋势`}
++        className="mt-2 w-full rounded-lg py-2 text-[11px] font-bold text-primary bg-primary/5 cursor-pointer hover:bg-primary/10">查看趋势 →</button>}
+     </CuteCard>
+   );
+ }
+diff --git a/components/nutrition/NutritionTrendChart.tsx b/components/nutrition/NutritionTrendChart.tsx
+index f180846..421adf9 100644
+--- a/components/nutrition/NutritionTrendChart.tsx
++++ b/components/nutrition/NutritionTrendChart.tsx
+@@ -1,156 +1,85 @@
+ "use client";
+ 
+-import { useState } from "react";
+-import {
+-  ResponsiveContainer,
+-  LineChart,
+-  Line,
+-  XAxis,
+-  YAxis,
+-  CartesianGrid,
+-  Tooltip,
+-  Legend,
+-  ReferenceLine,
+-} from "recharts";
++import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ReferenceLine } from "recharts";
+ import { CuteCard } from "@/components/ui/CuteCard";
+-import { TrendingUp, Droplets, Sparkles } from "lucide-react";
+-import type { MultiDayTrendItem } from "@/types/nutrition";
++import { TrendingUp } from "lucide-react";
++import { nutritionTrendValue, summarizeTrend } from "@/lib/nutrition/trends";
++import type { MultiDayNutritionSummary, NutrientIntakeItem } from "@/types/nutrition";
+ 
+ export interface NutritionTrendChartProps {
+-  trends: MultiDayTrendItem[];
+-  daysCount?: number;
+-  className?: string;
++  summary: MultiDayNutritionSummary;
++  metric: string;
++  onMetricChange: (metric: string) => void;
++  references?: NutrientIntakeItem[];
+ }
++const coreIds = ["vitamin_d", "calcium", "iron", "vitamin_a", "zinc", "dha"];
++const format = (value: number | null) => value === null ? "—" : Number(value.toFixed(2)).toLocaleString();
+ 
+-export function NutritionTrendChart({ trends, daysCount = 7, className = "" }: NutritionTrendChartProps) {
+-  const [metric, setMetric] = useState<"milk" | "vitaminD" | "calcium" | "iron">("vitaminD");
+-
+-  if (!trends || trends.length === 0) {
+-    return (
+-      <CuteCard className={`p-4 text-center text-text-muted text-xs ${className}`}>
+-        暂无多日趋势数据
+-      </CuteCard>
+-    );
+-  }
+-
+-  // 格式化 X 轴日期 (MM-DD)
+-  const chartData = trends.map((t) => ({
+-    ...t,
+-    displayDate: t.date.slice(5),
++export function NutritionTrendChart({ summary, metric, onMetricChange, references = [] }: NutritionTrendChartProps) {
++  const options = [
++    { id: "milk", name: "总奶量", unit: "ml" },
++    ...Object.entries(summary.averageIntakes).map(([id, item]) => ({ id, name: item.name, unit: item.unit })),
++  ];
++  const selected = options.find(item => item.id === metric) ?? options[0];
++  const activeMetric = selected.id;
++  const reference = references.find(item => item.nutrientId === activeMetric);
++  const target = summary.averageIntakes[activeMetric]?.targetAmount;
++  const chart = summary.dailyTrends.map(day => ({
++    ...day, displayDate: day.date.slice(5), value: nutritionTrendValue(day, activeMetric),
++    formula: nutritionTrendValue(day, "milk") === null ? null : day.formulaMl,
++    breast: nutritionTrendValue(day, "milk") === null ? null : day.breastMl,
+   }));
++  const stats = summarizeTrend(chart.map(day => day.value));
++  const quickOptions = options.filter(item => item.id === "milk" || coreIds.includes(item.id));
+ 
+-  return (
+-    <CuteCard className={`p-4 space-y-3 bg-white border border-primary/20 shadow-2xs ${className}`}>
+-      <div className="flex items-center justify-between">
+-        <div className="flex items-center gap-1.5">
+-          <TrendingUp size={16} className="text-primary" />
+-          <h3 className="text-xs font-bold text-text-primary">
+-            近 {daysCount} 天摄入趋势与基准线
+-          </h3>
+-        </div>
+-        <span className="text-[10px] text-text-muted">历史追踪</span>
+-      </div>
+-
+-      {/* 指标切换 */}
+-      <div className="flex gap-1.5 bg-gray-100/80 p-1 rounded-2xl">
+-        <button
+-          type="button"
+-          onClick={() => setMetric("vitaminD")}
+-          className={`flex-1 py-1.5 text-xs font-bold rounded-xl transition-all ${
+-            metric === "vitaminD" ? "bg-white text-primary shadow-xs" : "text-text-secondary"
+-          }`}
+-        >
+-          维生素D (IU)
+-        </button>
+-        <button
+-          type="button"
+-          onClick={() => setMetric("milk")}
+-          className={`flex-1 py-1.5 text-xs font-bold rounded-xl transition-all ${
+-            metric === "milk" ? "bg-white text-sky-600 shadow-xs" : "text-text-secondary"
+-          }`}
+-        >
+-          奶量 (ml)
+-        </button>
+-        <button
+-          type="button"
+-          onClick={() => setMetric("calcium")}
+-          className={`flex-1 py-1.5 text-xs font-bold rounded-xl transition-all ${
+-            metric === "calcium" ? "bg-white text-emerald-600 shadow-xs" : "text-text-secondary"
+-          }`}
+-        >
+-          钙 (mg)
+-        </button>
+-        <button
+-          type="button"
+-          onClick={() => setMetric("iron")}
+-          className={`flex-1 py-1.5 text-xs font-bold rounded-xl transition-all ${
+-            metric === "iron" ? "bg-white text-amber-600 shadow-xs" : "text-text-secondary"
+-          }`}
+-        >
+-          铁 (mg)
+-        </button>
+-      </div>
+-
+-      {/* 图表展示 */}
+-      <div className="h-[220px] -mx-2 pt-2">
++  return <CuteCard className="p-4 space-y-4 border border-primary/20">
++    <div className="flex flex-wrap items-center gap-1.5">
++      <TrendingUp size={16} className="text-primary" />
++      <h3 className="text-sm font-bold text-text-primary">{selected.name}趋势</h3>
++      <span className="ml-auto text-[10px] text-text-muted">{summary.startDate} 至 {summary.endDate}</span>
++    </div>
++    <div className="flex flex-wrap gap-1.5" aria-label="营养趋势指标">
++      {quickOptions.map(item => <button type="button" key={item.id} aria-pressed={activeMetric === item.id}
++        onClick={() => onMetricChange(item.id)}
++        className={`px-3 py-2 rounded-xl text-xs font-bold cursor-pointer ${activeMetric === item.id ? "bg-primary text-white" : "bg-primary/5 text-text-secondary"}`}>
++        {item.name}
++      </button>)}
++    </div>
++    <label className="flex items-center gap-3 text-xs text-text-secondary">
++      全部营养指标
++      <select aria-label="选择营养趋势指标" value={activeMetric} onChange={event => onMetricChange(event.target.value)}
++        className="flex-1 min-w-0 rounded-xl border border-divider bg-card px-3 py-2 text-text-primary">
++        {options.map(item => <option key={item.id} value={item.id}>{item.name} ({item.unit})</option>)}
++      </select>
++    </label>
++    <div className="flex justify-between gap-2 text-xs">
++      <span>有记录日均 <strong className="text-text-primary">{format(stats.average)} {selected.unit}</strong></span>
++      <span className="text-text-muted">{stats.recordedDays} / {summary.daysCount} 天有数据</span>
++    </div>
++    {stats.recordedDays === 0 ? <p className="py-8 text-center text-xs text-text-muted">这段时间还没有该指标的记录</p> :
++      <div className="h-60 w-full min-w-0" role="img" aria-label={`${selected.name}每日趋势，逐日数据见下方明细`}>
+         <ResponsiveContainer width="100%" height="100%">
+-          {metric === "vitaminD" ? (
+-            <LineChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+-              <CartesianGrid strokeDasharray="3 3" stroke="#F0F0F0" />
+-              <XAxis dataKey="displayDate" tick={{ fontSize: 10, fill: "#999" }} axisLine={false} tickLine={false} />
+-              <YAxis tick={{ fontSize: 10, fill: "#999" }} axisLine={false} tickLine={false} domain={[0, "auto"]} />
+-              <Tooltip
+-                contentStyle={{
+-                  background: "white",
+-                  border: "1px solid #FFE0EB",
+-                  borderRadius: "16px",
+-                  boxShadow: "0 4px 12px rgba(0,0,0,0.06)",
+-                  fontSize: "12px",
+-                }}
+-              />
+-              <ReferenceLine y={400} stroke="#10B981" strokeDasharray="4 4" label={{ value: "目标 400 IU", fill: "#10B981", fontSize: 10, position: "insideTopRight" }} />
+-              <ReferenceLine y={800} stroke="#EF4444" strokeDasharray="4 4" label={{ value: "上限 800 IU", fill: "#EF4444", fontSize: 10, position: "insideTopRight" }} />
+-              <Line type="monotone" dataKey="vitaminD" stroke="#FF6F9F" strokeWidth={2.5} dot={{ fill: "#FF6F9F", r: 4 }} name="实测维生素D (IU)" animationDuration={250} animationEasing="ease-out" />
+-            </LineChart>
+-          ) : metric === "milk" ? (
+-            <LineChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+-              <CartesianGrid strokeDasharray="3 3" stroke="#F0F0F0" />
+-              <XAxis dataKey="displayDate" tick={{ fontSize: 10, fill: "#999" }} axisLine={false} tickLine={false} />
+-              <YAxis tick={{ fontSize: 10, fill: "#999" }} axisLine={false} tickLine={false} />
+-              <Tooltip
+-                contentStyle={{
+-                  background: "white",
+-                  border: "1px solid #E0F2FE",
+-                  borderRadius: "16px",
+-                  fontSize: "12px",
+-                }}
+-              />
+-              <Line type="monotone" dataKey="totalFeedingMl" stroke="#0284C7" strokeWidth={2.5} dot={{ fill: "#0284C7", r: 4 }} name="总奶量 (ml)" animationDuration={250} animationEasing="ease-out" />
+-              <Line type="monotone" dataKey="formulaMl" stroke="#38BDF8" strokeWidth={1.5} dot={false} strokeDasharray="3 3" name="配方奶 (ml)" isAnimationActive={false} />
+-              <Line type="monotone" dataKey="breastMl" stroke="#F472B6" strokeWidth={1.5} dot={false} strokeDasharray="3 3" name="母乳 (ml)" isAnimationActive={false} />
+-              <Legend wrapperStyle={{ fontSize: "11px", paddingTop: "8px" }} />
+-            </LineChart>
+-          ) : metric === "calcium" ? (
+-            <LineChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+-              <CartesianGrid strokeDasharray="3 3" stroke="#F0F0F0" />
+-              <XAxis dataKey="displayDate" tick={{ fontSize: 10, fill: "#999" }} axisLine={false} tickLine={false} />
+-              <YAxis tick={{ fontSize: 10, fill: "#999" }} axisLine={false} tickLine={false} />
+-              <Tooltip contentStyle={{ background: "white", borderRadius: "16px", fontSize: "12px" }} />
+-              <ReferenceLine y={250} stroke="#10B981" strokeDasharray="4 4" label={{ value: "参考 250mg", fill: "#10B981", fontSize: 10 }} />
+-              <Line type="monotone" dataKey="calcium" stroke="#10B981" strokeWidth={2.5} dot={{ fill: "#10B981", r: 4 }} name="钙摄入 (mg)" animationDuration={250} animationEasing="ease-out" />
+-            </LineChart>
+-          ) : (
+-            <LineChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+-              <CartesianGrid strokeDasharray="3 3" stroke="#F0F0F0" />
+-              <XAxis dataKey="displayDate" tick={{ fontSize: 10, fill: "#999" }} axisLine={false} tickLine={false} />
+-              <YAxis tick={{ fontSize: 10, fill: "#999" }} axisLine={false} tickLine={false} />
+-              <Tooltip contentStyle={{ background: "white", borderRadius: "16px", fontSize: "12px" }} />
+-              <ReferenceLine y={10} stroke="#F59E0B" strokeDasharray="4 4" label={{ value: "参考 10mg", fill: "#F59E0B", fontSize: 10 }} />
+-              <Line type="monotone" dataKey="iron" stroke="#F59E0B" strokeWidth={2.5} dot={{ fill: "#F59E0B", r: 4 }} name="铁摄入 (mg)" animationDuration={250} animationEasing="ease-out" />
+-            </LineChart>
+-          )}
++          <LineChart data={chart} margin={{ top: 18, right: 12, left: -15, bottom: 0 }} accessibilityLayer>
++            <CartesianGrid strokeDasharray="3 3" opacity={0.25} />
++            <XAxis dataKey="displayDate" tick={{ fontSize: 10 }} minTickGap={18} />
++            <YAxis tick={{ fontSize: 10 }} domain={[0, "auto"]} />
++            <Tooltip formatter={value => value == null ? "未记录" : `${format(Number(value))} ${selected.unit}`} contentStyle={{ borderRadius: 12, fontSize: 12 }} />
++            {target != null && <ReferenceLine y={target} ifOverflow="extendDomain" stroke="#10b981" strokeDasharray="4 4" label={{ value: `适龄参考 ${target} ${selected.unit}`, fontSize: 10, position: "insideTopRight" }} />}
++            {reference?.ul != null && <ReferenceLine y={reference.ul} ifOverflow="extendDomain" stroke="#ef4444" strokeDasharray="4 4" label={{ value: `上限 ${reference.ul} ${selected.unit}`, fontSize: 10, position: "insideTopRight" }} />}
++            <Line type="linear" dataKey="value" name={selected.name} stroke="#0284c7" strokeWidth={2.5} dot={{ r: 3 }} connectNulls={false} isAnimationActive={false} />
++            {activeMetric === "milk" && <Line type="linear" dataKey="formula" name="配方奶" stroke="#38bdf8" strokeDasharray="3 3" dot={false} connectNulls={false} isAnimationActive={false} />}
++            {activeMetric === "milk" && <Line type="linear" dataKey="breast" name="母乳（含亲喂估算）" stroke="#f472b6" strokeDasharray="3 3" dot={false} connectNulls={false} isAnimationActive={false} />}
++            <Legend wrapperStyle={{ fontSize: 10 }} />
++          </LineChart>
+         </ResponsiveContainer>
+-      </div>
+-    </CuteCard>
+-  );
++      </div>}
++    <p className="text-[10px] leading-relaxed text-text-muted">按已有喂养、辅食与补剂记录计算，亲喂奶量和食物营养含估算。未记录日留空，日均不含未记录日；今天仍在累计，不能直接与完整一天比较。</p>
++    <details className="text-xs">
++      <summary className="cursor-pointer text-primary py-1">查看逐日明细</summary>
++      <div className="max-h-60 overflow-auto mt-2"><table className="w-full text-right">
++        <thead><tr><th className="text-left p-2">日期</th><th className="p-2">{selected.name} ({selected.unit})</th></tr></thead>
++        <tbody>{[...chart].reverse().map(day => <tr key={day.date} className="border-t border-divider"><td className="text-left p-2">{day.date}</td><td className="p-2">{format(day.value)}</td></tr>)}</tbody>
++      </table></div>
++    </details>
++  </CuteCard>;
+ }
+diff --git a/components/ui/StatCard.tsx b/components/ui/StatCard.tsx
+index 65158e2..5de3fb3 100644
+--- a/components/ui/StatCard.tsx
++++ b/components/ui/StatCard.tsx
+@@ -6,6 +6,8 @@ interface StatCardProps {
+   value: string;
+   unit?: string;
+   color?: string;
++  onClick?: () => void;
++  active?: boolean;
+ }
+ 
+ const StatCardImpl: React.FC<StatCardProps> = ({
+@@ -14,9 +16,17 @@ const StatCardImpl: React.FC<StatCardProps> = ({
+   value,
+   unit,
+   color = 'text-primary',
++  onClick,
++  active = false,
+ }) => {
+-  return (
+-    <div className="bg-card rounded-[20px] shadow-card hover:shadow-elevated p-3 flex flex-col items-center gap-1.5 min-w-0 transition-all duration-200 hover:-translate-y-1 active:scale-95 cursor-default">
++  const className = `bg-card rounded-[20px] shadow-card hover:shadow-elevated p-3 flex flex-col items-center gap-1.5 min-w-0 transition-all duration-200 hover:-translate-y-1 active:scale-95 ${
++    onClick
++      ? `cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${active ? 'ring-2 ring-primary/60' : ''}`
++      : 'cursor-default'
++  }`;
++
++  const content = (
++    <>
+       <div className={`flex items-center justify-center w-9 h-9 rounded-full ${color} transition-transform group-hover:scale-110`}>
+         {icon}
+       </div>
+@@ -27,8 +37,24 @@ const StatCardImpl: React.FC<StatCardProps> = ({
+       <span className="text-xs text-text-secondary truncate w-full text-center">
+         {label}
+       </span>
+-    </div>
++    </>
+   );
++
++  if (onClick) {
++    return (
++      <button
++        type="button"
++        className={className}
++        onClick={onClick}
++        aria-label={`${label} ${value}${unit ?? ''}，查看${label}趋势`}
++        aria-pressed={active}
++      >
++        {content}
++      </button>
++    );
++  }
++
++  return <div className={className}>{content}</div>;
+ };
+ 
+ export const StatCard = React.memo(StatCardImpl);
+diff --git a/lib/care-trends.ts b/lib/care-trends.ts
+index 094c83e..495ebdd 100644
+--- a/lib/care-trends.ts
++++ b/lib/care-trends.ts
+@@ -4,6 +4,7 @@ import { dayBoundsInTimeZone } from "./growdesk/record-list";
+ export interface TrendFeeding { timestamp: string; amountMl: number | null; leftMinutes: number | null; rightMinutes: number | null }
+ export interface TrendSleep { startTime: string; endTime: string | null }
+ export interface TrendDiaper { timestamp: string }
++export interface TrendFood { date: string }
+ export interface CareTrendDay {
+   date: string;
+   recordedMilkMl: number | null;
+@@ -11,6 +12,7 @@ export interface CareTrendDay {
+   breastMinutes: number;
+   sleepMinutes: number | null;
+   diaperCount: number;
++  foodCount: number;
+   hasRecords: boolean;
+ }
+ export interface CareTrends {
+@@ -39,13 +41,17 @@ function positive(value: number | null): number {
+ /** Real recorded volumes only. Gaps stay null; overlapping sleep is counted once. */
+ export function aggregateCareTrends(input: {
+   babyId: string; timeZone: string; endDate: string; days: 7 | 30;
+-  feeding: TrendFeeding[]; sleep: TrendSleep[]; diaper: TrendDiaper[]; now?: Date;
++  feeding: TrendFeeding[]; sleep: TrendSleep[]; diaper: TrendDiaper[]; food?: TrendFood[]; now?: Date;
+ }): CareTrends {
+   if (!isValidDateStr(input.endDate) || ![7, 30].includes(input.days)) throw new Error("趋势日期或范围无效");
+   const now = input.now ?? new Date();
+   const startDate = addDays(input.endDate, 1 - input.days);
+   const feeding = input.feeding.map(r => ({ ...r, at: timestamp(r.timestamp) }));
+   const diapers = input.diaper.map(r => timestamp(r.timestamp));
++  const foods = (input.food ?? []).map(r => {
++    if (!isValidDateStr(r.date)) throw new Error("辅食日期无效，无法统计趋势");
++    return r.date;
++  });
+   const sleeps = input.sleep.map(r => {
+     const start = timestamp(r.startTime);
+     const end = r.endTime === null ? now.getTime() : timestamp(r.endTime);
+@@ -66,6 +72,7 @@ export function aggregateCareTrends(input: {
+       lastEnd = Math.max(lastEnd, interval.end);
+     }
+     const diaperCount = diapers.filter(at => at >= start && at < end).length;
++    const foodCount = foods.filter(recordDate => recordDate === date).length;
+     return {
+       date,
+       recordedMilkMl: measured.length ? Math.round(measured.reduce((sum, r) => sum + positive(r.amountMl), 0) * 100) / 100 : null,
+@@ -73,7 +80,8 @@ export function aggregateCareTrends(input: {
+       breastMinutes: feeds.reduce((sum, r) => sum + positive(r.leftMinutes) + positive(r.rightMinutes), 0),
+       sleepMinutes: intervals.length ? Math.round(sleepMs / 60000) : null,
+       diaperCount,
+-      hasRecords: feeds.length > 0 || intervals.length > 0 || diaperCount > 0,
++      foodCount,
++      hasRecords: feeds.length > 0 || intervals.length > 0 || diaperCount > 0 || foodCount > 0,
+     };
+   });
+   return { babyId: input.babyId, timeZone: input.timeZone, startDate, endDate: input.endDate, today: dateInTimeZone(now, input.timeZone), days };
+diff --git a/lib/hooks/useScopedNutritionRequest.ts b/lib/hooks/useScopedNutritionRequest.ts
+index b447804..32e308e 100644
+--- a/lib/hooks/useScopedNutritionRequest.ts
++++ b/lib/hooks/useScopedNutritionRequest.ts
+@@ -38,7 +38,7 @@ export function useScopedNutritionRequest(babyId?: string) {
+   return useCallback(async (path: string, init?: RequestInit, allowStatuses?: readonly number[]) => {
+     try { return await client.request(path, init, allowStatuses); }
+     catch (error) {
+-      if (!(error instanceof NutritionScopeChanged)) showToast(error instanceof Error ? error.message : "营养数据请求失败", "error");
++      if (!(error instanceof NutritionScopeChanged) && !init?.signal?.aborted) showToast(error instanceof Error ? error.message : "营养数据请求失败", "error");
+       throw error;
+     }
+   }, [client, showToast]);
+diff --git a/lib/nutrition/engine.ts b/lib/nutrition/engine.ts
+index 753b135..89e9e31 100644
+--- a/lib/nutrition/engine.ts
++++ b/lib/nutrition/engine.ts
+@@ -667,6 +667,13 @@ export function calculateMultiDayNutritionTrend(params: {
+       iron,
+       zinc,
+       dha,
++      nutrients: Object.fromEntries(analysis.allNutrients.map(item => [item.nutrientId, item.totalAmount])),
++      hasRecords: day.feedings.length > 0 || day.supplements.length > 0 || (day.foodLogs?.length ?? 0) > 0,
++      recordedMetrics: [
++        ...(day.feedings.some(feeding => feeding.type !== "solid" &&
++          (feeding.amountMl != null || (feeding.leftMinutes ?? 0) > 0 || (feeding.rightMinutes ?? 0) > 0)) ? ["milk"] : []),
++        ...analysis.allNutrients.filter(item => item.sources.length > 0).map(item => item.nutrientId),
++      ],
+     });
+ 
+     for (const item of analysis.allNutrients) {
+diff --git a/lib/nutrition/scoped-request.ts b/lib/nutrition/scoped-request.ts
+index 74899d0..12da134 100644
+--- a/lib/nutrition/scoped-request.ts
++++ b/lib/nutrition/scoped-request.ts
+@@ -14,6 +14,7 @@ export class NutritionRequestError extends Error {
+ const ENDPOINTS = new Set([
+   "/api/nutrition/products", "/api/nutrition/schedules", "/api/nutrition/records",
+   "/api/nutrition/analysis", "/api/ai/parse-nutrition",
++  "/api/records/trends",
+ ]);
+ export function sameNutritionScope(a: NutritionClientScope | null, b: NutritionClientScope | null): boolean {
+   return Boolean(a && b && a.userId === b.userId && a.familyId === b.familyId && a.babyId === b.babyId);
+diff --git a/lib/nutrition/trends.ts b/lib/nutrition/trends.ts
+new file mode 100644
+index 0000000..4b9a2e5
+--- /dev/null
++++ b/lib/nutrition/trends.ts
+@@ -0,0 +1,24 @@
++import type { MultiDayTrendItem } from "@/types/nutrition";
++
++const legacyKeys = {
++  vitamin_d: "vitaminD", vitamin_a: "vitaminA", calcium: "calcium",
++  iron: "iron", zinc: "zinc", dha: "dha",
++} as const;
++
++/** Keep a missing day/field distinct from a recorded zero, including older responses. */
++export function nutritionTrendValue(day: MultiDayTrendItem, metric: string): number | null {
++  if (day.hasRecords === false) return null;
++  if (day.recordedMetrics && !day.recordedMetrics.includes(metric)) return null;
++  const key = legacyKeys[metric as keyof typeof legacyKeys];
++  const value = metric === "milk" ? day.totalFeedingMl : day.nutrients?.[metric] ?? (key ? day[key] : undefined);
++  return typeof value === "number" && Number.isFinite(value) ? value : null;
++}
++
++export function summarizeTrend(values: Array<number | null>) {
++  const recorded = values.filter((value): value is number => value !== null && Number.isFinite(value));
++  return {
++    recordedDays: recorded.length,
++    average: recorded.length ? recorded.reduce((sum, value) => sum + value, 0) / recorded.length : null,
++    latest: recorded.at(-1) ?? null,
++  };
++}
+diff --git a/tests/unit/care-trends.test.ts b/tests/unit/care-trends.test.ts
+index f5f4afd..797ba0a 100644
+--- a/tests/unit/care-trends.test.ts
++++ b/tests/unit/care-trends.test.ts
+@@ -8,6 +8,23 @@ function day(result: CareTrends, date: string) {
+   return value;
+ }
+ 
++test("food trends use the recorded calendar day, including food-only days and range boundaries", () => {
++  const result = aggregateCareTrends({
++    babyId: "test_baby_food_trends", timeZone: "America/Los_Angeles", endDate: "2026-10-06", days: 7,
++    feeding: [], sleep: [], diaper: [], food: [
++      { date: "2026-09-29" }, { date: "2026-09-30" },
++      { date: "2026-10-06" }, { date: "2026-10-06" }, { date: "2026-10-07" },
++    ],
++  });
++  assert.equal(day(result, "2026-09-30").foodCount, 1);
++  assert.equal(day(result, "2026-10-06").foodCount, 2);
++  assert.equal(day(result, "2026-10-06").hasRecords, true);
++  assert.equal(day(result, "2026-10-06").recordedMilkMl, null);
++  assert.equal(day(result, "2026-10-05").hasRecords, false);
++  assert.equal(result.days.reduce((sum, d) => sum + d.foodCount, 0), 3);
++  assert.throws(() => aggregateCareTrends({ babyId: "test_baby_food_bad", timeZone: "Asia/Shanghai", endDate: "2026-10-06", days: 7, feeding: [], sleep: [], diaper: [], food: [{ date: "2026-02-31" }] }));
++});
++
+ test("care trends uses the family-local Shanghai day boundary", () => {
+   const result = aggregateCareTrends({
+     babyId: "test_baby_trends_shanghai",
+diff --git a/tests/unit/growdesk-nutrition-completeness.test.ts b/tests/unit/growdesk-nutrition-completeness.test.ts
+index 8f32003..34a32cb 100644
+--- a/tests/unit/growdesk-nutrition-completeness.test.ts
++++ b/tests/unit/growdesk-nutrition-completeness.test.ts
+@@ -40,6 +40,14 @@ function route(fetchApi: protocol.BridgeFetch) {
+ }
+ const request = () => new Request("https://test.invalid/api/nutrition/analysis?babyId=test_baby&date=2026-09-19");
+ 
++test("nutrition trend rejects a future end date before fetching record history", async () => {
++  let calls = 0;
++  const api = route(async () => { calls++; throw new Error("unexpected upstream call"); });
++  const response = await api.GET(new Request("https://test.invalid/api/nutrition/analysis?babyId=test_baby&date=2999-01-01&days=30"));
++  assert.equal(response.status, 400);
++  assert.equal(calls, 0);
++});
++
+ test("nutrition refuses an upstream failure instead of returning an empty healthy analysis", async () => {
+   const api = route(async () => ({ ok: false, status: 503, error: { code: "TEST_OUTAGE", message: "test unavailable" } }));
+   assert.equal((await api.GET(request())).status, 503);
+diff --git a/tests/unit/nutrition-trends.test.ts b/tests/unit/nutrition-trends.test.ts
+new file mode 100644
+index 0000000..d810f68
+--- /dev/null
++++ b/tests/unit/nutrition-trends.test.ts
+@@ -0,0 +1,42 @@
++import assert from "node:assert/strict";
++import test from "node:test";
++import { calculateMultiDayNutritionTrend } from "../../lib/nutrition/engine";
++import { nutritionTrendValue, summarizeTrend } from "../../lib/nutrition/trends";
++import type { FeedingRecord } from "../../types";
++
++test("full nutrition trend preserves all nutrient projections, empty days, and an explicit zero", () => {
++  const feeding: FeedingRecord = { id: "test_feeding", timestamp: "2026-10-05T12:00:00+08:00", type: "bottle_breast", amountMl: 100, leftMinutes: null, rightMinutes: null, spitUp: false, notes: null };
++  const summary = calculateMultiDayNutritionTrend({
++    babyAgeMonths: 8, dailyDataList: [
++      { date: "2026-10-04", feedings: [], supplements: [] },
++      { date: "2026-10-05", feedings: [feeding], supplements: [] },
++      { date: "2026-10-06", feedings: [{ ...feeding, amountMl: 0 }], supplements: [] },
++    ], formulaProductsMap: {}, supplementProductsMap: {},
++  });
++  assert.ok(Object.keys(summary.dailyTrends[1].nutrients ?? {}).length > 20);
++  assert.equal(nutritionTrendValue(summary.dailyTrends[0], "energy_kcal"), null);
++  assert.equal(nutritionTrendValue(summary.dailyTrends[1], "energy_kcal"), 67);
++  assert.equal(nutritionTrendValue(summary.dailyTrends[1], "vitamin_d"), 10);
++  assert.equal(nutritionTrendValue(summary.dailyTrends[2], "milk"), 0);
++  assert.equal(nutritionTrendValue(summary.dailyTrends[1], "nonexistent"), null);
++  assert.deepEqual(summarizeTrend(summary.dailyTrends.map(day => nutritionTrendValue(day, "energy_kcal"))), { recordedDays: 1, average: 67, latest: 67 });
++});
++
++test("food-only days do not become zero milk and unknown nutrient sources stay blank", () => {
++  const summary = calculateMultiDayNutritionTrend({ babyAgeMonths: 8, dailyDataList: [
++    { date: "2026-10-06", feedings: [], supplements: [], foodLogs: [{ foods: ["米粉"], portion: "most" }] },
++  ], formulaProductsMap: {}, supplementProductsMap: {} });
++  const day = summary.dailyTrends[0];
++  assert.equal(day.hasRecords, true);
++  assert.equal(nutritionTrendValue(day, "milk"), null);
++  assert.equal(nutritionTrendValue(day, "vitamin_d"), null);
++  assert.ok(nutritionTrendValue(day, "energy_kcal")! > 0);
++  assert.equal(nutritionTrendValue({ ...day, nutrients: { vitamin_d: 0 }, recordedMetrics: ["vitamin_d"] }, "vitamin_d"), 0);
++});
++
++test("older responses keep supported core values and never manufacture absent metrics", () => {
++  const day = { date: "2026-10-06", totalFeedingMl: 0, formulaMl: 0, breastMl: 0, vitaminD: 400, calcium: 250, iron: 10 };
++  assert.equal(nutritionTrendValue(day, "vitamin_d"), 400);
++  assert.equal(nutritionTrendValue(day, "zinc"), null);
++  assert.equal(nutritionTrendValue(day, "milk"), 0);
++});
+diff --git a/types/nutrition.ts b/types/nutrition.ts
+index 5c9fd97..0ef24d0 100644
+--- a/types/nutrition.ts
++++ b/types/nutrition.ts
+@@ -184,6 +184,11 @@ export interface MultiDayTrendItem {
+   iron: number;
+   zinc?: number;
+   dha?: number;
++  /** Full deterministic daily projection, keyed by nutrientId. */
++  nutrients?: Record<string, number>;
++  hasRecords?: boolean;
++  /** Metrics with a known source; absence is not a measured zero. */
++  recordedMetrics?: string[];
+ }
+ 
+ export interface MultiDayNutritionSummary {
