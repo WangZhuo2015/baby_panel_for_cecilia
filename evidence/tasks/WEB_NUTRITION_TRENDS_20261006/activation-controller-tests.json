@@ -7,11 +7,19 @@
       "status": "PASS"
     },
     {
+      "scenario": "service_static_copy",
+      "status": "PASS"
+    },
+    {
       "scenario": "tampered_artifact",
       "status": "PASS"
     },
     {
       "scenario": "rollback_copy_failure",
+      "status": "PASS"
+    },
+    {
+      "scenario": "changed_service_static_copy",
       "status": "PASS"
     },
     {

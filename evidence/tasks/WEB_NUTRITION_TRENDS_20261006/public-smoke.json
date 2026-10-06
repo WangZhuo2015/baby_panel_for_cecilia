@@ -1,0 +1,48 @@
+{
+  "status": "PASS",
+  "readOnly": true,
+  "authenticated": false,
+  "productionWrites": 0,
+  "checks": [
+    {
+      "path": "/",
+      "status": 200
+    },
+    {
+      "path": "/nutrition",
+      "status": 200
+    },
+    {
+      "path": "/dashboard",
+      "status": 200
+    },
+    {
+      "path": "/notifications",
+      "status": 200
+    },
+    {
+      "path": "/family/passport",
+      "status": 200
+    },
+    {
+      "path": "/api/records/trends?babyId=test_unauthenticated",
+      "status": 401
+    },
+    {
+      "path": "/api/nutrition/analysis?babyId=test_unauthenticated",
+      "status": 401
+    },
+    {
+      "path": "/_next/static/chunks/app/(main)/page-0a28577e1a272069.js",
+      "status": 200,
+      "sha256": "e43d8fcf60d865d46d97f987494739ed9a3ce68e73d128cffb90084180749f41",
+      "matchesDeployedArtifact": true
+    },
+    {
+      "path": "/_next/static/chunks/app/(main)/nutrition/page-20acf364ebcc8d5e.js",
+      "status": 200,
+      "sha256": "836b743f6def9e40169952da1b7032cc1f6caacfce97bb15b9a9946c35fc3b01",
+      "matchesDeployedArtifact": true
+    }
+  ]
+}

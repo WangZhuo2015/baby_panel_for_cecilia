@@ -1,0 +1,107 @@
+{
+  "phase": "deployed",
+  "deployed": true,
+  "schemaChanged": false,
+  "apiChanged": false,
+  "noProductionTestData": true,
+  "verifiedArtifactSha256": "a78a1955b06ca8ad2a6d00cbba5527ac3f92e7da14ec1b60e9fec3ef02036794",
+  "candidateProvenance": {
+    "schemaVersion": 1,
+    "sourceGitSha": "5fa673c23c8886a097477e01cf200d5279f98348",
+    "sourceDirty": false,
+    "buildId": "SEwv3xzJ7OJ9tdoPoqiea",
+    "artifactSha256": "a78a1955b06ca8ad2a6d00cbba5527ac3f92e7da14ec1b60e9fec3ef02036794",
+    "builtAt": "2026-10-06T14:24:32.100Z"
+  },
+  "beforeProvenance": {
+    "schemaVersion": 1,
+    "sourceGitSha": "c366c6818887fb400d541dc679fc5c5b936392b0",
+    "sourceDirty": false,
+    "buildId": "jFRaen6S2ha8tJjqKrZsj",
+    "artifactSha256": "ca5ad7f43ea8f77799defe432e6d368608e65a78d6d229f10ae608c55fed94b5",
+    "builtAt": "2026-10-06T13:09:30.817Z"
+  },
+  "beforeServices": {
+    "baby-panel": {
+      "MainPID": "1927860",
+      "NRestarts": "0",
+      "ActiveState": "active"
+    },
+    "growdesk-api": {
+      "MainPID": "1699845",
+      "NRestarts": "0",
+      "ActiveState": "active"
+    },
+    "growdesk-notifications-worker": {
+      "MainPID": "1699928",
+      "NRestarts": "0",
+      "ActiveState": "active"
+    }
+  },
+  "configurationMetadataBefore": {
+    "/home/ubuntu/Github/baby_panel_for_cecilia/.env": {
+      "size": 1133,
+      "mtimeNs": 1790269527135897539,
+      "mode": 384,
+      "uid": 1001,
+      "gid": 1001
+    },
+    "/home/ubuntu/growdesk/api.env": {
+      "size": 1052,
+      "mtimeNs": 1791027386780350338,
+      "mode": 384,
+      "uid": 1001,
+      "gid": 1001
+    }
+  },
+  "unchangedSourceNotifications": "0bf604bf375927fdf723066b77712ed4f8863f35f4d76e034312bd6f8a79e1ef",
+  "immutableBuildHashes": {
+    "standalone/.next/server": "59770f5147dda16086cfe12c841d6779eb738606ea117709ba7b1ae18ef696fc",
+    "standalone/.next/static": "8561b24054f3ea953d58b3df36b9e0b4201f327e67cfb26c4c9a9a661578a272",
+    "standalone/server.js": "0ac6de214949c585c7d463228d9b904726fa6f7a9a4af9ffe9f0be625381ebc0",
+    "standalone/public": "ab158d9354f3d95ac7d751288f40cf2c7dc4d891c09d2d87237c818f231fe7e6"
+  },
+  "switchStarted": true,
+  "preservedRuntimeHashes": {
+    "data/archive": "f40ff9cee6277ee437fd17eedcb961e41031857e856a852e06d3b2971f6e1eec",
+    "public/uploads": "e5d3e3366295846a577ae32f3eece69da4edd28778de3033c45b7dd7eb8c504c",
+    "backups": "f7c1823e3adc2f0865c5acaf9ce101f03d96e78e8761d481906eee9ce31ca9b6",
+    "llm-profiles.json": "4da3682310a56b4c91b85a696310c3d67bc3cac3bb061acd16808563a58235dd",
+    ".data": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "candidateInstalled": true,
+  "localStatus": {
+    "/": 200,
+    "/nutrition": 200,
+    "/dashboard": 200,
+    "/notifications": 200,
+    "/family/passport": 200,
+    "/api/records/trends?babyId=test_unauthenticated": 401,
+    "/api/nutrition/analysis?babyId=test_unauthenticated": 401
+  },
+  "afterServices": {
+    "baby-panel": {
+      "MainPID": "1956540",
+      "NRestarts": "0",
+      "ActiveState": "active"
+    },
+    "growdesk-api": {
+      "MainPID": "1699845",
+      "NRestarts": "0",
+      "ActiveState": "active"
+    },
+    "growdesk-notifications-worker": {
+      "MainPID": "1699928",
+      "NRestarts": "0",
+      "ActiveState": "active"
+    }
+  },
+  "immutableBuildHashesAfter": {
+    "standalone/.next/server": "59770f5147dda16086cfe12c841d6779eb738606ea117709ba7b1ae18ef696fc",
+    "standalone/.next/static": "8561b24054f3ea953d58b3df36b9e0b4201f327e67cfb26c4c9a9a661578a272",
+    "standalone/server.js": "0ac6de214949c585c7d463228d9b904726fa6f7a9a4af9ffe9f0be625381ebc0",
+    "standalone/public": "ab158d9354f3d95ac7d751288f40cf2c7dc4d891c09d2d87237c818f231fe7e6"
+  },
+  "rollbackDirectory": "/home/ubuntu/growdesk/web-nutrition-releases/20261006-retry/rollback",
+  "configurationUnchanged": true
+}

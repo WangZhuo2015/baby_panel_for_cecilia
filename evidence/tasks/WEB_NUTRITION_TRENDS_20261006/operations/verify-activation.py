@@ -53,12 +53,25 @@ def setup(root):
 results = []
 with tempfile.TemporaryDirectory(prefix='test_web_activation_') as temp:
     root = Path(temp)
-    for mode in ('success', 'tampered_artifact', 'rollback_copy_failure'):
+    for mode in ('success', 'service_static_copy', 'tampered_artifact', 'rollback_copy_failure', 'changed_service_static_copy'):
         fixture = root / mode
         fixture.mkdir()
         ns, calls, archive = setup(fixture)
         if mode == 'tampered_artifact':
             (ns['CANDIDATE'] / 'standalone/public/a.txt').write_text('modified_after_build')
+        if mode in ('service_static_copy', 'changed_service_static_copy'):
+            original_ctl = ns['ctl']
+            def service_copy(action, unit):
+                result = original_ctl(action, unit)
+                if action == 'start' and ns['receipt'].get('candidateInstalled') and (ns['LIVE'] / '.next/standalone/.next/static').exists():
+                    static = ns['LIVE'] / '.next/standalone/.next/static'
+                    duplicate = static / 'static'
+                    duplicate.mkdir(exist_ok=True)
+                    (duplicate / 'a.js').write_bytes((static / 'a.js').read_bytes())
+                    if mode == 'changed_service_static_copy':
+                        (duplicate / 'a.js').write_text('unapproved_asset')
+                return result
+            ns['ctl'] = service_copy
         if mode == 'rollback_copy_failure':
             original_copy = ns['copy_runtime']
             counter = [0]
@@ -76,14 +89,16 @@ with tempfile.TemporaryDirectory(prefix='test_web_activation_') as temp:
         except AssertionError:
             failed = True
         receipt = ns['receipt']
-        if mode == 'success':
+        if mode in ('success', 'service_static_copy'):
             assert not failed and receipt['deployed']
             assert archive.read_text() == 'preserved_runtime_record'
         elif mode == 'tampered_artifact':
             assert failed and not calls and not ns['ROLLBACK'].exists()
             assert archive.read_text() == 'preserved_runtime_record'
         else:
-            assert failed and receipt['rolledBack'] and receipt['rollbackRuntimePreservationError'] == 'OSError'
+            assert failed and receipt['rolledBack']
+            if mode == 'rollback_copy_failure':
+                assert receipt['rollbackRuntimePreservationError'] == 'OSError'
             assert ns['props']('baby-panel')['ActiveState'] == 'active'
             assert archive.read_text() == 'preserved_runtime_record'
             assert Path(receipt['failedCandidateDirectory']).is_dir()

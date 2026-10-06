@@ -9,7 +9,7 @@ import urllib.request
 import urllib.error
 import uuid
 
-ROOT = Path('/home/ubuntu/growdesk/web-nutrition-releases/20261006')
+ROOT = Path('/home/ubuntu/growdesk/web-nutrition-releases/20261006-retry')
 LIVE = Path('/home/ubuntu/Github/baby_panel_for_cecilia')
 CANDIDATE = ROOT / 'source/.next'
 ROLLBACK = ROOT / 'rollback'
@@ -32,14 +32,29 @@ def metadata(path):
     stat = path.stat()
     return {'size': stat.st_size, 'mtimeNs': stat.st_mtime_ns, 'mode': stat.st_mode & 0o777, 'uid': stat.st_uid, 'gid': stat.st_gid}
 
-def digest(path):
+def digest(path, exclude=()):
     if path.is_file():
         return hashlib.sha256(path.read_bytes()).hexdigest()
     hash_ = hashlib.sha256()
     for file in sorted(path.rglob('*')):
         if file.is_file():
+            if file.relative_to(path).parts[0] in exclude:
+                continue
             hash_.update(str(file.relative_to(path)).encode() + b'\0' + file.read_bytes() + b'\0')
     return hash_.hexdigest()
+
+def immutable_hashes(build, expected=None):
+    result = {}
+    for rel in ('standalone/.next/server', 'standalone/.next/static', 'standalone/server.js', 'standalone/public'):
+        path = build / rel
+        exclude = ('uploads',) if rel == 'standalone/public' else ()
+        if expected is not None and rel == 'standalone/.next/static' and (path / 'static').exists():
+            # Existing systemd ExecStartPre copies .next/static into this already-present
+            # directory. Accept only an exact duplicate; every tested file stays bound.
+            assert digest(path / 'static') == expected[rel], 'service-added static copy differs from tested assets'
+            exclude = ('static',)
+        result[rel] = digest(path, exclude)
+    return result
 
 def artifact_digest(standalone):
     """Match scripts/prepare-standalone.mjs, including public and reference data."""
@@ -132,8 +147,8 @@ try:
     configs = (LIVE / '.env', Path('/home/ubuntu/growdesk/api.env'))
     receipt['configurationMetadataBefore'] = {str(path): metadata(path) for path in configs}
     receipt['unchangedSourceNotifications'] = digest(LIVE / 'app/notifications/page.tsx')
-    immutable = ('standalone/.next/server', 'standalone/.next/static', 'standalone/server.js')
-    receipt['immutableBuildHashes'] = {rel: digest(CANDIDATE / rel) for rel in immutable}
+    assert not (CANDIDATE / 'standalone/.next/static/static').exists(), 'candidate contains unverified service-added assets'
+    receipt['immutableBuildHashes'] = immutable_hashes(CANDIDATE)
     ROLLBACK.mkdir(mode=0o700)
     receipt['phase'] = 'switching'
     receipt['switchStarted'] = True
@@ -157,7 +172,8 @@ try:
         assert receipt['afterServices'][unit] == receipt['beforeServices'][unit], 'unrelated service changed: ' + unit
     assert {str(path): metadata(path) for path in configs} == receipt['configurationMetadataBefore']
     assert digest(LIVE / 'app/notifications/page.tsx') == receipt['unchangedSourceNotifications']
-    assert {rel: digest(LIVE / '.next' / rel) for rel in immutable} == receipt['immutableBuildHashes']
+    receipt['immutableBuildHashesAfter'] = immutable_hashes(LIVE / '.next', receipt['immutableBuildHashes'])
+    assert receipt['immutableBuildHashesAfter'] == receipt['immutableBuildHashes']
     assert json.loads((LIVE / '.next/standalone/build-provenance.json').read_text()) == candidate_provenance
     receipt.update(phase='deployed', deployed=True, rollbackDirectory=str(ROLLBACK), configurationUnchanged=True)
     save()

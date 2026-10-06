@@ -1,0 +1,10 @@
+{
+  "phase": "preflight",
+  "deployed": false,
+  "schemaChanged": false,
+  "apiChanged": false,
+  "noProductionTestData": true,
+  "verifiedArtifactSha256": "414ecdb5482b20d99f3e6ddba6560add576a69a86153769becb3b4480928455d",
+  "failureClass": "AssertionError",
+  "failureMessage": "candidate artifact was modified after build"
+}
