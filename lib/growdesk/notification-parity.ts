@@ -556,10 +556,10 @@ export async function fetchGrowDeskNotificationItems(
   extended = false,
 ): Promise<NotificationItem[]> {
   const rawRemote = await fetchCompleteList<unknown>(fetchApi, token, "/api/v1/notifications");
-  const remote = rawRemote
+  const canonicalRemote = rawRemote
     .map(item => validateCanonicalNotification(item, userId, scope))
-    .filter((item): item is CanonicalNotification => item !== null)
-    .map(item => projectNotificationReadState(fromGrowDeskNotification(item), item, extended));
+    .filter((item): item is CanonicalNotification => item !== null);
+  const remote = canonicalRemote.map(item => projectNotificationReadState(fromGrowDeskNotification(item), item, extended));
 
   if (!scope) {
     const seen = new Set<string>();
@@ -604,7 +604,25 @@ export async function fetchGrowDeskNotificationItems(
     supplement: supplements.map(raw => scopedRecord(raw, "补剂", scope)),
     growth: growths.map(raw => scopedRecord(raw, "生长", scope)),
   };
-  const familyItems = buildFamilyRecordNotifications(recordsByKind, scope, members, clock, nowMs);
+  // A durable server event owns its UUID and multi-device read state. Keep
+  // record-derived fallback only when no event represents the current version;
+  // historical events and older backends must remain visible independently.
+  const represented = new Set<string>();
+  for (const notification of canonicalRemote) {
+    const data = notification.data;
+    if (!data || data.eventKind !== "family_record" || !/^family_record:[0-9a-f]{64}$/.test(notification.eventKey) ||
+      data.eventKey !== notification.eventKey || data.familyId !== scope.familyId || data.babyId !== scope.babyId ||
+      typeof data.entityId !== "string" || typeof data.recordVersion !== "string" || !/^[1-9]\d*$/.test(data.recordVersion)) continue;
+    const descriptor = RECORD_KINDS.find(item => item.kind === data.entityType);
+    if (!descriptor || !["create", "update", "delete", "restore"].includes(String(data.operation))) continue;
+    const record = recordsByKind[descriptor.kind].find(item => item.id === data.entityId);
+    if (!record || String(record.version) !== data.recordVersion) continue;
+    const id = `family-${descriptor.idKind}-${record.id}`;
+    represented.add(id);
+    represented.add(`${id}-updated`);
+  }
+  const familyItems = buildFamilyRecordNotifications(recordsByKind, scope, members, clock, nowMs)
+    .filter(item => !represented.has(item.id));
   const dailyItems = buildDailyReminderNotifications(recordsByKind, scope, clock, nowMs);
   const planData = requireData(foodPlan);
   if (!isObject(planData)) invalidResponse("GrowDesk 返回的食物计划无效");

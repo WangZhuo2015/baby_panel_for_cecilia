@@ -27,10 +27,12 @@ function endpointOf(value: unknown): string {
     if (parsed.protocol !== "https:" || !parsed.hostname || parsed.username || parsed.password || parsed.hash) {
       invalid("推送地址必须为不含凭证的 HTTPS URL");
     }
+    // Forward the exact URL that was validated. web-push uses legacy url.parse,
+    // which interprets non-canonical strings (for example https:/host) differently.
+    return parsed.href;
   } catch {
     invalid("推送地址必须为有效的 HTTPS URL");
   }
-  return endpoint;
 }
 
 function keyOf(value: unknown, size: number): string {

@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { ToastProvider } from "@/components/ui/Toast";
 import { ServiceWorkerRegistrar } from "@/components/ServiceWorkerRegistrar";
+import { PushSubscriptionRecovery } from "@/components/notifications/PushSubscriptionRecovery";
 
 export const metadata: Metadata = {
   title: "宝宝成长工作台",
@@ -55,6 +56,7 @@ export default function RootLayout({
       </head>
       <body className="antialiased">
         <ServiceWorkerRegistrar />
+        <PushSubscriptionRecovery />
         <ToastProvider>
           <div className="app-wrapper">{children}</div>
         </ToastProvider>
