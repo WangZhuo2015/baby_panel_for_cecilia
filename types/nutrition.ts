@@ -187,6 +187,8 @@ export interface MultiDayTrendItem {
   /** Full deterministic daily projection, keyed by nutrientId. */
   nutrients?: Record<string, number>;
   hasRecords?: boolean;
+  /** Metrics with a known source; absence is not a measured zero. */
+  recordedMetrics?: string[];
 }
 
 export interface MultiDayNutritionSummary {

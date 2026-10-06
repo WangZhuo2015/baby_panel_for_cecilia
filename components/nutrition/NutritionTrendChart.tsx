@@ -26,8 +26,8 @@ export function NutritionTrendChart({ summary, metric, onMetricChange, reference
   const target = summary.averageIntakes[activeMetric]?.targetAmount;
   const chart = summary.dailyTrends.map(day => ({
     ...day, displayDate: day.date.slice(5), value: nutritionTrendValue(day, activeMetric),
-    formula: day.hasRecords === false ? null : day.formulaMl,
-    breast: day.hasRecords === false ? null : day.breastMl,
+    formula: nutritionTrendValue(day, "milk") === null ? null : day.formulaMl,
+    breast: nutritionTrendValue(day, "milk") === null ? null : day.breastMl,
   }));
   const stats = summarizeTrend(chart.map(day => day.value));
   const quickOptions = options.filter(item => item.id === "milk" || coreIds.includes(item.id));
