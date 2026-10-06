@@ -112,6 +112,7 @@ test("End-to-End Daily Summary Journey: Cron Pre-generation -> Instant User Cach
       orderBy: { createdAt: "desc" },
     });
     assert.ok(archived, "Pre-generated summary must be saved in AiArchive table");
+    assert.ok(archived.content, "Pre-generated summary must contain JSON content");
     const parsedArchived = JSON.parse(archived.content);
     assert.equal(parsedArchived.summary.headline, "第1次生成：上午作息非常规律，各项指标达标！");
 
