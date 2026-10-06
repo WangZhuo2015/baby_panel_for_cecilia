@@ -1,0 +1,24 @@
+{
+  "taskId": "WEB_PUSH_DELIVERY_20261005",
+  "runId": "20261006010539_bfa5360a",
+  "baseline": true,
+  "passed": false,
+  "claim": "real HTTP authentication and PostgreSQL persistence; gateway delivery is intercepted",
+  "physicalDeviceDeliveryVerified": false,
+  "externalPushRequests": 0,
+  "failureClass": "RuntimeError",
+  "cleanup": {
+    "taskId": "WEB_PUSH_DELIVERY_20261005",
+    "runId": "20261006010539_bfa5360a",
+    "status": "cleaned",
+    "database": "test_growdesk_20261006010539_bfa5360a",
+    "appRole": "test_app_20261006010539_bfa5360a",
+    "privateDirectoryRemoved": true,
+    "resources": [
+      "owned PostgreSQL cluster and test roles",
+      "owned Redis process",
+      "owned Go API process"
+    ],
+    "errors": []
+  }
+}

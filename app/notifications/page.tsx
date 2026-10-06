@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
   Bell,
@@ -22,19 +22,23 @@ import { useToast } from "@/components/ui/Toast";
 import { InstallGuideModal } from "@/components/ui/InstallGuideModal";
 import { useNotificationInbox } from "@/lib/hooks/useNotificationInbox";
 import type { NotificationViewItem as NotificationItem } from "@/lib/notification-actions";
+import { useBabyStore } from "@/stores/useBabyStore";
+import {
+  getPushRegistration,
+  PushClientError,
+  pushErrorMessage,
+  recoverExistingPushSubscription,
+  sendTestPush,
+  syncPushSubscription,
+} from "@/lib/push-client";
 
-/** 将 VAPID Base64 字符串转换为浏览器 PushManager 必需的 Uint8Array */
-function urlBase64ToUint8Array(base64String: string): Uint8Array {
-  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
-  const base64 = (base64String + padding)
-    .replace(/-/g, "+")
-    .replace(/_/g, "/");
-  const rawData = window.atob(base64);
-  const outputArray = new Uint8Array(rawData.length);
-  for (let i = 0; i < rawData.length; ++i) {
-    outputArray[i] = rawData.charCodeAt(i);
-  }
-  return outputArray;
+function currentPushPermission(): string {
+  const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  const isStandalone = window.matchMedia("(display-mode: standalone)").matches ||
+    (navigator as { standalone?: boolean }).standalone === true;
+  if (isIos && !isStandalone) return "ios_not_standalone";
+  if (!("Notification" in window) || !("serviceWorker" in navigator) || !("PushManager" in window)) return "unsupported";
+  return Notification.permission;
 }
 
 export default function NotificationsPage() {
@@ -43,6 +47,11 @@ export default function NotificationsPage() {
   const [showInstallGuide, setShowInstallGuide] = useState(false);
   const [testingPush, setTestingPush] = useState(false);
   const [enablingPush, setEnablingPush] = useState(false);
+  const [checkingPush, setCheckingPush] = useState(false);
+  const [pushError, setPushError] = useState<string | null>(null);
+  const [pushStatus, setPushStatus] = useState<string | null>(null);
+  const pushAction = useRef(false);
+  const pushBusy = checkingPush || enablingPush || testingPush;
   const { showToast } = useToast();
   const reportNotificationError = useCallback((message: string) => showToast(message, "error"), [showToast]);
   const {
@@ -50,93 +59,60 @@ export default function NotificationsPage() {
     markRead, dismiss, clearAll, error: notificationError,
   } = useNotificationInbox(true, reportNotificationError);
 
-  /** 强制生成最新有效的推送订阅并同步至服务端 */
-  const subscribeFresh = useCallback(
-    async (readyReg: ServiceWorkerRegistration): Promise<PushSubscription | null> => {
-      try {
-        const keyRes = await fetch("/api/push/vapid-key");
-        if (!keyRes.ok) throw new Error("获取推送公钥失败");
-        const { publicKey } = await keyRes.json();
-
-        // 先退订本地旧的或失效的订阅凭据，防止 key 漂移冲突
-        const oldSub = await readyReg.pushManager.getSubscription();
-        if (oldSub) {
-          await oldSub.unsubscribe().catch(() => {});
-        }
-
-        // 获取全新的当前有效订阅（必须传 Uint8Array）
-        const appServerKey = urlBase64ToUint8Array(publicKey);
-        const newSub = await readyReg.pushManager.subscribe({
-          userVisibleOnly: true,
-          applicationServerKey: appServerKey as unknown as BufferSource,
-        });
-
-        // 立即上传并绑定到当前用户
-        const subRes = await fetch("/api/push/subscribe", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(newSub.toJSON()),
-        });
-        if (!subRes.ok) {
-          const errData = await subRes.json().catch(() => ({}));
-          throw new Error(errData.error || "保存推送订阅失败");
-        }
-
-        setPushEnabled(true);
-        return newSub;
-      } catch (e) {
-        console.error("subscribeFresh error:", e);
-        return null;
-      }
-    },
-    []
-  );
-
   const checkAndSyncPush = useCallback(async () => {
-    if (typeof window === "undefined") return;
-
-    const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent);
-    const isStandalone =
-      window.matchMedia("(display-mode: standalone)").matches ||
-      (window.navigator as { standalone?: boolean }).standalone === true;
-
-    if (isIos && !isStandalone) {
-      setPushPermission("ios_not_standalone");
-      setPushEnabled(false);
-      return;
-    }
-
-    if (!("Notification" in window) || !("serviceWorker" in navigator)) {
-      setPushPermission("unsupported");
-      setPushEnabled(false);
-      return;
-    }
-
-    const perm = Notification.permission;
-    setPushPermission(perm);
-
-    if (perm === "granted") {
-      try {
-        const reg = await navigator.serviceWorker.ready;
-        const sub = await reg.pushManager.getSubscription();
-        if (sub) {
-          setPushEnabled(true);
-          // 自动向后端同步当前用户与设备订阅绑定
-          fetch("/api/push/subscribe", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(sub.toJSON()),
-          }).catch(() => {});
-        } else {
-          setPushEnabled(false);
-        }
-      } catch {
-        setPushEnabled(false);
-      }
-    } else {
-      setPushEnabled(false);
+    if (typeof window === "undefined" || pushAction.current) return;
+    pushAction.current = true;
+    let unsubscribeIdentity: (() => void) | undefined;
+    setCheckingPush(true);
+    setPushEnabled(false);
+    setPushError(null);
+    setPushStatus(null);
+    try {
+      const permission = currentPushPermission();
+      setPushPermission(permission);
+      if (permission !== "granted") return;
+      const identity = useBabyStore.getState();
+      const expectedUserId = identity.user?.id;
+      if (identity.authLoading || !expectedUserId) return;
+      let identityCurrent = true;
+      unsubscribeIdentity = useBabyStore.subscribe((state) => {
+        if (state.authLoading || state.user?.id !== expectedUserId) identityCurrent = false;
+      });
+      const result = await recoverExistingPushSubscription({
+        permission,
+        pushSupported: true,
+        standaloneEligible: true,
+        expectedUserId,
+        isCurrent: () => {
+          const current = useBabyStore.getState();
+          return identityCurrent && !current.authLoading && current.user?.id === expectedUserId;
+        },
+        getRegistration: () => getPushRegistration(navigator.serviceWorker, true),
+      });
+      setPushEnabled(result === "synced");
+    } catch (error) {
+      setPushError(pushErrorMessage(error));
+    } finally {
+      unsubscribeIdentity?.();
+      pushAction.current = false;
+      setCheckingPush(false);
     }
   }, []);
+
+  const ensurePushPermission = async () => {
+    let permission = currentPushPermission();
+    setPushPermission(permission);
+    if (permission === "ios_not_standalone") {
+      setShowInstallGuide(true);
+      throw new PushClientError("iOS 需先添加到主屏幕，从桌面图标打开后重试");
+    }
+    if (permission === "unsupported") throw new PushClientError("当前浏览器不支持推送通知，请使用支持推送的浏览器");
+    if (permission === "default") {
+      permission = await Notification.requestPermission();
+      setPushPermission(permission);
+    }
+    if (permission !== "granted") throw new PushClientError("通知权限未开启，请在浏览器设置中允许通知后重试");
+  };
 
   const handleDismiss = useCallback(async (id: string, e?: React.MouseEvent) => {
     e?.stopPropagation();
@@ -148,98 +124,54 @@ export default function NotificationsPage() {
   }, [checkAndSyncPush]);
 
   const handleEnablePush = async () => {
-    if (enablingPush) return;
+    if (pushAction.current) return;
+    pushAction.current = true;
     setEnablingPush(true);
+    setPushEnabled(false);
+    setPushError(null);
+    setPushStatus(null);
     try {
-      const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent);
-      const isStandalone =
-        window.matchMedia("(display-mode: standalone)").matches ||
-        (window.navigator as { standalone?: boolean }).standalone === true;
-      if (isIos && !isStandalone) {
-        showToast("iOS 需先「添加到主屏幕」，从桌面图标打开才能开启推送");
-        setShowInstallGuide(true);
-        return;
-      }
-
-      if (!("Notification" in window)) {
-        showToast("您的浏览器不支持推送通知");
-        return;
-      }
-
-      const permission = await Notification.requestPermission();
-      setPushPermission(permission);
-
-      if (permission !== "granted") {
-        showToast("推送权限未开启，请在浏览器设置中允许通知", "error");
-        return;
-      }
-
-      if (!("serviceWorker" in navigator)) {
-        showToast("您的浏览器不支持 Service Worker");
-        return;
-      }
-
-      const registration = await navigator.serviceWorker.register("/sw.js");
-      await registration.update();
-      const readyReg = await navigator.serviceWorker.ready;
-
-      const newSub = await subscribeFresh(readyReg);
-      if (newSub) {
-        showToast("设备推送已绑定并就绪 ✨", "success");
-      } else {
-        showToast("绑定失败，请检查网络设置", "error");
-      }
+      await ensurePushPermission();
+      const registration = await getPushRegistration(navigator.serviceWorker, true);
+      const subscription = await syncPushSubscription(registration, true);
+      if (!subscription) throw new PushClientError("设备尚未绑定，请先开启推送通知");
+      setPushEnabled(true);
+      setPushStatus("设备已绑定，可发送测试通知检查当前设备");
+      showToast("设备推送已绑定 ✨", "success");
     } catch (error) {
-      console.error("Push subscription error:", error);
-      showToast("开启推送通知失败，请重试", "error");
+      const message = pushErrorMessage(error);
+      setPushError(message);
+      showToast(message, "error");
     } finally {
+      pushAction.current = false;
       setEnablingPush(false);
     }
   };
 
   const handleSendTestPush = async () => {
-    if (testingPush) return;
+    if (pushAction.current) return;
+    pushAction.current = true;
     setTestingPush(true);
+    setPushEnabled(false);
+    setPushError(null);
+    setPushStatus(null);
     try {
-      let subPayload: any = null;
-
-      if ("serviceWorker" in navigator && "Notification" in window) {
-        if (Notification.permission === "default") {
-          const perm = await Notification.requestPermission();
-          setPushPermission(perm);
-        }
-
-        if (Notification.permission === "granted") {
-          const readyReg = await navigator.serviceWorker.ready;
-          let sub = await readyReg.pushManager.getSubscription();
-          if (!sub) {
-            sub = await subscribeFresh(readyReg);
-          }
-          if (sub) {
-            subPayload = sub.toJSON();
-          }
-        }
-      }
-
-      const res = await fetch("/api/push/test", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ subscription: subPayload }),
-      });
-      const data = await res.json();
-
-      if (res.ok) {
-        setPushEnabled(true);
-        showToast("测试推送已发出，请查看手机/电脑系统通知栏 ✨", "success");
-      } else {
-        if (res.status === 400 && data.error?.includes("失效")) {
-          setPushEnabled(false);
-        }
-        showToast(data.error || "发送测试推送失败", "error");
-      }
-    } catch {
-      showToast("网络请求失败，请稍后重试", "error");
+      await ensurePushPermission();
+      const registration = await getPushRegistration(navigator.serviceWorker, true);
+      const subscription = await syncPushSubscription(registration, true);
+      if (!subscription) throw new PushClientError("设备尚未绑定，请先开启推送通知");
+      setPushEnabled(true);
+      await sendTestPush(subscription);
+      const message = "推送服务已接受测试通知，请查看系统通知栏；若未显示，请检查系统通知设置";
+      setPushStatus(message);
+      showToast(message, "success");
+    } catch (error) {
+      if (error instanceof PushClientError && error.code === "PUSH_SUBSCRIPTION_GONE") setPushEnabled(false);
+      const message = pushErrorMessage(error);
+      setPushError(message);
+      showToast(message, "error");
     } finally {
+      pushAction.current = false;
       setTestingPush(false);
     }
   };
@@ -286,7 +218,11 @@ export default function NotificationsPage() {
                   <p className="text-sm font-bold text-text-primary">设备推送通知</p>
                   {pushEnabled ? (
                     <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-mint bg-mint/10 px-2 py-0.5 rounded-full">
-                      <CheckCircle size={12} /> 已开启
+                      <CheckCircle size={12} /> 已绑定
+                    </span>
+                  ) : checkingPush ? (
+                    <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-text-muted bg-gray-100 px-2 py-0.5 rounded-full">
+                      检查绑定中...
                     </span>
                   ) : pushPermission === "denied" ? (
                     <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-rose-500 bg-rose-50 px-2 py-0.5 rounded-full">
@@ -298,22 +234,34 @@ export default function NotificationsPage() {
                     </span>
                   ) : (
                     <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-text-muted bg-gray-100 px-2 py-0.5 rounded-full">
-                      未开启
+                      未绑定
                     </span>
                   )}
                 </div>
                 <p className="text-xs text-text-muted mt-0.5 leading-relaxed">
                   {pushEnabled
-                    ? "家人提交或修改记录时，手机锁屏状态下将实时弹出通知"
+                    ? "设备已绑定，可接收已配置的推送通知；可发送测试通知检查当前设备"
                     : pushPermission === "denied"
-                      ? "浏览器通知权限被禁用，请点击地址栏锁头图标允许"
+                      ? "通知权限被禁用，请在浏览器或系统设置中允许通知"
                       : pushPermission === "ios_not_standalone"
                         ? "iOS Safari 需先添加到主屏幕打开，即可开启系统锁屏推送"
-                        : "开启后家人提交或修改记录将实时收到系统推送"}
+                        : pushPermission === "unsupported"
+                          ? "当前浏览器不支持系统推送通知"
+                          : "开启后绑定当前设备，可发送测试通知检查系统通知设置"}
                 </p>
               </div>
             </div>
           </div>
+
+          {pushError && (
+            <div role="alert" className="rounded-xl bg-rose-50 px-3 py-2 text-xs text-rose-700 space-y-1">
+              <p>{pushError}</p>
+              <p>处理后可点击「开启推送通知」或「发送测试推送」重试。</p>
+            </div>
+          )}
+          {pushStatus && (
+            <p role="status" className="text-xs text-text-secondary leading-relaxed">{pushStatus}</p>
+          )}
 
           {/* Action buttons row */}
           <div className="pt-2 border-t border-divider/50 flex flex-wrap items-center justify-end gap-2">
@@ -335,6 +283,7 @@ export default function NotificationsPage() {
                   checkAndSyncPush();
                   showToast("请在浏览器设置中开启通知权限后刷新页面", "info");
                 }}
+                disabled={pushBusy}
                 className="px-3.5 py-1.5 rounded-full bg-rose-500 hover:bg-rose-600 text-white text-xs font-bold btn-press shadow-button transition-all cursor-pointer flex items-center gap-1.5"
               >
                 <RefreshCw size={13} />
@@ -342,11 +291,11 @@ export default function NotificationsPage() {
               </button>
             )}
 
-            {/* Re-bind / Enable button is ALWAYS available */}
+            {/* Sync an existing binding or enable this device. */}
             <button
               type="button"
               onClick={handleEnablePush}
-              disabled={enablingPush}
+              disabled={pushBusy}
               className={`px-3.5 py-1.5 rounded-full text-xs font-bold btn-press shadow-button transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-50 ${
                 pushEnabled
                   ? "bg-gray-100 hover:bg-gray-200 text-text-primary border border-divider"
@@ -354,14 +303,14 @@ export default function NotificationsPage() {
               }`}
             >
               <RefreshCw size={12} className={enablingPush ? "animate-spin" : ""} />
-              <span>{enablingPush ? "绑定中..." : pushEnabled ? "重新绑定设备" : "开启推送通知"}</span>
+              <span>{checkingPush ? "检查中..." : enablingPush ? "绑定中..." : pushEnabled ? "重新绑定设备" : "开启推送通知"}</span>
             </button>
 
-            {/* Test button is always visible & interactive */}
+            {/* Sending first confirms this device's binding. */}
             <button
               type="button"
               onClick={handleSendTestPush}
-              disabled={testingPush}
+              disabled={pushBusy}
               className="px-3.5 py-1.5 rounded-full bg-primary/10 hover:bg-primary/20 text-primary text-xs font-semibold btn-press transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
             >
               <Send size={13} />
@@ -561,7 +510,7 @@ function NotificationCard({
         <div className="flex-1 min-w-0 pr-6">
           <div className="flex items-center gap-2">
             <p
-              className={`text-sm ${!read ? "font-semibold" : "font-medium"} text-text-primary truncate`}
+              className={`text-sm ${!read ? "font-semibold" : "font-medium"} text-text-primary break-words`}
             >
               {notification.title}
             </p>
@@ -569,7 +518,7 @@ function NotificationCard({
               <span className="w-2 h-2 rounded-full bg-primary flex-shrink-0" />
             )}
           </div>
-          <p className="text-xs text-text-secondary mt-0.5 leading-relaxed line-clamp-2">
+          <p className="text-xs text-text-secondary mt-0.5 leading-relaxed whitespace-pre-wrap break-words">
             {notification.detail}
           </p>
           <p className="text-[10px] text-text-muted mt-1.5">

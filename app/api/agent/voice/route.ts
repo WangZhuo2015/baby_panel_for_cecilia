@@ -187,7 +187,11 @@ export async function POST(request: Request) {
     const principal = await resolveVoiceMvpPrincipal(request);
     if (!principal) {
       return NextResponse.json(
-        { success: false, error: "Unauthorized: 请先登录或提供有效的语音访问凭证" },
+        {
+          success: false,
+          error: "Unauthorized: 请先登录或提供有效的语音访问凭证",
+          reply: "请先在应用中配置有效的语音访问凭证。",
+        },
         { status: 401 }
       );
     }
@@ -199,7 +203,11 @@ export async function POST(request: Request) {
     const rateLimit = checkRateLimit(`voice:${user.id || ip}`, 30, 60_000);
     if (!rateLimit.success) {
       return NextResponse.json(
-        { success: false, error: `请求过于频繁，请 ${rateLimit.resetSeconds} 秒后再试` },
+        {
+          success: false,
+          error: `请求过于频繁，请 ${rateLimit.resetSeconds} 秒后再试`,
+          reply: `请求过于频繁，请稍后 ${rateLimit.resetSeconds} 秒后再试。`,
+        },
         { status: 429 }
       );
     }
@@ -227,14 +235,22 @@ export async function POST(request: Request) {
     if (!rawText) {
       console.warn(`[Voice API] Received empty request body from ${ip}:`, JSON.stringify(body));
       return NextResponse.json(
-        { success: false, error: "text is required" },
+        {
+          success: false,
+          error: "text is required",
+          reply: "未能听清您的指令，请再说一次。",
+        },
         { status: 400 }
       );
     }
 
     if (rawText.length > 4000) {
       return NextResponse.json(
-        { success: false, error: "消息过长，上限为 4000 字符" },
+        {
+          success: false,
+          error: "消息过长，上限为 4000 字符",
+          reply: "消息内容过长，请简短说明。",
+        },
         { status: 400 }
       );
     }
@@ -299,7 +315,11 @@ export async function POST(request: Request) {
 
     if (!getTestMockStreamFn() && !createLlmBackend().getApiKey()) {
       return NextResponse.json(
-        { success: false, error: "未配置 AI 服务 API Key，无法使用语音助手" },
+        {
+          success: false,
+          error: "未配置 AI 服务 API Key，无法使用语音助手",
+          reply: "抱歉，当前未配置 AI 助手服务，请检查系统设置。",
+        },
         { status: 503 }
       );
     }
@@ -318,6 +338,9 @@ export async function POST(request: Request) {
       familyId: principal.familyId || baby.familyId,
     });
 
+    // Helper for query fallback
+    const isLikelyQuery = /(?:查|看|几|多少|多久|多长|什么时候|情况|记录|作息|汇总|总结|概况|吗|呢)/.test(rawText);
+
     // 3. Execute agent loop (Sync mode vs Configurable Timeout-Race mode)
     if (timeoutMs <= 0) {
       let assistantFull = "";
@@ -334,7 +357,10 @@ export async function POST(request: Request) {
         },
       });
 
-      const reply = cleanReplyForSpeech(assistantFull) || "未能获取有效回复，请稍后重试。";
+      const fallbackReply = isLikelyQuery
+        ? "未能查到相关记录，请稍后重试。"
+        : "未能获取有效回复，请稍后重试。";
+      const reply = cleanReplyForSpeech(assistantFull) || fallbackReply;
       const duration = Date.now() - startTime;
       console.log(`[Voice API] Completed sync in ${duration}ms -> Reply: "${reply.slice(0, 100)}..."`);
 
@@ -378,7 +404,8 @@ export async function POST(request: Request) {
       // Guard background execution to finish and send push notification
       void agentPromise
         .then(async ({ assistantFull }) => {
-          const finalReply = cleanReplyForSpeech(assistantFull) || "已处理完毕。";
+          const fallbackReply = isLikelyQuery ? "未能查到相关记录。" : "已处理完毕。";
+          const finalReply = cleanReplyForSpeech(assistantFull) || fallbackReply;
           const totalDuration = Date.now() - startTime;
           console.log(
             `[Voice API Async] Background agent completed in ${totalDuration}ms -> "${finalReply.slice(0, 80)}..."`
@@ -427,7 +454,10 @@ export async function POST(request: Request) {
       });
     }
 
-    const reply = cleanReplyForSpeech(raceResult.assistantFull) || "好的，已为您处理完成。";
+    const fallbackReply = isLikelyQuery
+      ? "未能查到相关记录，请稍后重试。"
+      : "好的，已为您处理完成。";
+    const reply = cleanReplyForSpeech(raceResult.assistantFull) || fallbackReply;
     const duration = Date.now() - startTime;
     console.log(
       `[Voice API] Completed within ${timeoutMs}ms (${duration}ms) -> Reply: "${reply.slice(0, 100)}..."`
@@ -453,7 +483,11 @@ export async function POST(request: Request) {
   } catch (error: any) {
     console.error("POST /api/agent/voice error:", error);
     return NextResponse.json(
-      { success: false, error: error?.message || "服务器内部错误，请稍后重试" },
+      {
+        success: false,
+        error: error?.message || "服务器内部错误，请稍后重试",
+        reply: "抱歉，语音助手暂时遇到问题，请稍后重试。",
+      },
       { status: 500 }
     );
   }

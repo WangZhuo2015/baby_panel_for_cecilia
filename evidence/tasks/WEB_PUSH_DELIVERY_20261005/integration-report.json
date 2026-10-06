@@ -1,0 +1,44 @@
+{
+  "preservedUserFiles": 7,
+  "copiedSourceFiles": 11,
+  "sourceSha256": {
+    "app/api/push/test/route.ts": "ba10deeb7c096512511f9c8bc20b54b96f214c9ccabff708e082e8bb5fcff2ac",
+    "app/notifications/page.tsx": "3caa591a69d66790eeeee390dc314576c89d3dc477b4b8004b6a0a26dd079fac",
+    "lib/growdesk/push-bridge.ts": "e023382218d7d3a1a2c07f7039e112bbcfa38b71a568919cc5c63ab9a7456bea",
+    "lib/growdesk/notification-parity.ts": "28a8af2c5a59f2db1d2a8caf47a31d4d8a6e599dc1abe06ea9596bfb1267def1",
+    "lib/push-client.ts": "386bbae313646694e29b1aa2ada171bff56a36b079292fd881135f4b60a5ab9c",
+    "tests/unit/growdesk-push-test-route.test.ts": "f58f8879cd880d69f9ea96b446f76e8eb60f4f024e45b9fc8e2c810ba09b211d",
+    "tests/unit/push-client.test.ts": "b433627a8ca4b3d92c7acaa8cff5afc329c11a70fcccec7154bd97f39b08e85a",
+    "tests/unit/growdesk-family-push-parity.test.ts": "19ddcc8c71fd29d3b94547167aead22c3e0f06e42acdec4f2fde22340bc5ace5",
+    "scripts/review/check-push-browser.mjs": "6b5d2f51e460204450bf3b72e90043971a082fd8227db74c8135e9559967a5c2",
+    "scripts/review/check-push-persistence.py": "e5ef905e6b36e424375b8916933cb738ed3fa45ec9d0f9c3efd8908c82e0cf82",
+    "scripts/review/check-push-persistence.ts": "53dbf8a447e93a5885331083cc2cfecc7d7fd994a71e5a0210876bed8f77b964",
+    "app/layout.tsx": "7536e9ecfa6521c313d0e404d05c6130880f5438b08a03571bfdebc650d1ec88",
+    "components/notifications/PushSubscriptionRecovery.tsx": "b5defb7e47d457fd9af062eb6f2b47a44d14dbbb38e076c60857d9ea9d26da09",
+    "tests/unit/push-recovery.test.ts": "29929876debdfe65ca72904d43d6de161c64b2ffedbe3ccc272811679e11cbe1"
+  },
+  "staged": false,
+  "committed": false,
+  "deployed": true,
+  "originalCheckoutTypecheck": {
+    "exitCode": 2,
+    "status": "blocked_by_preserved_daily_summary_test",
+    "file": "tests/api/daily-summary-full-journey.test.ts",
+    "line": 115,
+    "error": "TS2345: JSON.parse receives string | null",
+    "sourceSha256": "38e00100e949e5c622025c0a943547996cbf4f653d12fe9594db0bebd8677adb",
+    "filePreservedExactly": true,
+    "log": "original-integration-typecheck.log"
+  },
+  "releaseSource": "5c8156d464d0c6e8fd005d46fc9b6f097069da7b",
+  "recoveryIntegratedFiles": 14,
+  "releaseTypecheck": "passed clean production-baseline candidate",
+  "releaseTests": {
+    "focusedUnit": 63,
+    "typecheck": 0,
+    "productionBuild": 0
+  },
+  "deploymentPending": false,
+  "deploymentReport": "/Users/wangzhuo/Documents/GitHub/growdesk-server/evidence/tasks/WEB_PUSH_RELEASE_20261006/REPORT.md",
+  "deploymentReceipt": "/Users/wangzhuo/Documents/GitHub/growdesk-server/evidence/tasks/WEB_PUSH_RELEASE_20261006/remote/deployment-receipt.json"
+}

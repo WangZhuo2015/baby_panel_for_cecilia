@@ -5,69 +5,76 @@ import { requireAuth } from "@/lib/api-helpers";
 import { PUSH_CONFIG, GROWDESK_CONFIG } from "@/lib/config";
 import { resolveBffSession } from "@/lib/growdesk/session";
 import { growdeskFetch } from "@/lib/growdesk/client";
+import { verifyBffCsrf } from "@/lib/growdesk/csrf";
+import { nativePushSubscription } from "@/lib/growdesk/push-bridge";
+import { BridgeError, bridgeErrorResponse, requireData } from "@/lib/growdesk/bridge-protocol";
 import crypto from "node:crypto";
 
 export async function POST(request: Request) {
   try {
     if (GROWDESK_CONFIG.enabled) {
+      const csrfError = verifyBffCsrf(request, { enforceInTest: true });
+      if (csrfError) return csrfError;
       const bffSession = await resolveBffSession(request);
       if (!bffSession) {
         return NextResponse.json({ error: "Unauthorized: 会话无效或已过期" }, { status: 401 });
       }
 
-      const body = await request.json().catch(() => ({}));
-      const endpoint = body?.subscription?.endpoint ? String(body.subscription.endpoint).trim() : "";
-
-      if (endpoint) {
-        const installationId = crypto.createHash("sha256").update(endpoint).digest("hex").slice(0, 32);
-        try {
-          await growdeskFetch(`/api/v1/devices/${installationId}/push`, {
-            method: "PUT",
-            accessToken: bffSession.accessToken,
-            body: {
-              token: endpoint,
-              platform: "web",
-              environment: "production",
-            },
-          });
-        } catch {}
+      const body = await request.json().catch(() => null);
+      const subscription = nativePushSubscription(body?.subscription);
+      // A test send is still a server-side request. Only browser push services
+      // may receive it; arbitrary client URLs must never become an SSRF target.
+      const endpoint = new URL(subscription.endpoint);
+      const host = endpoint.hostname.toLowerCase();
+      const allowedHost = host === "fcm.googleapis.com" ||
+        host === "updates.push.services.mozilla.com" || host.endsWith(".push.services.mozilla.com") ||
+        host === "web.push.apple.com" || host.endsWith(".web.push.apple.com") ||
+        host.endsWith(".notify.windows.com");
+      if (!allowedHost || (endpoint.port && endpoint.port !== "443")) {
+        throw new BridgeError(400, "INVALID_PUSH_SUBSCRIPTION", "不支持此推送服务地址，请重新绑定设备");
       }
-
       const publicKey = PUSH_CONFIG.publicKey;
       const privateKey = PUSH_CONFIG.privateKey;
-      if (publicKey && privateKey && body?.subscription?.endpoint && body?.subscription?.keys) {
-        try {
-          webPush.setVapidDetails(PUSH_CONFIG.subject, publicKey, privateKey);
-          const payload = JSON.stringify({
-            title: "🔔 宝宝成长助手 · 测试推送成功！",
-            body: `尊敬的 ${bffSession.user.displayName || bffSession.user.username}，您的设备推送已成功就绪 ✨`,
-            url: "/notifications",
-          });
-          await webPush.sendNotification(body.subscription, payload, { urgency: "high" });
-          return NextResponse.json({
-            success: true,
-            sent: 1,
-            failed: 0,
-            message: "测试推送已成功发送至当前设备！请检查手机锁屏或系统通知栏 ✨",
-          });
-        } catch (err: any) {
-          return NextResponse.json({
-            success: true,
-            sent: 0,
-            failed: 1,
-            simulated: true,
-            message: `推送发送被拦截 (${err?.message || "网络限制"})，但设备凭据已成功注册至 GrowDesk 服务端 ✨`,
-          });
-        }
+      if (!publicKey || !privateKey) {
+        throw new BridgeError(503, "PUSH_NOT_CONFIGURED", "服务端尚未配置推送密钥，无法发送推送");
       }
 
+      const installationId = crypto.createHash("sha256").update(subscription.endpoint).digest("hex").slice(0, 32);
+      const registration = requireData(await growdeskFetch<{ success: boolean }>(`/api/v1/devices/${installationId}/push`, {
+        method: "PUT", accessToken: bffSession.accessToken,
+        body: {
+          token: JSON.stringify(subscription), platform: "web", environment: "production",
+          deviceLabel: "Baby Panel Web",
+        },
+      }));
+      if (registration.success !== true) {
+        throw new BridgeError(502, "UPSTREAM_INVALID_RESPONSE", "服务端未确认推送订阅，请重试");
+      }
+      try {
+        await webPush.sendNotification(subscription, JSON.stringify({
+          title: "宝宝成长助手 · 测试通知", body: "这是一条测试通知，设备推送通道可用。", url: "/notifications",
+        }), {
+          urgency: "high", timeout: 10_000,
+          vapidDetails: { subject: PUSH_CONFIG.subject, publicKey, privateKey },
+        });
+      } catch (error) {
+        const pushError = error as webPush.WebPushError & { code?: string };
+        const status = pushError.statusCode;
+        if (status === 404 || status === 410) {
+          throw new BridgeError(400, "PUSH_SUBSCRIPTION_GONE", "设备推送凭据已失效，请点击「重新绑定设备」");
+        }
+        if (status === 401 || status === 403) {
+          throw new BridgeError(502, "PUSH_AUTH_FAILED", `推送服务鉴权失败(${status})，请检查服务端推送配置`);
+        }
+        if (pushError.code === "ETIMEDOUT" || /timeout|timed out/i.test(pushError.message || "")) {
+          throw new BridgeError(504, "PUSH_GATEWAY_TIMEOUT", "连接推送网关超时，请稍后重试");
+        }
+        throw new BridgeError(502, "PUSH_DELIVERY_FAILED", "推送服务未接受测试通知，请稍后重试");
+      }
       return NextResponse.json({
-        success: true,
-        sent: 1,
-        failed: 0,
-        simulated: true,
-        message: "测试推送模拟发送成功，GrowDesk 设备绑定有效 ✨",
-      });
+        success: true, sent: 1, failed: 0,
+        message: "推送服务已接受测试通知，请查看系统通知栏",
+      }, { headers: { "cache-control": "no-store" } });
     }
 
     const auth = await requireAuth(request);
@@ -207,6 +214,7 @@ export async function POST(request: Request) {
       message: "测试通知已发出，请检查系统通知栏",
     });
   } catch (error) {
+    if (GROWDESK_CONFIG.enabled) return bridgeErrorResponse(error);
     console.error("POST /api/push/test error:", error);
     return NextResponse.json(
       { error: "发送测试推送失败" },

@@ -1,0 +1,250 @@
+{
+  "taskId": "WEB_PUSH_DELIVERY_20261005",
+  "runId": "0167a521c0c8",
+  "baseline": false,
+  "startedAt": "2026-10-06T01:13:14.650666+00:00",
+  "passed": true,
+  "claim": "real HTTP authentication and PostgreSQL persistence; gateway delivery is intercepted",
+  "physicalDeviceDeliveryVerified": false,
+  "externalPushRequests": 0,
+  "routeChecks": {
+    "passed": true,
+    "cases": [
+      {
+        "name": "real registration, session exchange and Bearer principal",
+        "passed": true
+      },
+      {
+        "name": "subscribe persists full encryption keys through real HTTP and PostgreSQL",
+        "passed": true
+      },
+      {
+        "name": "test push preserves the complete subscription and authenticated owner",
+        "passed": true
+      },
+      {
+        "name": "anonymous and unknown real sessions cannot overwrite device registration",
+        "passed": true
+      },
+      {
+        "name": "backend push registration requires a verified Bearer principal",
+        "passed": true
+      },
+      {
+        "name": "foreign CSRF origin fails before any device write or gateway call",
+        "passed": true
+      },
+      {
+        "name": "missing current-device subscription fails without mutation or simulated send",
+        "passed": true
+      },
+      {
+        "name": "missing VAPID configuration reports 503 without changing stored subscription",
+        "passed": true
+      },
+      {
+        "name": "gateway 403 is reported as 502 while the real PostgreSQL subscription remains valid",
+        "passed": true
+      },
+      {
+        "name": "observe notification task inventory after a real family feeding transaction",
+        "passed": true
+      }
+    ],
+    "realAuthentication": true,
+    "realPostgreSQL": true,
+    "bffRuntime": "owned Node HTTP shim invoking the actual route handlers; Next runtime is not exercised",
+    "mockedSideEffects": [
+      "external WebPush gateway sendNotification only"
+    ],
+    "physicalDeviceDeliveryVerified": false,
+    "externalPushRequests": 0,
+    "observedHttp": [
+      {
+        "method": "POST",
+        "path": "/api/v1/auth/register"
+      },
+      {
+        "method": "POST",
+        "path": "/api/v1/auth/bff/session"
+      },
+      {
+        "method": "GET",
+        "path": "/api/v1/me"
+      },
+      {
+        "method": "POST",
+        "path": "/api/v1/auth/register"
+      },
+      {
+        "method": "POST",
+        "path": "/api/v1/auth/bff/session"
+      },
+      {
+        "method": "GET",
+        "path": "/api/v1/me"
+      },
+      {
+        "method": "POST",
+        "path": "/api/push/subscribe"
+      },
+      {
+        "method": "POST",
+        "path": "/api/v1/auth/bff/session"
+      },
+      {
+        "method": "PUT",
+        "path": "/api/v1/devices/cf1c9be3d97f020e95f659ecd426c367/push"
+      },
+      {
+        "method": "POST",
+        "path": "/api/push/test"
+      },
+      {
+        "method": "POST",
+        "path": "/api/v1/auth/bff/session"
+      },
+      {
+        "method": "PUT",
+        "path": "/api/v1/devices/cf1c9be3d97f020e95f659ecd426c367/push"
+      },
+      {
+        "method": "POST",
+        "path": "/api/push/test"
+      },
+      {
+        "method": "POST",
+        "path": "/api/push/test"
+      },
+      {
+        "method": "POST",
+        "path": "/api/v1/auth/bff/session"
+      },
+      {
+        "method": "PUT",
+        "path": "/api/v1/devices/cf1c9be3d97f020e95f659ecd426c367/push"
+      },
+      {
+        "method": "POST",
+        "path": "/api/push/test"
+      },
+      {
+        "method": "POST",
+        "path": "/api/push/test"
+      },
+      {
+        "method": "POST",
+        "path": "/api/v1/auth/bff/session"
+      },
+      {
+        "method": "POST",
+        "path": "/api/push/test"
+      },
+      {
+        "method": "POST",
+        "path": "/api/v1/auth/bff/session"
+      },
+      {
+        "method": "POST",
+        "path": "/api/push/test"
+      },
+      {
+        "method": "POST",
+        "path": "/api/v1/auth/bff/session"
+      },
+      {
+        "method": "PUT",
+        "path": "/api/v1/devices/cf1c9be3d97f020e95f659ecd426c367/push"
+      },
+      {
+        "method": "POST",
+        "path": "/api/v1/auth/register"
+      },
+      {
+        "method": "POST",
+        "path": "/api/v1/auth/bff/session"
+      },
+      {
+        "method": "GET",
+        "path": "/api/v1/me"
+      },
+      {
+        "method": "POST",
+        "path": "/api/v1/families"
+      },
+      {
+        "method": "POST",
+        "path": "/api/v1/families/09a1ba26-fc95-4011-9904-1ecdd8c1f98a/invites"
+      },
+      {
+        "method": "POST",
+        "path": "/api/v1/families/join"
+      },
+      {
+        "method": "POST",
+        "path": "/api/v1/families/09a1ba26-fc95-4011-9904-1ecdd8c1f98a/babies"
+      },
+      {
+        "method": "POST",
+        "path": "/api/v1/babies/ccf8bd8b-ff32-4ab6-9f33-22f85394e099/members"
+      },
+      {
+        "method": "POST",
+        "path": "/api/push/subscribe"
+      },
+      {
+        "method": "POST",
+        "path": "/api/v1/auth/bff/session"
+      },
+      {
+        "method": "PUT",
+        "path": "/api/v1/devices/5f4fb2bea355455807f79acfb44cbf57/push"
+      },
+      {
+        "method": "POST",
+        "path": "/api/v1/babies/ccf8bd8b-ff32-4ab6-9f33-22f85394e099/records/feeding"
+      }
+    ],
+    "gatewayCalls": 2,
+    "familyRecordNotificationProbe": {
+      "recordCommitted": true,
+      "recipientSubscriptionPresent": true,
+      "notificationDelta": 0,
+      "pushTaskDelta": 0,
+      "familyChangeDelta": 1,
+      "missingEventObserved": true
+    }
+  },
+  "source": {
+    "webHead": "8ed8e5c9f1a81a36191cdfba654af9e56aff4993",
+    "goHead": "516371a5959e11db865969cd0b2f9aa42be9bfa2",
+    "routeSha256": "ba10deeb7c096512511f9c8bc20b54b96f214c9ccabff708e082e8bb5fcff2ac"
+  },
+  "isolation": {
+    "host": "127.0.0.1",
+    "database": "test_growdesk_0167a521c0c8",
+    "role": "test_app_0167a521c0c8",
+    "superuser": false,
+    "postgresPort": 54090,
+    "redisPort": 54091,
+    "apiPort": 54094,
+    "webPort": 54092,
+    "resourceOwnership": "new cluster and child processes for this run",
+    "workerStarted": false,
+    "goVapidConfiguration": "generated virtual key pair; no worker or delivery invoked"
+  },
+  "cleanup": {
+    "taskId": "WEB_PUSH_DELIVERY_20261005",
+    "runId": "0167a521c0c8",
+    "status": "cleaned",
+    "database": "test_growdesk_0167a521c0c8",
+    "appRole": "test_app_0167a521c0c8",
+    "privateDirectoryRemoved": true,
+    "resources": [
+      "owned PostgreSQL cluster and test roles",
+      "owned Redis process",
+      "owned Go API process"
+    ],
+    "errors": []
+  }
+}

@@ -60,15 +60,66 @@ test("Voice Fast-Path Unit Tests: Intent Detection & Formatting", () => {
   assert.ok(q7);
   assert.equal(q7.domain, "summary");
 
+  // Query statements containing "记录" / "作息" / "查" / "看" / "怎么样"
+  const qFeedRecord1 = detectVoiceQueryIntent("查一下今天的喂奶记录");
+  assert.ok(qFeedRecord1);
+  assert.equal(qFeedRecord1.domain, "feeding");
+
+  const qFeedRecord2 = detectVoiceQueryIntent("查一下喂奶记录");
+  assert.ok(qFeedRecord2);
+  assert.equal(qFeedRecord2.domain, "feeding");
+
+  const qFeedRecord3 = detectVoiceQueryIntent("今天的喂奶记录");
+  assert.ok(qFeedRecord3);
+  assert.equal(qFeedRecord3.domain, "feeding");
+
+  const qSleepRecord = detectVoiceQueryIntent("查看今天的睡眠记录");
+  assert.ok(qSleepRecord);
+  assert.equal(qSleepRecord.domain, "sleep");
+
+  const qSleepStatus1 = detectVoiceQueryIntent("宝宝醒了吗");
+  assert.ok(qSleepStatus1);
+  assert.equal(qSleepStatus1.domain, "sleep");
+  assert.equal(qSleepStatus1.isLatestOnly, true);
+
+  const qSleepStatus2 = detectVoiceQueryIntent("宝宝还在睡吗");
+  assert.ok(qSleepStatus2);
+  assert.equal(qSleepStatus2.domain, "sleep");
+  assert.equal(qSleepStatus2.isLatestOnly, true);
+
+  const qDiaperQuery = detectVoiceQueryIntent("查一下换尿布");
+  assert.ok(qDiaperQuery);
+  assert.equal(qDiaperQuery.domain, "diaper");
+
+  const qSummaryRecord1 = detectVoiceQueryIntent("查一下记录");
+  assert.ok(qSummaryRecord1);
+  assert.equal(qSummaryRecord1.domain, "summary");
+
+  const qSummaryRecord2 = detectVoiceQueryIntent("今天有什么记录");
+  assert.ok(qSummaryRecord2);
+  assert.equal(qSummaryRecord2.domain, "summary");
+
+  const qSummaryRecord3 = detectVoiceQueryIntent("今天怎么样");
+  assert.ok(qSummaryRecord3);
+  assert.equal(qSummaryRecord3.domain, "summary");
+
+  const qSummaryRecord4 = detectVoiceQueryIntent("今天的作息");
+  assert.ok(qSummaryRecord4);
+  assert.equal(qSummaryRecord4.domain, "summary");
+
   // 4. Negative / Bookkeeping Intent Rejection (Must fall back to Agent)
   assert.equal(detectVoiceQueryIntent("宝宝刚刚喝了120毫升配方奶"), null);
   assert.equal(detectVoiceQueryIntent("喝了150ml"), null);
   assert.equal(detectVoiceQueryIntent("宝宝喝奶了"), null);
   assert.equal(detectVoiceQueryIntent("宝宝睡着了"), null);
   assert.equal(detectVoiceQueryIntent("刚换了尿布"), null);
+  assert.equal(detectVoiceQueryIntent("记一下尿布"), null);
+  assert.equal(detectVoiceQueryIntent("记录喂奶"), null);
+  assert.equal(detectVoiceQueryIntent("记录睡眠"), null);
+  assert.equal(detectVoiceQueryIntent("帮我记一下喝奶"), null);
+  assert.equal(detectVoiceQueryIntent("打卡"), null);
   assert.equal(detectVoiceQueryIntent("宝宝发烧了该怎么办"), null);
   assert.equal(detectVoiceQueryIntent("吐奶了怎么办"), null);
-  assert.equal(detectVoiceQueryIntent("记一下尿布"), null);
 });
 
 test("Voice Fast-Path Integration with Database (<100ms)", async () => {
@@ -171,7 +222,7 @@ test("Voice Fast-Path Integration with Database (<100ms)", async () => {
     console.log(`-> FastPath Diaper: "${diaperReply}"`);
     assert.ok(diaperReply?.includes("一共拉了1次便便"));
 
-    // 5. Test Full Route POST /api/agent/voice directly
+    // 5. Test Full Route POST /api/agent/voice directly with question
     const req = new Request("http://localhost:3000/api/agent/voice", {
       method: "POST",
       headers: {
@@ -188,6 +239,70 @@ test("Voice Fast-Path Integration with Database (<100ms)", async () => {
     assert.equal(json.fastPath, true);
     assert.ok(json.reply.includes("150毫升配方奶"));
     console.log(`-> Route POST reply: "${json.reply}"`);
+
+    // 6. Test Query statement with "记录": "查一下今天的喂奶记录"
+    const reqRecord = new Request("http://localhost:3000/api/agent/voice", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${validToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ text: "查一下今天的喂奶记录" }),
+    });
+    const resRecord = await POST(reqRecord);
+    assert.equal(resRecord.status, 200);
+    const jsonRecord = await resRecord.json();
+    assert.equal(jsonRecord.success, true);
+    assert.equal(jsonRecord.fastPath, true);
+    assert.ok(jsonRecord.reply.includes("150毫升配方奶"));
+    console.log(`-> Route POST '查一下今天的喂奶记录' reply: "${jsonRecord.reply}"`);
+
+    // 7. Test Summary Query statement: "今天有什么记录"
+    const reqSummary = new Request("http://localhost:3000/api/agent/voice", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${validToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ text: "今天有什么记录" }),
+    });
+    const resSummary = await POST(reqSummary);
+    assert.equal(resSummary.status, 200);
+    const jsonSummary = await resSummary.json();
+    assert.equal(jsonSummary.success, true);
+    assert.equal(jsonSummary.fastPath, true);
+    assert.ok(jsonSummary.reply.includes("概况"));
+    console.log(`-> Route POST '今天有什么记录' reply: "${jsonSummary.reply}"`);
+
+    // 8. Test Error handling guarantees spoken reply for Siri TTS
+    // A. 401 Unauthorized
+    const unauthReq = new Request("http://localhost:3000/api/agent/voice", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: "查一下记录" }),
+    });
+    const unauthRes = await POST(unauthReq);
+    assert.equal(unauthRes.status, 401);
+    const unauthJson = await unauthRes.json();
+    assert.equal(unauthJson.success, false);
+    assert.ok(typeof unauthJson.reply === "string" && unauthJson.reply.length > 0);
+    assert.equal(unauthJson.reply, "请先在应用中配置有效的语音访问凭证。");
+
+    // B. 400 Empty text
+    const emptyReq = new Request("http://localhost:3000/api/agent/voice", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${validToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ text: "" }),
+    });
+    const emptyRes = await POST(emptyReq);
+    assert.equal(emptyRes.status, 400);
+    const emptyJson = await emptyRes.json();
+    assert.equal(emptyJson.success, false);
+    assert.ok(typeof emptyJson.reply === "string" && emptyJson.reply.length > 0);
+    assert.equal(emptyJson.reply, "未能听清您的指令，请再说一次。");
   } finally {
     // Cleanup
     await prisma.user.deleteMany({ where: { username: testUsername } });

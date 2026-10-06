@@ -6,5 +6,6 @@ After=network.target baby-panel.service
 Type=oneshot
 User=ubuntu
 WorkingDirectory=/home/ubuntu/Github/baby_panel_for_cecilia
+EnvironmentFile=-/home/ubuntu/Github/baby_panel_for_cecilia/.env
 TimeoutStartSec=300
-ExecStart=/usr/bin/curl -fsS --max-time 300 -X POST http://127.0.0.1:3088/api/cron/daily-summary
+ExecStart=/bin/bash -c 'if [ -n "$CRON_SECRET" ]; then /usr/bin/curl -fsS --max-time 300 -H "Authorization: Bearer $CRON_SECRET" -X POST http://127.0.0.1:3088/api/cron/daily-summary; else /usr/bin/curl -fsS --max-time 300 -X POST http://127.0.0.1:3088/api/cron/daily-summary; fi'

@@ -938,13 +938,17 @@ export async function generateAiDailySummary(
     summaryMemoryCache.set(cacheKey, { summary: aiResult, timestamp: Date.now() });
   }
 
-  void archiveText("output_json", JSON.stringify({
-    _cacheKey: cacheKey,
-    summary: aiResult,
-    generatedAt: aiResult.generatedAt,
-    babyId: baby.id,
-    date,
-  })).catch((err) => console.warn("Failed to archive AI daily summary:", err));
+  try {
+    await archiveText("output_json", JSON.stringify({
+      _cacheKey: cacheKey,
+      summary: aiResult,
+      generatedAt: aiResult.generatedAt,
+      babyId: baby.id,
+      date,
+    }));
+  } catch (err) {
+    console.warn("Failed to archive AI daily summary:", err);
+  }
 
   return aiResult;
 }

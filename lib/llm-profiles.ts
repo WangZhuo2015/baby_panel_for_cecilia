@@ -36,6 +36,16 @@ function isTestEnvironment(): boolean {
 
 /** Fallback profile created from legacy / environment variables */
 function getLegacyEnvProfile(): LlmProfile {
+  if (process.env.OPENROUTER_API_KEY && !process.env.AI_BASE_URL && !process.env.OPENAI_BASE_URL) {
+    return {
+      name: "OpenRouter",
+      baseUrl: "https://openrouter.ai/api/v1",
+      apiKey: process.env.OPENROUTER_API_KEY,
+      model: process.env.OPENROUTER_MODEL || "z-ai/glm-5.2:free",
+      visionModel: process.env.AI_VISION_MODEL || "z-ai/glm-5.2:free",
+    };
+  }
+
   const baseUrl = (process.env.AI_BASE_URL || process.env.OPENAI_BASE_URL || "https://opencode.ai/zen/go/v1").replace(/\/+$/, "");
   const apiKey = process.env.AI_API_KEY || process.env.OPENAI_API_KEY || "";
   const model = process.env.AI_MODEL || process.env.OPENAI_MODEL || "Qwen3.8-Flash-Next";
