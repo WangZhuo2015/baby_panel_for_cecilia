@@ -38,7 +38,7 @@ export function useScopedNutritionRequest(babyId?: string) {
   return useCallback(async (path: string, init?: RequestInit, allowStatuses?: readonly number[]) => {
     try { return await client.request(path, init, allowStatuses); }
     catch (error) {
-      if (!(error instanceof NutritionScopeChanged)) showToast(error instanceof Error ? error.message : "营养数据请求失败", "error");
+      if (!(error instanceof NutritionScopeChanged) && !init?.signal?.aborted) showToast(error instanceof Error ? error.message : "营养数据请求失败", "error");
       throw error;
     }
   }, [client, showToast]);
