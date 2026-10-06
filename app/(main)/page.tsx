@@ -36,7 +36,7 @@ import { SupplementQuickCheckIn } from "@/components/nutrition/SupplementQuickCh
 import { FeatureTourModal } from "@/components/ui/FeatureTourModal";
 import { BabyAvatar } from "@/components/ui/BabyAvatar";
 
-import { formatIsoToLocalTime } from "@/lib/date";
+import { formatIsoToLocalTime, getLocalDateStr } from "@/lib/date";
 import { formatElapsedDuration } from "@/lib/sleep-timer";
 import { APP_VERSION } from "@/lib/version";
 import { openRecordDrawer, RecordDrawerType } from "@/lib/drawer-bus";
@@ -459,7 +459,7 @@ export default function HomePage() {
             <div className="flex items-center justify-between mb-2 px-1">
               <h3 className="text-xs font-bold text-text-secondary uppercase tracking-wider">今日累计概况</h3>
               <button
-                onClick={() => router.push("/daily-summary")}
+                onClick={() => router.push(`/daily-summary?date=${getLocalDateStr()}`)}
                 className="text-[11px] font-bold text-primary hover:underline flex items-center gap-0.5 cursor-pointer"
               >
                 查看完整日报 <ChevronRight size={12} />
@@ -472,10 +472,10 @@ export default function HomePage() {
               <StatCard icon={<UtensilsCrossed size={16} className="text-peach" />} label="辅食" value={String(summary.foodCount)} unit="顿" color="bg-peach/10" />
             </div>
 
-            {/* 🤖 AI 每日成长日报 Banner */}
+            {/* 🤖 每日成长日报 Banner */}
             <CuteCard
               className="mt-2.5 p-3.5 bg-gradient-to-r from-primary-light via-lavender/20 to-pink-50/50 dark:from-primary-dark/20 dark:via-lavender/10 dark:to-transparent border border-primary/20 cursor-pointer hover:shadow-md transition-all group"
-              onClick={() => router.push("/daily-summary")}
+              onClick={() => router.push(`/daily-summary?date=${getLocalDateStr()}`)}
             >
               <div className="flex items-center justify-between mb-1.5">
                 <div className="flex items-center gap-2">
@@ -483,7 +483,7 @@ export default function HomePage() {
                     <FileText size={13} />
                   </span>
                   <span className="text-xs font-bold text-text-primary group-hover:text-primary transition-colors">
-                    AI 每日成长日报
+                    每日成长日报
                   </span>
                   {aiDailySummary?.overallScore && (
                     <span className="text-[10px] bg-primary text-white px-2 py-0.5 rounded-full font-bold">
@@ -496,20 +496,20 @@ export default function HomePage() {
                 </span>
               </div>
               <p className="text-xs text-text-secondary line-clamp-1">
-                {aiDailySummary?.headline || "点击生成今日奶量、睡眠、排便全量 AI 智能总结与儿科指导"}
+                {aiDailySummary?.headline || "即时查看今日奶量、睡眠与排便统计，AI 解读按需生成"}
               </p>
             </CuteCard>
           </div>
 
           {/* Quick Action Grid */}
           <div>
-            <h3 className="text-xs font-bold text-text-secondary uppercase tracking-wider mb-2 px-1">快捷记录</h3>
+            <div className="flex items-center justify-between mb-2 px-1"><h3 className="text-xs font-bold text-text-secondary uppercase tracking-wider">快捷记录</h3><button className="text-xs font-bold text-primary inline-flex items-center gap-1" onClick={() => router.push("/dashboard")}>奶量与照护趋势 <ChevronRight size={14} /></button></div>
             <div className="grid grid-cols-3 sm:grid-cols-6 lg:grid-cols-3 gap-2">
               <QuickActionCard icon={<Droplets size={22} />} label="记喂奶" color="#8DCBFF" onClick={() => handleQuickRecord("feeding", "/records/feeding")} />
               <QuickActionCard icon={<Moon size={22} />} label="记睡眠" color="#B98AF5" onClick={() => handleQuickRecord("sleep", "/records/sleep")} />
               <QuickActionCard icon={<Wind size={22} />} label="换尿布" color="#78DDB5" onClick={() => handleQuickRecord("diaper", "/records/diaper")} />
               <QuickActionCard icon={<UtensilsCrossed size={22} />} label="吃辅食" color="#FFB38A" onClick={() => handleQuickRecord("food", "/food/log")} />
-              <QuickActionCard icon={<FileText size={22} />} label="每日总结" color="#FF6F9F" onClick={() => router.push("/daily-summary")} />
+              <QuickActionCard icon={<FileText size={22} />} label="每日总结" color="#FF6F9F" onClick={() => router.push(`/daily-summary?date=${getLocalDateStr()}`)} />
               <QuickActionCard icon={<Star size={22} />} label="发育里程" color="#B98AF5" onClick={() => router.push("/development")} />
             </div>
           </div>
@@ -569,7 +569,7 @@ export default function HomePage() {
 
               <button
                 type="button"
-                onClick={() => router.push("/daily-summary")}
+                onClick={() => router.push(`/daily-summary?date=${getLocalDateStr()}`)}
                 className="flex flex-col items-center justify-center p-2 rounded-xl bg-white/80 dark:bg-card/80 hover:bg-white dark:hover:bg-card border border-primary/10 hover:border-primary/30 shadow-2xs hover:shadow-xs transition-all card-hover-lift cursor-pointer group"
               >
                 <FileText size={14} className="text-pink-500 group-hover:scale-115 transition-transform" />

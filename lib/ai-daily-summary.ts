@@ -171,6 +171,8 @@ export async function fetchDailyComprehensiveMetrics(
   }
 
   // 1. Feeding Aggregations
+  let recordedFeedingMl = 0;
+  let estimatedBreastMilkMl = 0;
   let totalFeedingMl = 0;
   let totalBreastMinutes = 0;
   let formulaCount = 0;
@@ -179,6 +181,10 @@ export async function fetchDailyComprehensiveMetrics(
 
   const feedings: DailyFeedingDetail[] = feedingRecords.map((r) => {
     const effectiveMl = getFeedingEffectiveMl(r);
+    const recordedMl = typeof r.amountMl === "number" && Number.isFinite(r.amountMl) && r.amountMl > 0 ? r.amountMl : 0;
+    const estimatedAmountMl = Math.max(0, effectiveMl - recordedMl);
+    recordedFeedingMl += recordedMl;
+    estimatedBreastMilkMl += estimatedAmountMl;
     totalFeedingMl += effectiveMl;
     const bMins = (r.leftMinutes || 0) + (r.rightMinutes || 0);
     totalBreastMinutes += bMins;
@@ -198,7 +204,9 @@ export async function fetchDailyComprehensiveMetrics(
       time: formatIsoToLocalTime(r.timestamp),
       type: r.type,
       typeName: TYPE_LABELS[r.type] || "喂奶",
-      amountMl: r.amountMl ?? (effectiveMl > 0 ? effectiveMl : null),
+      amountMl: recordedMl > 0 ? recordedMl : (effectiveMl > 0 ? effectiveMl : null),
+      amountMlIsEstimated: recordedMl === 0 && estimatedAmountMl > 0,
+      estimatedAmountMl: estimatedAmountMl > 0 ? estimatedAmountMl : null,
       leftMinutes: r.leftMinutes,
       rightMinutes: r.rightMinutes,
       spitUp: r.spitUp,
@@ -327,6 +335,8 @@ export async function fetchDailyComprehensiveMetrics(
 
   return {
     date,
+    recordedFeedingMl,
+    estimatedBreastMilkMl,
     totalFeedingMl,
     totalBreastMinutes,
     feedingCount: feedingRecords.length,
@@ -382,25 +392,28 @@ export function generateCuratedDailySummary(
   const correctedAge = calculateCorrectedAge(baby?.birthDate, baby?.gestationalAge, metrics.date);
 
   const months = correctedAge.isPreterm ? correctedAge.correctedMonths : ageDetail.months;
+  const recordedMilk = Number.isFinite(metrics.recordedFeedingMl) ? metrics.recordedFeedingMl : Math.max(0, metrics.totalFeedingMl - (metrics.estimatedBreastMilkMl || 0));
+  const estimatedMilk = Number.isFinite(metrics.estimatedBreastMilkMl) ? metrics.estimatedBreastMilkMl : 0;
+  const effectiveMilk = Number.isFinite(metrics.totalFeedingMl) ? metrics.totalFeedingMl : recordedMilk + estimatedMilk;
 
   // Evaluate feeding
   let feedingEvaluation = "";
   const milkTargetMin = months < 6 ? 600 : months < 12 ? 600 : 400;
   const milkTargetMax = months < 6 ? 900 : months < 12 ? 800 : 500;
 
-  if (metrics.totalFeedingMl > 0 || metrics.totalBreastMinutes > 0) {
+  if (effectiveMilk > 0 || metrics.totalBreastMinutes > 0) {
     if (metrics.formulaCount > 0 && metrics.breastCount > 0) {
-      feedingEvaluation = `今日共混合喂养 ${metrics.feedingCount} 次，总奶量累计约 ${metrics.totalFeedingMl}ml（含母乳亲喂 ${metrics.totalBreastMinutes} 分钟及配方奶/瓶喂）。母乳与奶量搭配充沛，按需哺乳节奏良好。`;
+      feedingEvaluation = "今日共混合喂养 " + metrics.feedingCount + " 次，已记录瓶喂/配方奶 " + recordedMilk + "ml，另按亲喂时长估算母乳约 " + estimatedMilk + "ml；合计约 " + effectiveMilk + "ml（亲喂 " + metrics.totalBreastMinutes + " 分钟）。这些是记录值与估算值的合计，不能替代称重或泵奶量。";
     } else if (metrics.totalBreastMinutes > 0 && metrics.formulaCount === 0) {
-      feedingEvaluation = `今日母乳亲喂共 ${metrics.feedingCount} 次，累计时长 ${metrics.totalBreastMinutes} 分钟，估算摄入母乳约 ${metrics.totalFeedingMl}ml。亲喂频次与时长均符合月龄需求，妈妈辛苦了！`;
-    } else if (metrics.totalFeedingMl > 0) {
-      const ml = metrics.totalFeedingMl;
+      feedingEvaluation = "今日母乳亲喂共 " + metrics.feedingCount + " 次，累计时长 " + metrics.totalBreastMinutes + " 分钟，按亲喂时长估算摄入母乳约 " + (estimatedMilk || effectiveMilk) + "ml；亲喂量不是直接测量值。";
+    } else if (effectiveMilk > 0) {
+      const ml = recordedMilk;
       if (ml >= milkTargetMin && ml <= milkTargetMax + 150) {
         feedingEvaluation = `今日共摄入奶量 ${ml}ml（分 ${metrics.feedingCount} 次），达到${months}月龄推荐奶量（${milkTargetMin}–${milkTargetMax}ml/天），喂养量充足稳定。`;
       } else if (ml < milkTargetMin) {
-        feedingEvaluation = `今日记录总奶量 ${ml}ml（共 ${metrics.feedingCount} 次），略低于月龄建议区间（${milkTargetMin}–${milkTargetMax}ml）。若有辅食替代，请结合宝宝情绪及排尿情况综合观察。`;
+        feedingEvaluation = "今日已记录奶量 " + ml + "ml（共 " + metrics.feedingCount + " 次），略低于月龄建议区间（" + milkTargetMin + "–" + milkTargetMax + "ml）。若有辅食替代，请结合宝宝情绪及排尿情况综合观察。";
       } else {
-        feedingEvaluation = `今日共喝奶 ${ml}ml（共 ${metrics.feedingCount} 次），奶量胃口很好。注意喂奶后竖抱拍嗝，避免一次性过饱引起吐奶胀气。`;
+        feedingEvaluation = "今日已记录奶量 " + ml + "ml（共 " + metrics.feedingCount + " 次），奶量胃口很好。注意喂奶后竖抱拍嗝，避免一次性过饱引起吐奶胀气。";
       }
     }
   } else {
@@ -560,8 +573,9 @@ export function generateCuratedDailySummary(
     },
     suggestedQuestions,
     metrics,
-    disclaimer: "本总结由系统结合儿科指南与当日记录智能生成，仅供日常照护参考，不可作为医学临床诊断依据。",
+    disclaimer: "本页为当日记录的确定性统计与系统规则提示，不含 AI 生成；亲喂奶量为按时长估算值，不能替代称重或泵奶记录，仅供日常照护参考。",
     isAiGenerated: false,
+    source: "deterministic",
     generatedAt: new Date().toISOString(),
   };
 }
@@ -581,17 +595,9 @@ function isDailySummaryCacheFresh(
   const prev = cachedSummary.metrics;
   if (!prev) return false;
 
-  const dataUnchanged =
-    prev.feedingCount === currentMetrics.feedingCount &&
-    prev.totalFeedingMl === currentMetrics.totalFeedingMl &&
-    prev.totalBreastMinutes === currentMetrics.totalBreastMinutes &&
-    prev.sleepCount === currentMetrics.sleepCount &&
-    prev.totalSleepMinutes === currentMetrics.totalSleepMinutes &&
-    prev.diaperCount === currentMetrics.diaperCount &&
-    prev.peeCount === currentMetrics.peeCount &&
-    prev.poopCount === currentMetrics.poopCount &&
-    prev.foodCount === currentMetrics.foodCount &&
-    prev.supplementsCount === currentMetrics.supplementsCount;
+  // Compare the full deterministic projection so edits to notes, stool details,
+  // supplement doses, growth, or medical counts cannot reuse stale AI text.
+  const dataUnchanged = JSON.stringify(prev) === JSON.stringify(currentMetrics);
 
   // Past dates: fresh as long as records were not retroactively edited
   if (!isToday) {
@@ -682,13 +688,71 @@ function formatCandidate(key: string, p: LlmProfile): CandidateProfile {
 
 export const summaryMemoryCache = new Map<string, { summary: AiDailySummaryResult; timestamp: number }>();
 
+export class AiDailySummaryUnavailableError extends Error {
+  readonly status = 503;
+  readonly code = "AI_DAILY_SUMMARY_UNAVAILABLE";
+
+  constructor(message = "AI 解读暂时不可用，请稍后重试") {
+    super(message);
+    this.name = "AiDailySummaryUnavailableError";
+  }
+}
+
+async function loadFreshCachedAiSummary(
+  babyId: string,
+  date: string,
+  metrics: DailyComprehensiveMetrics,
+): Promise<AiDailySummaryResult | null> {
+  const cacheKey = "ai_daily_summary_" + babyId + "_" + date;
+  const isToday = date === getLocalDateStr();
+
+  if (isGrowDeskEnabled()) {
+    const cached = summaryMemoryCache.get(cacheKey);
+    return cached && isDailySummaryCacheFresh(cached.summary, metrics, isToday)
+      ? { ...cached.summary, metrics }
+      : null;
+  }
+
+  try {
+    const cached = await prisma.aiArchive.findFirst({
+      where: { kind: "output_json", content: { startsWith: "{\"_cacheKey\":\"" + cacheKey } },
+      orderBy: { createdAt: "desc" },
+    });
+    if (!cached?.content) return null;
+    const parsed = JSON.parse(cached.content);
+    const cachedSummary = parsed?.summary as AiDailySummaryResult | undefined;
+    return cachedSummary && isDailySummaryCacheFresh(cachedSummary, metrics, isToday)
+      ? { ...cachedSummary, metrics }
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Return current deterministic stats without contacting an AI provider. */
+export async function getDailySummary(
+  ctx: RecordContext,
+  targetDateStr?: string,
+): Promise<AiDailySummaryResult> {
+  const date = targetDateStr && isValidDateStr(targetDateStr) ? targetDateStr : getLocalDateStr();
+  const baby = ctx.baby || (await prisma.baby.findUnique({ where: { id: ctx.babyId } }));
+  if (!baby) throw new Error("未找到宝宝档案");
+  const metrics = await fetchDailyComprehensiveMetrics({
+    userId: ctx.userId,
+    babyId: baby.id,
+    accessToken: ctx.accessToken,
+    familyId: ctx.familyId,
+  }, date);
+  return (await loadFreshCachedAiSummary(baby.id, date, metrics)) || generateCuratedDailySummary(baby, metrics);
+}
+
 /**
  * Generate AI Daily Summary via LLM (OpenRouter / Opencode / AMD) with robust error handling and fallback.
  */
 export async function generateAiDailySummary(
   ctx: RecordContext,
   targetDateStr?: string,
-  options?: { forceRefresh?: boolean }
+  options?: { forceRefresh?: boolean; requireAi?: boolean }
 ): Promise<AiDailySummaryResult> {
   const date =
     targetDateStr && isValidDateStr(targetDateStr)
@@ -714,8 +778,10 @@ export async function generateAiDailySummary(
   // 2. Build default high-quality rule-based summary
   const curatedFallback = generateCuratedDailySummary(baby, metrics);
 
-  // If no AI key configured or in test environment, return curated summary directly
+  // GET uses getDailySummary and never reaches this function. For explicit POST
+  // requests, fail clearly when AI is unavailable instead of presenting rules as AI.
   if (!AI_CONFIG.apiKey) {
+    if (options?.requireAi) throw new AiDailySummaryUnavailableError();
     return curatedFallback;
   }
 
@@ -832,6 +898,7 @@ export async function generateAiDailySummary(
 
   const candidates = resolveCandidateProfiles();
   if (candidates.length === 0) {
+    if (options?.requireAi) throw new AiDailySummaryUnavailableError();
     console.warn("[AI Daily Summary] No valid AI credentials configured, returning curated fallback.");
     return curatedFallback;
   }
@@ -900,6 +967,7 @@ export async function generateAiDailySummary(
   }
 
   if (!parsed) {
+    if (options?.requireAi) throw new AiDailySummaryUnavailableError();
     console.warn("[AI Daily Summary] All LLM candidate profiles failed. Falling back to curated rule-based summary.");
     return curatedFallback;
   }
@@ -930,6 +998,7 @@ export async function generateAiDailySummary(
     metrics,
     disclaimer: "本总结由 AI 结合儿科指南与当日记录智能生成，仅供日常照护参考，不可作为医学临床诊断依据。",
     isAiGenerated: true,
+    source: "ai",
     generatedAt: new Date().toISOString(),
   };
 

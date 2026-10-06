@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAuth, requireBaby } from "@/lib/api-helpers";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
-import { generateAiDailySummary } from "@/lib/ai-daily-summary";
+import { AiDailySummaryUnavailableError, generateAiDailySummary, getDailySummary } from "@/lib/ai-daily-summary";
 import { isValidDateStr, getLocalDateStr } from "@/lib/date";
 import { GROWDESK_CONFIG } from "@/lib/config";
 import { resolveBffSession } from "@/lib/growdesk/session";
@@ -20,7 +20,6 @@ export async function GET(request: Request) {
       const { searchParams } = new URL(request.url);
       const requestedBabyId = searchParams.get("babyId");
       const dateParam = searchParams.get("date");
-      const forceParam = searchParams.get("force");
 
       const date = dateParam && isValidDateStr(dateParam) ? dateParam : getLocalDateStr();
       if (dateParam && !isValidDateStr(dateParam)) {
@@ -32,7 +31,7 @@ export async function GET(request: Request) {
         return NextResponse.json({ error: "未找到宝宝档案" }, { status: 404 });
       }
 
-      const summary = await generateAiDailySummary(
+      const summary = await getDailySummary(
         {
           userId: bffSession.user.id,
           babyId: baby.id,
@@ -40,10 +39,9 @@ export async function GET(request: Request) {
           accessToken: bffSession.accessToken,
           familyId: baby.familyId,
         },
-        date,
-        { forceRefresh: forceParam === "true" || forceParam === "1" }
+        date
       );
-      return NextResponse.json({ summary });
+      return NextResponse.json({ summary }, { headers: { "cache-control": "no-store" } });
     }
 
     const auth = await requireAuth(request);
@@ -61,7 +59,6 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const requestedBabyId = searchParams.get("babyId");
     const dateParam = searchParams.get("date");
-    const forceParam = searchParams.get("force");
 
     const date = dateParam && isValidDateStr(dateParam) ? dateParam : getLocalDateStr();
     if (dateParam && !isValidDateStr(dateParam)) {
@@ -71,17 +68,16 @@ export async function GET(request: Request) {
     const babyResult = await requireBaby(user.id, requestedBabyId);
     if (babyResult.errorResponse) return babyResult.errorResponse;
 
-    const summary = await generateAiDailySummary(
+    const summary = await getDailySummary(
       { userId: user.id, babyId: babyResult.baby.id, baby: babyResult.baby },
-      date,
-      { forceRefresh: forceParam === "true" || forceParam === "1" }
+      date
     );
 
-    return NextResponse.json({ summary });
+    return NextResponse.json({ summary }, { headers: { "cache-control": "no-store" } });
   } catch (error: unknown) {
     if (error instanceof BridgeError) return bridgeErrorResponse(error);
     console.error("GET /api/ai/daily-summary error:", error);
-    const message = error instanceof Error ? error.message : "获取每日 AI 总结失败";
+    const message = error instanceof Error ? error.message : "获取每日统计失败";
     return NextResponse.json(
       { error: message },
       { status: 500 }
@@ -118,9 +114,9 @@ export async function POST(request: Request) {
           familyId: baby.familyId,
         },
         date,
-        { forceRefresh: force !== false }
+        { forceRefresh: force !== false, requireAi: true }
       );
-      return NextResponse.json({ summary });
+      return NextResponse.json({ summary }, { headers: { "cache-control": "no-store" } });
     }
 
     const auth = await requireAuth(request);
@@ -149,15 +145,19 @@ export async function POST(request: Request) {
     const summary = await generateAiDailySummary(
       { userId: user.id, babyId: babyResult.baby.id, baby: babyResult.baby },
       date,
-      { forceRefresh: force !== false }
+      { forceRefresh: force !== false, requireAi: true }
     );
 
-    return NextResponse.json({ summary });
-  } catch (error: any) {
+    return NextResponse.json({ summary }, { headers: { "cache-control": "no-store" } });
+  } catch (error: unknown) {
+    if (error instanceof BridgeError) return bridgeErrorResponse(error);
+    if (error instanceof AiDailySummaryUnavailableError) {
+      return NextResponse.json({ error: error.message, code: error.code }, { status: error.status, headers: { "cache-control": "no-store" } });
+    }
     console.error("POST /api/ai/daily-summary error:", error);
     return NextResponse.json(
-      { error: error?.message || "生成每日 AI 总结失败" },
-      { status: 500 }
+      { error: error instanceof Error ? error.message : "生成每日 AI 总结失败" },
+      { status: 500, headers: { "cache-control": "no-store" } }
     );
   }
 }
