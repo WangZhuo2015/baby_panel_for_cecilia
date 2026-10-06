@@ -11,7 +11,7 @@ import {
   ChevronRight,
   Info,
 } from "lucide-react";
-import { useScopedNutritionRequest } from "@/lib/hooks/useScopedNutritionRequest";
+import { useScopedNutritionRequest, useNutritionScopeKey } from "@/lib/hooks/useScopedNutritionRequest";
 import { useBabyStore } from "@/stores/useBabyStore";
 import { calculateAge } from "@/lib/age";
 import { getLocalDateStr, addDays, getWeekdayStr } from "@/lib/date";
@@ -55,6 +55,11 @@ function generateWeeklyDates() {
 }
 
 export default function NutritionPage() {
+  const scopeKey = useNutritionScopeKey();
+  return <NutritionPageContent key={scopeKey} />;
+}
+
+function NutritionPageContent() {
   const router = useRouter();
   const baby = useBabyStore((s) => s.baby);
   const fetchUser = useBabyStore((s) => s.fetchUser);
@@ -66,6 +71,9 @@ export default function NutritionPage() {
   const [dailyAnalysis, setDailyAnalysis] = useState<DailyNutritionAnalysis | null>(null);
   const [multiDaySummary, setMultiDaySummary] = useState<MultiDayNutritionSummary | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+  const [trendMetric, setTrendMetric] = useState("milk");
+  const trendSection = useRef<HTMLDivElement>(null);
   const [isCatalogOpen, setIsCatalogOpen] = useState<boolean>(false);
 
   const weeklyDates = generateWeeklyDates();
@@ -78,6 +86,7 @@ export default function NutritionPage() {
     const generation = ++readGeneration.current;
     if (!baby?.id) { setDailyAnalysis(null); setMultiDaySummary(null); setLoading(false); return; }
     setLoading(true);
+    setError(null);
     try {
       if (timeScale === "today") {
         const res = await scopedRequest(`/api/nutrition/analysis?babyId=${baby.id}&date=${selectedDate}&days=1`);
@@ -97,7 +106,7 @@ export default function NutritionPage() {
         }
       }
     } catch (e) {
-      console.error("Failed to load nutrition analysis:", e);
+      if (generation === readGeneration.current) setError(e instanceof Error ? e.message : "营养数据加载失败，请重试");
     } finally {
       if (generation === readGeneration.current) setLoading(false);
     }
@@ -135,6 +144,12 @@ export default function NutritionPage() {
   }
 
   const age = calculateAge(baby.birthDate);
+  const viewTrend = (metric: string) => {
+    setTrendMetric(metric);
+    if (timeScale === "today") setTimeScale("7d");
+    if (selectedDate > getLocalDateStr()) setSelectedDate(getLocalDateStr());
+    requestAnimationFrame(() => trendSection.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
+  };
 
   return (
     <div className="px-4 pt-safe-6 pb-36 workbench:pb-12 max-w-md md:max-w-xl workbench:max-w-none lg:max-w-7xl mx-auto space-y-5">
@@ -207,7 +222,8 @@ export default function NutritionPage() {
               key={dateItem.date}
               type="button"
               onClick={() => setSelectedDate(dateItem.date)}
-              className={`flex-shrink-0 flex flex-col items-center justify-center w-13 h-16 rounded-2xl transition-all btn-press cursor-pointer ${
+              disabled={timeScale !== "today" && dateItem.date > getLocalDateStr()}
+              className={`flex-shrink-0 flex flex-col items-center justify-center w-13 h-16 rounded-2xl transition-all btn-press cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${
                 isSelected
                   ? "bg-primary text-white shadow-button ring-2 ring-primary/30 font-bold"
                   : dateItem.isToday
@@ -227,11 +243,17 @@ export default function NutritionPage() {
         options={[
           { value: "today", label: "今日全量营养" },
           { value: "7d", label: "近 7 天趋势" },
-          { value: "30d", label: "近 30 天周期" },
+          { value: "30d", label: "近 30 天趋势" },
         ]}
         value={timeScale}
-        onChange={(v) => setTimeScale(v as any)}
+        onChange={(v) => {
+          setTimeScale(v as "today" | "7d" | "30d");
+          if (v !== "today" && selectedDate > getLocalDateStr()) setSelectedDate(getLocalDateStr());
+        }}
       />
+
+      {error && <CuteCard className="p-4 text-sm text-text-secondary" ><p role="alert">{error}</p><CuteButton className="mt-2" onClick={loadData}>重新加载营养数据</CuteButton></CuteCard>}
+      {loading && <p role="status" className="text-xs text-text-muted text-center">正在读取营养数据…</p>}
 
       {/* ⚠️ 警示消息（如有过量风险或未补充） */}
       {dailyAnalysis?.alerts && dailyAnalysis.alerts.length > 0 && (
@@ -318,23 +340,27 @@ export default function NutritionPage() {
               </div>
 
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3 gap-2.5">
-                <CoreNutrientCard item={dailyAnalysis.coreMetrics.vitaminD} icon="☀️" />
-                <CoreNutrientCard item={dailyAnalysis.coreMetrics.calcium} icon="🦴" />
-                <CoreNutrientCard item={dailyAnalysis.coreMetrics.iron} icon="🩸" />
-                <CoreNutrientCard item={dailyAnalysis.coreMetrics.vitaminA} icon="🥕" />
-                <CoreNutrientCard item={dailyAnalysis.coreMetrics.zinc} icon="🛡️" />
-                <CoreNutrientCard item={dailyAnalysis.coreMetrics.dha} icon="🐟" />
+                <CoreNutrientCard item={dailyAnalysis.coreMetrics.vitaminD} icon="☀️" onViewTrend={() => viewTrend("vitamin_d")} />
+                <CoreNutrientCard item={dailyAnalysis.coreMetrics.calcium} icon="🦴" onViewTrend={() => viewTrend("calcium")} />
+                <CoreNutrientCard item={dailyAnalysis.coreMetrics.iron} icon="🩸" onViewTrend={() => viewTrend("iron")} />
+                <CoreNutrientCard item={dailyAnalysis.coreMetrics.vitaminA} icon="🥕" onViewTrend={() => viewTrend("vitamin_a")} />
+                <CoreNutrientCard item={dailyAnalysis.coreMetrics.zinc} icon="🛡️" onViewTrend={() => viewTrend("zinc")} />
+                <CoreNutrientCard item={dailyAnalysis.coreMetrics.dha} icon="🐟" onViewTrend={() => viewTrend("dha")} />
               </div>
             </div>
           )}
 
           {/* 📊 7天 / 30天 周期趋势图 */}
-          {multiDaySummary && multiDaySummary.dailyTrends.length > 0 && (
+          <div ref={trendSection} className="scroll-mt-6">
+          {multiDaySummary && !error && !loading && (
             <NutritionTrendChart
-              trends={multiDaySummary.dailyTrends}
-              daysCount={timeScale === "30d" ? 30 : 7}
+              summary={multiDaySummary}
+              metric={trendMetric}
+              onMetricChange={setTrendMetric}
+              references={dailyAnalysis?.allNutrients}
             />
           )}
+          </div>
         </div>
 
         {/* ===== 右栏：产品库快捷、多源穿透与明细表 (Col 5) ===== */}

@@ -667,6 +667,8 @@ export function calculateMultiDayNutritionTrend(params: {
       iron,
       zinc,
       dha,
+      nutrients: Object.fromEntries(analysis.allNutrients.map(item => [item.nutrientId, item.totalAmount])),
+      hasRecords: day.feedings.length > 0 || day.supplements.length > 0 || (day.foodLogs?.length ?? 0) > 0,
     });
 
     for (const item of analysis.allNutrients) {

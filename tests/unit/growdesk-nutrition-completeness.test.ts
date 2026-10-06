@@ -40,6 +40,14 @@ function route(fetchApi: protocol.BridgeFetch) {
 }
 const request = () => new Request("https://test.invalid/api/nutrition/analysis?babyId=test_baby&date=2026-09-19");
 
+test("nutrition trend rejects a future end date before fetching record history", async () => {
+  let calls = 0;
+  const api = route(async () => { calls++; throw new Error("unexpected upstream call"); });
+  const response = await api.GET(new Request("https://test.invalid/api/nutrition/analysis?babyId=test_baby&date=2999-01-01&days=30"));
+  assert.equal(response.status, 400);
+  assert.equal(calls, 0);
+});
+
 test("nutrition refuses an upstream failure instead of returning an empty healthy analysis", async () => {
   const api = route(async () => ({ ok: false, status: 503, error: { code: "TEST_OUTAGE", message: "test unavailable" } }));
   assert.equal((await api.GET(request())).status, 503);
