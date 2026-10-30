@@ -1,3 +1,5 @@
+import type { LlmModelInfo } from "@/lib/llm-preferences";
+
 export interface DailyFeedingDetail {
   id: string;
   time: string;
@@ -127,5 +129,7 @@ export interface AiDailySummaryResult {
   isAiGenerated: boolean;
   /** Declares whether the text came from deterministic rules or an AI provider. */
   source: "deterministic" | "ai";
+  /** Provider/model that generated this result, when an AI call was made. */
+  llm?: LlmModelInfo | null;
   generatedAt: string;
 }

@@ -1,3 +1,5 @@
+import { getCurrentLlmCacheKey, getCurrentLlmFeatureScope, hasCurrentLlmConfiguration } from "@/lib/llm-context";
+import { llmFetch, actualLlmModel } from "@/lib/llm-provenance";
 import { prisma } from "@/lib/prisma";
 import {
   getLocalDayUtcRange,
@@ -7,7 +9,6 @@ import {
 } from "@/lib/date";
 import { calculateAgeDetail, calculateCorrectedAge } from "@/lib/age";
 import { AI_CONFIG } from "@/lib/config";
-import { getLlmProfiles, type LlmProfile } from "@/lib/llm-profiles";
 import { archiveText } from "@/lib/archive";
 import { safeJsonParse } from "@/lib/json";
 import { getFeedingEffectiveMl } from "@/lib/nutrition/breastmilk";
@@ -621,69 +622,31 @@ function isDailySummaryCacheFresh(
 interface CandidateProfile {
   name: string;
   baseUrl: string;
-  apiKey: string;
   model: string;
   headers: Record<string, string>;
   completionExtras?: Record<string, unknown>;
 }
 
 function resolveCandidateProfiles(): CandidateProfile[] {
-  const list: CandidateProfile[] = [];
-  try {
-    const { activeProfile, profiles } = getLlmProfiles();
-    const active = profiles[activeProfile];
-    if (active?.baseUrl && active?.apiKey) {
-      list.push(formatCandidate(activeProfile, active));
-    }
-    for (const [key, p] of Object.entries(profiles)) {
-      if (key !== activeProfile && p.baseUrl && p.apiKey) {
-        list.push(formatCandidate(key, p));
-      }
-    }
-  } catch (err) {
-    console.warn("[AI Daily Summary] Failed to load LLM profiles:", err);
-  }
-
-  if (list.length === 0 && AI_CONFIG.baseUrl && AI_CONFIG.apiKey) {
-    list.push({
-      name: "default",
+  const scope = getCurrentLlmFeatureScope();
+  if (scope?.selection?.source === "chatgpt") {
+    return [{
+      name: "chatgpt",
       baseUrl: AI_CONFIG.baseUrl.replace(/\/+$/, ""),
-      apiKey: AI_CONFIG.apiKey,
-      model: AI_CONFIG.model,
-      headers: AI_CONFIG.headers,
-      completionExtras: AI_CONFIG.completionExtras,
-    });
+      model: scope.selection.modelId,
+      headers: { "Content-Type": "application/json" },
+      completionExtras: {},
+    }];
   }
 
-  return list;
-}
-
-function formatCandidate(key: string, p: LlmProfile): CandidateProfile {
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    ...(p.headers || {}),
-  };
-  if (p.apiKey) {
-    headers.Authorization = `Bearer ${p.apiKey}`;
-  }
-  if (p.baseUrl.includes("openrouter.ai") && !headers["HTTP-Referer"]) {
-    headers["HTTP-Referer"] = "https://baby.zwang.fun";
-    headers["X-Title"] = "Baby Panel";
-  }
-
-  let model = p.model;
-  if (model === "hermes-agent" || (p.baseUrl.includes("opencode.ai") && model.includes("muse-spark"))) {
-    model = "Qwen3.8-Flash-Next";
-  }
-
-  return {
-    name: key,
-    baseUrl: p.baseUrl.replace(/\/+$/, ""),
-    apiKey: p.apiKey,
-    model,
-    headers,
-    completionExtras: p.completionExtras,
-  };
+  if (!hasCurrentLlmConfiguration() || !AI_CONFIG.baseUrl) return [];
+  return [{
+    name: "selected",
+    baseUrl: AI_CONFIG.baseUrl.replace(/\/+$/, ""),
+    model: AI_CONFIG.model,
+    headers: AI_CONFIG.headers,
+    completionExtras: AI_CONFIG.completionExtras,
+  }];
 }
 
 export const summaryMemoryCache = new Map<string, { summary: AiDailySummaryResult; timestamp: number }>();
@@ -703,7 +666,7 @@ async function loadFreshCachedAiSummary(
   date: string,
   metrics: DailyComprehensiveMetrics,
 ): Promise<AiDailySummaryResult | null> {
-  const cacheKey = "ai_daily_summary_" + babyId + "_" + date;
+  const cacheKey = "ai_daily_summary_" + babyId + "_" + date + "_" + (getCurrentLlmCacheKey() || "default");
   const isToday = date === getLocalDateStr();
 
   if (isGrowDeskEnabled()) {
@@ -780,7 +743,7 @@ export async function generateAiDailySummary(
 
   // GET uses getDailySummary and never reaches this function. For explicit POST
   // requests, fail clearly when AI is unavailable instead of presenting rules as AI.
-  if (!AI_CONFIG.apiKey) {
+  if (!hasCurrentLlmConfiguration()) {
     if (options?.requireAi) throw new AiDailySummaryUnavailableError();
     return curatedFallback;
   }
@@ -794,7 +757,7 @@ export async function generateAiDailySummary(
   const isToday = date === todayStr;
 
   // Check cache unless forceRefresh is true
-  const cacheKey = `ai_daily_summary_${baby.id}_${date}`;
+  const cacheKey = `ai_daily_summary_${baby.id}_${date}_${getCurrentLlmCacheKey() || ctx.userId}`;
   if (!options?.forceRefresh) {
     if (isGrowDeskEnabled()) {
       const cached = summaryMemoryCache.get(cacheKey);
@@ -896,9 +859,10 @@ export async function generateAiDailySummary(
   ]
 }`;
 
+  const chatGPTSelected = getCurrentLlmFeatureScope()?.selection?.source === "chatgpt";
   const candidates = resolveCandidateProfiles();
   if (candidates.length === 0) {
-    if (options?.requireAi) throw new AiDailySummaryUnavailableError();
+    if (options?.requireAi || chatGPTSelected) throw new AiDailySummaryUnavailableError();
     console.warn("[AI Daily Summary] No valid AI credentials configured, returning curated fallback.");
     return curatedFallback;
   }
@@ -913,7 +877,7 @@ export async function generateAiDailySummary(
       const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
       try {
-        const res = await fetch(`${candidate.baseUrl}/chat/completions`, {
+        const res = await llmFetch(`${candidate.baseUrl}/chat/completions`, {
           method: "POST",
           headers: candidate.headers,
           body: JSON.stringify({
@@ -967,7 +931,7 @@ export async function generateAiDailySummary(
   }
 
   if (!parsed) {
-    if (options?.requireAi) throw new AiDailySummaryUnavailableError();
+    if (options?.requireAi || chatGPTSelected) throw new AiDailySummaryUnavailableError();
     console.warn("[AI Daily Summary] All LLM candidate profiles failed. Falling back to curated rule-based summary.");
     return curatedFallback;
   }
@@ -998,6 +962,7 @@ export async function generateAiDailySummary(
     metrics,
     disclaimer: "本总结由 AI 结合儿科指南与当日记录智能生成，仅供日常照护参考，不可作为医学临床诊断依据。",
     isAiGenerated: true,
+    llm: actualLlmModel(),
     source: "ai",
     generatedAt: new Date().toISOString(),
   };

@@ -1,17 +1,18 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-test("TDD: default model should be muse-spark (free)", async () => {
+test("default profile is the official GPT-6 API", async () => {
   const fs = await import("node:fs");
   const config = fs.readFileSync("lib/config.ts", "utf-8");
-  // Now defaults to muse-spark via opencode; allow either muse-spark or glm as free
-  assert.ok(config.includes("muse-spark") || config.includes("z-ai/glm-5.2"), "lib/config should default to muse-spark or glm free");
+  assert.ok(config.includes("getActiveLlmProfile"), "lib/config should resolve the selected LLM profile");
+  const profiles = fs.readFileSync("lib/llm-profiles.ts", "utf-8");
+  assert.ok(profiles.includes('"gpt-6-luna"'), "the official profile should default to GPT-6 Luna");
   const model = fs.readFileSync("lib/agent/model.ts", "utf-8");
-  assert.ok(model.includes("muse-spark") || model.includes("z-ai/glm-5.2"), "lib/agent/model should default to muse-spark or glm free");
+  assert.ok(model.includes("openAIResponsesApi()"), "the official profile should use the Responses API");
 });
 
 test("TDD: isRateLimitError should detect 429", async () => {
-  const { isRateLimitError, getRetryAfterMs } = await import("../../lib/agent/run.js");
+  const { isRateLimitError } = await import("../../lib/agent/run.js");
   assert.equal(isRateLimitError({ status: 429 }), true);
   assert.equal(isRateLimitError({ message: "429 Too Many Requests" }), true);
   assert.equal(isRateLimitError({ message: "rate limit exceeded" }), true);
