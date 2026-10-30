@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { AsyncLocalStorage } from "node:async_hooks";
 
 export interface LlmProfile {
   name?: string;
@@ -16,10 +17,18 @@ export interface LlmProfilesConfig {
   profiles: Record<string, LlmProfile>;
 }
 
+export interface ScopedLlmProfile {
+  profileId: string;
+  modelId: string;
+  profile: LlmProfile;
+}
+
+const profileScope = new AsyncLocalStorage<ScopedLlmProfile | undefined>();
+
 const CONFIG_FILENAME = "llm-profiles.json";
 
 function getProfilesFilePath(): string {
-  return path.resolve(process.cwd(), CONFIG_FILENAME);
+  return path.resolve(process.env.LLM_PROFILES_FILE?.trim() || path.join(process.cwd(), CONFIG_FILENAME));
 }
 
 function getEnvFilePath(): string {
@@ -34,33 +43,103 @@ function isTestEnvironment(): boolean {
   );
 }
 
-/** Fallback profile created from legacy / environment variables */
-function getLegacyEnvProfile(): LlmProfile {
-  if (process.env.OPENROUTER_API_KEY && !process.env.AI_BASE_URL && !process.env.OPENAI_BASE_URL) {
-    return {
-      name: "OpenRouter",
-      baseUrl: "https://openrouter.ai/api/v1",
-      apiKey: process.env.OPENROUTER_API_KEY,
-      model: process.env.OPENROUTER_MODEL || "z-ai/glm-5.2:free",
-      visionModel: process.env.AI_VISION_MODEL || "z-ai/glm-5.2:free",
-    };
-  }
+export const OPENAI_OFFICIAL_PROFILE_ID = "openai-official";
+export const AMD_V41_PROFILE_ID = "amd-v4.1-flash";
+const OPENAI_OFFICIAL_BASE = "https://api.openai.com/v1";
+const AMD_V41_BASE = "https://developer.amd.com.cn/radeon/api/v1";
+const MAX_OPENAI_KEY_BYTES = 16_384;
 
-  const baseUrl = (process.env.AI_BASE_URL || process.env.OPENAI_BASE_URL || "https://opencode.ai/zen/go/v1").replace(/\/+$/, "");
-  const apiKey = process.env.AI_API_KEY || process.env.OPENAI_API_KEY || "";
+/** Resolve only explicitly configured key sources. Never guess a repository-local key path. */
+export function resolveOfficialOpenAiKey(): string {
+  const inline = process.env.GROWDESK_AI_API_KEY?.trim() || process.env.OPENAI_API_KEY?.trim();
+  if (inline) return inline;
+  const configuredPath = process.env.GROWDESK_AI_API_KEY_FILE?.trim();
+  if (!configuredPath) return "";
+
+  let fd: number | undefined;
+  try {
+    fd = fs.openSync(configuredPath, fs.constants.O_RDONLY);
+    const stat = fs.fstatSync(fd);
+    if (!stat.isFile() || stat.size > MAX_OPENAI_KEY_BYTES) throw new Error();
+    const buffer = Buffer.alloc(MAX_OPENAI_KEY_BYTES + 1);
+    const bytesRead = fs.readSync(fd, buffer, 0, buffer.length, 0);
+    if (bytesRead > MAX_OPENAI_KEY_BYTES) throw new Error();
+    const raw = new TextDecoder("utf-8", { fatal: true }).decode(buffer.subarray(0, bytesRead));
+    const key = raw.trim();
+    if (!key || /[\s\p{Cc}]/u.test(key)) throw new Error();
+    return key;
+  } catch {
+    throw new Error("Official OpenAI API key configuration is invalid");
+  } finally {
+    if (fd !== undefined) {
+      try { fs.closeSync(fd); } catch {}
+    }
+  }
+}
+
+function isAmdApiRoot(value: unknown): boolean {
+  if (typeof value !== "string" || !/^https:\/\/developer\.amd\.com\.cn\/radeon\/api\/v1\/?$/i.test(value.trim())) return false;
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && url.hostname.toLowerCase() === "developer.amd.com.cn"
+      && !url.username && !url.password && !url.port && !url.search && !url.hash
+      && (url.pathname === "/radeon/api/v1" || url.pathname === "/radeon/api/v1/");
+  } catch {
+    return false;
+  }
+}
+
+function configuredAmdProfile(config: LlmProfilesConfig | null): LlmProfile | undefined {
+  if (!config) return undefined;
+  const candidates = Object.values(config.profiles).filter(profile =>
+    profile && isAmdApiRoot(profile.baseUrl) && typeof profile.apiKey === "string" && Boolean(profile.apiKey.trim()),
+  );
+  const activeId = process.env.LLM_PROFILE?.trim() || config.activeProfile;
+  const active = config.profiles[activeId];
+  return active && candidates.includes(active) ? active : candidates[0];
+}
+
+function getBuiltInProfiles(config: LlmProfilesConfig | null): Array<{ id: string; profile: LlmProfile }> {
+  const configuredAmd = isTestEnvironment() ? undefined : configuredAmdProfile(config);
+  const testAmdKey = isTestEnvironment() ? process.env.AMD_API_KEY?.trim() || "" : "";
+  return [
+    {
+      id: OPENAI_OFFICIAL_PROFILE_ID,
+      profile: {
+        name: "OpenAI official API · GPT-6 Luna",
+        baseUrl: OPENAI_OFFICIAL_BASE,
+        apiKey: resolveOfficialOpenAiKey(),
+        model: "gpt-6-luna",
+        visionModel: "gpt-6-luna",
+      },
+    },
+    {
+      id: AMD_V41_PROFILE_ID,
+      profile: {
+        name: "AMD · DeepSeek V4.1 Flash",
+        baseUrl: AMD_V41_BASE,
+        apiKey: configuredAmd?.apiKey?.trim() || testAmdKey,
+        ...(configuredAmd?.headers ? { headers: configuredAmd.headers } : {}),
+        ...(configuredAmd?.completionExtras ? { completionExtras: configuredAmd.completionExtras } : {}),
+        model: "DeepSeek-V4.1-Flash",
+        visionModel: "DeepSeek-V4.1-Flash",
+      },
+    },
+  ];
+}
+
+/** Fallback profile created from explicitly configured legacy environment variables. */
+function getLegacyEnvProfile(): LlmProfile {
+  const explicitBase = process.env.AI_BASE_URL || process.env.OPENAI_BASE_URL;
+  const baseUrl = (explicitBase || "https://opencode.ai/zen/go/v1").replace(/\/+$/, "");
+  const apiKey = process.env.AI_API_KEY || (explicitBase ? process.env.OPENAI_API_KEY : "") || "";
   const model = process.env.AI_MODEL || process.env.OPENAI_MODEL || "Qwen3.8-Flash-Next";
   const visionModel = process.env.AI_VISION_MODEL || "Qwen3.8-Flash-Next";
 
-  return {
-    name: "Legacy Environment",
-    baseUrl,
-    apiKey,
-    model,
-    visionModel,
-  };
+  return { name: "Legacy Environment", baseUrl, apiKey, model, visionModel };
 }
 
-let cachedConfig: { mtimeMs: number; config: LlmProfilesConfig } | null = null;
+let cachedConfig: { filePath: string; mtimeMs: number; config: LlmProfilesConfig } | null = null;
 
 export function loadLlmProfilesConfig(): LlmProfilesConfig | null {
   const filePath = getProfilesFilePath();
@@ -69,13 +148,13 @@ export function loadLlmProfilesConfig(): LlmProfilesConfig | null {
       return null;
     }
     const stat = fs.statSync(filePath);
-    if (cachedConfig && cachedConfig.mtimeMs === stat.mtimeMs) {
+    if (cachedConfig && cachedConfig.filePath === filePath && cachedConfig.mtimeMs === stat.mtimeMs) {
       return cachedConfig.config;
     }
     const content = fs.readFileSync(filePath, "utf-8");
     const parsed = JSON.parse(content) as LlmProfilesConfig;
     if (parsed && typeof parsed === "object" && parsed.profiles) {
-      cachedConfig = { mtimeMs: stat.mtimeMs, config: parsed };
+      cachedConfig = { filePath, mtimeMs: stat.mtimeMs, config: parsed };
       return parsed;
     }
   } catch (err) {
@@ -84,46 +163,138 @@ export function loadLlmProfilesConfig(): LlmProfilesConfig | null {
   return null;
 }
 
+export function listLlmProfileEntries(): Array<{ id: string; profile: LlmProfile }> {
+  // Tests use only virtual environment keys and never load the operator profile file.
+  const configured = isTestEnvironment() ? null : loadLlmProfilesConfig();
+  const builtIns = getBuiltInProfiles(configured);
+  const custom = configured
+    ? Object.entries(configured.profiles)
+        .filter(([id, profile]) => ![OPENAI_OFFICIAL_PROFILE_ID, AMD_V41_PROFILE_ID].includes(id) && Boolean(profile && profile.baseUrl))
+        .map(([id, profile]) => ({ id, profile }))
+    : [];
+  const hasLegacyConfig = isTestEnvironment() || Boolean(
+    process.env.AI_BASE_URL || process.env.OPENAI_BASE_URL || process.env.AI_API_KEY,
+  );
+  const legacy = hasLegacyConfig && !custom.some(({ id }) => id === "default")
+    ? [{ id: "default", profile: getLegacyEnvProfile() }]
+    : [];
+  return [...builtIns, ...custom, ...legacy];
+}
+
+export function getLlmProfileById(profileId: string): LlmProfile | null {
+  return listLlmProfileEntries().find((entry) => entry.id === profileId)?.profile || null;
+}
+
+export function isOfficialOpenAiProfileActive(): boolean {
+  return getActiveLlmProfileId() === OPENAI_OFFICIAL_PROFILE_ID;
+}
+
+export function getActiveLlmProfileId(): string {
+  const scoped = profileScope.getStore();
+  if (scoped) return scoped.profileId;
+  if (isTestEnvironment()) return "default";
+  const requested = process.env.LLM_PROFILE?.trim();
+  if (requested && getLlmProfileById(requested)?.baseUrl) return requested;
+  return OPENAI_OFFICIAL_PROFILE_ID;
+}
+
+export function getLlmProfileScope(): ScopedLlmProfile | undefined {
+  return profileScope.getStore();
+}
+
+/** Apply a validated profile/model only for the current async request chain. */
+export function runWithLlmProfileScope<T>(
+  profileId: string | null,
+  modelId: string | null,
+  callback: () => T,
+): T {
+  if (!profileId || !modelId) return profileScope.run(undefined, callback);
+  const profile = getLlmProfileById(profileId);
+  if (!profile || !profile.apiKey) {
+    throw new Error("Selected LLM profile is unavailable");
+  }
+  return profileScope.run({
+    profileId,
+    modelId,
+    profile: { ...profile, model: modelId, visionModel: modelId },
+  }, callback);
+}
+
+export function resolveLlmProfileModel(profile: LlmProfile, vision = false): string {
+  if (vision) {
+    if (profile.visionModel && profile.visionModel !== "hermes-agent") return profile.visionModel;
+    const configured = process.env.AI_VISION_MODEL;
+    if (configured && configured !== "hermes-agent") return configured;
+    return "Qwen3.8-Flash-Next";
+  }
+
+  if (profile.model) {
+    if (profile.model === "hermes-agent" || (profile.baseUrl.includes("opencode.ai") && profile.model.includes("muse-spark"))) {
+      return "Qwen3.8-Flash-Next";
+    }
+    return profile.model;
+  }
+
+  if (process.env.OPENROUTER_API_KEY && !process.env.AI_BASE_URL && !process.env.OPENAI_BASE_URL) {
+    return process.env.OPENROUTER_MODEL || "muse-spark-1.2-contributor";
+  }
+  const model = process.env.AI_MODEL || process.env.OPENAI_MODEL || "";
+  if (!model || model === "hermes-agent" || (profile.baseUrl.includes("opencode.ai") && model.includes("muse-spark"))) {
+    return "Qwen3.8-Flash-Next";
+  }
+  return model;
+}
+
+export function getLlmProviderId(baseUrl: string): string {
+  try {
+    const host = new URL(baseUrl).hostname.toLowerCase();
+    if (host === "openrouter.ai" || host.endsWith(".openrouter.ai")) return "openrouter";
+    if (host === "opencode.ai" || host.endsWith(".opencode.ai")) return "opencode";
+    if (host === "api.openai.com" || host.endsWith(".openai.com")) return "openai";
+  } catch {}
+  return "custom";
+}
+
+export function getLlmProfileProvider(profile: LlmProfile): string {
+  const ignored = /:8642\b/.test(profile.baseUrl || "");
+  const baseUrl = profile.baseUrl && !ignored
+    ? profile.baseUrl
+    : process.env.OPENROUTER_API_KEY && !process.env.AI_BASE_URL && !process.env.OPENAI_BASE_URL
+      ? "https://openrouter.ai/api/v1"
+      : process.env.AI_BASE_URL || process.env.OPENAI_BASE_URL || "https://openrouter.ai/api/v1";
+  return getLlmProviderId(baseUrl);
+}
+
 export function getActiveLlmProfile(): LlmProfile {
+  const scoped = profileScope.getStore();
+  if (scoped) return scoped.profile;
+
   // During tests, always enforce isolated environment configuration
   if (isTestEnvironment()) {
     return getLegacyEnvProfile();
   }
 
-  const config = loadLlmProfilesConfig();
-  if (!config) {
-    return getLegacyEnvProfile();
+  const requested = process.env.LLM_PROFILE?.trim();
+  if (requested) {
+    const profile = getLlmProfileById(requested);
+    if (profile?.baseUrl) return profile;
   }
-
-  const activeKey = process.env.LLM_PROFILE || config.activeProfile;
-  const profile = config.profiles[activeKey];
-  if (profile && profile.baseUrl) {
-    return profile;
+  if (!isTestEnvironment()) {
+    const official = getLlmProfileById(OPENAI_OFFICIAL_PROFILE_ID);
+    if (official) return official;
   }
-
-  // Fallback if active key not found
-  const firstProfile = Object.values(config.profiles)[0];
-  if (firstProfile && firstProfile.baseUrl) {
-    return firstProfile;
-  }
-
   return getLegacyEnvProfile();
 }
 
 export function getLlmProfiles(): { activeProfile: string; profiles: Record<string, LlmProfile> } {
-  const config = loadLlmProfilesConfig();
-  if (!config) {
-    const legacy = getLegacyEnvProfile();
-    return {
-      activeProfile: "default",
-      profiles: { default: legacy },
-    };
-  }
-
-  const activeKey = process.env.LLM_PROFILE || config.activeProfile;
+  const entries = listLlmProfileEntries();
+  const requested = process.env.LLM_PROFILE?.trim();
+  const activeProfile = requested && entries.some(({ id }) => id === requested)
+    ? requested
+    : isTestEnvironment() ? "default" : OPENAI_OFFICIAL_PROFILE_ID;
   return {
-    activeProfile: activeKey,
-    profiles: config.profiles,
+    activeProfile,
+    profiles: Object.fromEntries(entries.map(({ id, profile }) => [id, profile])),
   };
 }
 
@@ -187,7 +358,7 @@ export function switchActiveProfile(
 
     const selectedProfile = parsed.profiles[profileId];
 
-    if (options.syncEnv) {
+    if (options.syncEnv && ![OPENAI_OFFICIAL_PROFILE_ID, AMD_V41_PROFILE_ID].includes(profileId)) {
       syncActiveProfileToEnv(selectedProfile, profileId);
     }
 

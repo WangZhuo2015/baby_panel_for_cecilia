@@ -41,6 +41,7 @@ import {
 } from "@/lib/date";
 import { calculateAge } from "@/lib/age";
 import type { AiDailySummaryResult } from "@/types/daily-summary";
+import type { ScheduledDailySummary } from "@/lib/growdesk/scheduled-daily-summary";
 import { DailySummaryPosterModal } from "@/components/daily-summary/DailySummaryPosterModal";
 import { BabyAvatar } from "@/components/ui/BabyAvatar";
 
@@ -88,6 +89,7 @@ export default function DailySummaryPage() {
   );
 
   const [summary, setSummary] = useState<AiDailySummaryResult | null>(null);
+  const [scheduledSummary, setScheduledSummary] = useState<ScheduledDailySummary | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const requestSeqRef = useRef(0);
@@ -141,6 +143,9 @@ export default function DailySummaryPage() {
     if (summary && (summary.babyId !== babyId || summary.date !== date)) {
       setSummary(null);
     }
+    if (scheduledSummary && (scheduledSummary.babyId !== babyId || scheduledSummary.date !== date)) {
+      setScheduledSummary(null);
+    }
     setError(null);
     setLoading(true);
 
@@ -157,6 +162,12 @@ export default function DailySummaryPage() {
       }
       if (requestId === requestSeqRef.current) {
         setSummary(body.summary);
+        const scheduled = body.scheduledSummary;
+        setScheduledSummary(
+          scheduled && scheduled.babyId === babyId && scheduled.date === date
+            ? scheduled as ScheduledDailySummary
+            : null,
+        );
         setError(null);
       }
     } catch (caught) {
@@ -470,6 +481,53 @@ ${summary.sections.tomorrowTips}
                 查看昨日完整日报 👈
               </button>
             </div>
+          )}
+
+          {scheduledSummary && scheduledSummary.babyId === baby?.id && scheduledSummary.date === selectedDate && (
+            <CuteCard className="space-y-3 border border-amber-300/70 bg-gradient-to-br from-amber-50/80 to-orange-50/40 p-4 shadow-soft dark:from-amber-950/20 dark:to-transparent">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div>
+                  <h2 className="text-sm font-bold text-text-primary">定时日报 · AMD</h2>
+                  <p className="mt-0.5 text-[10px] text-text-muted">
+                    AMD {scheduledSummary.llm.model} · 生成于 {new Date(scheduledSummary.generatedAt).toLocaleString("zh-CN")}
+                  </p>
+                </div>
+                <span className="rounded-full bg-amber-100 px-2.5 py-1 text-[10px] font-bold text-amber-900 dark:bg-amber-900/50 dark:text-amber-200">
+                  {scheduledSummary.overallScore} · {scheduledSummary.overallRating.toFixed(1)} / 5
+                </span>
+              </div>
+              <h3 className="text-sm font-semibold leading-relaxed text-text-primary">{scheduledSummary.headline}</h3>
+              {scheduledSummary.highlights.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {scheduledSummary.highlights.map((item, index) => (
+                    <span key={index} className="rounded-xl border border-amber-200 bg-white/80 px-2.5 py-1 text-[11px] text-text-primary dark:bg-card/80">{item}</span>
+                  ))}
+                </div>
+              )}
+              <div className="space-y-2 border-t border-amber-200/70 pt-3 dark:border-amber-900/50">
+                {([
+                  ["喂养", scheduledSummary.sections.feeding],
+                  ["睡眠", scheduledSummary.sections.sleep],
+                  ["排便", scheduledSummary.sections.diaper],
+                  ["生长与照护", scheduledSummary.sections.growthAndCare],
+                  ["明日建议", scheduledSummary.sections.tomorrowTips],
+                ] as const).map(([label, text]) => (
+                  <section key={label}>
+                    <h4 className="mb-1 text-[11px] font-bold text-text-secondary">{label}</h4>
+                    <FormattedSectionText text={text} />
+                  </section>
+                ))}
+              </div>
+              {scheduledSummary.suggestedQuestions.length > 0 && (
+                <div className="border-t border-amber-200/70 pt-2 dark:border-amber-900/50">
+                  <h4 className="mb-1 text-[11px] font-bold text-text-secondary">可以继续关注</h4>
+                  <ul className="list-inside list-disc space-y-1 text-xs text-text-primary">
+                    {scheduledSummary.suggestedQuestions.map((question, index) => <li key={index}>{question}</li>)}
+                  </ul>
+                </div>
+              )}
+              <p className="border-t border-amber-200/70 pt-2 text-[10px] leading-relaxed text-text-muted dark:border-amber-900/50">{scheduledSummary.disclaimer}</p>
+            </CuteCard>
           )}
 
           {/* 3. Status Score & Headline Card */}

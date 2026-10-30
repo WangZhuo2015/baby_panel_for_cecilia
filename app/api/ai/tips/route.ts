@@ -1,3 +1,4 @@
+import { llmRoute } from "@/lib/llm-route";
 import { NextResponse } from "next/server";
 import { getAiTips } from "@/lib/ai-tips";
 import { requireAuth, requireBaby } from "@/lib/api-helpers";
@@ -8,7 +9,7 @@ import { loadWebBaby } from "@/lib/growdesk/bridge-identity";
 import { growdeskFetch } from "@/lib/growdesk/client";
 import { BridgeError, bridgeErrorResponse } from "@/lib/growdesk/bridge-protocol";
 
-export async function GET(request: Request) {
+async function handleGET(request: Request) {
   try {
     if (GROWDESK_CONFIG.enabled) {
       const bffSession = await resolveBffSession(request);
@@ -53,3 +54,5 @@ export async function GET(request: Request) {
     );
   }
 }
+
+export const GET = llmRoute("tips", handleGET);

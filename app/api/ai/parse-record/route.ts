@@ -1,3 +1,6 @@
+import { llmFetch } from "@/lib/llm-provenance";
+import { hasCurrentLlmConfiguration } from "@/lib/llm-context";
+import { llmRoute } from "@/lib/llm-route";
 import { NextResponse } from "next/server";
 import { requireAuth, requireBaby } from "@/lib/api-helpers";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
@@ -21,7 +24,7 @@ const HINT: Record<string, string> = {
   medical: "当前在化验单页，优先输出 medical_report。",
 };
 
-export async function POST(request: Request) {
+async function handlePOST(request: Request) {
   let userId: string;
   let accessToken: string | undefined;
 
@@ -48,7 +51,7 @@ export async function POST(request: Request) {
     );
   }
 
-  if (!AI_CONFIG.apiKey) {
+  if (!hasCurrentLlmConfiguration()) {
     return NextResponse.json({ error: "未配置大模型，无法整理语音记录" }, { status: 503 });
   }
 
@@ -88,7 +91,7 @@ food.data: date?, time?(HH:mm), foods(string[]), portion?(little|half|most|all),
 不要假装已经保存。`;
 
   try {
-    const res = await fetch(`${AI_CONFIG.baseUrl.replace(/\/+$/, "")}/chat/completions`, {
+    const res = await llmFetch(`${AI_CONFIG.baseUrl.replace(/\/+$/, "")}/chat/completions`, {
       method: "POST",
       headers: AI_CONFIG.headers,
       body: JSON.stringify({
@@ -119,3 +122,5 @@ food.data: date?, time?(HH:mm), foods(string[]), portion?(little|half|most|all),
     return NextResponse.json({ error: "整理记录失败，请稍后重试" }, { status: 502 });
   }
 }
+
+export const POST = llmRoute("record_parse", handlePOST);
