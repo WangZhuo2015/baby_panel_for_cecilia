@@ -7,6 +7,7 @@ import vm from "node:vm";
 import { createRequire } from "node:module";
 import { transformSync } from "esbuild";
 import { BridgeError, bridgeErrorResponse, requireData } from "../../lib/growdesk/bridge-protocol";
+import * as chatRetry from "../../lib/agent/chat-retry";
 
 // Execute the actual module with explicit boundaries; no SQLite, file-store or LLM side effects.
 const require = createRequire(import.meta.url);
@@ -25,6 +26,78 @@ const session = { id: "test_session", userId: "test_user", babyId: "test_baby", 
 function chat(enabled = true, validSession = true, deniedBaby = false) {
   const calls: string[] = [];
   const bff = { user: { id: "test_user" }, accessToken: "test_token" };
+  const chatSession = { ...session, messages: [] as any[] };
+  const claimedMessageIds = new Set<string>();
+  type TestChatRun = {
+    sessionId: string;
+    userId: string;
+    turnId: string;
+    sessionMeta: any;
+    status: string;
+    subscribers: Set<unknown>;
+    [key: string]: any;
+  };
+  const runsBySession = new Map<string, TestChatRun>();
+  const runsByTurn = new Map<string, TestChatRun>();
+  const activeChatRunManager = {
+    get: (sessionId: string) => runsBySession.get(sessionId) ?? null,
+    getByTurnId: (userId: string, turnId: string) => runsByTurn.get(`${userId}:${turnId}`) ?? null,
+    startRun: (params: any) => {
+      calls.push("run");
+      const run: TestChatRun = {
+        ...params,
+        status: "running",
+        subscribers: new Set(),
+        fullText: "",
+        toolTraces: [],
+        llm: params.llmInfo,
+      };
+      runsBySession.set(run.sessionId, run);
+      runsByTurn.set(`${run.userId}:${run.turnId}`, run);
+      return run;
+    },
+    attachRunSubscriber: (run: TestChatRun, subscriber: (event: any) => void) => {
+      subscriber({ type: "session", session: run.sessionMeta });
+      subscriber({ type: "done" });
+      return true;
+    },
+    detachRunSubscriber: (run: TestChatRun, subscriber: (event: any) => void) => {
+      run.subscribers.delete(subscriber);
+    },
+  };
+  const bffAiSessionStore = {
+    getSession: async (_id: string, userId: string, token: string) => {
+      assert.equal(userId, "test_user");
+      assert.equal(token, "test_token");
+      return chatSession;
+    },
+    createSession: async () => chatSession,
+    addMessage: async (_id: string, userId: string, message: Record<string, unknown>, token: string) => {
+      calls.push("append");
+      assert.equal(_id, "test_session");
+      assert.equal(userId, "test_user");
+      assert.equal(token, "test_token");
+      assert.equal(message.claim, true);
+      assert.equal(message.role, "user");
+      assert.equal(typeof message.id, "string");
+      const messageId = message.id as string;
+      if (claimedMessageIds.has(messageId)) return { created: false };
+      claimedMessageIds.add(messageId);
+      chatSession.messages.push({
+        id: messageId,
+        role: message.role,
+        content: message.content,
+        image: message.image,
+        toolsJson: message.toolsJson,
+      });
+      return { created: true };
+    },
+  };
+  class TestChatGPTPlanError extends Error {
+    constructor(public code: string) {
+      super(code);
+    }
+  }
   const route = load("app/api/ai/chat/route.ts", {
     "next/server": { NextResponse: Response },
     "@/lib/config": { GROWDESK_CONFIG: { enabled } },
@@ -37,10 +110,25 @@ function chat(enabled = true, validSession = true, deniedBaby = false) {
     "@/lib/growdesk/client": { growdeskFetch: async () => { throw new Error("Use mocked loadWebBaby"); } },
     "@/lib/growdesk/bridge-identity": { loadWebBaby: async (_fetch: unknown, token: string, babyId: string) => { calls.push("baby"); assert.equal(token, "test_token"); assert.equal(babyId, "test_baby"); if (deniedBaby) throw new BridgeError(403, "BABY_ACCESS_DENIED", "test_denied"); return { id: babyId, familyId: "test_family" }; } },
     "@/lib/growdesk/bridge-protocol": { BridgeError },
-    "@/lib/growdesk/ai-sessions": { bffAiSessionStore: { getSession: async (_id: string, userId: string, token: string) => { assert.equal(userId, "test_user"); assert.equal(token, "test_token"); return session; }, createSession: async () => session, addMessage: async () => { calls.push("append"); return {}; } } },
+    "@/lib/growdesk/ai-sessions": { bffAiSessionStore },
     "@/lib/rate-limit": { getClientIp: () => "test_ip", checkRateLimit: () => ({ success: true }) },
     "@/lib/archive": { archiveText: async () => {} },
-    "@/lib/agent": { createLlmBackend: () => ({ getApiKey: () => "test_fake_key" }), buildAgentSystemPrompt: () => "test_prompt", activeChatRunManager: { get: () => null, startRun: () => { calls.push("run"); }, attachSubscriber: (_id: string, cb: any) => cb({ type: "done" }) } },
+    "@/lib/agent": { createLlmBackend: () => ({ getApiKey: () => "test_fake_key" }), buildAgentSystemPrompt: () => "test_prompt", activeChatRunManager },
+    "@/lib/agent/chat-retry": chatRetry,
+    "@/lib/chatgpt-plan": {
+      createChatGPTBackend: async () => { throw new Error("ChatGPT backend must not start in these route tests"); },
+      ChatGPTPlanError: TestChatGPTPlanError,
+      planErrorMessage: (error: TestChatGPTPlanError) => error.message,
+    },
+    "@/lib/llm-context": {
+      withLlmFeature: async (_userId: string, _feature: string, _accessToken: string | undefined, work: () => unknown) => work(),
+      getCurrentLlmFeatureScope: () => undefined,
+      getCurrentLlmModelInfo: () => undefined,
+    },
+    "@/lib/llm-profiles": {
+      getLlmProfileById: () => undefined,
+      resolveLlmProfileModel: () => undefined,
+    },
   });
   return { route, calls };
 }
