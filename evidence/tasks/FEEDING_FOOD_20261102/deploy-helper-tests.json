@@ -1,0 +1,18 @@
+[
+  {
+    "case": "unmanifested-file",
+    "refused": true
+  },
+  {
+    "case": "private-env",
+    "refused": true
+  },
+  {
+    "case": "changed-reviewed-code",
+    "refused": true
+  },
+  {
+    "case": "escaping-symlink",
+    "refused": true
+  }
+]

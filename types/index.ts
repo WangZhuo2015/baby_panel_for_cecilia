@@ -174,11 +174,23 @@ export interface FoodPlan {
   steps: string[];
 }
 
+export type FoodCategoryRole = 'staple' | 'protein' | 'vegetable' | 'fruit' | 'oil' | 'optional' | 'other';
+
+export interface FoodMealComponent {
+  role: FoodCategoryRole;
+  name: string;
+  grams?: number;
+  foodId?: string;
+  icon?: string;
+}
+
 export interface FoodLogRecord {
   id: string;
   date: string;
   time: string;
   foods: string[];
+  components?: FoodMealComponent[];
+  totalGrams?: number;
   portion: 'little' | 'half' | 'most' | 'all';
   acceptance: number;
   babyState: 'happy' | 'neutral' | 'rejected';

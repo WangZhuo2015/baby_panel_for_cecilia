@@ -4,6 +4,7 @@ if (typeof window !== "undefined") {
 
 import { BridgeError, calendarDate, isoTimestamp, wireVersion } from "./bridge-protocol";
 import { foodItemIds, legacyVersion, legacyWallClock, optionalText, requiredEnum, requiredTimestamp } from "./record-compat-helpers";
+import { FOOD_OBSERVATION_KEYS as OBSERVATION_KEYS, FOOD_OBSERVATION_PREFIX as OBSERVATION_PREFIX, serializeFoodNotes } from "../food-log-limits";
 
 export interface LegacyFoodRecord {
   id: string;
@@ -16,6 +17,8 @@ export interface LegacyFoodRecord {
   portion?: string | null;
   reaction?: string | null;
   notes?: string | null;
+  components?: unknown;
+  totalGrams?: number;
   acceptance?: number;
   babyState?: string;
   hasAbnormal?: boolean;
@@ -52,8 +55,6 @@ const REACTIONS = ["like", "normal", "dislike"] as const;
 // assume modern Asia/Shanghai (UTC+08:00), never the Node host's timezone.
 const FOOD_FAMILY_TIMEZONE = "Asia/Shanghai";
 const FOOD_FAMILY_UTC_OFFSET = "+08:00";
-const OBSERVATION_KEYS = ["acceptance", "babyState", "hasAbnormal", "abnormalNotes"] as const;
-const OBSERVATION_PREFIX = "[growdesk-web-food:v1]";
 
 // The backend has no observation fields. A versioned JSON notes envelope keeps
 // them losslessly alongside human notes; untagged/malformed notes stay literal.
@@ -76,7 +77,7 @@ function encodeNotes(body: Record<string, unknown>, existingNotes: string | null
   for (const key of OBSERVATION_KEYS) if (body[key] !== undefined) observations[key] = body[key];
   if (!Object.keys(observations).length) return notes;
   // Reject oversize data, never truncate or silently lose legacy observations.
-  return optionalText(OBSERVATION_PREFIX + JSON.stringify({ notes, observations }), "notes");
+  return optionalText(serializeFoodNotes(notes, observations), "notes");
 }
 
 function inferredMealType(body: Record<string, unknown>): GrowDeskFoodRecord["mealType"] {
@@ -126,9 +127,21 @@ function updateOccurredAt(body: Record<string, unknown>, date: string | undefine
   return wallClockOccurredAt(calendarDate(date), body.time);
 }
 
+function submittedFoods(body: Record<string, unknown>): unknown {
+  if (body.foodItemIds !== undefined) return body.foodItemIds;
+  // Explicit names can also include legacy entries without weighted components.
+  if (body.foods !== undefined) return body.foods;
+  if (Array.isArray(body.components)) {
+    return body.components.map((component: unknown) =>
+      component && typeof component === "object" && "name" in component ? component.name : null
+    );
+  }
+  return undefined;
+}
+
 export function toGrowDeskFoodCreatePayload(body: Record<string, unknown>) {
   const date = recordDate(body);
-  const rawFoods = body.foodItemIds !== undefined ? body.foodItemIds : body.foods;
+  const rawFoods = submittedFoods(body);
   return {
     recordDate: date,
     mealType: inferredMealType(body),
@@ -150,7 +163,7 @@ export function toGrowDeskFoodUpdatePayload(body: Record<string, unknown>, exist
   if (body.mealType !== undefined) payload.mealType = mealType(body.mealType);
   const occurredAt = updateOccurredAt(body, date ?? (typeof body.recordDate === "string" ? body.recordDate : typeof body.date === "string" ? body.date : undefined));
   if (occurredAt !== undefined) payload.occurredAt = occurredAt;
-  if (body.foodItemIds !== undefined || body.foods !== undefined) payload.foodItemIds = foodItemIds(body.foodItemIds !== undefined ? body.foodItemIds : body.foods);
+  if (body.foodItemIds !== undefined || body.foods !== undefined || body.components !== undefined) payload.foodItemIds = foodItemIds(submittedFoods(body));
   if (body.portionDescription !== undefined || body.portion !== undefined) payload.portionDescription = portion(body.portionDescription !== undefined ? body.portionDescription : body.portion);
   if (body.reaction !== undefined) payload.reaction = reaction(body.reaction);
   if (body.notes !== undefined || OBSERVATION_KEYS.some(key => body[key] !== undefined)) payload.notes = encodeNotes(body, existing?.notes);

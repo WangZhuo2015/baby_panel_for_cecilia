@@ -24,6 +24,13 @@ import { estimateNursingVolumeMl } from "@/lib/nutrition/breastmilk";
 import type { FeedingType, FeedingRecord } from "@/types";
 
 const FORMULA_PRESETS = [60, 90, 120, 150, 180, 210, 240];
+const MILK_STEP_ML = 5;
+const MIN_MILK_ML = 0;
+const MAX_MILK_ML = 3000;
+
+function clampMilkMl(value: number): number {
+  return Math.min(MAX_MILK_ML, Math.max(MIN_MILK_ML, value));
+}
 
 function isoToLocalHHMM(iso?: string): string {
   if (!iso) return "";
@@ -69,12 +76,13 @@ export function FeedingForm({
     return (initialData?.type as FeedingType) || "formula";
   });
 
+  // Keep saved amounts as entered; +/- controls adjust from the current value without snapping to a 5 ml grid.
   const [amount, setAmount] = useState<number>(() => {
     return typeof initialData?.amountMl === "number" ? initialData.amountMl : 120;
   });
 
   const [customBreastMl, setCustomBreastMl] = useState<number | null>(() => {
-    if (initialData?.type === "breast" && typeof initialData?.amountMl === "number" && initialData.amountMl > 0) {
+    if (initialData?.type === "breast" && typeof initialData?.amountMl === "number" && initialData.amountMl >= 0) {
       return initialData.amountMl;
     }
     return null;
@@ -313,7 +321,7 @@ export function FeedingForm({
                 <p className="text-[10px] text-text-muted mt-0.5">
                   {feedingType === "mixed"
                     ? `母乳约${estimatedBreastMl}ml + 配方${amount}ml，合计约${estimatedBreastMl + (amount || 0)}ml`
-                    : "按双侧活跃吸吮时长科学折算，支持微调"}
+                    : `按双侧活跃吸吮时长折算，可每次增减${MILK_STEP_ML}ml微调`}
                 </p>
               </div>
             </div>
@@ -330,9 +338,10 @@ export function FeedingForm({
               <div className="flex items-center gap-1">
                 <button
                   type="button"
-                  onClick={() => setCustomBreastMl(Math.max(0, effectiveBreastMl - 10))}
+                  onClick={() => setCustomBreastMl((current) => clampMilkMl((current ?? estimatedBreastMl) - MILK_STEP_ML))}
                   className="w-7 h-7 rounded-full bg-pink-50 text-pink-700 border border-pink-200 text-xs font-bold flex items-center justify-center btn-press hover:bg-pink-100"
-                  title="-10ml"
+                  aria-label={`预估母乳摄入量减少${MILK_STEP_ML}毫升`}
+                  title={`-${MILK_STEP_ML}ml`}
                 >
                   -
                 </button>
@@ -344,9 +353,10 @@ export function FeedingForm({
                 </div>
                 <button
                   type="button"
-                  onClick={() => setCustomBreastMl(effectiveBreastMl + 10)}
+                  onClick={() => setCustomBreastMl((current) => clampMilkMl((current ?? estimatedBreastMl) + MILK_STEP_ML))}
                   className="w-7 h-7 rounded-full bg-pink-50 text-pink-700 border border-pink-200 text-xs font-bold flex items-center justify-center btn-press hover:bg-pink-100"
-                  title="+10ml"
+                  aria-label={`预估母乳摄入量增加${MILK_STEP_ML}毫升`}
+                  title={`+${MILK_STEP_ML}ml`}
                 >
                   +
                 </button>
@@ -373,7 +383,7 @@ export function FeedingForm({
             <h3 className="text-xs font-bold text-text-secondary uppercase tracking-wider">
               {feedingType === "bottle_breast" ? "瓶喂母乳量" : "配方奶量"}
             </h3>
-            <span className="text-xs text-text-muted">点击或微调奶量</span>
+            <span className="text-xs text-text-muted">快捷预设或每次±{MILK_STEP_ML}ml微调</span>
           </div>
 
           {/* 🍼 奶粉选择与快捷管理 (在配方奶或混合喂养时始终展示) */}
@@ -465,8 +475,10 @@ export function FeedingForm({
           <div className="flex items-center justify-center gap-4 py-2">
             <button
               type="button"
-              onClick={() => setAmount(Math.max(10, amount - 10))}
+              onClick={() => setAmount((current) => clampMilkMl(current - MILK_STEP_ML))}
               className="w-10 h-10 rounded-full bg-primary-light text-primary flex items-center justify-center btn-press font-bold hover:bg-primary/20"
+              aria-label={`奶量减少${MILK_STEP_ML}毫升`}
+              title={`-${MILK_STEP_ML}ml`}
             >
               <Minus size={18} />
             </button>
@@ -480,8 +492,10 @@ export function FeedingForm({
 
             <button
               type="button"
-              onClick={() => setAmount(amount + 10)}
+              onClick={() => setAmount((current) => clampMilkMl(current + MILK_STEP_ML))}
               className="w-10 h-10 rounded-full bg-primary-light text-primary flex items-center justify-center btn-press font-bold hover:bg-primary/20"
+              aria-label={`奶量增加${MILK_STEP_ML}毫升`}
+              title={`+${MILK_STEP_ML}ml`}
             >
               <Plus size={18} />
             </button>

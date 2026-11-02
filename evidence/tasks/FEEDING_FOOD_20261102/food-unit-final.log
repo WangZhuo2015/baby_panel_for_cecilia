@@ -1,0 +1,269 @@
+TAP version 13
+# Subtest: FoodLogForm resolves only the selected baby's authorized family
+ok 1 - FoodLogForm resolves only the selected baby's authorized family
+  ---
+  duration_ms: 1.036206
+  type: 'test'
+  ...
+# Subtest: FoodLogForm exposes loading, disabled custom add, failure, and retry states
+ok 2 - FoodLogForm exposes loading, disabled custom add, failure, and retry states
+  ---
+  duration_ms: 0.713844
+  type: 'test'
+  ...
+# Subtest: F1 exact FoodLogForm onSubmit shape derives a deterministic meal type
+ok 3 - F1 exact FoodLogForm onSubmit shape derives a deterministic meal type
+  ---
+  duration_ms: 3.504218
+  type: 'test'
+  ...
+# Subtest: F2 legacy food observations round-trip create and update without overwriting human notes
+ok 4 - F2 legacy food observations round-trip create and update without overwriting human notes
+  ---
+  duration_ms: 31.26528
+  type: 'test'
+  ...
+# Subtest: F2 partial edits retain omitted observations and notes from the existing record
+ok 5 - F2 partial edits retain omitted observations and notes from the existing record
+  ---
+  duration_ms: 0.518083
+  type: 'test'
+  ...
+# Subtest: multiple food components and their individual weights survive create and partial edits
+ok 6 - multiple food components and their individual weights survive create and partial edits
+  ---
+  duration_ms: 2.148051
+  type: 'test'
+  ...
+# Subtest: explicit legacy names remain alongside weighted items, with component-only fallback
+ok 7 - explicit legacy names remain alongside weighted items, with component-only fallback
+  ---
+  duration_ms: 0.371801
+  type: 'test'
+  ...
+# Subtest: food form checks the exact adapter envelope and item limits before sending
+ok 8 - food form checks the exact adapter envelope and item limits before sending
+  ---
+  duration_ms: 1.439047
+  type: 'test'
+  ...
+# Subtest: default food projection matches the old PWA while extended keeps concurrency fields
+ok 9 - default food projection matches the old PWA while extended keeps concurrency fields
+  ---
+  duration_ms: 0.617244
+  type: 'test'
+  ...
+# Subtest: F4 Shanghai 20:00 maps to the correct instant and back on create/update
+ok 10 - F4 Shanghai 20:00 maps to the correct instant and back on create/update
+  ---
+  duration_ms: 0.655443
+  type: 'test'
+  ...
+# Subtest: F4 Shanghai 00:15 maps to the correct instant and back on create/update
+ok 11 - F4 Shanghai 00:15 maps to the correct instant and back on create/update
+  ---
+  duration_ms: 0.972605
+  type: 'test'
+  ...
+# ◇ injected env (17) from .env.test // tip: ◈ encrypted .env [www.dotenvx.com]
+# Subtest: food BFF forwards the selected family scope for list and create
+ok 12 - food BFF forwards the selected family scope for list and create
+  ---
+  duration_ms: 26.841978
+  type: 'test'
+  ...
+# Subtest: food store keys by family and ignores a late response after switching families
+ok 13 - food store keys by family and ignores a late response after switching families
+  ---
+  duration_ms: 2.730214
+  type: 'test'
+  ...
+# ◇ injected env (17) from .env.test // tip: ⌘ custom filepath { path: '/custom/path/.env' }
+# Subtest: F3 legacy create-as-tried forwards tried to backend and returns familyStatus
+ok 14 - F3 legacy create-as-tried forwards tried to backend and returns familyStatus
+  ---
+  duration_ms: 30.163714
+  type: 'test'
+  ...
+# Subtest: F3 create-as-tried survives the actual picker store reload
+ok 15 - F3 create-as-tried survives the actual picker store reload
+  ---
+  duration_ms: 10.122372
+  type: 'test'
+  ...
+# Subtest: F3 create without legacy status omits tried entirely
+ok 16 - F3 create without legacy status omits tried entirely
+  ---
+  duration_ms: 2.718734
+  type: 'test'
+  ...
+# Subtest: every reference food retains its preparation, nutrition and safety knowledge
+ok 17 - every reference food retains its preparation, nutrition and safety knowledge
+  ---
+  duration_ms: 13.895511
+  type: 'test'
+  ...
+# Subtest: custom food is not assigned another food knowledge and preserves explicit metadata
+ok 18 - custom food is not assigned another food knowledge and preserves explicit metadata
+  ---
+  duration_ms: 0.321202
+  type: 'test'
+  ...
+# Subtest: reference list follows legacy age then seed order regardless of upstream name sorting
+ok 19 - reference list follows legacy age then seed order regardless of upstream name sorting
+  ---
+  duration_ms: 5.355307
+  type: 'test'
+  ...
+# ◇ injected env (17) from .env.test // tip: ⌁ auth for agents [www.vestauth.com]
+# Subtest: food-plan CAS reader accepts only the canonical empty version 0 state
+ok 20 - food-plan CAS reader accepts only the canonical empty version 0 state
+  ---
+  duration_ms: 4.804585
+  type: 'test'
+  ...
+# Subtest: food-plan CAS reader preserves upstream failures and rejects malformed versions as upstream errors
+ok 21 - food-plan CAS reader preserves upstream failures and rejects malformed versions as upstream errors
+  ---
+  duration_ms: 2.476292
+  type: 'test'
+  ...
+# Subtest: products GET uses the requested baby family and exhausts formula pages
+ok 22 - products GET uses the requested baby family and exhausts formula pages
+  ---
+  duration_ms: 63.708766
+  type: 'test'
+  ...
+# Subtest: products GET propagates a paginated catalog outage instead of returning an empty list
+ok 23 - products GET propagates a paginated catalog outage instead of returning an empty list
+  ---
+  duration_ms: 9.83409
+  type: 'test'
+  ...
+# Subtest: formula creation sends the observed food-plan version
+ok 24 - formula creation sends the observed food-plan version
+  ---
+  duration_ms: 5.635629
+  type: 'test'
+  ...
+# Subtest: formula creation reports a food-plan 409 as a partial mutation
+ok 25 - formula creation reports a food-plan 409 as a partial mutation
+  ---
+  duration_ms: 4.570104
+  type: 'test'
+  ...
+# Subtest: formula creation propagates a food-plan 503 instead of merging an empty plan
+ok 26 - formula creation propagates a food-plan 503 instead of merging an empty plan
+  ---
+  duration_ms: 3.680419
+  type: 'test'
+  ...
+# Subtest: normalized supplement schedule and vaccine selection preserve legacy response shapes without food-plan writes
+ok 27 - normalized supplement schedule and vaccine selection preserve legacy response shapes without food-plan writes
+  ---
+  duration_ms: 26.854218
+  type: 'test'
+  ...
+# Subtest: recipe history preserves multiple dates and same-day rows with real stable identities
+ok 28 - recipe history preserves multiple dates and same-day rows with real stable identities
+  ---
+  duration_ms: 26.206454
+  type: 'test'
+  ...
+# Subtest: recipe append validates input and never adopts client-supplied identity or shared state
+ok 29 - recipe append validates input and never adopts client-supplied identity or shared state
+  ---
+  duration_ms: 2.071451
+  type: 'test'
+  ...
+# Subtest: first recipe uses empty version-zero state; missing upstream version fails closed
+ok 30 - first recipe uses empty version-zero state; missing upstream version fails closed
+  ---
+  duration_ms: 1.042046
+  type: 'test'
+  ...
+# ◇ injected env (17) from .env.test // tip: ⌘ enable debugging { debug: true }
+# actual store URL: /api/food/plans?babyId=test_baby&date=2026-09-17 route status: 200
+# actual store URL: /api/food/plans?babyId=test_baby_second&date=2026-09-17 route status: 200
+# Subtest: F5 food-page store reload retrieves the saved recipe for the selected baby
+ok 31 - F5 food-page store reload retrieves the saved recipe for the selected baby
+  ---
+  duration_ms: 50.82214
+  type: 'test'
+  ...
+# Subtest: F2 saved food observations survive the real timeline detail/conversion pipeline
+ok 32 - F2 saved food observations survive the real timeline detail/conversion pipeline
+  ---
+  duration_ms: 35.15738
+  type: 'test'
+  ...
+# ◇ injected env (17) from .env.test // tip: ⌘ enable debugging { debug: true }
+# Subtest: F3 custom food POST sends canonical allergenRisk, never legacy allergens
+ok 33 - F3 custom food POST sends canonical allergenRisk, never legacy allergens
+  ---
+  duration_ms: 24.771327
+  type: 'test'
+  ...
+# Subtest: F3 GET tried filter respects backend familyStatus.tried
+ok 34 - F3 GET tried filter respects backend familyStatus.tried
+  ---
+  duration_ms: 5.236146
+  type: 'test'
+  ...
+# Subtest: F2 actual log PUT reads existing observations before merging a partial edit
+ok 35 - F2 actual log PUT reads existing observations before merging a partial edit
+  ---
+  duration_ms: 29.535791
+  type: 'test'
+  ...
+# Subtest: F5 saving a recipe merges unwrapped planData and preserves supplementState
+ok 36 - F5 saving a recipe merges unwrapped planData and preserves supplementState
+  ---
+  duration_ms: 4.842265
+  type: 'test'
+  ...
+# Subtest: F5 GET exposes recipe date and fields at legacy top level
+ok 37 - F5 GET exposes recipe date and fields at legacy top level
+  ---
+  duration_ms: 2.829175
+  type: 'test'
+  ...
+# Subtest: F5 failed read must not overwrite the saved supplement state
+ok 38 - F5 failed read must not overwrite the saved supplement state
+  ---
+  duration_ms: 2.276172
+  type: 'test'
+  ...
+# Subtest: food recipe concurrent-save conflict propagates instead of claiming a new recipe exists
+ok 39 - food recipe concurrent-save conflict propagates instead of claiming a new recipe exists
+  ---
+  duration_ms: 3.420818
+  type: 'test'
+  ...
+# Subtest: food create uses the selected baby even when the form carries an empty babyId
+ok 40 - food create uses the selected baby even when the form carries an empty babyId
+  ---
+  duration_ms: 26.445576
+  type: 'test'
+  ...
+# Subtest: food update carries the captured baby scope and ignores a late response after switching babies
+ok 41 - food update carries the captured baby scope and ignores a late response after switching babies
+  ---
+  duration_ms: 1.608088
+  type: 'test'
+  ...
+# Subtest: food delete carries the captured baby scope and ignores a late response after switching babies
+ok 42 - food delete carries the captured baby scope and ignores a late response after switching babies
+  ---
+  duration_ms: 2.514893
+  type: 'test'
+  ...
+1..42
+# tests 42
+# suites 0
+# pass 42
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 2518.44925
