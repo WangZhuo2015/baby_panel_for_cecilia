@@ -1,0 +1,1390 @@
+[
+  {
+    "width": 320,
+    "scrollWidth": 320,
+    "height": 1748,
+    "controls": [
+      {
+        "name": "返回",
+        "width": 44,
+        "height": 44
+      },
+      {
+        "name": "切换到深色模式",
+        "width": 36,
+        "height": 36
+      },
+      {
+        "name": "语音快速录入说完后会弹出卡片，确认才写入档案",
+        "width": 262,
+        "height": 66
+      },
+      {
+        "name": "",
+        "width": 256,
+        "height": 50
+      },
+      {
+        "name": "",
+        "width": 256,
+        "height": 50
+      },
+      {
+        "name": "🎲 随机转一转",
+        "width": 120,
+        "height": 28
+      },
+      {
+        "name": "🥣 经典高铁补铁餐米粉 20g + 牛肉 25g + 西蓝花 30g",
+        "width": 208,
+        "height": 56
+      },
+      {
+        "name": "🐟 深海鱼健脑餐大米粥 25g + 三文鱼 20g + 胡萝卜 30g + 核",
+        "width": 208,
+        "height": 72
+      },
+      {
+        "name": "🥚 营养温和初尝餐米粉 20g + 鸡蛋 15g + 南瓜 25g",
+        "width": 208,
+        "height": 56
+      },
+      {
+        "name": "主食上一个",
+        "width": 44,
+        "height": 44
+      },
+      {
+        "name": "主食下一个",
+        "width": 44,
+        "height": 44
+      },
+      {
+        "name": "15g",
+        "width": 46,
+        "height": 36
+      },
+      {
+        "name": "20g",
+        "width": 46,
+        "height": 36
+      },
+      {
+        "name": "25g",
+        "width": 46,
+        "height": 36
+      },
+      {
+        "name": "30g",
+        "width": 46,
+        "height": 36
+      },
+      {
+        "name": "主食 · 谷薯精准克数",
+        "width": 56,
+        "height": 36
+      },
+      {
+        "name": "蛋白上一个",
+        "width": 44,
+        "height": 44
+      },
+      {
+        "name": "蛋白下一个",
+        "width": 44,
+        "height": 44
+      },
+      {
+        "name": "15g",
+        "width": 46,
+        "height": 36
+      },
+      {
+        "name": "20g",
+        "width": 46,
+        "height": 36
+      },
+      {
+        "name": "25g",
+        "width": 46,
+        "height": 36
+      },
+      {
+        "name": "35g",
+        "width": 46,
+        "height": 36
+      },
+      {
+        "name": "肉蛋 · 蛋白精准克数",
+        "width": 56,
+        "height": 36
+      },
+      {
+        "name": "蔬菜上一个",
+        "width": 44,
+        "height": 44
+      },
+      {
+        "name": "蔬菜下一个",
+        "width": 44,
+        "height": 44
+      },
+      {
+        "name": "20g",
+        "width": 46,
+        "height": 36
+      },
+      {
+        "name": "30g",
+        "width": 46,
+        "height": 36
+      },
+      {
+        "name": "40g",
+        "width": 46,
+        "height": 36
+      },
+      {
+        "name": "50g",
+        "width": 46,
+        "height": 36
+      },
+      {
+        "name": "蔬菜 · 菌藻精准克数",
+        "width": 56,
+        "height": 36
+      },
+      {
+        "name": "常吃菜分类：谷物主食",
+        "width": 94,
+        "height": 44
+      },
+      {
+        "name": "常吃菜分类：薯类根茎",
+        "width": 94,
+        "height": 44
+      },
+      {
+        "name": "常吃菜分类：肉禽类",
+        "width": 81,
+        "height": 44
+      },
+      {
+        "name": "常吃菜分类：鱼虾海鲜",
+        "width": 94,
+        "height": 44
+      },
+      {
+        "name": "常吃菜分类：蛋豆制品",
+        "width": 94,
+        "height": 44
+      },
+      {
+        "name": "常吃菜分类：蔬菜菌菇",
+        "width": 94,
+        "height": 44
+      },
+      {
+        "name": "常吃菜分类：水果",
+        "width": 68,
+        "height": 44
+      },
+      {
+        "name": "常吃菜分类：乳制品",
+        "width": 81,
+        "height": 44
+      },
+      {
+        "name": "常吃菜分类：辅食油",
+        "width": 81,
+        "height": 44
+      },
+      {
+        "name": "搜索常吃菜",
+        "width": 230,
+        "height": 49
+      },
+      {
+        "name": "选择鳕鱼",
+        "width": 111,
+        "height": 52
+      },
+      {
+        "name": "选择三文鱼",
+        "width": 111,
+        "height": 52
+      },
+      {
+        "name": "选择鲈鱼",
+        "width": 111,
+        "height": 52
+      },
+      {
+        "name": "选择黄花鱼",
+        "width": 111,
+        "height": 52
+      },
+      {
+        "name": "选择虾",
+        "width": 111,
+        "height": 52
+      },
+      {
+        "name": "选择扇贝",
+        "width": 111,
+        "height": 52
+      },
+      {
+        "name": "强化铁婴儿谷物克数",
+        "width": 64,
+        "height": 44
+      },
+      {
+        "name": "移除强化铁婴儿谷物",
+        "width": 44,
+        "height": 44
+      },
+      {
+        "name": "鸡蛋克数",
+        "width": 64,
+        "height": 44
+      },
+      {
+        "name": "移除鸡蛋",
+        "width": 44,
+        "height": 44
+      },
+      {
+        "name": "南瓜克数",
+        "width": 64,
+        "height": 44
+      },
+      {
+        "name": "移除南瓜",
+        "width": 44,
+        "height": 44
+      },
+      {
+        "name": "食材库水果与油脂（可选）",
+        "width": 230,
+        "height": 44
+      },
+      {
+        "name": "+ 自定义食材",
+        "width": 116,
+        "height": 44
+      },
+      {
+        "name": "半碗",
+        "width": 111,
+        "height": 38
+      },
+      {
+        "name": "大部分",
+        "width": 111,
+        "height": 38
+      },
+      {
+        "name": "全部",
+        "width": 111,
+        "height": 38
+      },
+      {
+        "name": "1 heart",
+        "width": 32,
+        "height": 32
+      },
+      {
+        "name": "2 heart",
+        "width": 32,
+        "height": 32
+      },
+      {
+        "name": "3 heart",
+        "width": 32,
+        "height": 32
+      },
+      {
+        "name": "4 hearts",
+        "width": 32,
+        "height": 32
+      },
+      {
+        "name": "5 hearts",
+        "width": 32,
+        "height": 32
+      },
+      {
+        "name": "😊开心",
+        "width": 71,
+        "height": 78
+      },
+      {
+        "name": "😐一般",
+        "width": 71,
+        "height": 78
+      },
+      {
+        "name": "😣拒绝",
+        "width": 71,
+        "height": 78
+      },
+      {
+        "name": "正常无异常 ✨",
+        "width": 124,
+        "height": 38
+      },
+      {
+        "name": "有异常 / 泛红 🚨",
+        "width": 124,
+        "height": 38
+      },
+      {
+        "name": "保存辅食记录",
+        "width": 286,
+        "height": 52
+      }
+    ]
+  },
+  {
+    "width": 390,
+    "scrollWidth": 390,
+    "height": 1652,
+    "controls": [
+      {
+        "name": "返回",
+        "width": 44,
+        "height": 44
+      },
+      {
+        "name": "切换到深色模式",
+        "width": 36,
+        "height": 36
+      },
+      {
+        "name": "语音快速录入说完后会弹出卡片，确认才写入档案",
+        "width": 332,
+        "height": 66
+      },
+      {
+        "name": "",
+        "width": 159,
+        "height": 50
+      },
+      {
+        "name": "",
+        "width": 159,
+        "height": 50
+      },
+      {
+        "name": "🎲 随机转一转",
+        "width": 120,
+        "height": 28
+      },
+      {
+        "name": "🥣 经典高铁补铁餐米粉 20g + 牛肉 25g + 西蓝花 30g",
+        "width": 278,
+        "height": 56
+      },
+      {
+        "name": "🐟 深海鱼健脑餐大米粥 25g + 三文鱼 20g + 胡萝卜 30g + 核",
+        "width": 278,
+        "height": 72
+      },
+      {
+        "name": "🥚 营养温和初尝餐米粉 20g + 鸡蛋 15g + 南瓜 25g",
+        "width": 278,
+        "height": 56
+      },
+      {
+        "name": "主食上一个",
+        "width": 44,
+        "height": 44
+      },
+      {
+        "name": "主食下一个",
+        "width": 44,
+        "height": 44
+      },
+      {
+        "name": "15g",
+        "width": 63,
+        "height": 36
+      },
+      {
+        "name": "20g",
+        "width": 63,
+        "height": 36
+      },
+      {
+        "name": "25g",
+        "width": 63,
+        "height": 36
+      },
+      {
+        "name": "30g",
+        "width": 63,
+        "height": 36
+      },
+      {
+        "name": "主食 · 谷薯精准克数",
+        "width": 56,
+        "height": 36
+      },
+      {
+        "name": "蛋白上一个",
+        "width": 44,
+        "height": 44
+      },
+      {
+        "name": "蛋白下一个",
+        "width": 44,
+        "height": 44
+      },
+      {
+        "name": "15g",
+        "width": 63,
+        "height": 36
+      },
+      {
+        "name": "20g",
+        "width": 63,
+        "height": 36
+      },
+      {
+        "name": "25g",
+        "width": 63,
+        "height": 36
+      },
+      {
+        "name": "35g",
+        "width": 63,
+        "height": 36
+      },
+      {
+        "name": "肉蛋 · 蛋白精准克数",
+        "width": 56,
+        "height": 36
+      },
+      {
+        "name": "蔬菜上一个",
+        "width": 44,
+        "height": 44
+      },
+      {
+        "name": "蔬菜下一个",
+        "width": 44,
+        "height": 44
+      },
+      {
+        "name": "20g",
+        "width": 63,
+        "height": 36
+      },
+      {
+        "name": "30g",
+        "width": 63,
+        "height": 36
+      },
+      {
+        "name": "40g",
+        "width": 63,
+        "height": 36
+      },
+      {
+        "name": "50g",
+        "width": 63,
+        "height": 36
+      },
+      {
+        "name": "蔬菜 · 菌藻精准克数",
+        "width": 56,
+        "height": 36
+      },
+      {
+        "name": "常吃菜分类：谷物主食",
+        "width": 94,
+        "height": 44
+      },
+      {
+        "name": "常吃菜分类：薯类根茎",
+        "width": 94,
+        "height": 44
+      },
+      {
+        "name": "常吃菜分类：肉禽类",
+        "width": 81,
+        "height": 44
+      },
+      {
+        "name": "常吃菜分类：鱼虾海鲜",
+        "width": 94,
+        "height": 44
+      },
+      {
+        "name": "常吃菜分类：蛋豆制品",
+        "width": 94,
+        "height": 44
+      },
+      {
+        "name": "常吃菜分类：蔬菜菌菇",
+        "width": 94,
+        "height": 44
+      },
+      {
+        "name": "常吃菜分类：水果",
+        "width": 68,
+        "height": 44
+      },
+      {
+        "name": "常吃菜分类：乳制品",
+        "width": 81,
+        "height": 44
+      },
+      {
+        "name": "常吃菜分类：辅食油",
+        "width": 81,
+        "height": 44
+      },
+      {
+        "name": "搜索常吃菜",
+        "width": 300,
+        "height": 49
+      },
+      {
+        "name": "选择鳕鱼",
+        "width": 146,
+        "height": 52
+      },
+      {
+        "name": "选择三文鱼",
+        "width": 146,
+        "height": 52
+      },
+      {
+        "name": "选择鲈鱼",
+        "width": 146,
+        "height": 52
+      },
+      {
+        "name": "选择黄花鱼",
+        "width": 146,
+        "height": 52
+      },
+      {
+        "name": "选择虾",
+        "width": 146,
+        "height": 52
+      },
+      {
+        "name": "选择扇贝",
+        "width": 146,
+        "height": 52
+      },
+      {
+        "name": "强化铁婴儿谷物克数",
+        "width": 64,
+        "height": 44
+      },
+      {
+        "name": "移除强化铁婴儿谷物",
+        "width": 44,
+        "height": 44
+      },
+      {
+        "name": "鸡蛋克数",
+        "width": 64,
+        "height": 44
+      },
+      {
+        "name": "移除鸡蛋",
+        "width": 44,
+        "height": 44
+      },
+      {
+        "name": "南瓜克数",
+        "width": 64,
+        "height": 44
+      },
+      {
+        "name": "移除南瓜",
+        "width": 44,
+        "height": 44
+      },
+      {
+        "name": "食材库水果与油脂（可选）",
+        "width": 300,
+        "height": 44
+      },
+      {
+        "name": "+ 自定义食材",
+        "width": 116,
+        "height": 44
+      },
+      {
+        "name": "半碗",
+        "width": 146,
+        "height": 38
+      },
+      {
+        "name": "大部分",
+        "width": 146,
+        "height": 38
+      },
+      {
+        "name": "全部",
+        "width": 146,
+        "height": 38
+      },
+      {
+        "name": "1 heart",
+        "width": 32,
+        "height": 32
+      },
+      {
+        "name": "2 heart",
+        "width": 32,
+        "height": 32
+      },
+      {
+        "name": "3 heart",
+        "width": 32,
+        "height": 32
+      },
+      {
+        "name": "4 hearts",
+        "width": 32,
+        "height": 32
+      },
+      {
+        "name": "5 hearts",
+        "width": 32,
+        "height": 32
+      },
+      {
+        "name": "😊开心",
+        "width": 95,
+        "height": 78
+      },
+      {
+        "name": "😐一般",
+        "width": 95,
+        "height": 78
+      },
+      {
+        "name": "😣拒绝",
+        "width": 95,
+        "height": 78
+      },
+      {
+        "name": "正常无异常 ✨",
+        "width": 159,
+        "height": 38
+      },
+      {
+        "name": "有异常 / 泛红 🚨",
+        "width": 159,
+        "height": 38
+      },
+      {
+        "name": "保存辅食记录",
+        "width": 356,
+        "height": 52
+      }
+    ]
+  },
+  {
+    "width": 768,
+    "scrollWidth": 768,
+    "height": 1400,
+    "controls": [
+      {
+        "name": "返回",
+        "width": 44,
+        "height": 44
+      },
+      {
+        "name": "切换到深色模式",
+        "width": 36,
+        "height": 36
+      },
+      {
+        "name": "语音快速录入说完后会弹出卡片，确认才写入档案",
+        "width": 694,
+        "height": 66
+      },
+      {
+        "name": "",
+        "width": 340,
+        "height": 50
+      },
+      {
+        "name": "",
+        "width": 340,
+        "height": 50
+      },
+      {
+        "name": "🎲 随机转一转",
+        "width": 120,
+        "height": 28
+      },
+      {
+        "name": "🥣 经典高铁补铁餐米粉 20g + 牛肉 25g + 西蓝花 30g",
+        "width": 205,
+        "height": 72
+      },
+      {
+        "name": "🐟 深海鱼健脑餐大米粥 25g + 三文鱼 20g + 胡萝卜 30g + 核",
+        "width": 205,
+        "height": 72
+      },
+      {
+        "name": "🥚 营养温和初尝餐米粉 20g + 鸡蛋 15g + 南瓜 25g",
+        "width": 205,
+        "height": 72
+      },
+      {
+        "name": "主食上一个",
+        "width": 44,
+        "height": 44
+      },
+      {
+        "name": "主食下一个",
+        "width": 44,
+        "height": 44
+      },
+      {
+        "name": "15g",
+        "width": 41,
+        "height": 36
+      },
+      {
+        "name": "20g",
+        "width": 41,
+        "height": 36
+      },
+      {
+        "name": "25g",
+        "width": 41,
+        "height": 36
+      },
+      {
+        "name": "30g",
+        "width": 41,
+        "height": 36
+      },
+      {
+        "name": "主食 · 谷薯精准克数",
+        "width": 56,
+        "height": 36
+      },
+      {
+        "name": "蛋白上一个",
+        "width": 44,
+        "height": 44
+      },
+      {
+        "name": "蛋白下一个",
+        "width": 44,
+        "height": 44
+      },
+      {
+        "name": "15g",
+        "width": 41,
+        "height": 36
+      },
+      {
+        "name": "20g",
+        "width": 41,
+        "height": 36
+      },
+      {
+        "name": "25g",
+        "width": 41,
+        "height": 36
+      },
+      {
+        "name": "35g",
+        "width": 41,
+        "height": 36
+      },
+      {
+        "name": "肉蛋 · 蛋白精准克数",
+        "width": 56,
+        "height": 36
+      },
+      {
+        "name": "蔬菜上一个",
+        "width": 44,
+        "height": 44
+      },
+      {
+        "name": "蔬菜下一个",
+        "width": 44,
+        "height": 44
+      },
+      {
+        "name": "20g",
+        "width": 41,
+        "height": 36
+      },
+      {
+        "name": "30g",
+        "width": 41,
+        "height": 36
+      },
+      {
+        "name": "40g",
+        "width": 41,
+        "height": 36
+      },
+      {
+        "name": "50g",
+        "width": 41,
+        "height": 36
+      },
+      {
+        "name": "蔬菜 · 菌藻精准克数",
+        "width": 56,
+        "height": 36
+      },
+      {
+        "name": "常吃菜分类：谷物主食",
+        "width": 94,
+        "height": 44
+      },
+      {
+        "name": "常吃菜分类：薯类根茎",
+        "width": 94,
+        "height": 44
+      },
+      {
+        "name": "常吃菜分类：肉禽类",
+        "width": 81,
+        "height": 44
+      },
+      {
+        "name": "常吃菜分类：鱼虾海鲜",
+        "width": 94,
+        "height": 44
+      },
+      {
+        "name": "常吃菜分类：蛋豆制品",
+        "width": 94,
+        "height": 44
+      },
+      {
+        "name": "常吃菜分类：蔬菜菌菇",
+        "width": 94,
+        "height": 44
+      },
+      {
+        "name": "常吃菜分类：水果",
+        "width": 68,
+        "height": 44
+      },
+      {
+        "name": "常吃菜分类：乳制品",
+        "width": 81,
+        "height": 44
+      },
+      {
+        "name": "常吃菜分类：辅食油",
+        "width": 81,
+        "height": 44
+      },
+      {
+        "name": "搜索常吃菜",
+        "width": 312,
+        "height": 49
+      },
+      {
+        "name": "选择鳕鱼",
+        "width": 152,
+        "height": 52
+      },
+      {
+        "name": "选择三文鱼",
+        "width": 152,
+        "height": 52
+      },
+      {
+        "name": "选择鲈鱼",
+        "width": 152,
+        "height": 52
+      },
+      {
+        "name": "选择黄花鱼",
+        "width": 152,
+        "height": 52
+      },
+      {
+        "name": "选择虾",
+        "width": 152,
+        "height": 52
+      },
+      {
+        "name": "选择扇贝",
+        "width": 152,
+        "height": 52
+      },
+      {
+        "name": "强化铁婴儿谷物克数",
+        "width": 64,
+        "height": 44
+      },
+      {
+        "name": "移除强化铁婴儿谷物",
+        "width": 44,
+        "height": 44
+      },
+      {
+        "name": "鸡蛋克数",
+        "width": 64,
+        "height": 44
+      },
+      {
+        "name": "移除鸡蛋",
+        "width": 44,
+        "height": 44
+      },
+      {
+        "name": "南瓜克数",
+        "width": 64,
+        "height": 44
+      },
+      {
+        "name": "移除南瓜",
+        "width": 44,
+        "height": 44
+      },
+      {
+        "name": "食材库水果与油脂（可选）",
+        "width": 662,
+        "height": 44
+      },
+      {
+        "name": "+ 自定义食材",
+        "width": 116,
+        "height": 44
+      },
+      {
+        "name": "半碗",
+        "width": 327,
+        "height": 38
+      },
+      {
+        "name": "大部分",
+        "width": 327,
+        "height": 38
+      },
+      {
+        "name": "全部",
+        "width": 327,
+        "height": 38
+      },
+      {
+        "name": "1 heart",
+        "width": 32,
+        "height": 32
+      },
+      {
+        "name": "2 heart",
+        "width": 32,
+        "height": 32
+      },
+      {
+        "name": "3 heart",
+        "width": 32,
+        "height": 32
+      },
+      {
+        "name": "4 hearts",
+        "width": 32,
+        "height": 32
+      },
+      {
+        "name": "5 hearts",
+        "width": 32,
+        "height": 32
+      },
+      {
+        "name": "😊开心",
+        "width": 215,
+        "height": 78
+      },
+      {
+        "name": "😐一般",
+        "width": 215,
+        "height": 78
+      },
+      {
+        "name": "😣拒绝",
+        "width": 215,
+        "height": 78
+      },
+      {
+        "name": "正常无异常 ✨",
+        "width": 340,
+        "height": 38
+      },
+      {
+        "name": "有异常 / 泛红 🚨",
+        "width": 340,
+        "height": 38
+      },
+      {
+        "name": "保存辅食记录",
+        "width": 718,
+        "height": 52
+      }
+    ]
+  },
+  {
+    "width": 1280,
+    "scrollWidth": 1280,
+    "height": 1400,
+    "controls": [
+      {
+        "name": "返回",
+        "width": 44,
+        "height": 44
+      },
+      {
+        "name": "切换到深色模式",
+        "width": 36,
+        "height": 36
+      },
+      {
+        "name": "语音快速录入说完后会弹出卡片，确认才写入档案",
+        "width": 806,
+        "height": 66
+      },
+      {
+        "name": "",
+        "width": 396,
+        "height": 50
+      },
+      {
+        "name": "",
+        "width": 396,
+        "height": 50
+      },
+      {
+        "name": "🎲 随机转一转",
+        "width": 120,
+        "height": 28
+      },
+      {
+        "name": "🥣 经典高铁补铁餐米粉 20g + 牛肉 25g + 西蓝花 30g",
+        "width": 243,
+        "height": 72
+      },
+      {
+        "name": "🐟 深海鱼健脑餐大米粥 25g + 三文鱼 20g + 胡萝卜 30g + 核",
+        "width": 243,
+        "height": 72
+      },
+      {
+        "name": "🥚 营养温和初尝餐米粉 20g + 鸡蛋 15g + 南瓜 25g",
+        "width": 243,
+        "height": 72
+      },
+      {
+        "name": "主食上一个",
+        "width": 44,
+        "height": 44
+      },
+      {
+        "name": "主食下一个",
+        "width": 44,
+        "height": 44
+      },
+      {
+        "name": "15g",
+        "width": 51,
+        "height": 36
+      },
+      {
+        "name": "20g",
+        "width": 51,
+        "height": 36
+      },
+      {
+        "name": "25g",
+        "width": 51,
+        "height": 36
+      },
+      {
+        "name": "30g",
+        "width": 51,
+        "height": 36
+      },
+      {
+        "name": "主食 · 谷薯精准克数",
+        "width": 56,
+        "height": 36
+      },
+      {
+        "name": "蛋白上一个",
+        "width": 44,
+        "height": 44
+      },
+      {
+        "name": "蛋白下一个",
+        "width": 44,
+        "height": 44
+      },
+      {
+        "name": "15g",
+        "width": 51,
+        "height": 36
+      },
+      {
+        "name": "20g",
+        "width": 51,
+        "height": 36
+      },
+      {
+        "name": "25g",
+        "width": 51,
+        "height": 36
+      },
+      {
+        "name": "35g",
+        "width": 51,
+        "height": 36
+      },
+      {
+        "name": "肉蛋 · 蛋白精准克数",
+        "width": 56,
+        "height": 36
+      },
+      {
+        "name": "蔬菜上一个",
+        "width": 44,
+        "height": 44
+      },
+      {
+        "name": "蔬菜下一个",
+        "width": 44,
+        "height": 44
+      },
+      {
+        "name": "20g",
+        "width": 51,
+        "height": 36
+      },
+      {
+        "name": "30g",
+        "width": 51,
+        "height": 36
+      },
+      {
+        "name": "40g",
+        "width": 51,
+        "height": 36
+      },
+      {
+        "name": "50g",
+        "width": 51,
+        "height": 36
+      },
+      {
+        "name": "蔬菜 · 菌藻精准克数",
+        "width": 56,
+        "height": 36
+      },
+      {
+        "name": "常吃菜分类：谷物主食",
+        "width": 94,
+        "height": 44
+      },
+      {
+        "name": "常吃菜分类：薯类根茎",
+        "width": 94,
+        "height": 44
+      },
+      {
+        "name": "常吃菜分类：肉禽类",
+        "width": 81,
+        "height": 44
+      },
+      {
+        "name": "常吃菜分类：鱼虾海鲜",
+        "width": 94,
+        "height": 44
+      },
+      {
+        "name": "常吃菜分类：蛋豆制品",
+        "width": 94,
+        "height": 44
+      },
+      {
+        "name": "常吃菜分类：蔬菜菌菇",
+        "width": 94,
+        "height": 44
+      },
+      {
+        "name": "常吃菜分类：水果",
+        "width": 68,
+        "height": 44
+      },
+      {
+        "name": "常吃菜分类：乳制品",
+        "width": 81,
+        "height": 44
+      },
+      {
+        "name": "常吃菜分类：辅食油",
+        "width": 81,
+        "height": 44
+      },
+      {
+        "name": "搜索常吃菜",
+        "width": 368,
+        "height": 49
+      },
+      {
+        "name": "选择鳕鱼",
+        "width": 180,
+        "height": 52
+      },
+      {
+        "name": "选择三文鱼",
+        "width": 180,
+        "height": 52
+      },
+      {
+        "name": "选择鲈鱼",
+        "width": 180,
+        "height": 52
+      },
+      {
+        "name": "选择黄花鱼",
+        "width": 180,
+        "height": 52
+      },
+      {
+        "name": "选择虾",
+        "width": 180,
+        "height": 52
+      },
+      {
+        "name": "选择扇贝",
+        "width": 180,
+        "height": 52
+      },
+      {
+        "name": "强化铁婴儿谷物克数",
+        "width": 64,
+        "height": 44
+      },
+      {
+        "name": "移除强化铁婴儿谷物",
+        "width": 44,
+        "height": 44
+      },
+      {
+        "name": "鸡蛋克数",
+        "width": 64,
+        "height": 44
+      },
+      {
+        "name": "移除鸡蛋",
+        "width": 44,
+        "height": 44
+      },
+      {
+        "name": "南瓜克数",
+        "width": 64,
+        "height": 44
+      },
+      {
+        "name": "移除南瓜",
+        "width": 44,
+        "height": 44
+      },
+      {
+        "name": "食材库水果与油脂（可选）",
+        "width": 774,
+        "height": 44
+      },
+      {
+        "name": "+ 自定义食材",
+        "width": 116,
+        "height": 44
+      },
+      {
+        "name": "半碗",
+        "width": 383,
+        "height": 38
+      },
+      {
+        "name": "大部分",
+        "width": 383,
+        "height": 38
+      },
+      {
+        "name": "全部",
+        "width": 383,
+        "height": 38
+      },
+      {
+        "name": "1 heart",
+        "width": 32,
+        "height": 32
+      },
+      {
+        "name": "2 heart",
+        "width": 32,
+        "height": 32
+      },
+      {
+        "name": "3 heart",
+        "width": 32,
+        "height": 32
+      },
+      {
+        "name": "4 hearts",
+        "width": 32,
+        "height": 32
+      },
+      {
+        "name": "5 hearts",
+        "width": 32,
+        "height": 32
+      },
+      {
+        "name": "😊开心",
+        "width": 253,
+        "height": 78
+      },
+      {
+        "name": "😐一般",
+        "width": 253,
+        "height": 78
+      },
+      {
+        "name": "😣拒绝",
+        "width": 253,
+        "height": 78
+      },
+      {
+        "name": "正常无异常 ✨",
+        "width": 396,
+        "height": 38
+      },
+      {
+        "name": "有异常 / 泛红 🚨",
+        "width": 396,
+        "height": 38
+      },
+      {
+        "name": "保存辅食记录",
+        "width": 830,
+        "height": 52
+      }
+    ]
+  }
+]

@@ -140,7 +140,16 @@ try {
   assert.equal(restored.totalGrams, 84);
   assert.equal(restored.portion, 'all', 'opening an edit must retain the selected portion');
   await render('food', { date: '2026-11-02', time: '12:00', foods: ['test_unknown_legacy_food'] });
+  assert.ok(await page.getByText('克数未记录', { exact: true }).count());
   assert.deepEqual((await save('保存修改')).foods, ['test_unknown_legacy_food']);
+
+  await render('food', { date: '2026-11-02', time: '12:00', foods: [] });
+  const search = page.getByRole('searchbox', { name: '搜索常吃菜', exact: true });
+  await search.fill('牛肉');
+  await page.getByRole('button', { name: '选择牛肉', exact: true }).click();
+  await search.fill('');
+  assert.equal(await page.getByRole('spinbutton', { name: '牛肉克数', exact: true }).count(), 1);
+  assert.deepEqual((await save('保存修改')).foods, ['牛肉']);
 
   await render('food', { date: '2026-11-02', time: '12:00', foods: [] });
   assert.equal(await page.getByRole('button', { name: /^常吃菜分类：/ }).count(), 9);
@@ -189,11 +198,12 @@ try {
 
   await page.evaluate(() => window.testLoadFoods([]));
   await render('food', {}, 'create');
+  await page.getByLabel('搭配工具', { exact: true }).click();
   // Select cod through the actual protein wheel, then insert family options in
   // front of the common options. A numeric selection index used to drift here.
   for (let attempt = 0; attempt < 100; attempt++) {
     if (await page.getByRole('spinbutton', { name: '鳕鱼克数', exact: true }).count()) break;
-    await page.getByTitle('下一个', { exact: true }).nth(1).click();
+    await page.getByRole('button', { name: '蛋白下一个', exact: true }).click();
   }
   assert.equal(await page.getByRole('spinbutton', { name: '鳕鱼克数', exact: true }).count(), 1);
   await page.getByRole('spinbutton', { name: '肉蛋 · 蛋白精准克数', exact: true }).fill('350');
@@ -206,7 +216,7 @@ try {
   assert.deepEqual((await save('保存辅食记录')).foods, wheelSelection.foods);
   for (let attempt = 0; attempt < 100; attempt++) {
     if (await page.getByRole('spinbutton', { name: 'test_late_meat_a克数', exact: true }).count()) break;
-    await page.getByTitle('下一个', { exact: true }).nth(1).click();
+    await page.getByRole('button', { name: '蛋白下一个', exact: true }).click();
   }
   assert.equal(await page.getByRole('spinbutton', { name: 'test_late_meat_a克数', exact: true }).count(), 1);
   const familyWheelSelection = await save('保存辅食记录');
