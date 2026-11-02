@@ -1,0 +1,31 @@
+{
+  "status": "PASS",
+  "actualTemporaryFilesystem": true,
+  "serviceChanges": false,
+  "cases": [
+    {
+      "case": "unknown-package-file",
+      "result": "REFUSED_EXPECTED"
+    },
+    {
+      "case": "changed-reviewed-code",
+      "result": "REFUSED_EXPECTED"
+    },
+    {
+      "case": "private-environment",
+      "result": "REFUSED_EXPECTED"
+    },
+    {
+      "case": "escaping-link",
+      "result": "REFUSED_EXPECTED"
+    },
+    {
+      "case": "unknown-sdk-upload-file",
+      "result": "REFUSED_EXPECTED"
+    },
+    {
+      "case": "modified-sdk-module",
+      "result": "REFUSED_EXPECTED"
+    }
+  ]
+}

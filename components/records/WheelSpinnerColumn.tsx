@@ -32,6 +32,7 @@ export interface WheelSpinnerColumnProps {
 }
 
 export const WheelSpinnerColumn: React.FC<WheelSpinnerColumnProps> = ({
+  role,
   title,
   icon,
   items,
@@ -43,6 +44,7 @@ export const WheelSpinnerColumn: React.FC<WheelSpinnerColumnProps> = ({
   colorTheme,
   isSpinning = false,
 }) => {
+  const roleLabel = role === "staple" ? "主食" : role === "protein" ? "蛋白" : "蔬菜";
   const currentItem = items[selectedIndex] || items[0] || { id: "none", name: "（无）", icon: "⚪" };
   const isNone = currentItem.id === "none";
 
@@ -102,9 +104,9 @@ export const WheelSpinnerColumn: React.FC<WheelSpinnerColumnProps> = ({
   };
 
   return (
-    <div className={`flex flex-col rounded-2xl border p-2.5 transition-all ${colorTheme.border} ${colorTheme.bg}`}>
+      <div className={`flex min-w-0 flex-col rounded-2xl border p-2.5 transition-all ${colorTheme.border} ${colorTheme.bg}`}>
       {/* 栏目标题 */}
-      <div className="flex items-center justify-between pb-1.5 border-b border-divider/40">
+      <div className="flex min-w-0 items-center justify-between border-b border-primary/10 pb-1.5">
         <div className="flex items-center gap-1.5 min-w-0">
           <span className="text-base shrink-0">{icon}</span>
           <span className="text-xs font-bold text-text-primary truncate">{title}</span>
@@ -121,14 +123,15 @@ export const WheelSpinnerColumn: React.FC<WheelSpinnerColumnProps> = ({
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
-        className="relative my-1 select-none flex flex-col items-center justify-center h-36 overflow-hidden rounded-xl bg-card border border-divider/60 shadow-inner touch-pan-y"
+        className="relative my-1 flex h-36 min-w-0 select-none flex-col items-center justify-center overflow-hidden rounded-xl border border-primary/15 bg-card shadow-inner touch-pan-y"
       >
         {/* 上滚按钮 */}
         <button
           type="button"
           onClick={handlePrev}
           disabled={isSpinning}
-          className="absolute top-1 z-20 text-text-muted hover:text-text-primary p-0.5 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+          aria-label={`${roleLabel}上一个`}
+          className="absolute top-0 z-20 flex h-11 w-11 items-center justify-center rounded-full text-text-muted transition-colors hover:bg-gray-100 hover:text-text-primary dark:hover:bg-gray-800"
           title="上一个"
         >
           <ChevronUp size={16} />
@@ -158,9 +161,9 @@ export const WheelSpinnerColumn: React.FC<WheelSpinnerColumnProps> = ({
           </div>
 
           {/* 当前选中的正中项 (高亮放大) */}
-          <div className="h-11 flex items-center justify-center gap-1.5 text-xs font-bold text-text-primary px-2 max-w-full transition-all">
+          <div className="flex min-h-11 max-w-full items-center justify-center gap-1.5 px-2 py-1 text-center text-xs font-bold text-text-primary transition-all">
             <span className="text-base shrink-0">{currentItem.icon}</span>
-            <span className="truncate">{currentItem.name}</span>
+            <span className="break-words">{currentItem.name}</span>
             {currentItem.tried && (
               <span className="shrink-0 text-[10px] font-semibold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/60 px-1 py-0.2 rounded-full border border-emerald-200">
                 <Check size={9} className="inline mr-0.5" />尝过
@@ -192,7 +195,8 @@ export const WheelSpinnerColumn: React.FC<WheelSpinnerColumnProps> = ({
           type="button"
           onClick={handleNext}
           disabled={isSpinning}
-          className="absolute bottom-1 z-20 text-text-muted hover:text-text-primary p-0.5 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+          aria-label={`${roleLabel}下一个`}
+          className="absolute bottom-0 z-20 flex h-11 w-11 items-center justify-center rounded-full text-text-muted transition-colors hover:bg-gray-100 hover:text-text-primary dark:hover:bg-gray-800"
           title="下一个"
         >
           <ChevronDown size={16} />
@@ -201,7 +205,7 @@ export const WheelSpinnerColumn: React.FC<WheelSpinnerColumnProps> = ({
 
       {/* 克数设定面板 */}
       {!isNone ? (
-        <div className="mt-1 space-y-1.5 bg-card/90 rounded-xl p-1.5 border border-divider/50">
+        <div className="mt-1 space-y-1.5 rounded-xl border border-primary/10 bg-card/90 p-1.5">
           {/* 常用克数快捷药丸 */}
           <div className="grid grid-cols-4 gap-1">
             {gramOptions.map((g) => (
@@ -209,7 +213,7 @@ export const WheelSpinnerColumn: React.FC<WheelSpinnerColumnProps> = ({
                 key={g}
                 type="button"
                 onClick={() => onUpdateGrams(g)}
-                className={`py-0.5 text-[10px] rounded-lg font-bold transition-all ${
+                className={`min-h-9 rounded-lg py-1 text-xs font-bold transition-all ${
                   grams === g
                     ? "bg-primary text-white shadow-xs"
                     : "bg-gray-100 dark:bg-gray-800 text-text-secondary hover:bg-gray-200"
@@ -231,14 +235,14 @@ export const WheelSpinnerColumn: React.FC<WheelSpinnerColumnProps> = ({
                 max={300}
                 value={grams || ""}
                 onChange={(e) => onUpdateGrams(clampFoodGrams(Number(e.target.value)))}
-                className="w-11 text-center py-0.5 text-[11px] font-bold rounded-md border border-divider bg-bg focus:outline-hidden focus:ring-1 focus:ring-primary"
+                className="h-9 w-14 rounded-md border border-primary/15 bg-bg py-0.5 text-center text-xs font-bold focus:outline-hidden focus:ring-1 focus:ring-primary"
               />
               <span className="text-[10px] text-text-muted">g</span>
             </div>
           </div>
         </div>
       ) : (
-        <div className="mt-1 py-2 text-center text-[11px] text-text-muted bg-card/60 rounded-xl border border-divider/40">
+        <div className="mt-1 rounded-xl border border-primary/10 bg-card/60 py-2 text-center text-xs text-text-muted">
           本餐不添加此类
         </div>
       )}
