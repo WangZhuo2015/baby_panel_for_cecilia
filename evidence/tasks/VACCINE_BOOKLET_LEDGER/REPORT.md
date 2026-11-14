@@ -7,7 +7,7 @@ Status: **IMPLEMENTED_NOT_REVIEWED**. No production migration or deployment was 
 - Request: make vaccination recording usable against a real paper booklet.
 - Web baseline: `ecf29fb3ce0c1dabdb20c545fdc264acd44d0189`.
 - Companion backend: `WangZhuo2015/growdesk-server`, baseline `d89d9ef380482e39df3171a6f782de63101cebbb`.
-- Companion backend PR: https://github.com/WangZhuo2015/growdesk-server/pull/21 ; paired integration is pinned to `f7f96f37a50d0dc62dd83135a25dd7157c3088c0`.
+- Companion backend PR: https://github.com/WangZhuo2015/growdesk-server/pull/21 ; paired integration is pinned to `8e24507215a85d00204de5ee44bfe56f5263d84d`.
 - Native iOS was inspected for compatibility. This change does not implement a new native iOS editing screen or update its pinned API snapshot.
 - No supplied booklet image, child identifier, actual vaccination row, or clinical traceability identifier is included in this repository. Tests use synthetic tenants and records.
 
@@ -49,6 +49,9 @@ In cloud mode, record requests opt into `x-growdesk-representation: ledger`; Web
 - Real HTTP suite `bash scripts/test-api.sh 3089 tests/api/medical-vaccines.test.ts`: 2 scenarios passed against isolated `dev_test.db`, including actual persistence, metadata edits, idempotency conflicts, stale edit/delete versions, cross-baby rejection, plan-to-completion validation, explicit product uncertainty and selective deletion. Test tenants were removed.
 - `python3 scripts/review/check-vaccine-ledger-migration.py`: passed against an owned in-memory SQLite database with four synthetic historical rows. Dates, original text, exact identity, unknown values and foreign keys were checked.
 - Prisma migration/schema diff was empty; `git diff --check` passed.
+- The pinned backend passed its dedicated cloud validation: generated contract, Go compilation/vet/vaccine race tests, and real HTTP/owned PostgreSQL transactions, migration, scope, rollback and restart. Evidence: https://github.com/WangZhuo2015/growdesk-server/actions/runs/43595512212 . The first candidate's missing timeline projection helper was restored before this successful run.
+
+The first Web candidate's generic CI stopped at the existing dependency audit (Next.js and proxy-addr critical advisories); its later test/build steps were not run in that workflow. The candidate did not change `package.json` or `package-lock.json`. The dependency gate remains enabled. Evidence: https://github.com/WangZhuo2015/baby_panel_for_cecilia/actions/runs/43595452141 . Local build/unit evidence above and the separate paired integration gate do not replace that audit.
 
 The API runner supports selecting relevant test files and binds its temporary server to loopback. The test process explicitly disconnects Prisma. The environment's tsx CLI IPC restriction was handled by using `node --import tsx`, without changing application behavior or skipping assertions.
 
@@ -59,5 +62,5 @@ Independent source review identified generic-name brand inference, explicit unas
 ## Remaining acceptance gates
 
 - Browser interaction and visual QA could not be performed in this environment. Check mobile Safari dialog behavior, date entry, keyboard scrolling, error retry, continuous entry, delayed reads and switching babies during requests.
-- Cloud Go/PostgreSQL behavior must pass the companion backend's CI and paired Web integration gate. The local workspace has no usable Go compiler or owned PostgreSQL runtime.
+- The dedicated backend Go/PostgreSQL CI passed at the pinned revision. The paired Web integration gate must also pass against that exact revision. The local workspace has no usable Go compiler or owned PostgreSQL runtime.
 - Repository implementation and local tests do not establish clinical schedule accuracy, production migration success, independent acceptance, or deployment.
