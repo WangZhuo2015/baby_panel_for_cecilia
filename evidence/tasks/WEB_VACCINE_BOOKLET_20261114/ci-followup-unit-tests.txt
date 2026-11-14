@@ -1,0 +1,13 @@
+✔ TDD: medical reports imageUrl should validate /uploads/medical/ pattern (M2) (1.511736ms)
+✔ TDD: medical reports imageUrl update should also validate (M2) (0.479271ms)
+✔ vaccines POST preserves explicit catalog IDs and never guesses from a short name (V1) (1.64745ms)
+✔ TDD: vaccines should handle sexRestriction filtering (V3) (0.776839ms)
+✔ TDD: medical reports should bump items limit to >20 (M4) (0.334353ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 371.223612

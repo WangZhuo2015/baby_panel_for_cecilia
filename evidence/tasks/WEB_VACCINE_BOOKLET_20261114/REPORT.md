@@ -80,3 +80,35 @@ Also passed:
 - Deploy the compatible server PATCH/field contract before enabling the updated Web bridge. Apply the Web's two SQLite migrations for deployments that still use legacy mode.
 - Browser and device interaction checks remain a review gate for this draft implementation.
 - Cloud photo attachments, OCR recognition, and batch-import confirmation are not implemented by this change. No production migration or deployment was performed here.
+
+## GitHub CI follow-up
+
+Reviewed the completed Actions runs for PR #30 at the exact head `7ef87581a0cfeafe7a31ad421e74312e0510ef9e`. This section records that head's remote results and a subsequent local test correction; it does not claim the follow-up commit has passed remote CI.
+
+| Workflow | Result at the reviewed head | Finding |
+| --- | --- | --- |
+| [CI](https://github.com/WangZhuo2015/baby_panel_for_cecilia/actions/runs/43593732506) | Failed | The dependency-audit gate failed before the main unit/build steps. Typecheck, lint, Prisma validation, migration diff, and migration deployment to a fresh database had already passed. |
+| [Post-launch session lifecycle](https://github.com/WangZhuo2015/baby_panel_for_cecilia/actions/runs/43593732514) | Failed | Its 12 handler/session tests passed. The full unit suite reported exactly one failure: the obsolete vaccine V1 source-text assertion described below. |
+| [Go Web transport](https://github.com/WangZhuo2015/baby_panel_for_cecilia/actions/runs/43593732518) | Passed | All three jobs passed: typecheck/lint/standalone build, HTTP lifecycle/attachment contracts, and actual Next BFF with the pinned Go backend on isolated PostgreSQL/Redis. |
+| [Native Go Web parity](https://github.com/WangZhuo2015/baby_panel_for_cecilia/actions/runs/43593732547) | Passed | Its existing actual Web HTTP, Chromium, and native persistent-effects checks passed against the pinned backend. These checks do not establish acceptance of the new vaccine editor or the new cross-service vaccine PATCH contract. |
+
+### Correction of the failure introduced by the refactor
+
+[Session job 132443724923](https://github.com/WangZhuo2015/baby_panel_for_cecilia/actions/runs/43593732514/job/132443724923) failed `tests/unit/functional-p1-batch3.test.ts` with `should have strict fuzzy logic to avoid short 'Hib' mis-match`. The test read `app/api/vaccines/route.ts` and required literal implementation fragments such as `requestedVaccineId` and `findUnique`. The POST implementation now lives in a shared handler, and original vaccine names are stored without choosing a catalogue entry by substring. The source-text check therefore failed despite the intended anti-misclassification behavior being preserved.
+
+The V1 test now exercises the actual field validator and upstream payload adapter. It verifies that the short name `Hib` remains unlinked, maps to the `unmapped` catalogue code, and preserves its written name; an explicitly supplied catalogue key remains authoritative. The real booklet API test additionally creates and reads back an unlinked `Hib` record and an explicitly linked record. No production handler, dependency, workflow, pinned backend reference, or unrelated gate was changed for this correction.
+
+Targeted follow-up validation passed:
+
+```sh
+node --import tsx --env-file=.env.test --test tests/unit/functional-p1-batch3.test.ts
+TEST_API_FILES='tests/api/vaccine-booklet.test.ts' bash scripts/test-api.sh 3089
+```
+
+- Unit file: **5 passed, 0 failed**, exit 0; `ci-followup-unit-tests.txt`.
+- Actual Next.js HTTP and isolated SQLite booklet API: **1 passed, 0 failed**, exit 0; `ci-followup-api-tests.txt`. Test tenants and the temporary service were cleaned up.
+- The full unit suite was not rerun locally for this bounded correction; the remote run above identified its single failure.
+
+### Existing dependency-audit gate remains unresolved
+
+[CI job 132443724947](https://github.com/WangZhuo2015/baby_panel_for_cecilia/actions/runs/43593732506/job/132443724947) ran `npm audit --audit-level=critical` and exited 1. Its report listed 16 vulnerabilities: 4 moderate, 10 high, and 2 critical, with `next` and `proxy-addr` classified critical. The exact GitHub comparison from base `ecf29fb3ce0c1dabdb20c545fdc264acd44d0189` to the reviewed head contains no change to `package.json`, `package-lock.json`, or any workflow. This is a gate on the existing locked dependency graph, not a vaccine API regression. It is still a blocking CI result and was neither bypassed nor addressed by this task.

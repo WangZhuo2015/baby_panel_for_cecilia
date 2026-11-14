@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import fs from "node:fs";
 import path from "node:path";
+import { vaccineRecordFields } from "../../lib/growdesk/vaccine-record-fields";
+import { toGrowDeskVaccineRecordPayload } from "../../lib/growdesk/vaccine-compat";
 
 test("TDD: medical reports imageUrl should validate /uploads/medical/ pattern (M2)", () => {
   const content = fs.readFileSync(path.join(process.cwd(), "app/api/medical/reports/route.ts"), "utf-8");
@@ -21,14 +23,18 @@ test("TDD: medical reports imageUrl update should also validate (M2)", () => {
   assert.ok(hasValidation, "update should validate imageUrl pattern");
 });
 
-test("TDD: vaccines POST should prefer exact vaccineId, avoid short fuzzy (V1)", () => {
-  const content = fs.readFileSync(path.join(process.cwd(), "app/api/vaccines/route.ts"), "utf-8");
-  // Should have strict matching logic, not just naive includes with short string
-  // After fix, should check length >=3 or exact match first
-  const hasStrictLogic = content.includes("length >= 3") || content.includes("=== name") || content.includes("exact") || content.includes("trim().length");
-  assert.ok(hasStrictLogic, "should have strict fuzzy logic to avoid short 'Hib' mis-match");
-  // Should also handle requestedVaccineId exact
-  assert.ok(content.includes("requestedVaccineId") && content.includes("findUnique"), "should handle exact vaccineId");
+test("vaccines POST preserves explicit catalog IDs and never guesses from a short name (V1)", () => {
+  const record = { name: "Hib", completedDate: "2026-08-01", doseNumber: 1 };
+  assert.equal(vaccineRecordFields(record).vaccineId, null, "a short name is not a catalog association");
+  const unlinked = toGrowDeskVaccineRecordPayload(record);
+  assert.equal(unlinked.vaccineCode, "unmapped", "Hib must not select a combination vaccine by substring");
+  assert.equal(unlinked.legacyName, "Hib");
+  assert.equal("vaccineId" in unlinked, false);
+
+  const explicit = { ...record, vaccineId: "test_explicit_hib" };
+  assert.equal(vaccineRecordFields(explicit).vaccineId, explicit.vaccineId);
+  assert.equal(toGrowDeskVaccineRecordPayload(explicit).vaccineCode, explicit.vaccineId);
+  assert.equal(toGrowDeskVaccineRecordPayload(explicit).legacyName, record.name);
 });
 
 test("TDD: vaccines should handle sexRestriction filtering (V3)", () => {

@@ -77,9 +77,19 @@ test("API: vaccine booklet creates, corrects, completes plans, and protects hist
   assert.equal(complete.completedDate, "2026-08-03");
   assert.equal(complete.scheduledDate, "2026-08-01");
 
+  const shortNameResponse = await write("POST", { ...historical, clientId: "test_vaccine_short_name", name: "Hib", doseNumber: 1 });
+  assert.equal(shortNameResponse.status, 201, await shortNameResponse.clone().text());
+  const shortName = (await shortNameResponse.json()).record;
+  assert.equal(shortName.name, "Hib");
+  assert.equal(shortName.vaccineId, null, "a short name must not select a combination vaccine by substring");
+  assert.equal((await list()).find(item => item.id === shortName.id)!.vaccineId, null);
+
   const knownResponse = await write("POST", { ...historical, clientId: "test_vaccine_known", vaccineId: "vac_hepb", doseNumber: 1, name: "test_目录关联原名" });
   assert.equal(knownResponse.status, 201);
   const known = (await knownResponse.json()).record;
+  assert.equal(known.vaccineId, "vac_hepb", "an explicit catalog association takes precedence over the written name");
+  assert.equal(known.name, "test_目录关联原名");
+  assert.equal((await list()).find(item => item.id === known.id)!.vaccineId, "vac_hepb");
   const select = (fields: Record<string, unknown>) => fetch(`${baseUrl}/api/vaccines/selections`, { method: "PUT", headers: tenant.headers, body: JSON.stringify({ babyId: tenant.babyId, vaccineId: "vac_hepb", doseNumber: 1, ...fields }) });
   assert.equal((await select({ selected: false })).status, 200);
   assert.equal((await select({ completed: false })).status, 400);
