@@ -135,6 +135,7 @@ export async function GET(request: Request) {
     })
 
     for (const v of vaccines) {
+      if (!v.scheduledDate) continue;
       const scheduledDate = new Date(v.scheduledDate)
       const diffMs = scheduledDate.getTime() - nowMs
       const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24))

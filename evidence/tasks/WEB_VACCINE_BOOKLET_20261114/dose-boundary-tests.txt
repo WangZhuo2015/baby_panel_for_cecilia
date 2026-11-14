@@ -1,0 +1,13 @@
+✔ historical booklet fields round trip without inventing a plan, dose, or date (2.969751ms)
+✔ record creation requires an explicit actual date; a plan cannot masquerade as a vaccination (0.80417ms)
+✔ dose parsing preserves uncertainty and does not take valency or year numbers as a dose (0.621666ms)
+✔ unmapped names remain recordable; tracing codes are text and notes stay unchanged (0.546593ms)
+✔ programme choices and unknown doses cannot mark real doses complete (0.424689ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 358.290567

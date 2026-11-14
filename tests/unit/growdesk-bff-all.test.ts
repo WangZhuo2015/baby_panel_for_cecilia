@@ -382,11 +382,12 @@ test("SH-08: Medical Compat DTO Layer", async (t) => {
 });
 
 test("SH-08: Vaccine Compat DTO Layer", async (t) => {
-  await t.test("toGrowDeskVaccineRecordPayload: extracts vaccineCode and dose note", () => {
+  await t.test("toGrowDeskVaccineRecordPayload: preserves dose and notes without inventing plan dates", () => {
     const p = toGrowDeskVaccineRecordPayload({
       vaccineId: "hep-b",
+      name: "test_HepB",
       dose: "1",
-      scheduledDate: "2026-09-12",
+      completedDate: "2026-09-12",
       clinic: "Community Clinic",
       notes: "Left arm",
     });
@@ -394,7 +395,9 @@ test("SH-08: Vaccine Compat DTO Layer", async (t) => {
     assert.equal(p.vaccineCode, "hep-b");
     assert.equal(p.administeredDate, "2026-09-12");
     assert.equal(p.clinic, "Community Clinic");
-    assert.ok(p.notes?.includes("剂次: 1"));
+    assert.equal(p.notes, "Left arm");
+    assert.equal(p.doseNumber, 1);
+    assert.equal(p.scheduledDate, null);
   });
 
   await t.test("fromGrowDeskVaccineRecord: parses dose from notes and marks completed", () => {

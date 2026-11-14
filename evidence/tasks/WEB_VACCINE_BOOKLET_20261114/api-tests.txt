@@ -1,0 +1,59 @@
+==> [test-api] migrate deploy (file:./dev_test.db)
+Datasource "db": SQLite database "dev_test.db" at "file:/workspace/scratch/489117071bd5/baby_panel_for_cecilia/dev_test.db"
+
+9 migrations found in prisma/migrations
+
+
+No pending migrations to apply.
+==> [test-api] seed static reference data
+🗑️  Refreshing reference knowledge base data (vaccines, food items, milestones, books)...
+📖 Reading JSON files...
+📅 Creating DataRelease...
+📚 Creating 59 SourceRefs...
+💉 Creating 33 Vaccines...
+🧩 Creating 3 VaccineStrategyGroups...
+📆 Creating VaccineScheduleEntries (11 routine + 7 optional)...
+⚙️  Creating 8 ScheduleEngineRules...
+🌱 Creating 119 DevelopmentMilestones...
+🚩 Creating 32 DevelopmentWarningSigns...
+🍼 Creating 4 FeedingGuidelines...
+🥦 Creating 45 FoodItems...
+📖 Creating 5 Books...
+🎯 Creating 25 ActivityRecommendations...
+ℹ️ 未设置 SEED_DEMO=1，跳过演示账号创建（生产环境请保持关闭）。
+✅ Seed complete!
+==> [test-api] purge leftover test tenants
+◇ injected env (17) from .env.test // tip: ⌘ multiple files { path: ['.env.local', '.env'] }
+purged users=0 orphan_families=0 test_clients=0
+==> [test-api] start server on :3089
+==> [test-api] wait for server
+==> [test-api] run api tests (sequential: files share one SQLite file)
+---- tests/api/medical-vaccines.test.ts
+◇ injected env (17) from .env.test // tip: ◈ secrets for agents [www.dotenvx.com]
+◇ injected env (0) from .env // tip: ⌘ enable debugging { debug: true }
+-> Testing Vaccines API...
+-> Testing Vaccine Selections API...
+-> Testing Medical Reports API...
+✔ API: Medical Reports and Vaccines Domain (1324.179571ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1704.855164
+---- tests/api/vaccine-booklet.test.ts
+◇ injected env (17) from .env.test // tip: ◈ secrets for agents [www.dotenvx.com]
+✔ API: vaccine booklet creates, corrects, completes plans, and protects historical facts (922.217454ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1361.921648
+==> [test-api] purge test tenants
+◇ injected env (17) from .env.test // tip: ⌁ auth for agents [www.vestauth.com]
+purged users=0 orphan_families=0 test_clients=0

@@ -76,6 +76,7 @@ model Baby {
   foodLogRecords      FoodLogRecord[]
   foodPlans           FoodPlan[]
   vaccineRecords      VaccineRecord[]
+  vaccineWriteReceipts VaccineWriteReceipt[]
   vaccineSelections   VaccineSelection[]
   medicalReports      MedicalReport[]
   aiChatSessions      AiChatSession[]
@@ -639,16 +640,42 @@ model FoodPlan {
 // ─── Family Vaccine Record (actual completed/scheduled record for baby) ─────
 
 model VaccineRecord {
-  id            String   @id @default(uuid())
-  babyId        String
-  baby          Baby     @relation(fields: [babyId], references: [id], onDelete: Cascade)
-  name          String
-  dose          String
-  scheduledDate String
-  completedDate String?
-  isCompleted   Boolean  @default(false)
+  id               String   @id @default(uuid())
+  babyId           String
+  baby             Baby     @relation(fields: [babyId], references: [id], onDelete: Cascade)
+  name             String
+  vaccineId        String?
+  dose             String?
+  doseNumber       Int?
+  scheduledDate    String?
+  completedDate    String?
+  isCompleted      Boolean  @default(false)
+  clinic           String?
+  batchNumber      String?
+  manufacturer     String?
+  productName      String?
+  traceabilityCode String?
+  injectionSite    String?
+  notes            String?
+  version          Int      @default(1)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @default(now()) @updatedAt
 
   @@index([babyId, scheduledDate])
+  @@index([babyId, completedDate])
+}
+
+// Durable create receipts survive a record deletion, preventing a delayed retry
+// from recreating a vaccination the caregiver has deliberately removed.
+model VaccineWriteReceipt {
+  babyId      String
+  baby        Baby     @relation(fields: [babyId], references: [id], onDelete: Cascade)
+  clientId    String
+  requestHash String
+  recordId    String
+  createdAt   DateTime @default(now())
+
+  @@id([babyId, clientId])
 }
 
 // ─── Family Vaccine Selection (which optional vaccines the family chooses) ──

@@ -1,15 +1,15 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth, requireBaby } from "@/lib/api-helpers";
-import { getLocalDateStr } from "@/lib/date";
 import { GROWDESK_CONFIG } from "@/lib/config";
 import { resolveBffSession } from "@/lib/growdesk/session";
 import { verifyBffCsrf } from "@/lib/growdesk/csrf";
 import { growdeskFetch } from "@/lib/growdesk/client";
 import { loadWebBaby } from "@/lib/growdesk/bridge-identity";
-import { BridgeError, bridgeErrorResponse, requireData } from "@/lib/growdesk/bridge-protocol";
-import { buildVaccineSelections, fromGrowDeskVaccineCatalog, projectLegacyVaccineSelections, type GrowDeskVaccineRecord } from "@/lib/growdesk/vaccine-compat";
+import { BridgeError, bridgeErrorResponse, pathId, requireData } from "@/lib/growdesk/bridge-protocol";
+import { buildVaccineSelections, fromGrowDeskVaccineCatalog, projectLegacyVaccineSelections, parseDoseNumber, readGrowDeskVaccineRecords, type GrowDeskVaccineRecord } from "@/lib/growdesk/vaccine-compat";
 import { wantsExtendedRepresentation } from "@/lib/growdesk/legacy-projections";
+import { completedVaccineFacts } from "@/lib/growdesk/vaccine-selection-facts";
 
 export async function GET(request: Request) {
   try {
@@ -29,14 +29,13 @@ export async function GET(request: Request) {
       }
 
       const [recRes, catalogRes, selectionRes] = await Promise.all([
-        growdeskFetch<GrowDeskVaccineRecord[]>(`/api/v1/babies/${babyId}/vaccines/records`, {
+        growdeskFetch<GrowDeskVaccineRecord[]>(`/api/v1/babies/${pathId(babyId)}/vaccines/records`, {
           accessToken: bffSession.accessToken,
         }),
         growdeskFetch<any>(`/api/v1/vaccines/catalog`, { accessToken: bffSession.accessToken }),
-        growdeskFetch<any[]>(`/api/v1/babies/${babyId}/vaccines/selections`, { accessToken: bffSession.accessToken }),
+        growdeskFetch<any[]>(`/api/v1/babies/${pathId(babyId)}/vaccines/selections`, { accessToken: bffSession.accessToken }),
       ]);
-      const recordsData = requireData(recRes);
-      const records = Array.isArray(recordsData) ? recordsData : [];
+      const records = readGrowDeskVaccineRecords(requireData(recRes), babyId);
       const catalog = fromGrowDeskVaccineCatalog(requireData(catalogRes));
       const normalizedSelections = requireData(selectionRes);
       const savedSelections: Record<string, { selected?: boolean; completed?: boolean; id?: string; updatedAt?: string }> = {};
@@ -59,12 +58,13 @@ export async function GET(request: Request) {
       }
       for (const record of records) {
         const legacyId = record.vaccineCode;
-        const dose = record.doseNumber || 1;
+        const dose = record.doseNumber ?? parseDoseNumber(record.legacyDose || record.notes);
+        if (dose === null || record.isCompleted === false) continue;
         const key = `${legacyId}-${dose}`;
         if (!savedSelections[key]) {
           savedSelections[key] = {
             selected: true,
-            completed: record.isCompleted !== false,
+            completed: true,
             id: record.id,
             updatedAt: record.updatedAt,
           };
@@ -87,12 +87,22 @@ export async function GET(request: Request) {
     const babyResult = await requireBaby(user.id, requestedBabyId);
     if (babyResult.errorResponse) return babyResult.errorResponse;
 
-    const selections = await prisma.vaccineSelection.findMany({
-      where: { babyId: babyResult.baby.id },
-      orderBy: [{ vaccineId: "asc" }, { doseNumber: "asc" }],
-    });
+    const [selections, records, catalog] = await Promise.all([
+      prisma.vaccineSelection.findMany({ where: { babyId: babyResult.baby.id }, orderBy: [{ vaccineId: "asc" }, { doseNumber: "asc" }] }),
+      prisma.vaccineRecord.findMany({ where: { babyId: babyResult.baby.id, isCompleted: true } }),
+      prisma.vaccine.findMany({ select: { id: true, vaccineId: true, name: true, shortName: true } }),
+    ]);
+    const facts = completedVaccineFacts(records, catalog);
+    const rows = selections.map(selection => ({ ...selection, completed: facts.has(`${selection.vaccineId}-${selection.doseNumber}`), recordId: facts.get(`${selection.vaccineId}-${selection.doseNumber}`) ?? null }));
+    const seen = new Set(rows.map(row => `${row.vaccineId}-${row.doseNumber}`));
+    for (const [key, recordId] of facts) {
+      if (seen.has(key)) continue;
+      const separator = key.lastIndexOf("-");
+      const record = records.find(item => item.id === recordId)!;
+      rows.push({ id: recordId, babyId: babyResult.baby.id, vaccineId: key.slice(0, separator), doseNumber: Number(key.slice(separator + 1)), selected: true, completed: true, recordId, updatedAt: record.updatedAt });
+    }
+    return NextResponse.json(rows);
 
-    return NextResponse.json(selections);
   } catch (error) {
     if (error instanceof BridgeError) return bridgeErrorResponse(error);
     console.error("GET /api/vaccines/selections error:", error);
@@ -127,14 +137,14 @@ export async function PUT(request: Request) {
       if (!vaccineId || typeof vaccineId !== "string") {
         return NextResponse.json({ error: "vaccineId 必填" }, { status: 400 });
       }
-      const dose = typeof doseNumber === "number" ? doseNumber : 1;
-      if (!Number.isInteger(dose) || dose < 1 || dose > 12) {
+      const dose = doseNumber;
+      if (typeof dose !== "number" || !Number.isInteger(dose) || dose < 1 || dose > 12) {
         return NextResponse.json({ error: "doseNumber 必须为 1-12 之间的整数" }, { status: 400 });
       }
-      if (typeof selected !== "boolean" && typeof completed !== "boolean") {
+      if ((selected !== undefined && typeof selected !== "boolean") || (completed !== undefined && typeof completed !== "boolean") || (selected === undefined && completed === undefined)) {
         return NextResponse.json({ error: "selected 或 completed 必须为布尔值" }, { status: 400 });
       }
-      const saved = requireData(await growdeskFetch<any>(`/api/v1/babies/${babyId}/vaccines/selections`, {
+      const saved = requireData(await growdeskFetch<any>(`/api/v1/babies/${pathId(babyId)}/vaccines/selections`, {
         method: "PUT",
         accessToken: bffSession.accessToken,
         body: {
@@ -171,90 +181,27 @@ export async function PUT(request: Request) {
         { status: 400 }
       );
     }
-    let dose = 1;
-    if (doseNumber !== undefined && doseNumber !== null) {
-      if (!Number.isInteger(doseNumber) || doseNumber < 1 || doseNumber > 12) {
-        return NextResponse.json(
-          { error: "doseNumber 必须为 1-12 之间的整数" },
-          { status: 400 }
-        );
+    const dose = doseNumber;
+    if (typeof dose !== "number" || !Number.isInteger(dose) || dose < 1 || dose > 12) {
+      return NextResponse.json({ error: "doseNumber 必须为 1-12 的整数" }, { status: 400 });
+    }
+    if ((selected !== undefined && typeof selected !== "boolean") || (completed !== undefined && typeof completed !== "boolean") || (selected === undefined && completed === undefined)) {
+      return NextResponse.json({ error: "selected 或 completed 必须为布尔值" }, { status: 400 });
+    }
+    const result = await prisma.$transaction(async tx => {
+      const records = await tx.vaccineRecord.findMany({ where: { babyId: baby.id, isCompleted: true } });
+      const catalog = await tx.vaccine.findMany({ select: { id: true, vaccineId: true, name: true, shortName: true } });
+      const recordId = completedVaccineFacts(records, catalog).get(`${vaccineId.trim()}-${dose}`);
+      const actualCompleted = Boolean(recordId);
+      if (completed !== undefined && completed !== actualCompleted) {
+        throw new BridgeError(400, "VACCINE_RECORD_REQUIRED", "请在接种记录中录入或更正实际接种信息；选择方案不会改变接种历史");
       }
-      dose = doseNumber;
-    }
-    if (typeof selected !== "boolean" && typeof completed !== "boolean") {
-      return NextResponse.json(
-        { error: "selected 或 completed 必须为布尔值" },
-        { status: 400 }
-      );
-    }
-
-    const result = await prisma.$transaction(async (tx) => {
       const selection = await tx.vaccineSelection.upsert({
-        where: {
-          babyId_vaccineId_doseNumber: {
-            babyId: baby.id,
-            vaccineId: vaccineId.trim(),
-            doseNumber: dose,
-          },
-        },
-        update: {
-          selected: selected !== undefined ? selected : undefined,
-          completed: completed !== undefined ? completed : undefined,
-        },
-        create: {
-          babyId: baby.id,
-          vaccineId: vaccineId.trim(),
-          doseNumber: dose,
-          selected: selected ?? true,
-          completed: completed ?? false,
-        },
+        where: { babyId_vaccineId_doseNumber: { babyId: baby.id, vaccineId: vaccineId.trim(), doseNumber: dose } },
+        update: { ...(selected === undefined ? {} : { selected }), completed: actualCompleted },
+        create: { babyId: baby.id, vaccineId: vaccineId.trim(), doseNumber: dose, selected: selected ?? true, completed: actualCompleted },
       });
-
-      if (completed === true) {
-        const vaccine = await tx.vaccine.findUnique({ where: { vaccineId: vaccineId.trim() } });
-        const vName = vaccine?.name || vaccineId.trim();
-        const doseStr = `第${dose}剂`;
-        const todayStr = getLocalDateStr();
-
-        const existingRecord = await tx.vaccineRecord.findFirst({
-          where: {
-            babyId: baby.id,
-            name: vName,
-            dose: doseStr,
-          },
-        });
-
-        if (existingRecord) {
-          await tx.vaccineRecord.update({
-            where: { id: existingRecord.id },
-            data: { isCompleted: true, completedDate: existingRecord.completedDate || todayStr },
-          });
-        } else {
-          await tx.vaccineRecord.create({
-            data: {
-              babyId: baby.id,
-              name: vName,
-              dose: doseStr,
-              scheduledDate: todayStr,
-              completedDate: todayStr,
-              isCompleted: true,
-            },
-          });
-        }
-      } else if (completed === false) {
-        const vaccine = await tx.vaccine.findUnique({ where: { vaccineId: vaccineId.trim() } });
-        const vName = vaccine?.name || vaccineId.trim();
-        const doseStr = `第${dose}剂`;
-        await tx.vaccineRecord.deleteMany({
-          where: {
-            babyId: baby.id,
-            name: vName,
-            dose: doseStr,
-          },
-        });
-      }
-
-      return selection;
+      return { ...selection, completed: actualCompleted, recordId: recordId ?? null };
     });
 
     return NextResponse.json(result);

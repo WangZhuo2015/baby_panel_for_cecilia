@@ -192,6 +192,17 @@ export async function restoreSnapshot(ctx: SnapshotContext, snapshotId: string) 
           scheduledDate: payload.scheduledDate,
           completedDate: payload.completedDate,
           isCompleted: Boolean(payload.isCompleted),
+          vaccineId: payload.vaccineId ?? null,
+          doseNumber: payload.doseNumber ?? null,
+          clinic: payload.clinic ?? null,
+          batchNumber: payload.batchNumber ?? null,
+          manufacturer: payload.manufacturer ?? null,
+          productName: payload.productName ?? null,
+          traceabilityCode: payload.traceabilityCode ?? null,
+          injectionSite: payload.injectionSite ?? null,
+          notes: payload.notes ?? null,
+          // Preserve a fresh revision so a stale editor cannot overwrite the restored record.
+          version: Number.isSafeInteger(payload.version) && payload.version >= 1 ? payload.version + 1 : 1,
         },
       });
       break;

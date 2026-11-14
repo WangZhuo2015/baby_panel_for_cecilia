@@ -1,5 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
+import { BridgeError, wireVersion } from "./bridge-protocol";
+import { parseDoseNumber, vaccineRecordFields, type VaccineRecordFields } from "./vaccine-record-fields";
+export { parseDoseNumber } from "./vaccine-record-fields";
 import vaccineDataset from "../../data/02_vaccines.json";
 import sourcesDataset from "../../data/01_sources.json";
 import {
@@ -18,16 +21,11 @@ if (typeof window !== "undefined") {
   throw new Error("This module can only be loaded on the server.");
 }
 
-export interface LegacyVaccineRecord {
+export interface LegacyVaccineRecord extends VaccineRecordFields {
   id: string;
   babyId: string;
-  name: string;
-  vaccineId?: string;
-  dose: string;
-  scheduledDate: string;
-  completedDate: string | null;
-  isCompleted: boolean;
-  notes?: string | null;
+  vaccineCode?: string;
+  version: string;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -47,6 +45,10 @@ export interface GrowDeskVaccineRecord {
   isCompleted?: boolean;
   clinic: string | null;
   batchNumber: string | null;
+  manufacturer?: string | null;
+  productName?: string | null;
+  traceabilityCode?: string | null;
+  injectionSite?: string | null;
   notes: string | null;
   version: string;
   createdAt: string;
@@ -128,79 +130,91 @@ export function fromGrowDeskVaccineCatalog(raw: unknown, regionCode = "CN-JS") {
   };
 }
 
-export function parseDoseNumber(val: unknown): number {
-  if (typeof val === "number" && Number.isInteger(val) && val >= 1) return val;
-  if (typeof val === "string") {
-    const match = val.match(/\d+/);
-    if (match) {
-      const num = parseInt(match[0], 10);
-      if (num >= 1 && num <= 12) return num;
-    }
-  }
-  return 1;
-}
-
 export function toGrowDeskVaccineRecordPayload(body: Record<string, unknown>) {
-  const vaccineRef = String(body.vaccineId || body.vaccineCode || body.name || "").trim();
-  const code = String(body.vaccineCode || body.vaccineId || body.name || "").trim();
-  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(vaccineRef);
-  const isCompleted = body.isCompleted !== false;
-  const scheduledDate = String(
-    body.scheduledDate || body.completedDate || body.administeredDate || new Date().toISOString().slice(0, 10),
-  ).trim();
-  const completedDate = isCompleted
-    ? String(body.completedDate || body.administeredDate || scheduledDate).trim()
-    : null;
-
-  const clinic = body.clinic ? String(body.clinic).trim() : null;
-  const batchNumber = body.batchNumber ? String(body.batchNumber).trim() : null;
-
-  let notes = body.notes ? String(body.notes).trim() : null;
-  const rawDose = body.dose !== undefined && body.dose !== null ? String(body.dose).trim() : (body.doseNumber !== undefined && body.doseNumber !== null ? String(body.doseNumber).trim() : "");
-  if (rawDose && !notes?.includes("剂次")) {
-    notes = notes ? `${notes} (剂次: ${rawDose})` : `剂次: ${rawDose}`;
-  } else if (!notes?.includes("剂次")) {
-    const doseNum = parseDoseNumber(body.dose || body.doseNumber);
-    const doseLabel = `第${doseNum}剂`;
-    notes = notes ? `${notes} (剂次: ${doseLabel})` : `剂次: ${doseLabel}`;
-  }
-
+  const fields = vaccineRecordFields(body);
+  const vaccineCode = typeof body.vaccineCode === "string" && body.vaccineCode.trim()
+    ? body.vaccineCode.trim() : fields.vaccineId || "unmapped";
+  if (vaccineCode.length > 100) throw new BridgeError(400, "INVALID_VACCINE_RECORD", "疫苗目录编码过长");
   return {
-    vaccineCode: code,
-    ...(isUuid ? { vaccineId: vaccineRef } : {}),
-    doseNumber: parseDoseNumber(body.doseNumber ?? body.dose),
-    legacyName: body.name ? String(body.name).trim() : null,
-    legacyDose: body.dose ? String(body.dose).trim() : null,
-    administeredDate: isCompleted ? (completedDate || scheduledDate) : scheduledDate,
-    scheduledDate,
-    completedDate,
-    isCompleted,
-    clinic,
-    batchNumber,
-    notes,
+    vaccineCode,
+    ...((fields.vaccineId && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(fields.vaccineId)) ? { vaccineId: fields.vaccineId } : {}),
+    doseNumber: fields.doseNumber,
+    legacyName: fields.name,
+    legacyDose: fields.dose,
+    administeredDate: fields.isCompleted ? fields.completedDate! : fields.scheduledDate!,
+    scheduledDate: fields.scheduledDate,
+    completedDate: fields.completedDate,
+    isCompleted: fields.isCompleted,
+    clinic: fields.clinic,
+    batchNumber: fields.batchNumber,
+    manufacturer: fields.manufacturer,
+    productName: fields.productName,
+    traceabilityCode: fields.traceabilityCode,
+    injectionSite: fields.injectionSite,
+    notes: fields.notes,
   };
 }
 
-export function fromGrowDeskVaccineRecord(rec: GrowDeskVaccineRecord): LegacyVaccineRecord {
-  const doseNum = rec.doseNumber ?? parseDoseNumber(rec.legacyDose || rec.notes);
-  const dose = rec.legacyDose || `第${doseNum}剂`;
-  const isCompleted = rec.isCompleted !== undefined ? rec.isCompleted : rec.completedDate === null ? false : true;
-  const scheduledDate = rec.scheduledDate || rec.administeredDate;
-  const completedDate = isCompleted ? (rec.completedDate || rec.administeredDate) : null;
+export function toGrowDeskVaccineUpdatePayload(body: Record<string, unknown>, current: GrowDeskVaccineRecord) {
+  const prior = fromGrowDeskVaccineRecord(current);
+  const fields = vaccineRecordFields(body, prior);
+  const full = toGrowDeskVaccineRecordPayload({ ...fields, vaccineCode: body.vaccineCode ?? (body.vaccineId !== undefined ? fields.vaccineId || "unmapped" : current.vaccineCode) });
+  const patch: Record<string, unknown> = { baseVersion: wireVersion(body.baseVersion) };
+  // Keep PATCH partial: a display fallback must never be written back as a new fact.
+  for (const key of ["clinic", "batchNumber", "manufacturer", "productName", "traceabilityCode", "injectionSite", "notes"] as const) {
+    if (body[key] !== undefined) patch[key] = fields[key];
+  }
+  if (body.name !== undefined) patch.legacyName = fields.name;
+  if (body.dose !== undefined) patch.legacyDose = fields.dose;
+  if (body.dose !== undefined || body.doseNumber !== undefined) patch.doseNumber = fields.doseNumber;
+  if (body.vaccineCode !== undefined || body.vaccineId !== undefined) {
+    patch.vaccineCode = full.vaccineCode;
+    if (fields.vaccineId === null) patch.vaccineId = null;
+    else if ("vaccineId" in full) patch.vaccineId = full.vaccineId;
+  }
+  if (body.isCompleted !== undefined) patch.isCompleted = fields.isCompleted;
+  if (body.scheduledDate !== undefined) patch.scheduledDate = fields.scheduledDate;
+  if (body.administeredDate !== undefined || body.completedDate !== undefined || body.isCompleted !== undefined || (!fields.isCompleted && body.scheduledDate !== undefined)) {
+    patch.administeredDate = full.administeredDate;
+    patch.completedDate = fields.completedDate;
+  }
+  return patch;
+}
 
+export function fromGrowDeskVaccineRecord(rec: GrowDeskVaccineRecord): LegacyVaccineRecord {
+  const doseNumber = rec.doseNumber ?? parseDoseNumber(rec.legacyDose || rec.notes);
+  const isCompleted = rec.isCompleted !== undefined ? rec.isCompleted : rec.completedDate !== null;
   return {
     id: rec.id,
     babyId: rec.babyId,
     name: rec.legacyName || rec.vaccineCode,
-    vaccineId: rec.vaccineCode,
-    dose,
-    scheduledDate,
-    completedDate,
+    vaccineId: rec.vaccineCode === "unmapped" || (rec.vaccineCode === rec.legacyName && !rec.vaccineId) ? null : rec.vaccineCode,
+    vaccineCode: rec.vaccineCode,
+    dose: rec.legacyDose || (doseNumber === null ? null : `第${doseNumber}剂`),
+    doseNumber,
+    scheduledDate: rec.scheduledDate ?? null,
+    completedDate: isCompleted ? (rec.completedDate || rec.administeredDate) : null,
     isCompleted,
+    clinic: rec.clinic,
+    batchNumber: rec.batchNumber,
+    manufacturer: rec.manufacturer ?? null,
+    productName: rec.productName ?? null,
+    traceabilityCode: rec.traceabilityCode ?? null,
+    injectionSite: rec.injectionSite ?? null,
     notes: rec.notes,
+    version: wireVersion(rec.version),
     createdAt: rec.createdAt,
     updatedAt: rec.updatedAt,
   };
+}
+
+/** Scope mismatches must never be rendered as another baby's vaccination book. */
+export function readGrowDeskVaccineRecords(value: unknown, babyId: string): GrowDeskVaccineRecord[] {
+  if (!Array.isArray(value)) throw new BridgeError(502, "UPSTREAM_INVALID_RESPONSE", "接种记录返回格式无效");
+  for (const record of value) {
+    if (!record || record.babyId !== babyId) throw new BridgeError(502, "UPSTREAM_SCOPE_MISMATCH", "接种记录宝宝范围不一致");
+  }
+  return value as GrowDeskVaccineRecord[];
 }
 
 let cachedKnowledgeBase: any = null;
@@ -645,7 +659,8 @@ export function projectLegacyVaccineSelections(
 ) {
   const recordByKey = new Map<string, GrowDeskVaccineRecord>();
   for (const record of records) {
-    recordByKey.set(`${record.vaccineCode}-${record.doseNumber ?? parseDoseNumber(record.legacyDose || record.notes)}`, record);
+    const dose = record.doseNumber ?? parseDoseNumber(record.legacyDose || record.notes);
+    if (dose !== null && record.isCompleted !== false) recordByKey.set(`${record.vaccineCode}-${dose}`, record);
   }
   return Object.entries(savedSelections ?? {})
     .map(([key, saved]) => {
@@ -662,7 +677,7 @@ export function projectLegacyVaccineSelections(
         vaccineId,
         doseNumber,
         selected: saved.selected ?? true,
-        completed: saved.completed ?? false,
+        completed: Boolean(record),
         ...(updatedAt ? { updatedAt } : {}),
       };
       return row;
@@ -680,6 +695,7 @@ export function buildVaccineSelections(
 
   for (const rec of records) {
     const doseNum = rec.doseNumber ?? parseDoseNumber(rec.legacyDose || rec.notes);
+    if (doseNum === null || rec.isCompleted === false) continue;
     const key = `${rec.vaccineCode}-${doseNum}`;
     recordMap.set(key, rec);
   }
@@ -697,7 +713,7 @@ export function buildVaccineSelections(
         (v.shortName ? recordMap.get(`${v.shortName.split("/")[0]}-${d.doseNumber}`) : undefined);
       const saved = savedSelections ? savedSelections[key] : undefined;
 
-      const isCompleted = Boolean((rec && rec.isCompleted !== false) || saved?.completed);
+      const isCompleted = Boolean(rec);
       const isSelected = saved?.selected !== undefined ? saved.selected : true;
 
       result.push({

@@ -46,6 +46,8 @@ test("Issue #6: Growth, Medical, Books, Vaccines & Food Parity Unit Tests", asyn
     // Vaccines
     assert.equal(isBridgedMethod("/api/vaccines", "GET"), true);
     assert.equal(isBridgedMethod("/api/vaccines", "POST"), true);
+    assert.equal(isBridgedMethod("/api/vaccines", "PATCH"), true);
+    assert.equal(isBridgedMethod("/api/vaccines/records", "GET"), true);
     assert.equal(isBridgedMethod("/api/vaccines", "DELETE"), true);
     assert.equal(isBridgedMethod("/api/vaccines/selections", "GET"), true);
     assert.equal(isBridgedMethod("/api/vaccines/selections", "PUT"), true);
@@ -218,7 +220,7 @@ test("Issue #6: Growth, Medical, Books, Vaccines & Food Parity Unit Tests", asyn
     assert.equal(parseDoseNumber("第1剂"), 1);
     assert.equal(parseDoseNumber("第2剂"), 2);
     assert.equal(parseDoseNumber("第3剂"), 3);
-    assert.equal(parseDoseNumber(null), 1);
+    assert.equal(parseDoseNumber(null), null);
 
     const rawRecords: GrowDeskVaccineRecord[] = [
       {

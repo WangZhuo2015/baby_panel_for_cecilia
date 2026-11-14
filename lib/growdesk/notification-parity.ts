@@ -1,3 +1,4 @@
+import { parseDoseNumber } from "./vaccine-record-fields";
 import { isValidDateStr } from "@/lib/date";
 import type { NotificationItem } from "@/app/api/notifications/route";
 import {
@@ -394,20 +395,14 @@ export function buildFamilyRecordNotifications(
   return result.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)).slice(0, 20);
 }
 
-function doseNumber(notes: unknown): number {
-  const match = typeof notes === "string" ? notes.match(/第\s*(\d+)\s*剂|剂次\s*:\s*第?\s*(\d+)/) : null;
-  const value = match ? Number(match[1] || match[2]) : 1;
-  return Number.isInteger(value) && value >= 1 ? value : 1;
-}
-
-function vaccineDoseNumber(record: VaccineRecord): number {
+function vaccineDoseNumber(record: VaccineRecord): number | null {
   if (record.doseNumber !== undefined && record.doseNumber !== null) {
     if (!Number.isInteger(record.doseNumber) || record.doseNumber < 1 || record.doseNumber > 12) {
       invalidResponse("GrowDesk 返回了无效的疫苗 doseNumber");
     }
     return record.doseNumber;
   }
-  return doseNumber(record.legacyDose || record.notes);
+  return parseDoseNumber(record.legacyDose || record.notes);
 }
 
 function vaccineText(value: unknown, field: string, fallback: string): string {
@@ -415,7 +410,7 @@ function vaccineText(value: unknown, field: string, fallback: string): string {
   return stringField(value, field);
 }
 
-function pendingNaturalKey(code: string, dose: number, scheduledDate: string, name: string): string {
+function pendingNaturalKey(code: string, dose: number | null, scheduledDate: string, name: string): string {
   return `${code}\u0000${dose}\u0000${scheduledDate}\u0000${name}`;
 }
 
@@ -446,7 +441,7 @@ export function buildVaccineReminderNotifications(
       continue;
     }
     dateField(record.administeredDate, "疫苗 administeredDate");
-    completed.add(`${code}-${dose}`);
+    if (dose !== null && code !== "unmapped") completed.add(`${code}-${dose}`);
   }
 
   const buildReminder = (
@@ -454,11 +449,11 @@ export function buildVaccineReminderNotifications(
     code: string,
     name: string,
     dose: string,
-    doseNum: number,
+    doseNum: number | null,
     scheduledDate: string,
   ): NotificationItem | null => {
     const key = `${code}-${doseNum}`;
-    if (completed.has(key)) return null;
+    if (doseNum !== null && code !== "unmapped" && completed.has(key)) return null;
     const scheduledMs = Date.parse(scheduledDate);
     const days = Math.ceil((scheduledMs - nowMs) / (24 * 60 * 60 * 1000));
     if (days > 7) return null;
@@ -482,7 +477,7 @@ export function buildVaccineReminderNotifications(
       ? dateField(record.administeredDate, "疫苗 administeredDate")
       : dateField(record.scheduledDate, "疫苗 scheduledDate");
     const name = vaccineText(record.legacyName, "疫苗 legacyName", code);
-    const dose = vaccineText(record.legacyDose, "疫苗 legacyDose", `第${doseNum}剂`);
+    const dose = vaccineText(record.legacyDose, "疫苗 legacyDose", doseNum === null ? "剂次待核对" : `第${doseNum}剂`);
     canonicalPendingKeys.add(pendingNaturalKey(code, doseNum, scheduledDate, name));
     const reminder = buildReminder(record.id, code, name, dose, doseNum, scheduledDate);
     return reminder ? [reminder] : [];
@@ -491,7 +486,7 @@ export function buildVaccineReminderNotifications(
   const legacyItems = legacyPending.flatMap(record => {
     const code = record.vaccineId || record.name;
     if (canonicalPendingKeys.has(pendingNaturalKey(code, record.doseNumber, record.scheduledDate, record.name))) return [];
-    const reminder = buildReminder(record.id, code, record.name, record.dose, record.doseNumber, record.scheduledDate);
+    const reminder = buildReminder(record.id, code, record.name, record.dose || "剂次待核对", record.doseNumber, record.scheduledDate);
     return reminder ? [reminder] : [];
   });
   return [...canonicalItems, ...legacyItems].sort((a, b) => a.detail.localeCompare(b.detail));

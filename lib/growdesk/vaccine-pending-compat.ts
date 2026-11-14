@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { isValidDateStr } from "@/lib/date";
 import { BridgeError } from "./bridge-protocol";
+import { parseDoseNumber } from "./vaccine-record-fields";
 import { readGrowDeskFoodPlan, type GrowDeskFoodPlanState } from "./food-plan-state";
 
 export interface LegacyPendingVaccine {
@@ -8,8 +9,8 @@ export interface LegacyPendingVaccine {
   babyId: string;
   vaccineId?: string;
   name: string;
-  dose: string;
-  doseNumber: number;
+  dose: string | null;
+  doseNumber: number | null;
   scheduledDate: string;
   completedDate: null;
   isCompleted: false;
@@ -41,8 +42,8 @@ function pendingFields(raw: Record<string, unknown>, babyId: string, status: num
   if (raw.babyId !== babyId) throw new BridgeError(502, "UPSTREAM_SCOPE_MISMATCH", "待接种记录宝宝范围不一致");
   const scheduledDate = text(raw.scheduledDate, "scheduledDate", 10, status);
   if (!isValidDateStr(scheduledDate)) invalid("scheduledDate 必须是有效的 YYYY-MM-DD 日期", status);
-  const doseNumber = raw.doseNumber;
-  if (!Number.isInteger(doseNumber) || Number(doseNumber) < 1 || Number(doseNumber) > 12) invalid("doseNumber 必须为 1-12 的整数", status);
+  const doseNumber = raw.doseNumber ?? null;
+  if (doseNumber !== null && (typeof doseNumber !== "number" || !Number.isInteger(doseNumber) || doseNumber < 1 || doseNumber > 12)) invalid("doseNumber 必须为 1-12 的整数或未知", status);
   if (raw.isCompleted !== false || raw.completedDate !== null) invalid("待接种记录完成状态无效", status);
   const createdAt = text(raw.createdAt, "createdAt", 64, status);
   const updatedAt = text(raw.updatedAt, "updatedAt", 64, status);
@@ -50,8 +51,8 @@ function pendingFields(raw: Record<string, unknown>, babyId: string, status: num
   const vaccineId = raw.vaccineId === undefined ? undefined : text(raw.vaccineId, "vaccineId", 200, status);
   return {
     id: text(raw.id, "id", 200, status), babyId, ...(vaccineId ? { vaccineId } : {}),
-    name: text(raw.name, "name", 200, status), dose: text(raw.dose, "dose", 50, status),
-    doseNumber: Number(doseNumber), scheduledDate, completedDate: null, isCompleted: false,
+    name: text(raw.name, "name", 200, status), dose: raw.dose === null || raw.dose === undefined || raw.dose === "" ? null : text(raw.dose, "dose", 100, status),
+    doseNumber: doseNumber === null ? null : Number(doseNumber), scheduledDate, completedDate: null, isCompleted: false,
     createdAt, updatedAt,
   };
 }
@@ -70,9 +71,8 @@ export function readLegacyPendingVaccines(plan: PendingPlanEnvelope): LegacyPend
 }
 
 export function createLegacyPendingVaccine(body: Record<string, unknown>, babyId: string, now = new Date()): LegacyPendingVaccine {
-  const dose = typeof body.dose === "string" && body.dose.trim() ? body.dose.trim() : "第1剂";
-  const match = dose.match(/\d+/);
-  const doseNumber = body.doseNumber ?? (match ? Number(match[0]) : 1);
+  const dose = typeof body.dose === "string" && body.dose.trim() ? body.dose.trim() : null;
+  const doseNumber = body.doseNumber ?? parseDoseNumber(dose);
   const timestamp = now.toISOString();
   return pendingFields({
     id: typeof body.clientId === "string" && body.clientId.trim() ? body.clientId.trim() : randomUUID(),

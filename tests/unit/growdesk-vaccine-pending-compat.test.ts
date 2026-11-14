@@ -126,7 +126,8 @@ test("pending route sends a normalized scheduled record and propagates 409", asy
   });
   const response = await postVaccine(request("POST", { babyId, clientId: "pending_route", name: "测试疫苗", dose: "第1剂", scheduledDate: "2026-09-20", isCompleted: false }));
   assert.equal(response.status, 409);
-  assert.equal(written.vaccineCode, "测试疫苗");
+  assert.equal(written.vaccineCode, "unmapped");
+  assert.equal(written.legacyName, "测试疫苗");
   assert.equal(written.scheduledDate, "2026-09-20");
   assert.equal(written.administeredDate, "2026-09-20");
   assert.equal(written.completedDate, null);
@@ -213,4 +214,18 @@ test("pending route propagates canonical baby scope errors before a legacy write
   const response = await postVaccine(request("POST", { babyId, name: "测试疫苗", scheduledDate: "2026-09-20", isCompleted: false }));
   assert.equal(response.status, 403);
   assert.equal(writes, 1);
+});
+
+
+test("unknown dose remains unknown and cannot suppress a first-dose appointment", () => {
+  const pending = createLegacyPendingVaccine({ clientId: "test_unknown_dose", name: "test_vaccine", scheduledDate: "2026-09-20" }, babyId, new Date(nowMs));
+  assert.equal(pending.doseNumber, null);
+  assert.equal(pending.dose, null);
+  const records = [
+    { id: "test_completed_unknown", babyId, familyId: scope.familyId, vaccineCode: "vac_test", doseNumber: null, legacyDose: null, notes: "13价", administeredDate: "2026-09-19", isCompleted: true },
+    { id: "test_pending_first", babyId, familyId: scope.familyId, vaccineCode: "vac_test", doseNumber: 1, legacyName: "test_vaccine", administeredDate: "2026-09-20", scheduledDate: "2026-09-20", isCompleted: false, completedDate: null },
+  ];
+  const reminders = buildVaccineReminderNotifications([], records, fullPlan("8", {}), scope, clock, nowMs);
+  assert.equal(reminders.length, 1);
+  assert.equal(reminders[0].id, "vaccine-test_pending_first");
 });

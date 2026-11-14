@@ -7,7 +7,7 @@ import { prisma } from "../../lib/prisma";
 import { getLocalDateStr } from "../../lib/date";
 import { createTestTenant, destroyTestTenant } from "../helpers/tenant";
 
-const BASE_URL = process.env.BABY_PANEL_URL || "http://127.0.0.1:3088";
+const BASE_URL = process.env.BABY_PANEL_URL || "http://127.0.0.1:3089";
 
 test("API: Medical Reports and Vaccines Domain", async (t) => {
   // 隔离租户：禁止 findFirst 抓取真实用户/宝宝（AGENTS.md）
@@ -28,6 +28,12 @@ test("API: Medical Reports and Vaccines Domain", async (t) => {
   const vacData = await vacRes.json();
   assert.ok(Array.isArray(vacData.national), "National NIP vaccines list should exist");
   assert.ok(Array.isArray(vacData.schedule), "Vaccine schedule entries should exist");
+
+  const completedRecord = await fetch(`${BASE_URL}/api/vaccines`, {
+    method: "POST", headers,
+    body: JSON.stringify({ babyId: baby.id, vaccineId: "vac_hepb", name: "test_乙肝疫苗", doseNumber: 1, completedDate: "2026-08-01", isCompleted: true }),
+  });
+  assert.equal(completedRecord.status, 201, "Explicit actual date must be recorded before completion can be projected");
 
   // 2. Vaccine Selections & Completion Tracking
   console.log("-> Testing Vaccine Selections API...");
