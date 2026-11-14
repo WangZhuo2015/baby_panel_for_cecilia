@@ -130,6 +130,53 @@ class Scenario:
             'receipts',(SELECT COUNT(*) FROM idempotency_receipts WHERE scope_id='{family}'),
             'cursor',(SELECT cursor::text FROM family_sync_states WHERE family_id='{family}'));"""))
 
+    def vaccine_ledger(self, bid, other_bid, owner):
+        self.owned.sql("""INSERT INTO vaccines(id,vaccine_code,name,program_type,china_national)
+            VALUES('test_web_ledger_vaccine','TEST-WEB-LEDGER','test_web_ledger_product','non_program',false);""")
+        payload = {'babyId': bid, 'clientId': 'test_web_ledger_create', 'name': 'test_疫苗本原文',
+            'vaccineId': 'TEST-WEB-LEDGER', 'recordStatus': 'completed', 'doseNumber': 1,
+            'completedDate': '2026-04-01', 'manufacturer': 'test_manufacturer', 'clinic': 'test_clinic',
+            'batchNumber': 'TEST-LOT', 'traceCode': '0000001234', 'administrationRoute': '口服',
+            'sourceText': 'test_原始抄录', 'notes': 'test_original'}
+        created = self.bff('POST', '/api/vaccines', 201, payload)['record']
+        record_id = identifier(created['id'])
+        assert created['vaccineId'] == 'TEST-WEB-LEDGER' and created['version'] == '1'
+        assert self.bff('POST', '/api/vaccines', 201, payload)['record']['id'] == record_id
+        self.bff('POST', '/api/vaccines', 409, {**payload, 'notes': 'test_conflicting_retry'})
+        changed = self.bff('PUT', '/api/vaccines', 200,
+            {'id': record_id, 'babyId': bid, 'baseVersion': '1', 'notes': 'test_corrected'})['record']
+        assert changed['version'] == '2' and changed['traceCode'] == '0000001234'
+        assert changed['administeredDate'] == '2026-04-01' and changed['manufacturer'] == 'test_manufacturer'
+        self.bff('PUT', '/api/vaccines', 409, {'id': record_id, 'babyId': bid, 'baseVersion': '1', 'notes': 'test_stale'})
+        self.bff('PUT', '/api/vaccines', 404, {'id': record_id, 'babyId': other_bid, 'baseVersion': '2', 'notes': 'test_wrong_baby'})
+        self.bff('PUT', '/api/vaccines/selections', 200,
+            {'babyId': bid, 'vaccineId': 'TEST-WEB-LEDGER', 'doseNumber': 1, 'selected': True})
+        self.bff('PUT', '/api/vaccines/selections', 400,
+            {'babyId': bid, 'vaccineId': 'TEST-WEB-LEDGER', 'doseNumber': 1, 'completed': False})
+        assert self.owned.sql(f"SELECT vaccine_id='test_web_ledger_vaccine' AND trace_code='0000001234' AND version=2 FROM vaccine_records WHERE id='{record_id}';") == 't'
+        self.passed('vaccine Web ledger persists metadata and product identity with idempotency and atomic PATCH')
+
+        plan = self.bff('POST', '/api/vaccines', 201, {'babyId': bid, 'clientId': 'test_web_ledger_plan',
+            'name': 'test_预约', 'recordStatus': 'planned', 'scheduledDate': '2030-01-01', 'doseNumber': None})['record']
+        assert plan['administeredDate'] is None and plan['doseNumber'] is None
+        review = self.bff('POST', '/api/vaccines', 201, {'babyId': bid, 'clientId': 'test_web_ledger_review',
+            'name': 'PENTAXIM', 'vaccineId': None, 'recordStatus': 'needs_review', 'sourceText': 'test_产品日期未确认'})['record']
+        assert review['vaccineId'] is None and review['administeredDate'] is None
+        self.bff('PUT', '/api/vaccines', 400, {'id': plan['id'], 'babyId': bid, 'baseVersion': '1', 'recordStatus': 'completed'})
+        confirmed = self.bff('PUT', '/api/vaccines', 200, {'id': plan['id'], 'babyId': bid, 'baseVersion': '1',
+            'recordStatus': 'completed', 'completedDate': '2026-04-02'})['record']
+        assert confirmed['administeredDate'] == '2026-04-02' and confirmed['scheduledDate'] == '2030-01-01'
+        rows = self.bff('GET', f'/api/vaccines?view=records&babyId={bid}', 200)['records']
+        assert len(rows) == 3 and any(row['id'] == review['id'] and row['vaccineId'] is None for row in rows)
+        old_client = self.api('GET', f'/api/v1/babies/{bid}/vaccines/records', 200, token=owner)['data']
+        assert all(isinstance(row['administeredDate'], str) for row in old_client)
+        assert all(row['id'] != review['id'] for row in old_client)
+        self.bff('DELETE', f'/api/vaccines?id={record_id}&babyId={bid}&baseVersion=1', 409)
+        self.bff('DELETE', f'/api/vaccines?id={record_id}&babyId={bid}&baseVersion=2', 200)
+        assert self.owned.sql(f"SELECT deleted_at IS NOT NULL FROM vaccine_records WHERE id='{record_id}';") == 't'
+        assert len(self.bff('GET', f'/api/vaccines?view=records&babyId={bid}', 200)['records']) == 2
+        self.passed('vaccine plans/review remain distinct, legacy iOS dates stay decodable and deletion is versioned')
+
     def run(self):
         username = 'test_web_go_' + self.owned.owner
         password = 'test_password_' + secrets.token_hex(12)
@@ -208,6 +255,8 @@ class Scenario:
         assert all('version' not in row for row in self.bff('GET', timeline_path, 200))
         assert self.owned.sql(f"SELECT COUNT(*) FROM baby_food_plans WHERE baby_id='{bid}';") == '0'
         self.passed('five-kind Go timeline, overnight sleep and archived canonical supplement without food-plan')
+
+        self.vaccine_ledger(bid, other_bid, owner)
 
         caregiver_name = 'test_web_go_caregiver_' + self.owned.owner
         caregiver = self.api('POST', '/api/v1/auth/register', 201,

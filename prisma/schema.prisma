@@ -639,16 +639,35 @@ model FoodPlan {
 // ─── Family Vaccine Record (actual completed/scheduled record for baby) ─────
 
 model VaccineRecord {
-  id            String   @id @default(uuid())
-  babyId        String
-  baby          Baby     @relation(fields: [babyId], references: [id], onDelete: Cascade)
-  name          String
-  dose          String
-  scheduledDate String
-  completedDate String?
-  isCompleted   Boolean  @default(false)
+  id                  String   @id @default(uuid())
+  babyId              String
+  baby                Baby     @relation(fields: [babyId], references: [id], onDelete: Cascade)
+  name                String
+  vaccineId           String?
+  dose                String
+  doseNumber          Int?
+  recordStatus        String?  // completed | planned | needs_review; null for old writers
+  administeredDate    String?
+  scheduledDate       String?
+  completedDate       String?
+  isCompleted         Boolean  @default(false)
+  manufacturer        String?
+  clinic              String?
+  batchNumber         String?
+  traceCode           String?
+  administrationRoute String?
+  injectionSite       String?
+  sourceText          String?
+  notes               String?
+  version             Int      @default(1)
+  clientId            String?
+  clientHash          String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @default(now()) @updatedAt
 
   @@index([babyId, scheduledDate])
+  @@index([babyId, vaccineId, doseNumber])
+  @@unique([babyId, clientId])
 }
 
 // ─── Family Vaccine Selection (which optional vaccines the family chooses) ──

@@ -382,7 +382,7 @@ test("SH-08: Medical Compat DTO Layer", async (t) => {
 });
 
 test("SH-08: Vaccine Compat DTO Layer", async (t) => {
-  await t.test("toGrowDeskVaccineRecordPayload: extracts vaccineCode and dose note", () => {
+  await t.test("toGrowDeskVaccineRecordPayload: preserves a plan without creating an administration or changing notes", () => {
     const p = toGrowDeskVaccineRecordPayload({
       vaccineId: "hep-b",
       dose: "1",
@@ -392,9 +392,12 @@ test("SH-08: Vaccine Compat DTO Layer", async (t) => {
     });
 
     assert.equal(p.vaccineCode, "hep-b");
-    assert.equal(p.administeredDate, "2026-09-12");
+    assert.equal(p.administeredDate, null);
+    assert.equal(p.scheduledDate, "2026-09-12");
+    assert.equal(p.recordStatus, "planned");
+    assert.equal(p.doseNumber, 1);
     assert.equal(p.clinic, "Community Clinic");
-    assert.ok(p.notes?.includes("剂次: 1"));
+    assert.equal(p.notes, "Left arm");
   });
 
   await t.test("fromGrowDeskVaccineRecord: parses dose from notes and marks completed", () => {
@@ -412,7 +415,7 @@ test("SH-08: Vaccine Compat DTO Layer", async (t) => {
       updatedAt: "2026-09-12T09:00:00.000Z",
     });
 
-    assert.equal(rec.vaccineId, "BCG");
+    assert.equal(rec.vaccineId, null, "a bare abbreviation does not silently establish a catalogue relationship");
     assert.equal(rec.dose, "第2剂");
     assert.equal(rec.isCompleted, true);
     assert.equal(rec.completedDate, "2026-09-12");

@@ -2,6 +2,8 @@ import fs from "node:fs";
 import path from "node:path";
 import vaccineDataset from "../../data/02_vaccines.json";
 import sourcesDataset from "../../data/01_sources.json";
+import { matchVaccineProduct, parseVaccineRecordInput, vaccineDoseNumber, vaccineRecordStatus, type VaccineLedgerRecord, type VaccineRecordStatus } from "../vaccine-records";
+import { getLocalDateStr, isValidDateStr } from "../date";
 import {
   legacyDataReleaseId,
   legacyFixtureCreatedAt,
@@ -18,19 +20,7 @@ if (typeof window !== "undefined") {
   throw new Error("This module can only be loaded on the server.");
 }
 
-export interface LegacyVaccineRecord {
-  id: string;
-  babyId: string;
-  name: string;
-  vaccineId?: string;
-  dose: string;
-  scheduledDate: string;
-  completedDate: string | null;
-  isCompleted: boolean;
-  notes?: string | null;
-  createdAt?: string;
-  updatedAt?: string;
-}
+export type LegacyVaccineRecord = VaccineLedgerRecord;
 
 export interface GrowDeskVaccineRecord {
   id: string;
@@ -41,12 +31,18 @@ export interface GrowDeskVaccineRecord {
   doseNumber?: number | null;
   legacyName?: string | null;
   legacyDose?: string | null;
-  administeredDate: string;
+  recordStatus?: VaccineRecordStatus;
+  administeredDate: string | null;
   scheduledDate?: string | null;
   completedDate?: string | null;
   isCompleted?: boolean;
+  manufacturer?: string | null;
   clinic: string | null;
   batchNumber: string | null;
+  traceCode?: string | null;
+  administrationRoute?: string | null;
+  injectionSite?: string | null;
+  sourceText?: string | null;
   notes: string | null;
   version: string;
   createdAt: string;
@@ -128,76 +124,80 @@ export function fromGrowDeskVaccineCatalog(raw: unknown, regionCode = "CN-JS") {
   };
 }
 
-export function parseDoseNumber(val: unknown): number {
-  if (typeof val === "number" && Number.isInteger(val) && val >= 1) return val;
-  if (typeof val === "string") {
-    const match = val.match(/\d+/);
-    if (match) {
-      const num = parseInt(match[0], 10);
-      if (num >= 1 && num <= 12) return num;
-    }
-  }
-  return 1;
+export function parseDoseNumber(value: unknown): number | null {
+  const direct = vaccineDoseNumber(value);
+  if (direct !== null) return direct;
+  if (typeof value !== "string") return null;
+  // Old records carried an explicit ordinal in notes. A batch number or date
+  // is not a dose number, and absent notes must not turn into dose one.
+  const match = value.match(/第\s*(\d{1,2})\s*剂/u);
+  return match ? vaccineDoseNumber(Number(match[1])) : null;
 }
 
 export function toGrowDeskVaccineRecordPayload(body: Record<string, unknown>) {
-  const vaccineRef = String(body.vaccineId || body.vaccineCode || body.name || "").trim();
-  const code = String(body.vaccineCode || body.vaccineId || body.name || "").trim();
-  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(vaccineRef);
-  const isCompleted = body.isCompleted !== false;
-  const scheduledDate = String(
-    body.scheduledDate || body.completedDate || body.administeredDate || new Date().toISOString().slice(0, 10),
-  ).trim();
-  const completedDate = isCompleted
-    ? String(body.completedDate || body.administeredDate || scheduledDate).trim()
-    : null;
-
-  const clinic = body.clinic ? String(body.clinic).trim() : null;
-  const batchNumber = body.batchNumber ? String(body.batchNumber).trim() : null;
-
-  let notes = body.notes ? String(body.notes).trim() : null;
-  const rawDose = body.dose !== undefined && body.dose !== null ? String(body.dose).trim() : (body.doseNumber !== undefined && body.doseNumber !== null ? String(body.doseNumber).trim() : "");
-  if (rawDose && !notes?.includes("剂次")) {
-    notes = notes ? `${notes} (剂次: ${rawDose})` : `剂次: ${rawDose}`;
-  } else if (!notes?.includes("剂次")) {
-    const doseNum = parseDoseNumber(body.dose || body.doseNumber);
-    const doseLabel = `第${doseNum}剂`;
-    notes = notes ? `${notes} (剂次: ${doseLabel})` : `剂次: ${doseLabel}`;
-  }
-
+  const input = parseVaccineRecordInput({ ...body, name: body.name ?? body.legacyName ?? body.vaccineCode ?? body.vaccineId });
+  const reference = input.vaccineId || (typeof body.vaccineCode === "string" ? body.vaccineCode.trim() : "");
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(reference);
+  const catalog = loadFullVaccineKnowledge().vaccines;
+  const matched = !reference && !Object.hasOwn(body, "vaccineId") ? matchVaccineProduct(input.name, catalog) : null;
+  const knownReference = isUuid || catalog.some(row => row.vaccineId === reference);
+  const code = reference || matched?.vaccineId || input.name;
   return {
-    vaccineCode: code,
-    ...(isUuid ? { vaccineId: vaccineRef } : {}),
-    doseNumber: parseDoseNumber(body.doseNumber ?? body.dose),
-    legacyName: body.name ? String(body.name).trim() : null,
-    legacyDose: body.dose ? String(body.dose).trim() : null,
-    administeredDate: isCompleted ? (completedDate || scheduledDate) : scheduledDate,
-    scheduledDate,
-    completedDate,
-    isCompleted,
-    clinic,
-    batchNumber,
-    notes,
+    vaccineCode: typeof body.vaccineCode === "string" && body.vaccineCode.trim() ? body.vaccineCode.trim() : code,
+    vaccineId: input.vaccineId || matched?.vaccineId || (!Object.hasOwn(body, "vaccineId") && knownReference ? reference : null),
+    doseNumber: input.doseNumber,
+    legacyName: input.name,
+    legacyDose: input.dose,
+    recordStatus: input.recordStatus,
+    administeredDate: input.administeredDate,
+    scheduledDate: input.scheduledDate,
+    completedDate: input.completedDate,
+    isCompleted: input.isCompleted,
+    manufacturer: input.manufacturer,
+    clinic: input.clinic,
+    batchNumber: input.batchNumber,
+    traceCode: input.traceCode,
+    administrationRoute: input.administrationRoute,
+    injectionSite: input.injectionSite,
+    sourceText: input.sourceText,
+    notes: input.notes,
   };
 }
 
 export function fromGrowDeskVaccineRecord(rec: GrowDeskVaccineRecord): LegacyVaccineRecord {
-  const doseNum = rec.doseNumber ?? parseDoseNumber(rec.legacyDose || rec.notes);
-  const dose = rec.legacyDose || `第${doseNum}剂`;
-  const isCompleted = rec.isCompleted !== undefined ? rec.isCompleted : rec.completedDate === null ? false : true;
-  const scheduledDate = rec.scheduledDate || rec.administeredDate;
-  const completedDate = isCompleted ? (rec.completedDate || rec.administeredDate) : null;
-
+  const doseNumber = rec.doseNumber ?? (!rec.recordStatus ? parseDoseNumber(rec.legacyDose || rec.notes) : null);
+  const catalog = loadFullVaccineKnowledge().vaccines;
+  const product = rec.vaccineId === null && rec.recordStatus ? null : catalog.find(row => row.vaccineId === rec.vaccineCode)
+    || matchVaccineProduct(rec.vaccineCode, catalog)
+    || matchVaccineProduct(rec.legacyName || rec.vaccineCode, catalog);
+  let recordStatus = vaccineRecordStatus(rec);
+  const actual = rec.completedDate || rec.administeredDate || null;
+  if (recordStatus === "completed" && (!actual || !isValidDateStr(actual) || actual > getLocalDateStr())) recordStatus = "needs_review";
+  if (recordStatus === "planned" && !(rec.scheduledDate || (!rec.recordStatus && rec.administeredDate))) recordStatus = "needs_review";
+  const isCompleted = recordStatus === "completed";
   return {
     id: rec.id,
     babyId: rec.babyId,
     name: rec.legacyName || rec.vaccineCode,
-    vaccineId: rec.vaccineCode,
-    dose,
-    scheduledDate,
-    completedDate,
+    // A free-text vaccineCode is not evidence of a catalogue relationship.
+    vaccineId: rec.vaccineId ? (product?.vaccineId || rec.vaccineCode) : product?.vaccineId || null,
+    dose: rec.legacyDose || (doseNumber ? `第${doseNumber}剂` : "剂次待核对"),
+    doseNumber,
+    recordStatus,
+    // Only legacy planned DTOs used administeredDate as a transport placeholder.
+    administeredDate: recordStatus === "planned" ? null : actual,
+    scheduledDate: rec.scheduledDate || (!rec.recordStatus && recordStatus === "planned" ? rec.administeredDate : null),
+    completedDate: isCompleted ? actual : null,
     isCompleted,
-    notes: rec.notes,
+    manufacturer: rec.manufacturer ?? null,
+    clinic: rec.clinic ?? null,
+    batchNumber: rec.batchNumber ?? null,
+    traceCode: rec.traceCode ?? null,
+    administrationRoute: rec.administrationRoute ?? null,
+    injectionSite: rec.injectionSite ?? null,
+    sourceText: rec.sourceText ?? null,
+    notes: rec.notes ?? null,
+    version: String(rec.version),
     createdAt: rec.createdAt,
     updatedAt: rec.updatedAt,
   };
@@ -636,38 +636,57 @@ export function projectLegacyVaccineKnowledge(fullKnowledge: ReturnType<typeof l
   };
 }
 
-/** Project persisted old selection rows, preserving the old row shape. */
+/** Completed progress is a projection of verified records, never a writable flag. */
+function completedRecordsByKey(records: GrowDeskVaccineRecord[], knowledge?: { vaccines?: Array<Record<string, any>> }) {
+  const vaccines = knowledge?.vaccines || loadFullVaccineKnowledge().vaccines;
+  const byCode = new Map<string, Record<string, any>>();
+  for (const vaccine of vaccines) {
+    for (const key of [vaccine.vaccineId, vaccine.vaccineCode, vaccine.id, vaccine.normalizedId]) {
+      if (key) byCode.set(String(key), vaccine);
+    }
+  }
+  const result = new Map<string, GrowDeskVaccineRecord>();
+  for (const record of records) {
+    const projected = fromGrowDeskVaccineRecord(record);
+    if (!projected.isCompleted || projected.doseNumber === null) continue;
+    if (record.vaccineId === null && record.recordStatus) continue;
+    const vaccine = byCode.get(record.vaccineCode)
+      || (record.vaccineId ? byCode.get(record.vaccineId) : undefined)
+      || matchVaccineProduct(record.legacyName || record.vaccineCode, vaccines);
+    const code = vaccine?.vaccineId || vaccine?.vaccineCode || record.vaccineCode;
+    const key = `${code}-${projected.doseNumber}`;
+    // A later planned/review row must never erase a completed dose.
+    if (!result.has(key)) result.set(key, record);
+  }
+  return result;
+}
+
+/** Project legacy rows while preserving their IDs and selection preferences. */
 export function projectLegacyVaccineSelections(
   records: GrowDeskVaccineRecord[],
   savedSelections: Record<string, SavedVaccineSelection> | undefined,
   babyId: string,
   updatedAtFallback?: string,
 ) {
-  const recordByKey = new Map<string, GrowDeskVaccineRecord>();
-  for (const record of records) {
-    recordByKey.set(`${record.vaccineCode}-${record.doseNumber ?? parseDoseNumber(record.legacyDose || record.notes)}`, record);
-  }
-  return Object.entries(savedSelections ?? {})
-    .map(([key, saved]) => {
-      const separator = key.lastIndexOf("-");
-      const vaccineId = separator > 0 ? key.slice(0, separator) : key;
-      const parsedDose = separator > 0 ? Number(key.slice(separator + 1)) : 1;
-      const doseNumber = Number.isInteger(parsedDose) && parsedDose > 0 ? parsedDose : 1;
-      const record = recordByKey.get(`${vaccineId}-${doseNumber}`);
-      const id = saved.id || (record ? legacyFixtureSiblingId(record.id, 1) : undefined);
-      const updatedAt = saved.updatedAt || record?.updatedAt || record?.createdAt || updatedAtFallback;
-      const row: LegacyVaccineResponse = {
-        ...(id ? { id } : {}),
-        babyId,
-        vaccineId,
-        doseNumber,
-        selected: saved.selected ?? true,
-        completed: saved.completed ?? false,
-        ...(updatedAt ? { updatedAt } : {}),
-      };
-      return row;
-    })
-    .sort((left, right) => String(left.vaccineId).localeCompare(String(right.vaccineId)) || Number(left.doseNumber) - Number(right.doseNumber));
+  const recordByKey = completedRecordsByKey(records);
+  const keys = new Set([...Object.keys(savedSelections || {}), ...recordByKey.keys()]);
+  return [...keys].map(key => {
+    const saved = savedSelections?.[key];
+    const separator = key.lastIndexOf("-");
+    const vaccineId = separator > 0 ? key.slice(0, separator) : key;
+    const doseNumber = separator > 0 ? vaccineDoseNumber(Number(key.slice(separator + 1))) : null;
+    if (doseNumber === null) return null;
+    const record = recordByKey.get(key);
+    const id = saved?.id || (record ? legacyFixtureSiblingId(record.id, 1) : undefined);
+    const updatedAt = saved?.updatedAt || record?.updatedAt || record?.createdAt || updatedAtFallback;
+    return {
+      ...(id ? { id } : {}), babyId, vaccineId, doseNumber,
+      selected: saved?.selected ?? true,
+      completed: Boolean(record),
+      ...(updatedAt ? { updatedAt } : {}),
+    };
+  }).filter((row): row is NonNullable<typeof row> => row !== null)
+    .sort((left, right) => left.vaccineId.localeCompare(right.vaccineId) || left.doseNumber - right.doseNumber);
 }
 
 export function buildVaccineSelections(
@@ -675,40 +694,24 @@ export function buildVaccineSelections(
   savedSelections?: Record<string, SavedVaccineSelection>,
   knowledge?: { vaccines?: Array<Record<string, any>> },
 ): VaccineSelectionItem[] {
-  const result: VaccineSelectionItem[] = [];
-  const recordMap = new Map<string, GrowDeskVaccineRecord>();
-
-  for (const rec of records) {
-    const doseNum = rec.doseNumber ?? parseDoseNumber(rec.legacyDose || rec.notes);
-    const key = `${rec.vaccineCode}-${doseNum}`;
-    recordMap.set(key, rec);
-  }
-
   const fullKb = knowledge || loadFullVaccineKnowledge();
-  const allVaccines = fullKb.vaccines || [];
-
-  for (const v of allVaccines) {
-    const doses = Array.isArray(v.doses) && v.doses.length > 0 ? v.doses : [{ doseNumber: 1 }];
-    for (const d of doses) {
-      const key = `${v.vaccineId}-${d.doseNumber}`;
-      const rec =
-        recordMap.get(key) ||
-        recordMap.get(`${v.name}-${d.doseNumber}`) ||
-        (v.shortName ? recordMap.get(`${v.shortName.split("/")[0]}-${d.doseNumber}`) : undefined);
-      const saved = savedSelections ? savedSelections[key] : undefined;
-
-      const isCompleted = Boolean((rec && rec.isCompleted !== false) || saved?.completed);
-      const isSelected = saved?.selected !== undefined ? saved.selected : true;
-
+  const recordMap = completedRecordsByKey(records, fullKb);
+  const result: VaccineSelectionItem[] = [];
+  for (const vaccine of fullKb.vaccines || []) {
+    const code = vaccine.vaccineId || vaccine.vaccineCode || vaccine.id;
+    const doses = Array.isArray(vaccine.doses) ? vaccine.doses : [];
+    for (const dose of doses) {
+      const key = `${code}-${dose.doseNumber}`;
+      const record = recordMap.get(key);
+      const saved = savedSelections?.[key];
       result.push({
-        vaccineId: v.vaccineId,
-        doseNumber: d.doseNumber,
-        selected: isSelected,
-        completed: isCompleted,
-        recordId: rec ? rec.id : null,
+        vaccineId: code,
+        doseNumber: dose.doseNumber,
+        selected: saved?.selected ?? Boolean(record),
+        completed: Boolean(record),
+        recordId: record?.id ?? null,
       });
     }
   }
-
   return result;
 }

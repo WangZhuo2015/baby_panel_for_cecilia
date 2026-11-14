@@ -55,7 +55,12 @@ import { resolveBffSession } from "@/lib/growdesk/session"
 import { growdeskFetch } from "@/lib/growdesk/client"
 import { bridgeErrorResponse, BridgeError } from "@/lib/growdesk/bridge-protocol"
 import { loadWebBaby, loadWebIdentity } from "@/lib/growdesk/bridge-identity"
-import { fetchGrowDeskNotificationItems } from "@/lib/growdesk/notification-parity"
+import {
+  calendarDaysUntil,
+  completedVaccineReminderKey,
+  fetchGrowDeskNotificationItems,
+  plannedVaccineReminderRecord,
+} from "@/lib/growdesk/notification-parity"
 import { wantsExtendedRepresentation } from "@/lib/growdesk/legacy-projections"
 import { assertExpectedActor } from "@/lib/growdesk/nutrition-scope"
 
@@ -130,14 +135,19 @@ export async function GET(request: Request) {
 
     // 1. Vaccine reminders — upcoming within 7 days
     const vaccines = await prisma.vaccineRecord.findMany({
-      where: { babyId, isCompleted: false },
+      where: { babyId },
       orderBy: { scheduledDate: 'asc' }
     })
+    const completedVaccineKeys = new Set(vaccines
+      .map(v => completedVaccineReminderKey(v as unknown as Record<string, unknown>, todayStr))
+      .filter((key): key is string => key !== null))
 
     for (const v of vaccines) {
-      const scheduledDate = new Date(v.scheduledDate)
-      const diffMs = scheduledDate.getTime() - nowMs
-      const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24))
+      const planned = plannedVaccineReminderRecord(v as unknown as Record<string, unknown>)
+      if (!planned) continue
+      if (planned.doseNumber !== null && completedVaccineKeys.has(`${planned.code}-${planned.doseNumber}`)) continue
+      const diffDays = calendarDaysUntil(planned.scheduledDate, todayStr)
+      if (diffDays === null) continue
 
       if (diffDays <= 7) {
         const isOverdue = diffDays < 0
@@ -150,8 +160,8 @@ export async function GET(request: Request) {
         notifications.push({
           id: `vaccine-${v.id}`,
           type: 'vaccine',
-          title: `💉 ${v.name} ${v.dose}`,
-          detail: `计划接种日期：${v.scheduledDate}`,
+          title: `💉 ${planned.name} ${planned.dose}`,
+          detail: `计划接种日期：${planned.scheduledDate}`,
           time: timeLabel,
           urgent: diffDays <= 3,
           icon: '💉',
