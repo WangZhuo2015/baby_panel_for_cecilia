@@ -15,6 +15,7 @@ import { decodeNotes } from "./food-compat";
 import { extractProductIdFromNotes } from "./nutrition-compat";
 import { readLegacyPendingVaccines, readPendingPlan } from "./vaccine-pending-compat";
 import { legacyDataReleaseId } from "./knowledge-legacy-id";
+import { vaccineDoseNumber as parseExplicitVaccineDose, vaccineRecordStatus } from "@/lib/vaccine-records";
 
 type JsonObject = Record<string, unknown>;
 
@@ -60,14 +61,18 @@ interface VaccineRecord extends JsonObject {
   id: string;
   babyId: string;
   familyId: string;
-  vaccineCode: string;
-  administeredDate: string;
+  vaccineCode?: string | null;
+  vaccineId?: string | null;
+  name?: string | null;
+  administeredDate?: string | null;
   scheduledDate?: string | null;
   completedDate?: string | null;
+  recordStatus?: string | null;
   isCompleted?: boolean;
   doseNumber?: number | null;
   legacyName?: string | null;
   legacyDose?: string | null;
+  dose?: string | null;
   notes?: string | null;
 }
 
@@ -110,8 +115,16 @@ async function fetchArray<T>(
   token: string,
   pathname: string,
   label: string,
+  headers?: Record<string, string>,
 ): Promise<T[]> {
-  return arrayData(await fetchApi<T[]>(pathname, { accessToken: token }), label);
+  // The underlying GrowDesk transport accepts extra headers, while BridgeFetch
+  // intentionally exposes only its legacy option subset. Keep the ledger opt-in
+  // local to the vaccine read until the bridge contract itself is versioned.
+  const fetchWithHeaders = fetchApi as unknown as <T>(
+    path: string,
+    options?: { accessToken?: string; headers?: Record<string, string> },
+  ) => Promise<BridgeResult<T>>;
+  return arrayData(await fetchWithHeaders<T[]>(pathname, { accessToken: token, headers }), label);
 }
 
 function scopeValue(data: JsonObject, key: "babyId" | "familyId"): unknown {
@@ -394,20 +407,27 @@ export function buildFamilyRecordNotifications(
   return result.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)).slice(0, 20);
 }
 
-function doseNumber(notes: unknown): number {
-  const match = typeof notes === "string" ? notes.match(/第\s*(\d+)\s*剂|剂次\s*:\s*第?\s*(\d+)/) : null;
-  const value = match ? Number(match[1] || match[2]) : 1;
-  return Number.isInteger(value) && value >= 1 ? value : 1;
-}
-
-function vaccineDoseNumber(record: VaccineRecord): number {
+function vaccineDoseNumber(record: VaccineRecord): number | null {
   if (record.doseNumber !== undefined && record.doseNumber !== null) {
     if (!Number.isInteger(record.doseNumber) || record.doseNumber < 1 || record.doseNumber > 12) {
       invalidResponse("GrowDesk 返回了无效的疫苗 doseNumber");
     }
     return record.doseNumber;
   }
-  return doseNumber(record.legacyDose || record.notes);
+  // A ledger row explicitly carries the structured unknown. Do not recover a
+  // dose ordinal from display text for that row; only legacy rows without a
+  // ledger status may parse an explicit written ordinal.
+  if (record.recordStatus !== undefined && record.recordStatus !== null) return null;
+  // Only accept an explicit ordinal in the written dose. An absent or vague
+  // value remains unknown; it must never become dose one by default.
+  return parseExplicitVaccineDose(
+    optionalText(record.legacyDose) || optionalText(record.dose) || optionalText(record.notes),
+  );
+}
+
+function safeVaccineDoseNumber(record: JsonObject): number | null {
+  try { return vaccineDoseNumber(record as VaccineRecord); }
+  catch { return null; }
 }
 
 function vaccineText(value: unknown, field: string, fallback: string): string {
@@ -415,8 +435,62 @@ function vaccineText(value: unknown, field: string, fallback: string): string {
   return stringField(value, field);
 }
 
-function pendingNaturalKey(code: string, dose: number, scheduledDate: string, name: string): string {
-  return `${code}\u0000${dose}\u0000${scheduledDate}\u0000${name}`;
+function pendingNaturalKey(code: string, dose: number | null, scheduledDate: string, name: string): string {
+  return `${code}\u0000${dose ?? "unknown"}\u0000${scheduledDate}\u0000${name}`;
+}
+
+/** Return an actual planned date only; malformed, absent, and review dates are omitted. */
+export function plannedVaccineReminderDate(record: JsonObject): string | null {
+  if (record.recordStatus !== undefined && record.recordStatus !== null
+    && !["completed", "planned", "needs_review"].includes(String(record.recordStatus))) return null;
+  if (vaccineRecordStatus(record) !== "planned") return null;
+  const value = record.scheduledDate;
+  return typeof value === "string" && isValidDateStr(value) ? value : null;
+}
+
+function vaccineIdentity(record: JsonObject): string | null {
+  return optionalText(record.vaccineCode) || optionalText(record.vaccineId)
+    || optionalText(record.legacyName) || optionalText(record.name);
+}
+
+/** Only a dated, non-future completion with a known product and dose suppresses a plan. */
+export function completedVaccineReminderKey(record: JsonObject, today: string): string | null {
+  if (record.recordStatus !== undefined && record.recordStatus !== null
+    && !["completed", "planned", "needs_review"].includes(String(record.recordStatus))) return null;
+  if (vaccineRecordStatus(record) !== "completed") return null;
+  const actualDate = typeof record.completedDate === "string" ? record.completedDate
+    : typeof record.administeredDate === "string" ? record.administeredDate : null;
+  if (!actualDate || !isValidDateStr(actualDate) || !isValidDateStr(today) || actualDate > today) return null;
+  const dose = safeVaccineDoseNumber(record);
+  const code = vaccineIdentity(record);
+  return dose !== null && code ? `${code}-${dose}` : null;
+}
+
+export function plannedVaccineReminderRecord(record: JsonObject): {
+  code: string;
+  doseNumber: number | null;
+  scheduledDate: string;
+  name: string;
+  dose: string;
+} | null {
+  const scheduledDate = plannedVaccineReminderDate(record);
+  const code = vaccineIdentity(record);
+  if (!scheduledDate || !code) return null;
+  const doseNumber = safeVaccineDoseNumber(record);
+  const name = optionalText(record.legacyName) || optionalText(record.name) || code;
+  const dose = optionalText(record.legacyDose) || optionalText(record.dose)
+    || (doseNumber === null ? "剂次待核对" : `第${doseNumber}剂`);
+  return { code, doseNumber, scheduledDate, name, dose };
+}
+
+/** Calendar-day difference for date-only vaccine dates, independent of DST. */
+export function calendarDaysUntil(date: string, today: string): number | null {
+  if (!isValidDateStr(date) || !isValidDateStr(today)) return null;
+  const dateMs = Date.parse(`${date}T00:00:00Z`);
+  const todayMs = Date.parse(`${today}T00:00:00Z`);
+  return Number.isFinite(dateMs) && Number.isFinite(todayMs)
+    ? Math.round((dateMs - todayMs) / (24 * 60 * 60 * 1000))
+    : null;
 }
 
 export function buildVaccineReminderNotifications(
@@ -434,19 +508,23 @@ export function buildVaccineReminderNotifications(
   const pendingRecords: VaccineRecord[] = [];
   for (const raw of records) {
     const record = scopedRecord(raw, "疫苗", scope) as VaccineRecord;
-    const code = stringField(record.vaccineCode, "疫苗 vaccineCode");
-    const dose = vaccineDoseNumber(record);
     if (record.isCompleted !== undefined && typeof record.isCompleted !== "boolean") {
       invalidResponse("GrowDesk 返回了无效的疫苗 isCompleted");
     }
-    const isPending = record.isCompleted === false
-      || (record.isCompleted === undefined && record.completedDate === null);
-    if (isPending) {
+    if (record.recordStatus !== undefined && record.recordStatus !== null
+      && !["completed", "planned", "needs_review"].includes(record.recordStatus)) {
+      invalidResponse("GrowDesk 返回了无效的疫苗 recordStatus");
+    }
+    const status = vaccineRecordStatus(record);
+    if (status === "needs_review") continue;
+    if (status === "planned") {
       pendingRecords.push(record);
       continue;
     }
-    dateField(record.administeredDate, "疫苗 administeredDate");
-    completed.add(`${code}-${dose}`);
+    // A completed row without a verifiable actual date is not allowed to erase
+    // a planned reminder. Date uncertainty is a review case, not completion.
+    const completedKey = completedVaccineReminderKey(record, _clock.date);
+    if (completedKey) completed.add(completedKey);
   }
 
   const buildReminder = (
@@ -454,13 +532,12 @@ export function buildVaccineReminderNotifications(
     code: string,
     name: string,
     dose: string,
-    doseNum: number,
+    doseNum: number | null,
     scheduledDate: string,
   ): NotificationItem | null => {
-    const key = `${code}-${doseNum}`;
-    if (completed.has(key)) return null;
-    const scheduledMs = Date.parse(scheduledDate);
-    const days = Math.ceil((scheduledMs - nowMs) / (24 * 60 * 60 * 1000));
+    if (doseNum !== null && completed.has(`${code}-${doseNum}`)) return null;
+    const days = calendarDaysUntil(scheduledDate, _clock.date);
+    if (days === null) return null;
     if (days > 7) return null;
     return {
       id: `vaccine-${id}`,
@@ -476,15 +553,11 @@ export function buildVaccineReminderNotifications(
 
   const canonicalPendingKeys = new Set<string>();
   const canonicalItems = pendingRecords.flatMap(record => {
-    const code = stringField(record.vaccineCode, "疫苗 vaccineCode");
-    const doseNum = vaccineDoseNumber(record);
-    const scheduledDate = record.scheduledDate === undefined || record.scheduledDate === null
-      ? dateField(record.administeredDate, "疫苗 administeredDate")
-      : dateField(record.scheduledDate, "疫苗 scheduledDate");
-    const name = vaccineText(record.legacyName, "疫苗 legacyName", code);
-    const dose = vaccineText(record.legacyDose, "疫苗 legacyDose", `第${doseNum}剂`);
-    canonicalPendingKeys.add(pendingNaturalKey(code, doseNum, scheduledDate, name));
-    const reminder = buildReminder(record.id, code, name, dose, doseNum, scheduledDate);
+    const planned = plannedVaccineReminderRecord(record);
+    if (!planned) return [];
+    const { code, doseNumber, scheduledDate, name, dose } = planned;
+    canonicalPendingKeys.add(pendingNaturalKey(code, doseNumber, scheduledDate, name));
+    const reminder = buildReminder(record.id, code, name, dose, doseNumber, scheduledDate);
     return reminder ? [reminder] : [];
   });
   const legacyPending = readLegacyPendingVaccines(readPendingPlan(plan, scope.babyId));

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # API 集成测试一键运行：
-#   独立测试库 dev_test.db + 3088 临时服务 → 跑 tests/api → 自清理 → 关服务。
-# 用法：bash scripts/test-api.sh [PORT]
+#   独立测试库 dev_test.db + 3089 临时服务 → 跑 tests/api → 自清理 → 关服务。
+# 用法：bash scripts/test-api.sh [PORT] [tests/api/example.test.ts ...]
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -14,6 +14,15 @@ if [ -f "$REPO_ROOT/.env.test" ]; then
 fi
 
 PORT="${1:-${PORT:-3089}}"
+if [ "$#" -gt 0 ]; then shift; fi
+TEST_FILES=("$@")
+if [ "${#TEST_FILES[@]}" -eq 0 ]; then TEST_FILES=(tests/api/*.test.ts); fi
+for f in "${TEST_FILES[@]}"; do
+  if [[ "$f" != tests/api/*.test.ts || "$f" == *".."* || ! -f "$f" ]]; then
+    echo "[test-api] 测试文件必须是现有 tests/api/*.test.ts 文件：$f"
+    exit 1
+  fi
+done
 export DATABASE_URL="${DATABASE_URL:-file:./dev_test.db}"
 export PORT
 export BABY_PANEL_URL="http://127.0.0.1:${PORT}"
@@ -22,10 +31,10 @@ echo "==> [test-api] migrate deploy ($DATABASE_URL)"
 npx prisma migrate deploy
 
 echo "==> [test-api] seed static reference data"
-npx tsx prisma/seed.ts
+node --import tsx prisma/seed.ts
 
 echo "==> [test-api] purge leftover test tenants"
-npx tsx scripts/purge-test-data.ts
+node --import tsx scripts/purge-test-data.ts
 
 # 预检：端口被占（常见为生产服务）必须直接失败，否则测试会打到错误服务上
 if (echo > /dev/tcp/127.0.0.1/"${PORT}") 2>/dev/null; then
@@ -35,9 +44,9 @@ fi
 
 echo "==> [test-api] start server on :${PORT}"
 if command -v setsid >/dev/null 2>&1; then
-  setsid npx next dev --port "${PORT}" > /tmp/baby-test-server.log 2>&1 &
+  setsid node node_modules/next/dist/bin/next dev --hostname 127.0.0.1 --port "${PORT}" > /tmp/baby-test-server.log 2>&1 &
 else
-  npx next dev --port "${PORT}" > /tmp/baby-test-server.log 2>&1 &
+  node node_modules/next/dist/bin/next dev --hostname 127.0.0.1 --port "${PORT}" > /tmp/baby-test-server.log 2>&1 &
 fi
 SERVER_PID=$!
 cleanup() {
@@ -61,14 +70,14 @@ done
 
 echo "==> [test-api] run api tests (sequential: files share one SQLite file)"
 TEST_EXIT=0
-for f in tests/api/*.test.ts; do
+for f in "${TEST_FILES[@]}"; do
   echo "---- $f"
-  if ! npx tsx --env-file=.env.test --test "$f"; then
+  if ! node --env-file=.env.test --import tsx --test "$f"; then
     TEST_EXIT=1
   fi
 done
 
 echo "==> [test-api] purge test tenants"
-npx tsx scripts/purge-test-data.ts
+node --import tsx scripts/purge-test-data.ts
 
 exit "$TEST_EXIT"

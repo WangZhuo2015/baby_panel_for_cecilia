@@ -184,15 +184,7 @@ export async function restoreSnapshot(ctx: SnapshotContext, snapshotId: string) 
 
     case "vaccine": {
       restoredEntity = await prisma.vaccineRecord.create({
-        data: {
-          id: payload.id || undefined,
-          babyId: ctx.babyId,
-          name: payload.name,
-          dose: payload.dose,
-          scheduledDate: payload.scheduledDate,
-          completedDate: payload.completedDate,
-          isCompleted: Boolean(payload.isCompleted),
-        },
+        data: { babyId: ctx.babyId, ...vaccineSnapshotRestoreData(payload) },
       });
       break;
     }
@@ -247,6 +239,41 @@ export async function restoreSnapshot(ctx: SnapshotContext, snapshotId: string) 
     entityType: snapshot.entityType,
     restoredId: restoredEntity?.id,
     restoredEntity,
+  };
+}
+
+/**
+ * Copies the complete vaccine ledger projection from a snapshot. Missing keys
+ * from legacy snapshots stay null instead of acquiring inferred dates/status.
+ */
+export function vaccineSnapshotRestoreData(payload: Record<string, unknown>) {
+  const textOrNull = (value: unknown): string | null => typeof value === "string" ? value : null;
+  const doseNumber = typeof payload.doseNumber === "number" && Number.isInteger(payload.doseNumber)
+    ? payload.doseNumber : null;
+  const previousVersion = typeof payload.version === "number" && Number.isInteger(payload.version) && payload.version > 0
+    ? payload.version : 0;
+  if (previousVersion >= 2147483647) throw new Error("疫苗记录版本已到上限，无法恢复");
+  return {
+    id: typeof payload.id === "string" && payload.id ? payload.id : undefined,
+    name: typeof payload.name === "string" ? payload.name : "",
+    vaccineId: textOrNull(payload.vaccineId),
+    dose: typeof payload.dose === "string" ? payload.dose : "",
+    doseNumber,
+    recordStatus: textOrNull(payload.recordStatus),
+    administeredDate: textOrNull(payload.administeredDate),
+    scheduledDate: textOrNull(payload.scheduledDate),
+    completedDate: textOrNull(payload.completedDate),
+    isCompleted: payload.isCompleted === true,
+    manufacturer: textOrNull(payload.manufacturer),
+    clinic: textOrNull(payload.clinic),
+    batchNumber: textOrNull(payload.batchNumber),
+    traceCode: textOrNull(payload.traceCode),
+    administrationRoute: textOrNull(payload.administrationRoute),
+    injectionSite: textOrNull(payload.injectionSite),
+    sourceText: textOrNull(payload.sourceText),
+    notes: textOrNull(payload.notes),
+    // Reusing the entity id must not revive an old editor's version token.
+    version: previousVersion + 1,
   };
 }
 

@@ -68,7 +68,7 @@ test("legacy vaccine selections retain only saved rows and derive fixture identi
       babyId,
       familyId: "test_family",
       vaccineCode: "vac_hepb",
-      administeredDate: "test_date",
+      administeredDate: "2024-08-08",
       clinic: null,
       batchNumber: null,
       notes: "第1剂",
