@@ -1,0 +1,20 @@
+{
+  "passed": true,
+  "synthetic": true,
+  "browser": "chromium",
+  "cases": [
+    "failed automatic sync stays unbound with a persistent error; retry reuses the subscription",
+    "HTTP 200 without success true does not confirm binding",
+    "same-key rebind keeps the subscription; test success requires a real positive accepted count",
+    "a changed VAPID key replaces the old subscription once before syncing",
+    "a provider-confirmed expired endpoint is removed; retry registers a new endpoint once",
+    "confirmed expired subscription stays unbound when browser removal returns false",
+    "confirmed expired subscription stays unbound when browser removal returns reject",
+    "a stalled subscription read releases the page without contacting push APIs",
+    "a stalled subscription creation releases the button without confirming or uploading",
+    "a stalled key-rotation removal releases the page without creating a replacement",
+    "a stalled expired removal still clears the confirmed binding and shows recovery instructions",
+    "a missing or inactive worker produces an actionable error and a bounded retry"
+  ],
+  "failure": null
+}

@@ -38,7 +38,7 @@ export const BRIDGED_METHODS: Readonly<Record<string, readonly string[]>> = {
   "/api/growth/ocr": ["POST"],
   "/api/medical/reports": ["GET", "POST"],
   "/api/medical/ocr": ["POST"],
-  "/api/vaccines": ["GET", "POST", "DELETE"],
+  "/api/vaccines": ["GET", "POST", "PUT", "DELETE"],
   "/api/vaccines/selections": ["GET", "PUT"],
   "/api/records/timeline": ["GET"],
   "/api/notifications": ["GET"],

@@ -18,6 +18,8 @@ import { getActiveLlmProfileId, OPENAI_OFFICIAL_PROFILE_ID } from "@/lib/llm-pro
 import { createRetryingModelStreamFn } from "@/lib/agent/stream-retry";
 import type { ChatLlmModelInfo } from "@/lib/agent/chat-retry";
 
+export { getRetryAfterMs, isRateLimitError } from "@/lib/agent/stream-retry";
+
 const MAX_TURNS = 8;
 
 export type AgentStreamEvent =
@@ -146,7 +148,7 @@ export async function runBabyAgent(opts: RunBabyAgentOptions): Promise<void> {
       ];
 
   const streamFn: StreamFn = createRetryingModelStreamFn(primaryFn, {
-    maxRetries: 1,
+    maxRetries: 10,
     fallbacks: fallbackCandidates,
     onSuccess: (message, candidateModel) => {
       const source = opts.llmInfo?.source || (opts.backendSession ? "chatgpt" : "api");

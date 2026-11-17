@@ -1,0 +1,11 @@
+{
+  "name": "release-build",
+  "command": [
+    "next",
+    "build",
+    "--webpack"
+  ],
+  "exitCode": 0,
+  "elapsedSeconds": 94.94,
+  "productionConnections": false
+}

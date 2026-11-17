@@ -1,0 +1,13 @@
+{
+  "status": "PASS",
+  "testAddress": "127.0.0.2:3089",
+  "statuses": {
+    "/login": 200,
+    "/food/log": 200,
+    "/records/feeding": 200,
+    "/settings": 200,
+    "/api/food/logs": 401
+  },
+  "databaseConnections": false,
+  "externalApiCalls": false
+}

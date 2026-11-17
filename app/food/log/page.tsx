@@ -30,7 +30,7 @@ export default function FoodLogPage() {
   };
 
   return (
-    <div className="min-h-[100dvh] bg-bg max-w-md mx-auto px-4 pt-4 pb-36">
+    <div className="mx-auto min-h-[100dvh] w-full max-w-4xl bg-bg px-4 pb-32 pt-4 sm:px-6 lg:px-8">
       <AppHeader title="辅食记录" showBack />
 
       <div className="mt-3">

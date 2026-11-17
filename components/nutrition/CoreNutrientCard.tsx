@@ -2,15 +2,15 @@
 
 import type { NutrientIntakeItem } from "@/types/nutrition";
 import { CuteCard } from "@/components/ui/CuteCard";
-import { AlertCircle, CheckCircle2, ShieldAlert } from "lucide-react";
 
 export interface CoreNutrientCardProps {
   item?: NutrientIntakeItem;
   icon?: string;
   className?: string;
+  onViewTrend?: () => void;
 }
 
-export function CoreNutrientCard({ item, icon = "✨", className = "" }: CoreNutrientCardProps) {
+export function CoreNutrientCard({ item, icon = "✨", className = "", onViewTrend }: CoreNutrientCardProps) {
   if (!item) return null;
 
   const rate = item.achievementRate || 0;
@@ -82,6 +82,8 @@ export function CoreNutrientCard({ item, icon = "✨", className = "" }: CoreNut
         <span>补剂: {item.supplementAmount}</span>
         <span>母乳: {item.breastmilkAmount}</span>
       </div>
+      {onViewTrend && <button type="button" onClick={onViewTrend} aria-label={`查看${item.name}趋势`}
+        className="mt-2 w-full rounded-lg py-2 text-[11px] font-bold text-primary bg-primary/5 cursor-pointer hover:bg-primary/10">查看趋势 →</button>}
     </CuteCard>
   );
 }

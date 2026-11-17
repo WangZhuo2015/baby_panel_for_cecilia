@@ -1,0 +1,67 @@
+[
+  {
+    "name": "typecheck",
+    "command": [
+      "node",
+      "node_modules/typescript/bin/tsc",
+      "--noEmit"
+    ],
+    "exitCode": 0,
+    "elapsedSeconds": 8.07,
+    "databaseConnections": false,
+    "testData": "synthetic test_ fixtures only"
+  },
+  {
+    "name": "lint",
+    "command": [
+      "node",
+      "node_modules/oxlint/bin/oxlint",
+      "components/records/FeedingFormFields.tsx",
+      "components/records/FoodLogForm.tsx",
+      "components/records/WheelSpinnerColumn.tsx",
+      "lib/food-options.ts",
+      "lib/growdesk/food-compat.ts",
+      "scripts/test-feeding-food-browser.mjs",
+      "tests/unit/growdesk-food-compat-repair.test.ts"
+    ],
+    "exitCode": 0,
+    "elapsedSeconds": 0.06,
+    "databaseConnections": false,
+    "testData": "synthetic test_ fixtures only"
+  },
+  {
+    "name": "food-unit",
+    "command": [
+      "node",
+      "--import",
+      "tsx",
+      "--test",
+      "tests/unit/food-log-form-family.test.ts",
+      "tests/unit/growdesk-food-compat-repair.test.ts",
+      "tests/unit/growdesk-food-family-scope.test.ts",
+      "tests/unit/growdesk-food-items-tried.test.ts",
+      "tests/unit/growdesk-food-library-compat.test.ts",
+      "tests/unit/growdesk-food-plan-cas.test.ts",
+      "tests/unit/growdesk-food-plan-history.test.ts",
+      "tests/unit/growdesk-food-plan-reload.test.ts",
+      "tests/unit/growdesk-food-review-regression.test.ts",
+      "tests/unit/growdesk-food-routes-repair.test.ts",
+      "tests/unit/growdesk-food-store-scope.test.ts"
+    ],
+    "exitCode": 0,
+    "elapsedSeconds": 3.69,
+    "databaseConnections": false,
+    "testData": "synthetic test_ fixtures only"
+  },
+  {
+    "name": "browser",
+    "command": [
+      "node",
+      "scripts/test-feeding-food-browser.mjs"
+    ],
+    "exitCode": 0,
+    "elapsedSeconds": 3.79,
+    "databaseConnections": false,
+    "testData": "synthetic test_ fixtures only"
+  }
+]

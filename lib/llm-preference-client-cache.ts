@@ -62,13 +62,13 @@ type UserStoreLike<State extends UserStateLike> = {
 function safeOwnerId(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const id = value.trim();
-  return id.length > 0 && id.length <= 256 && !/[\u0000-\u001f\u007f]/.test(id) ? id : null;
+  return id.length > 0 && id.length <= 256 && !/\p{Cc}/u.test(id) ? id : null;
 }
 
 function safeString(value: unknown, maxLength = 256): string | null {
   if (typeof value !== "string") return null;
   const text = value.trim();
-  return text.length > 0 && text.length <= maxLength && !/[\u0000-\u001f\u007f]/.test(text) ? text : null;
+  return text.length > 0 && text.length <= maxLength && !/\p{Cc}/u.test(text) ? text : null;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

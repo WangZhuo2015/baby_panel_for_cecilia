@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { toGrowDeskFoodCreatePayload, toGrowDeskFoodUpdatePayload, fromGrowDeskFoodRecord, type GrowDeskFoodRecord } from "../../lib/growdesk/food-compat";
+import { foodLogLimitMessage, clampFoodGrams } from "../../lib/food-log-limits";
 
 const form = { date: "2026-09-17", time: "20:00", foods: ["test_rice"], portion: "most", acceptance: 3, babyState: "happy", hasAbnormal: true, abnormalNotes: "test_rash" };
 const record = (payload: Record<string, unknown>): GrowDeskFoodRecord => ({ id: "test_food", babyId: "test_baby", familyId: "test_family", recordDate: form.date, mealType: "snack", occurredAt: null, foodItemIds: [], portionDescription: null, reaction: null, notes: null, version: "1", createdAt: "2026-09-17T00:00:00Z", updatedAt: "2026-09-17T00:00:00Z", ...payload } as GrowDeskFoodRecord);
@@ -30,6 +31,56 @@ test("F2 partial edits retain omitted observations and notes from the existing r
   assert.equal(restored.babyState, "happy");
   assert.equal(restored.abnormalNotes, "test_rash");
   assert.equal(restored.notes, "test_note");
+});
+
+test("multiple food components and their individual weights survive create and partial edits", () => {
+  const components = [
+    { role: "protein", name: "鳕鱼", foodId: "test_cod", grams: 25 },
+    { role: "protein", name: "虾", foodId: "test_shrimp", grams: 15 },
+    { role: "vegetable", name: "test_custom_vegetable", grams: 32 },
+  ];
+  const input = { ...form, foods: components.map(item => item.name), components, totalGrams: 72, notes: "test_note" };
+  const created = record(toGrowDeskFoodCreatePayload(input));
+  const restored = fromGrowDeskFoodRecord(created);
+  assert.deepEqual(restored.foods, input.foods);
+  assert.deepEqual(restored.components, components);
+  assert.equal(restored.totalGrams, 72);
+  const updated = record({ ...created, ...toGrowDeskFoodUpdatePayload({ version: "1", acceptance: 4 }, created) });
+  const edited = fromGrowDeskFoodRecord(updated);
+  assert.deepEqual(edited.components, components);
+  assert.equal(edited.totalGrams, 72);
+  assert.equal(edited.notes, "test_note");
+  const reduced = components.slice(1);
+  const changed = record({ ...updated, ...toGrowDeskFoodUpdatePayload({
+    version: "2", foods: reduced.map(item => item.name), components: reduced, totalGrams: 47,
+  }, updated) });
+  const changedRecord = fromGrowDeskFoodRecord(changed);
+  assert.deepEqual(changedRecord.foods, reduced.map(item => item.name));
+  assert.deepEqual(changedRecord.components, reduced);
+  assert.equal(changedRecord.totalGrams, 47);
+});
+
+test("explicit legacy names remain alongside weighted items, with component-only fallback", () => {
+  const components = [{ role: "protein", name: "鳕鱼", grams: 25 }];
+  const foods = ["鳕鱼", "test_unknown_legacy_food"];
+  assert.deepEqual(toGrowDeskFoodCreatePayload({ ...form, foods, components }).foodItemIds, foods);
+  assert.deepEqual(toGrowDeskFoodUpdatePayload({ version: "1", foods, components }).foodItemIds, foods);
+  assert.deepEqual(toGrowDeskFoodCreatePayload({ date: form.date, components }).foodItemIds, ["鳕鱼"]);
+  assert.deepEqual(toGrowDeskFoodUpdatePayload({ version: "1", components }).foodItemIds, ["鳕鱼"]);
+});
+
+test("food form checks the exact adapter envelope and item limits before sending", () => {
+  const normal = { ...form, components: [{ role: "protein", name: "鳕鱼", grams: 25 }], totalGrams: 25 };
+  assert.equal(foodLogLimitMessage(normal), null);
+  const oversized = { ...normal, abnormalNotes: "test_".repeat(250) };
+  assert.ok(foodLogLimitMessage(oversized));
+  assert.throws(() => toGrowDeskFoodCreatePayload(oversized), /1000/);
+  const tooMany = { ...normal, foods: Array.from({ length: 21 }, (_, index) => `test_food_${index}`) };
+  assert.ok(foodLogLimitMessage(tooMany));
+  assert.throws(() => toGrowDeskFoodCreatePayload(tooMany), /20/);
+  for (const [input, expected] of [[-1, 0], [350, 300], [25.5, 25.5], [Infinity, 0], [NaN, 0]]) {
+    assert.equal(clampFoodGrams(input), expected);
+  }
 });
 
 test("default food projection matches the old PWA while extended keeps concurrency fields", () => {

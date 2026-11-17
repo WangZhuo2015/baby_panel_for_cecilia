@@ -14,6 +14,7 @@ export class NutritionRequestError extends Error {
 const ENDPOINTS = new Set([
   "/api/nutrition/products", "/api/nutrition/schedules", "/api/nutrition/records",
   "/api/nutrition/analysis", "/api/ai/parse-nutrition",
+  "/api/records/trends",
 ]);
 export function sameNutritionScope(a: NutritionClientScope | null, b: NutritionClientScope | null): boolean {
   return Boolean(a && b && a.userId === b.userId && a.familyId === b.familyId && a.babyId === b.babyId);

@@ -38,7 +38,8 @@ import { toGrowDeskFoodCreatePayload, fromGrowDeskFoodRecord } from "@/lib/growd
 import { toGrowDeskSupplementCreatePayload, fromGrowDeskSupplementRecord } from "@/lib/growdesk/supplement-compat";
 import { toGrowDeskGrowthCreatePayload, fromGrowDeskGrowthRecord } from "@/lib/growdesk/growth-compat";
 import { toGrowDeskMedicalCreatePayload, fromGrowDeskMedicalRecord, type GrowDeskMedicalReport } from "@/lib/growdesk/medical-compat";
-import { toGrowDeskVaccineRecordPayload, fromGrowDeskVaccineRecord, type GrowDeskVaccineRecord } from "@/lib/growdesk/vaccine-compat";
+import { toGrowDeskVaccineRecordPayload, fromGrowDeskVaccineRecord, loadFullVaccineKnowledge, type GrowDeskVaccineRecord } from "@/lib/growdesk/vaccine-compat";
+import { matchVaccineProduct, parseVaccineRecordInput, vaccineRecordDate, type VaccineRecordInput } from "@/lib/vaccine-records";
 import { type GrowDeskFeedingRecord } from "@/lib/growdesk/feeding-compat";
 import { type GrowDeskSleepRecord } from "@/lib/growdesk/sleep-compat";
 import { type GrowDeskDiaperRecord } from "@/lib/growdesk/diaper-compat";
@@ -72,6 +73,55 @@ export function checkScope(principal: UserPrincipal, requiredScope: "read" | "wr
     return principal.scopes.has("baby:write") || principal.scopes.has("app:write");
   }
   return false;
+}
+
+const vaccineRecordInputSchema = {
+  type: "object",
+  required: ["name", "recordStatus"],
+  properties: {
+    name: { type: "string", description: "疫苗本上记载的名称/产品名，按原文填写" },
+    vaccineId: { type: "string", description: "能精确匹配到目录时填写产品代码；不能确认时省略" },
+    dose: { type: "string", description: "疫苗本剂次原文，不确定时省略" },
+    doseNumber: { type: ["integer", "null"], minimum: 1, maximum: 12, description: "明确的数字剂次；未知时传 null 或省略" },
+    recordStatus: { type: "string", enum: ["completed", "planned", "needs_review"], description: "已接种、预约或待核对，必须明确选择" },
+    administeredDate: { type: "string", description: "明确记载的实际接种日 YYYY-MM-DD" },
+    completedDate: { type: "string", description: "明确记载的实际接种日 YYYY-MM-DD" },
+    scheduledDate: { type: "string", description: "预约日 YYYY-MM-DD；planned 必填" },
+    manufacturer: { type: "string", description: "疫苗本生产企业" },
+    clinic: { type: "string", description: "接种单位/门诊" },
+    batchNumber: { type: "string", description: "疫苗本批号" },
+    traceCode: { type: "string", description: "电子追溯码" },
+    administrationRoute: { type: "string", description: "明确记载的接种途径，如口服或肌内注射" },
+    injectionSite: { type: "string", description: "明确记载的接种部位" },
+    sourceText: { type: "string", description: "待核对的疫苗本原文" },
+    notes: { type: "string", description: "备注" },
+  },
+} as const;
+
+function resolveMcpVaccineRecordInput(raw: unknown): { input: VaccineRecordInput; matchedCode: string | null } {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error("疫苗记录格式无效");
+  const body = raw as Record<string, unknown>;
+  if (typeof body.recordStatus !== "string" || !body.recordStatus) {
+    throw new Error("必须明确选择 completed、planned 或 needs_review；未确认状态时不要登记为已接种");
+  }
+  const parsed = parseVaccineRecordInput(body);
+  const matched = matchVaccineProduct(parsed.vaccineId || parsed.name, loadFullVaccineKnowledge().vaccines);
+  const matchedCode = typeof matched?.vaccineId === "string" ? matched.vaccineId
+    : typeof matched?.id === "string" ? matched.id : null;
+  return { input: { ...parsed, vaccineId: parsed.vaccineId || matchedCode }, matchedCode };
+}
+
+async function syncCompletedVaccineSelection(
+  babyId: string,
+  input: VaccineRecordInput,
+  matchedCode: string | null,
+): Promise<void> {
+  if (input.recordStatus !== "completed" || !matchedCode || input.doseNumber === null) return;
+  await prisma.vaccineSelection.upsert({
+    where: { babyId_vaccineId_doseNumber: { babyId, vaccineId: matchedCode, doseNumber: input.doseNumber } },
+    create: { babyId, vaccineId: matchedCode, doseNumber: input.doseNumber, selected: true, completed: true },
+    update: { selected: true, completed: true },
+  }).catch(() => {});
 }
 
 /**
@@ -743,16 +793,8 @@ export function createMcpServer(principal: UserPrincipal, options?: { accessToke
         {
           name: "record_vaccine",
           description:
-            "【疫苗写】登记已完成接种的疫苗剂次（疫苗名称、剂次、接种日期）。自动关联当前操作家长身份并返回新记录。",
-          inputSchema: {
-            type: "object",
-            required: ["name"],
-            properties: {
-              name: { type: "string", description: "疫苗名称（如 乙肝疫苗、五联疫苗）" },
-              dose: { type: "string", description: "剂次（如 第1剂、第2剂）" },
-              completedDate: { type: "string", description: "接种日期 (YYYY-MM-DD，默认今天)" },
-            },
-          },
+            "【疫苗写】按疫苗本登记已接种、预约或待核对记录。必须明确状态；已接种填写实际日期，预约填写计划日期，未知剂次和日期保持未知。",
+          inputSchema: vaccineRecordInputSchema,
         },
         {
           name: "record_medical_report",
@@ -973,7 +1015,7 @@ export function createMcpServer(principal: UserPrincipal, options?: { accessToke
             type: "object",
             properties: {
               growth: { type: "object", description: "生长测量数据" },
-              vaccine: { type: "object", description: "已接种疫苗" },
+              vaccine: { ...vaccineRecordInputSchema, description: "按疫苗本记录；状态、日期与剂次按事实填写，不确定时用 needs_review 和 null" },
               medicalReport: { type: "object", description: "化验单或体检报告" },
               deleteAction: { type: "object", description: "删除某条记录" },
               undoAction: { type: "object", description: "撤销刚才的删除操作" },
@@ -1614,7 +1656,7 @@ export function createMcpServer(principal: UserPrincipal, options?: { accessToke
         const limit = typeof args.limit === "number" ? Math.min(100, Math.max(1, args.limit)) : 50;
 
         if (GROWDESK_CONFIG.enabled) {
-          const res = await mcpGrowdeskFetch<any[]>(`/api/v1/babies/${babyId}/vaccines/records?limit=${limit}`, { accessToken });
+          const res = await mcpGrowdeskFetch<any[]>(`/api/v1/babies/${babyId}/vaccines/records?limit=${limit}`, { accessToken, headers: { "x-growdesk-representation": "ledger" } });
           const list = requireList<any>(res, "MCP 数据");
           const rawList = list.slice(0, limit).map((v: any) => {
             const rec = fromGrowDeskVaccineRecord(v);
@@ -2316,23 +2358,21 @@ export function createMcpServer(principal: UserPrincipal, options?: { accessToke
           throw new McpError(ErrorCode.InvalidRequest, "Forbidden: Missing baby:write scope");
         }
 
-        const vName = String(args.name || "").trim();
-        if (!vName) throw new Error("请输入疫苗名称");
-        const dose = String(args.dose || "第1剂").trim();
-        const completedDate = args.completedDate && isValidDateStr(args.completedDate) ? args.completedDate : getLocalDateStr();
+        const { input, matchedCode } = resolveMcpVaccineRecordInput(args);
+        const statusLabel = input.recordStatus === "completed" ? "已接种"
+          : input.recordStatus === "planned" ? "已预约" : "待核对";
+        const date = vaccineRecordDate(input);
+        const dateLabel = date ? `日期 ${date}` : "日期待核对";
 
         if (GROWDESK_CONFIG.enabled) {
           const payload = toGrowDeskVaccineRecordPayload({
-            babyId,
-            name: vName,
-            dose,
-            scheduledDate: completedDate,
-            completedDate,
-            isCompleted: true,
+            ...input,
+            vaccineCode: matchedCode || input.vaccineId || undefined,
           });
           const res = await mcpGrowdeskFetch<GrowDeskVaccineRecord>(`/api/v1/babies/${babyId}/vaccines/records`, {
             method: "POST",
             accessToken,
+            headers: { "x-growdesk-representation": "ledger" },
             body: payload,
           });
           const created = requireWriteData(res, "Failed to record vaccine");
@@ -2350,47 +2390,14 @@ export function createMcpServer(principal: UserPrincipal, options?: { accessToke
         }
 
         const record = await prisma.vaccineRecord.create({
-          data: {
-            babyId,
-            name: vName,
-            dose,
-            scheduledDate: completedDate,
-            completedDate,
-            isCompleted: true,
-          },
+          data: { babyId, ...input },
         });
-
-        // Sync vaccine selection
-        const doseMatch = dose.match(/\d+/);
-        const doseNum = doseMatch ? parseInt(doseMatch[0], 10) : 1;
-        const allVaccines = await prisma.vaccine.findMany();
-        const matched = allVaccines.find((v) => v.name.includes(vName) || vName.includes(v.name));
-        if (matched) {
-          await prisma.vaccineSelection.upsert({
-            where: {
-              babyId_vaccineId_doseNumber: {
-                babyId,
-                vaccineId: matched.vaccineId,
-                doseNumber: doseNum,
-              },
-            },
-            create: {
-              babyId,
-              vaccineId: matched.vaccineId,
-              doseNumber: doseNum,
-              selected: true,
-              completed: true,
-            },
-            update: {
-              selected: true,
-              completed: true,
-            },
-          }).catch(() => {});
-        }
+        await syncCompletedVaccineSelection(babyId, input, matchedCode);
 
         const data = {
           success: true,
           action: "record_vaccine",
+          message: `${statusLabel}记录已保存：${input.name} ${input.dose}；${dateLabel}`,
           record: {
             ...record,
             recordedBy: currentUserSummary,
@@ -2784,7 +2791,7 @@ export function createMcpServer(principal: UserPrincipal, options?: { accessToke
                 if (Number.isInteger(found.version)) baseVersion = found.version;
               }
             } else if (type === "vaccine") {
-              const res = await mcpGrowdeskFetch<any[]>(`/api/v1/babies/${babyId}/vaccines/records?limit=50`, { accessToken });
+              const res = await mcpGrowdeskFetch<any[]>(`/api/v1/babies/${babyId}/vaccines/records?limit=50`, { accessToken, headers: { "x-growdesk-representation": "ledger" } });
               const list = requireList<any>(res, "MCP 数据");
               const found = list.find((r: any) => (r.completedDate || r.administeredDate || r.scheduledDate || r.date)?.slice(0, 10) === date);
               if (found) {
@@ -3584,6 +3591,7 @@ export function createMcpServer(principal: UserPrincipal, options?: { accessToke
         }
 
         const messages: string[] = [];
+        const resolvedVaccine = args.vaccine ? resolveMcpVaccineRecordInput(args.vaccine) : null;
 
         if (GROWDESK_CONFIG.enabled) {
           if (countHealthMeasurementMutations(args) > 1) {
@@ -3612,27 +3620,23 @@ export function createMcpServer(principal: UserPrincipal, options?: { accessToke
             messages.push(`📏 生长测量记录已保存 (体重: ${created.weightKg ?? "-"}kg, 身长: ${created.heightCm ?? "-"}cm)`);
           }
 
-          if (args.vaccine) {
-            const v = args.vaccine;
-            const vName = String(v.name || "").trim();
-            const dose = String(v.dose || "第1剂").trim();
-            const completedDate = v.completedDate && isValidDateStr(v.completedDate) ? v.completedDate : getLocalDateStr();
-            if (!vName) throw new Error("请输入疫苗名称");
+          if (resolvedVaccine) {
+            const { input, matchedCode } = resolvedVaccine;
             const payload = toGrowDeskVaccineRecordPayload({
-              babyId,
-              name: vName,
-              dose,
-              scheduledDate: completedDate,
-              completedDate,
-              isCompleted: true,
+              ...input,
+              vaccineCode: matchedCode || input.vaccineId || undefined,
             });
             const res = await mcpGrowdeskFetch<GrowDeskVaccineRecord>(`/api/v1/babies/${babyId}/vaccines/records`, {
               method: "POST",
               accessToken,
+              headers: { "x-growdesk-representation": "ledger" },
               body: payload,
             });
             const created = requireWriteData(res, "Failed to record vaccine");
-            messages.push(`💉 疫苗接种已登记【${vName} ${dose}】(完成日期: ${completedDate})`);
+            const statusLabel = input.recordStatus === "completed" ? "已接种"
+              : input.recordStatus === "planned" ? "已预约" : "待核对";
+            const date = vaccineRecordDate(input);
+            messages.push(`💉 ${statusLabel}记录已保存【${input.name} ${input.dose}】(${date ? `日期: ${date}` : "日期待核对"}; ID: ${created.id})`);
           }
 
           if (args.medicalReport) {
@@ -3694,7 +3698,7 @@ export function createMcpServer(principal: UserPrincipal, options?: { accessToke
                   if (Number.isInteger(found.version)) baseVersion = found.version;
                 }
               } else if (type === "vaccine") {
-                const res = await mcpGrowdeskFetch<any[]>(`/api/v1/babies/${babyId}/vaccines/records?limit=50`, { accessToken });
+                const res = await mcpGrowdeskFetch<any[]>(`/api/v1/babies/${babyId}/vaccines/records?limit=50`, { accessToken, headers: { "x-growdesk-representation": "ledger" } });
                 const list = requireList<any>(res, "MCP 数据");
                 const found = list.find((r: any) => (r.completedDate || r.administeredDate || r.scheduledDate || r.date)?.slice(0, 10) === date);
                 if (found) {
@@ -3761,23 +3765,16 @@ export function createMcpServer(principal: UserPrincipal, options?: { accessToke
           messages.push(`📏 生长测量记录已保存 (体重: ${result.weightKg || "-"}kg, 身长: ${result.heightCm || "-"}cm)`);
         }
 
-        if (args.vaccine) {
-          const v = args.vaccine;
-          const vName = String(v.name || "").trim();
-          const dose = String(v.dose || "第1剂").trim();
-          const completedDate = v.completedDate && isValidDateStr(v.completedDate) ? v.completedDate : getLocalDateStr();
-          if (!vName) throw new Error("请输入疫苗名称");
+        if (resolvedVaccine) {
+          const { input, matchedCode } = resolvedVaccine;
           const record = await prisma.vaccineRecord.create({
-            data: {
-              babyId,
-              name: vName,
-              dose,
-              scheduledDate: completedDate,
-              completedDate,
-              isCompleted: true,
-            },
+            data: { babyId, ...input },
           });
-          messages.push(`💉 疫苗接种已登记【${vName} ${dose}】(完成日期: ${completedDate})`);
+          await syncCompletedVaccineSelection(babyId, input, matchedCode);
+          const statusLabel = input.recordStatus === "completed" ? "已接种"
+            : input.recordStatus === "planned" ? "已预约" : "待核对";
+          const date = vaccineRecordDate(input);
+          messages.push(`💉 ${statusLabel}记录已保存【${input.name} ${input.dose}】(${date ? `日期: ${date}` : "日期待核对"}; ID: ${record.id})`);
         }
 
         if (args.medicalReport) {

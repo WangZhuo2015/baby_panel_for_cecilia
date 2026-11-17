@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import test, { after, before } from "node:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import {
   createFauxCore,
@@ -14,6 +17,32 @@ import { setTestMockStreamFn } from "../../lib/agent/run";
 import { POST as chatPOST, GET as chatGET } from "../../app/api/ai/chat/route";
 import { POST as cancelPOST } from "../../app/api/ai/chat/cancel/route";
 import { GET as sessionGET } from "../../app/api/ai/sessions/[id]/route";
+
+const fixtureEnvKeys = [
+  "GROWDESK_AI_API_KEY", "OPENAI_API_KEY", "GROWDESK_AI_API_KEY_FILE", "LLM_PREFERENCES_FILE",
+] as const;
+let fixtureDirectory: string | undefined;
+const previousFixtureEnv = new Map<string, string | undefined>();
+
+before(() => {
+  for (const key of fixtureEnvKeys) previousFixtureEnv.set(key, process.env[key]);
+  fixtureDirectory = mkdtempSync(join(tmpdir(), "test_decoupled_llm_"));
+  // Exercise real profile validation; the existing faux stream replaces only
+  // model execution, while persistence and concurrent POST handling stay real.
+  process.env.GROWDESK_AI_API_KEY = "test_decoupled_official_key";
+  process.env.OPENAI_API_KEY = "test_decoupled_official_key";
+  delete process.env.GROWDESK_AI_API_KEY_FILE;
+  process.env.LLM_PREFERENCES_FILE = join(fixtureDirectory, "preferences.json");
+});
+
+after(() => {
+  for (const key of fixtureEnvKeys) {
+    const previous = previousFixtureEnv.get(key);
+    if (previous === undefined) delete process.env[key];
+    else process.env[key] = previous;
+  }
+  if (fixtureDirectory) rmSync(fixtureDirectory, { recursive: true, force: true });
+});
 
 test("Decoupled AI Session: Prompt-First Persistence", async (t) => {
   const tenant = await createTestTenant(prisma, "promptfirst");

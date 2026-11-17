@@ -1,0 +1,14 @@
+{
+  "taskId": "WEB_PUSH_DELIVERY_20261005",
+  "runId": "c9e672bde99b",
+  "status": "cleaned",
+  "database": "test_growdesk_c9e672bde99b",
+  "appRole": "test_app_c9e672bde99b",
+  "privateDirectoryRemoved": true,
+  "resources": [
+    "owned PostgreSQL cluster and test roles",
+    "owned Redis process",
+    "owned Go API process"
+  ],
+  "errors": []
+}

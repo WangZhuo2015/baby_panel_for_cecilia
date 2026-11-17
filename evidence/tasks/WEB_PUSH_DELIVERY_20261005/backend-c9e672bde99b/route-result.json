@@ -1,0 +1,225 @@
+{
+  "passed": false,
+  "cases": [
+    {
+      "name": "real registration, session exchange and Bearer principal",
+      "passed": true
+    },
+    {
+      "name": "subscribe persists full encryption keys through real HTTP and PostgreSQL",
+      "passed": true
+    },
+    {
+      "name": "test push preserves the complete subscription and authenticated owner",
+      "passed": false,
+      "error": "PUSH_TEST_DROPPED_ENCRYPTION_KEYS"
+    },
+    {
+      "name": "anonymous and unknown real sessions cannot overwrite device registration",
+      "passed": true
+    },
+    {
+      "name": "backend push registration requires a verified Bearer principal",
+      "passed": true
+    },
+    {
+      "name": "foreign CSRF origin fails before any device write or gateway call",
+      "passed": false,
+      "error": "FOREIGN_ORIGIN_ACCEPTED"
+    },
+    {
+      "name": "missing current-device subscription fails without mutation or simulated send",
+      "passed": false,
+      "error": "MISSING_SUBSCRIPTION_ACCEPTED"
+    },
+    {
+      "name": "missing VAPID configuration reports 503 without changing stored subscription",
+      "passed": false,
+      "error": "MISSING_CONFIG_SIMULATED_SUCCESS"
+    },
+    {
+      "name": "gateway 403 is reported as 502 while the real PostgreSQL subscription remains valid",
+      "passed": false,
+      "error": "GATEWAY_FAILURE_SIMULATED_SUCCESS"
+    },
+    {
+      "name": "observe notification task inventory after a real family feeding transaction",
+      "passed": true
+    }
+  ],
+  "realAuthentication": true,
+  "realPostgreSQL": true,
+  "bffRuntime": "owned Node HTTP shim invoking the actual route handlers; Next runtime is not exercised",
+  "mockedSideEffects": [
+    "external WebPush gateway sendNotification only"
+  ],
+  "physicalDeviceDeliveryVerified": false,
+  "externalPushRequests": 0,
+  "observedHttp": [
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/register"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/bff/session"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/me"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/register"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/bff/session"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/me"
+    },
+    {
+      "method": "POST",
+      "path": "/api/push/subscribe"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/bff/session"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/devices/950f61b41d2cc32695bd1c7a284c6544/push"
+    },
+    {
+      "method": "POST",
+      "path": "/api/push/test"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/bff/session"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/devices/950f61b41d2cc32695bd1c7a284c6544/push"
+    },
+    {
+      "method": "POST",
+      "path": "/api/push/test"
+    },
+    {
+      "method": "POST",
+      "path": "/api/push/test"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/bff/session"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/devices/950f61b41d2cc32695bd1c7a284c6544/push"
+    },
+    {
+      "method": "POST",
+      "path": "/api/push/test"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/bff/session"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/devices/950f61b41d2cc32695bd1c7a284c6544/push"
+    },
+    {
+      "method": "POST",
+      "path": "/api/push/test"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/bff/session"
+    },
+    {
+      "method": "POST",
+      "path": "/api/push/test"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/bff/session"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/devices/950f61b41d2cc32695bd1c7a284c6544/push"
+    },
+    {
+      "method": "POST",
+      "path": "/api/push/test"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/bff/session"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/devices/950f61b41d2cc32695bd1c7a284c6544/push"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/register"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/bff/session"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/me"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/families"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/families/11b9a48a-9688-427d-9fe5-e6264530bd17/invites"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/families/join"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/families/11b9a48a-9688-427d-9fe5-e6264530bd17/babies"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/babies/db323cd5-3de3-4c16-9208-2914f248bb80/members"
+    },
+    {
+      "method": "POST",
+      "path": "/api/push/subscribe"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/bff/session"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/devices/13bc91201a0b91fc5aac1c504ec415ee/push"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/babies/db323cd5-3de3-4c16-9208-2914f248bb80/records/feeding"
+    }
+  ],
+  "gatewayCalls": 3,
+  "familyRecordNotificationProbe": {
+    "recordCommitted": true,
+    "recipientSubscriptionPresent": true,
+    "notificationDelta": 0,
+    "pushTaskDelta": 0,
+    "familyChangeDelta": 1,
+    "missingEventObserved": true
+  }
+}

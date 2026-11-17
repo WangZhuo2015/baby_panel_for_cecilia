@@ -5,7 +5,6 @@ import {
   CheckCircle2,
   RefreshCw,
   Sparkles,
-  Plus,
   X,
   UtensilsCrossed,
   Check,
@@ -22,11 +21,19 @@ import { VoiceConfirmEntry } from "@/components/ui/VoiceConfirmEntry";
 import { useToast } from "@/components/ui/Toast";
 import { useBabyStore } from "@/stores/useBabyStore";
 import { getLocalDateStr } from "@/lib/date";
+import { clampFoodGrams, foodLogLimitMessage, MAX_MEAL_FOODS } from "@/lib/food-log-limits";
+import {
+  COMMON_FOOD_CATEGORIES,
+  CUSTOM_FOOD_CATEGORIES,
+  type CommonFoodCategory,
+  type CommonFoodOption,
+} from "@/lib/food-options";
 import type { FoodLogRecord, FoodMealComponent, FoodCategoryRole } from "@/types";
 import foodData from "@/data/04_foods.json";
 import { WheelSpinnerColumn, type SpinnerItem } from "./WheelSpinnerColumn";
 
 const FOOD_ICON_OPTIONS = ["🍽️", "🥩", "🐟", "🥚", "🥛", "🍚", "🥕", "🍎", "🥦", "🍠", "🥬", "🌽", "🍌", "🍇", "🍗", "🍤"];
+const NONE_WHEEL_ITEM_NAME = "（无 / 本餐不吃）";
 
 const portionOptions = [
   { value: "little" as const, label: "少量" },
@@ -293,9 +300,9 @@ export function FoodLogForm({
 
   // Build full categorized library for the 3 spin wheels + optional
   const { stapleList, proteinList, vegetableList, optionalList } = useMemo(() => {
-    const staples: SpinnerItem[] = [{ id: "none", name: "（无 / 本餐不吃）", icon: "⚪" }];
-    const proteins: SpinnerItem[] = [{ id: "none", name: "（无 / 本餐不吃）", icon: "⚪" }];
-    const vegetables: SpinnerItem[] = [{ id: "none", name: "（无 / 本餐不吃）", icon: "⚪" }];
+    const staples: SpinnerItem[] = [{ id: "none", name: NONE_WHEEL_ITEM_NAME, icon: "⚪" }];
+    const proteins: SpinnerItem[] = [{ id: "none", name: NONE_WHEEL_ITEM_NAME, icon: "⚪" }];
+    const vegetables: SpinnerItem[] = [{ id: "none", name: NONE_WHEEL_ITEM_NAME, icon: "⚪" }];
     const optionals: SpinnerItem[] = [];
 
     const seenStaple = new Set<string>();
@@ -357,6 +364,35 @@ export function FoodLogForm({
       }
     }
 
+    // 3. Add curated common options to the same wheels. New options without
+    // catalog records use a UI-only id and are not marked as tried.
+    for (const category of COMMON_FOOD_CATEGORIES) {
+      for (const food of category.foods) {
+        const target = category.role === "staple"
+          ? staples
+          : category.role === "protein"
+            ? proteins
+            : category.role === "vegetable"
+              ? vegetables
+              : optionals;
+        const seen = category.role === "staple"
+          ? seenStaple
+          : category.role === "protein"
+            ? seenProtein
+            : category.role === "vegetable"
+              ? seenVeg
+              : seenOpt;
+        if (seen.has(food.name)) continue;
+        seen.add(food.name);
+        target.push({
+          id: food.foodId || `common_option_${category.id}_${food.name}`,
+          name: food.name,
+          icon: food.icon,
+          tried: triedFoodNames.has(food.name),
+        });
+      }
+    }
+
     return {
       stapleList: staples,
       proteinList: proteins,
@@ -365,95 +401,74 @@ export function FoodLogForm({
     };
   }, [foodItems, triedFoodNames]);
 
-  // Initial wheel selection indices and grams
-  const [stapleIndex, setStapleIndex] = useState<number>(() => {
-    if (initialData?.components?.length) {
-      const match = initialData.components.find((c: any) => c.role === "staple");
-      if (match) {
-        const idx = stapleList.findIndex((s) => s.name === match.name);
-        return idx >= 0 ? idx : 0;
-      }
-    } else if (initialData?.foods?.length) {
-      for (const foodName of initialData.foods) {
-        if (inferFoodRole({ name: foodName }) === "staple") {
-          const idx = stapleList.findIndex((s) => s.name === foodName);
-          if (idx >= 0) return idx;
-        }
-      }
-    }
-    // Default to first real item if creating
-    return stapleList.length > 1 ? 1 : 0;
+  const initialDataComponents: FoodMealComponent[] = isEdit && Array.isArray(initialData?.components)
+    ? initialData.components
+    : [];
+  const [retainedComponents, setRetainedComponents] = useState<FoodMealComponent[]>(() =>
+    initialDataComponents.map((component) => ({ ...component }))
+  );
+  const [extraComponents, setExtraComponents] = useState<FoodMealComponent[]>([]);
+  const [legacyFoodNames, setLegacyFoodNames] = useState<string[]>(() => {
+    if (!isEdit || !Array.isArray(initialData?.foods)) return [];
+    const componentNames = new Set(initialDataComponents.map((component) => component.name));
+    return initialData.foods.filter((name: unknown): name is string =>
+      typeof name === "string" && name.trim().length > 0 && !componentNames.has(name)
+    );
   });
 
-  const [stapleGrams, setStapleGrams] = useState<number>(() => {
-    if (initialData?.components?.length) {
-      const match = initialData.components.find((c: any) => c.role === "staple");
-      if (match?.grams) return match.grams;
-    }
-    return 20;
-  });
+  const initialFoodNameForRole = (role: "staple" | "protein" | "vegetable") => {
+    const component = initialDataComponents.find((item) => item.role === role);
+    if (component) return component.name;
+    if (!Array.isArray(initialData?.foods)) return null;
+    return initialData.foods.find((name: unknown) =>
+      typeof name === "string" && inferFoodRole({ name }) === role
+    ) || null;
+  };
 
-  const [proteinIndex, setProteinIndex] = useState<number>(() => {
-    if (initialData?.components?.length) {
-      const match = initialData.components.find((c: any) => c.role === "protein");
-      if (match) {
-        const idx = proteinList.findIndex((s) => s.name === match.name);
-        return idx >= 0 ? idx : 0;
-      }
-    } else if (initialData?.foods?.length) {
-      for (const foodName of initialData.foods) {
-        if (inferFoodRole({ name: foodName }) === "protein") {
-          const idx = proteinList.findIndex((s) => s.name === foodName);
-          if (idx >= 0) return idx;
-        }
-      }
-    }
-    return proteinList.length > 1 ? 1 : 0;
-  });
+  const initialWheelName = (role: "staple" | "protein" | "vegetable", items: SpinnerItem[]) => {
+    if (isEdit) return initialFoodNameForRole(role) || NONE_WHEEL_ITEM_NAME;
+    return items[1]?.name || NONE_WHEEL_ITEM_NAME;
+  };
 
-  const [proteinGrams, setProteinGrams] = useState<number>(() => {
-    if (initialData?.components?.length) {
-      const match = initialData.components.find((c: any) => c.role === "protein");
-      if (match?.grams) return match.grams;
-    }
-    return 25;
-  });
+  const wheelIndexForName = (name: string, items: SpinnerItem[]) => {
+    const index = items.findIndex((item) => item.name === name);
+    return index > 0 ? index : 0;
+  };
 
-  const [vegIndex, setVegIndex] = useState<number>(() => {
-    if (initialData?.components?.length) {
-      const match = initialData.components.find((c: any) => c.role === "vegetable");
-      if (match) {
-        const idx = vegetableList.findIndex((s) => s.name === match.name);
-        return idx >= 0 ? idx : 0;
-      }
-    } else if (initialData?.foods?.length) {
-      for (const foodName of initialData.foods) {
-        if (inferFoodRole({ name: foodName }) === "vegetable") {
-          const idx = vegetableList.findIndex((s) => s.name === foodName);
-          if (idx >= 0) return idx;
-        }
-      }
-    }
-    return vegetableList.length > 1 ? 1 : 0;
-  });
+  const initialGrams = (role: "staple" | "protein" | "vegetable", fallback: number) => {
+    const component = initialDataComponents.find((item) => item.role === role);
+    return typeof component?.grams === "number" ? component.grams : fallback;
+  };
 
-  const [vegGrams, setVegGrams] = useState<number>(() => {
-    if (initialData?.components?.length) {
-      const match = initialData.components.find((c: any) => c.role === "vegetable");
-      if (match?.grams) return match.grams;
-    }
-    return 30;
-  });
+  // In edit mode the wheels only point at an existing or candidate item. They
+  // never add defaults to the saved meal unless the user explicitly adds one.
+  const [stapleSelectionName, setStapleSelectionName] = useState<string>(() => initialWheelName("staple", stapleList));
+  const stapleIndex = wheelIndexForName(stapleSelectionName, stapleList);
+  const setStapleIndex = (index: number) => setStapleSelectionName(stapleList[index]?.name || NONE_WHEEL_ITEM_NAME);
+  const [stapleGrams, setStapleGrams] = useState<number>(() => initialGrams("staple", 20));
+  const [proteinSelectionName, setProteinSelectionName] = useState<string>(() => initialWheelName("protein", proteinList));
+  const proteinIndex = wheelIndexForName(proteinSelectionName, proteinList);
+  const setProteinIndex = (index: number) => setProteinSelectionName(proteinList[index]?.name || NONE_WHEEL_ITEM_NAME);
+  const [proteinGrams, setProteinGrams] = useState<number>(() => initialGrams("protein", 25));
+  const [vegSelectionName, setVegSelectionName] = useState<string>(() => initialWheelName("vegetable", vegetableList));
+  const vegIndex = wheelIndexForName(vegSelectionName, vegetableList);
+  const setVegIndex = (index: number) => setVegSelectionName(vegetableList[index]?.name || NONE_WHEEL_ITEM_NAME);
+  const [vegGrams, setVegGrams] = useState<number>(() => initialGrams("vegetable", 30));
 
-  // Optional add-ons (oil & fruits)
-  const [selectedOptionals, setSelectedOptionals] = useState<FoodMealComponent[]>(() => {
-    if (initialData?.components?.length) {
-      return initialData.components.filter((c: any) => c.role === "optional");
-    }
-    return [];
-  });
-
-  const [showOptionalSection, setShowOptionalSection] = useState(() => selectedOptionals.length > 0);
+  const [activeCommonCategoryId, setActiveCommonCategoryId] = useState("seafood");
+  const [commonFoodSearch, setCommonFoodSearch] = useState("");
+  const commonCategoryScrollerRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const container = commonCategoryScrollerRef.current;
+    const activeButton = container?.querySelector<HTMLButtonElement>('[aria-pressed="true"]');
+    if (!container || !activeButton) return;
+    const containerRect = container.getBoundingClientRect();
+    const buttonRect = activeButton.getBoundingClientRect();
+    const buttonLeft = container.scrollLeft + buttonRect.left - containerRect.left;
+    const targetLeft = buttonLeft - (container.clientWidth - buttonRect.width) / 2;
+    container.scrollLeft = Math.max(0, Math.min(targetLeft, container.scrollWidth - container.clientWidth));
+  }, [activeCommonCategoryId]);
+  const [showOptionalSection, setShowOptionalSection] = useState(false);
 
   // Spin animation state
   const [isSpinning, setIsSpinning] = useState(false);
@@ -507,101 +522,202 @@ export function FoodLogForm({
       setVegGrams(preset.vegGrams);
     }
     if (preset.optional) {
-      setSelectedOptionals(preset.optional);
+      setExtraComponents((prev) => [
+        ...prev.filter((component) => component.role !== "optional"),
+        ...preset.optional!,
+      ]);
       setShowOptionalSection(true);
     }
     showToast(`已填入「${preset.title}」✨`);
   };
 
-  // Toggle optional food item
-  const handleToggleOptional = (item: SpinnerItem) => {
-    setSelectedOptionals((prev) => {
-      const exists = prev.find((o) => o.name === item.name);
-      if (exists) {
-        return prev.filter((o) => o.name !== item.name);
-      }
-      return [
-        ...prev,
-        {
-          role: "optional",
-          name: item.name,
-          foodId: item.id,
-          icon: item.icon,
-          grams: item.name.includes("油") ? 2 : 20,
-        },
-      ];
-    });
-  };
+  const componentFromWheel = (
+    role: "staple" | "protein" | "vegetable",
+    item: SpinnerItem,
+    grams: number
+  ): FoodMealComponent => ({
+    role,
+    name: item.name,
+    ...(item.id.startsWith("common_option_") ? {} : { foodId: item.id }),
+    icon: item.icon,
+    grams,
+  });
 
-  const handleUpdateOptionalGrams = (name: string, grams: number) => {
-    setSelectedOptionals((prev) =>
-      prev.map((o) => (o.name === name ? { ...o, grams: Math.max(0, grams) } : o))
-    );
-  };
+  const selectedWheelComponents = [
+    stapleIndex > 0 && stapleList[stapleIndex]
+      ? componentFromWheel("staple", stapleList[stapleIndex], stapleGrams)
+      : null,
+    proteinIndex > 0 && proteinList[proteinIndex]
+      ? componentFromWheel("protein", proteinList[proteinIndex], proteinGrams)
+      : null,
+    vegIndex > 0 && vegetableList[vegIndex]
+      ? componentFromWheel("vegetable", vegetableList[vegIndex], vegGrams)
+      : null,
+  ].filter((component): component is FoodMealComponent => component !== null);
 
-  // Active combined components
   const activeComponents = useMemo<FoodMealComponent[]>(() => {
-    const list: FoodMealComponent[] = [];
-    if (stapleIndex > 0 && stapleList[stapleIndex]) {
-      const s = stapleList[stapleIndex];
-      list.push({
-        role: "staple",
-        name: s.name,
-        foodId: s.id,
-        icon: s.icon,
-        grams: stapleGrams,
-      });
+    const list = [...retainedComponents];
+    const seenNames = new Set(list.map((component) => component.name));
+    const appendIfNew = (component: FoodMealComponent) => {
+      if (seenNames.has(component.name)) return;
+      seenNames.add(component.name);
+      list.push(component);
+    };
+
+    // Keep edit mode exact until the user explicitly adds or changes an item.
+    if (!isEdit) {
+      for (const component of selectedWheelComponents) appendIfNew(component);
     }
-    if (proteinIndex > 0 && proteinList[proteinIndex]) {
-      const p = proteinList[proteinIndex];
-      list.push({
-        role: "protein",
-        name: p.name,
-        foodId: p.id,
-        icon: p.icon,
-        grams: proteinGrams,
-      });
-    }
-    if (vegIndex > 0 && vegetableList[vegIndex]) {
-      const v = vegetableList[vegIndex];
-      list.push({
-        role: "vegetable",
-        name: v.name,
-        foodId: v.id,
-        icon: v.icon,
-        grams: vegGrams,
-      });
-    }
-    for (const opt of selectedOptionals) {
-      list.push(opt);
-    }
+    for (const component of extraComponents) appendIfNew(component);
     return list;
   }, [
-    stapleIndex,
-    stapleList,
-    stapleGrams,
-    proteinIndex,
-    proteinList,
-    proteinGrams,
-    vegIndex,
-    vegetableList,
-    vegGrams,
-    selectedOptionals,
+    isEdit,
+    retainedComponents,
+    extraComponents,
+    selectedWheelComponents,
   ]);
+
+  const selectedOptionals = activeComponents.filter((component) =>
+    component.role === "optional" || component.role === "fruit" || component.role === "oil"
+  );
+  const activeCommonCategory = COMMON_FOOD_CATEGORIES.find((category) => category.id === activeCommonCategoryId)
+    ?? COMMON_FOOD_CATEGORIES[0];
+  const normalizedCommonFoodSearch = commonFoodSearch.trim().toLocaleLowerCase("zh-CN");
+  const commonFoodResults = normalizedCommonFoodSearch
+    ? COMMON_FOOD_CATEGORIES.flatMap((category) =>
+        category.foods
+          .filter((food) => food.name.toLocaleLowerCase("zh-CN").includes(normalizedCommonFoodSearch))
+          .map((food) => ({ category, food }))
+      )
+    : activeCommonCategory.foods.map((food) => ({ category: activeCommonCategory, food }));
+  const currentPortionLabel = portionOptions.find((option) => option.value === portion)?.label || "未记录";
+  const currentStateLabel = stateOptions.find((option) => option.value === babyState)?.label || "未记录";
 
   const totalGrams = useMemo(() => {
     return activeComponents.reduce((sum, c) => sum + (c.grams || 0), 0);
   }, [activeComponents]);
+  const hasUnrecordedFoodGrams = legacyFoodNames.length > 0 || activeComponents.some(
+    (component) => typeof component.grams !== "number"
+  );
+  const hasKnownFoodGrams = activeComponents.some((component) => typeof component.grams === "number");
+  const weightSummary = hasUnrecordedFoodGrams
+    ? (hasKnownFoodGrams ? `已知 ${totalGrams}g` : "克数未记录")
+    : `总重${totalGrams}g`;
 
-  const hasStaple = stapleIndex > 0;
-  const hasProtein = proteinIndex > 0;
-  const hasVeg = vegIndex > 0;
+  const hasStaple = activeComponents.some((component) => component.role === "staple");
+  const hasProtein = activeComponents.some((component) => component.role === "protein");
+  const hasVeg = activeComponents.some((component) => component.role === "vegetable");
+
+  const isFoodSelected = (name: string) =>
+    activeComponents.some((component) => component.name === name) || legacyFoodNames.includes(name);
+
+  const removeFoodByName = (name: string) => {
+    setRetainedComponents((prev) => prev.filter((component) => component.name !== name));
+    setExtraComponents((prev) => prev.filter((component) => component.name !== name));
+    setLegacyFoodNames((prev) => prev.filter((foodName) => foodName !== name));
+    if (!isEdit) {
+      if (stapleList[stapleIndex]?.name === name) setStapleIndex(0);
+      if (proteinList[proteinIndex]?.name === name) setProteinIndex(0);
+      if (vegetableList[vegIndex]?.name === name) setVegIndex(0);
+    }
+  };
+
+  const addFoodComponent = (component: FoodMealComponent) => {
+    setLegacyFoodNames((prev) => prev.filter((name) => name !== component.name));
+    setExtraComponents((prev) =>
+      prev.some((item) => item.name === component.name) ? prev : [...prev, component]
+    );
+  };
+
+  const buildCommonComponent = (
+    category: CommonFoodCategory,
+    food: CommonFoodOption
+  ): FoodMealComponent => {
+    const catalogFood = foodData.foodItems.find((item) => item.name === food.name);
+    const familyFood = foodItems.find((item) => item.name === food.name);
+    const foodId = food.foodId || catalogFood?.id || familyFood?.foodId || familyFood?.id;
+    return {
+      role: category.role,
+      name: food.name,
+      ...(foodId ? { foodId } : {}),
+      icon: food.icon || catalogFood?.icon || familyFood?.icon || "🍽️",
+      grams: food.grams ?? category.defaultGrams,
+    };
+  };
+
+  const handleToggleCommonFood = (
+    category: CommonFoodCategory,
+    food: CommonFoodOption
+  ) => {
+    if (isFoodSelected(food.name)) {
+      removeFoodByName(food.name);
+      return;
+    }
+    addFoodComponent(buildCommonComponent(category, food));
+  };
+
+  const handleToggleOptional = (item: SpinnerItem) => {
+    if (isFoodSelected(item.name)) {
+      removeFoodByName(item.name);
+      return;
+    }
+    const familyFood = foodItems.find((food) => food.name === item.name);
+    const foodId = item.id.startsWith("common_option_")
+      ? undefined
+      : familyFood?.foodId || familyFood?.id || item.id;
+    addFoodComponent({
+      role: "optional",
+      name: item.name,
+      ...(foodId ? { foodId } : {}),
+      icon: item.icon,
+      grams: item.name.includes("油") ? 2 : 20,
+    });
+  };
+
+  const handleUpdateComponentGrams = (name: string, grams: number) => {
+    const safeGrams = clampFoodGrams(grams);
+    setRetainedComponents((prev) =>
+      prev.map((component) => component.name === name ? { ...component, grams: safeGrams } : component)
+    );
+    setExtraComponents((prev) =>
+      prev.map((component) => component.name === name ? { ...component, grams: safeGrams } : component)
+    );
+    if (stapleList[stapleIndex]?.name === name) setStapleGrams(safeGrams);
+    if (proteinList[proteinIndex]?.name === name) setProteinGrams(safeGrams);
+    if (vegetableList[vegIndex]?.name === name) setVegGrams(safeGrams);
+  };
+
+  const handleAddWheelItem = (role: "staple" | "protein" | "vegetable") => {
+    const list = role === "staple" ? stapleList : role === "protein" ? proteinList : vegetableList;
+    const index = role === "staple" ? stapleIndex : role === "protein" ? proteinIndex : vegIndex;
+    const grams = role === "staple" ? stapleGrams : role === "protein" ? proteinGrams : vegGrams;
+    const item = list[index];
+    if (!item || index === 0) return;
+
+    const component = componentFromWheel(role, item, grams);
+    setLegacyFoodNames((prev) => prev.filter((name) => name !== item.name));
+    const alreadyRetained = retainedComponents.some((existing) => existing.name === item.name);
+    if (alreadyRetained) {
+      setRetainedComponents((prev) => prev.map((existing) =>
+        existing.name === item.name ? { ...existing, grams } : existing
+      ));
+      return;
+    }
+    setExtraComponents((prev) => {
+      const exists = prev.some((existing) => existing.name === item.name);
+      return exists
+        ? prev.map((existing) => existing.name === item.name ? { ...existing, grams } : existing)
+        : [...prev, component];
+    });
+  };
 
   // Add custom food modal
   const [showAddFood, setShowAddFood] = useState(false);
   const [newFoodName, setNewFoodName] = useState("");
   const [newFoodIcon, setNewFoodIcon] = useState("🍽️");
-  const [newFoodCategory, setNewFoodCategory] = useState<"staple" | "protein" | "vegetable" | "optional">("staple");
+  const [newFoodCategory, setNewFoodCategory] = useState("grain");
+  const selectedCustomCategory = CUSTOM_FOOD_CATEGORIES.find((category) => category.id === newFoodCategory)
+    ?? CUSTOM_FOOD_CATEGORIES[0];
   const [addingFood, setAddingFood] = useState(false);
 
   const handleAddCustomFood = async () => {
@@ -629,7 +745,7 @@ export function FoodLogForm({
           familyId,
           name,
           icon: newFoodIcon,
-          category: catMap[newFoodCategory] || "other",
+          category: selectedCustomCategory.apiCategory,
           status: "tried",
           firstAddedDate: getLocalDateStr(),
         }),
@@ -637,6 +753,23 @@ export function FoodLogForm({
       if (!res.ok) throw new Error("创建失败");
       const created = await res.json();
       if (resolveFoodFormFamilyId(useBabyStore.getState()) !== familyId) return;
+
+      const defaultGrams = selectedCustomCategory.apiCategory === "oil"
+        ? 2
+        : selectedCustomCategory.role === "staple"
+          ? 20
+          : selectedCustomCategory.role === "protein"
+            ? 25
+            : selectedCustomCategory.role === "vegetable"
+              ? 30
+              : 15;
+      addFoodComponent({
+        role: selectedCustomCategory.role,
+        name: created.name || name,
+        ...(created.foodId || created.id ? { foodId: created.foodId || created.id } : {}),
+        icon: created.icon || newFoodIcon,
+        grams: defaultGrams,
+      });
 
       setShowAddFood(false);
       setNewFoodName("");
@@ -651,52 +784,85 @@ export function FoodLogForm({
 
   const handleFormSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (activeComponents.length === 0) {
+    if (activeComponents.length === 0 && legacyFoodNames.length === 0) {
       showToast("请至少为宝宝选择一种辅食食材");
       return;
     }
 
     let autoPortion = portion;
-    if (totalGrams > 0) {
+    if (!isEdit && totalGrams > 0) {
       if (totalGrams <= 35) autoPortion = "little";
       else if (totalGrams <= 60) autoPortion = "half";
       else if (totalGrams <= 95) autoPortion = "most";
       else autoPortion = "all";
     }
 
-    const selectedFoodNames = activeComponents.map((c) => c.name);
+    const selectedFoodNames = [...legacyFoodNames];
+    for (const component of activeComponents) {
+      if (!selectedFoodNames.includes(component.name)) selectedFoodNames.push(component.name);
+    }
+    const hasComponentPayload = activeComponents.length > 0 ||
+      (Array.isArray(initialData?.components) && initialData.components.length > 0);
+    const sameAsInitialComponents = activeComponents.length === initialDataComponents.length &&
+      activeComponents.every((component, index) =>
+        JSON.stringify(component) === JSON.stringify(initialDataComponents[index])
+      );
+    const persistedTotalGrams = totalGrams > 0
+      ? totalGrams
+      : isEdit && sameAsInitialComponents && typeof initialData?.totalGrams === "number"
+        ? initialData.totalGrams
+        : totalGrams;
 
-    await onSubmit({
+    const payload = {
       date,
       time,
       foods: selectedFoodNames,
-      components: activeComponents,
-      totalGrams,
+      ...(hasComponentPayload ? { components: activeComponents, totalGrams: persistedTotalGrams } : {}),
       portion: autoPortion,
       acceptance,
       babyState,
       hasAbnormal,
       abnormalNotes: hasAbnormal ? abnormalNotes.trim() : undefined,
-    });
+    };
+    const limitMessage = foodLogLimitMessage({ ...payload, notes: initialData?.notes });
+    if (limitMessage) {
+      showToast(limitMessage);
+      return;
+    }
+    await onSubmit(payload);
   };
 
   return (
-    <div className="space-y-4">
-      {/* Voice entry (Create mode only) */}
-      {!isEdit && <VoiceConfirmEntry contextType="food" />}
+    <div className="min-w-0 space-y-4">
+      {/* Voice entry stays available without taking over the first screen. */}
+      {!isEdit && (
+        <details className="overflow-hidden rounded-2xl border border-primary/15 bg-card">
+          <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between px-4 py-2 text-sm font-semibold text-text-primary">
+            语音快速录入（可选）
+            <ChevronDown size={16} aria-hidden="true" />
+          </summary>
+          <div className="border-t border-primary/10 p-3">
+            <VoiceConfirmEntry contextType="food" />
+          </div>
+        </details>
+      )}
 
       {/* Date and time */}
-      <FormSection title="记录时间">
-        <div className="flex gap-3">
-          <div className="flex-1">
+      <FormSection title="记录时间" className="min-w-0">
+        <div className="grid min-w-0 grid-cols-[repeat(auto-fit,minmax(min(100%,150px),1fr))] gap-2">
+          <div className="min-w-0">
             <CuteInput
+              label="日期"
+              className="w-full min-w-0 px-3 [color-scheme:light] dark:[color-scheme:dark]"
               type="date"
               value={date}
               onChange={(e) => setDate(e.target.value)}
             />
           </div>
-          <div className="flex-1">
+          <div className="min-w-0">
             <CuteInput
+              label="时间"
+              className="w-full min-w-0 px-3 [color-scheme:light] dark:[color-scheme:dark]"
               type="time"
               value={time}
               onChange={(e) => setTime(e.target.value)}
@@ -705,41 +871,51 @@ export function FoodLogForm({
         </div>
       </FormSection>
 
-      {/* 3-Column Wheel Spinners */}
-      <FormSection title="🥣 辅食黄金餐盘 (三大滚轮组合)">
-        <div className="flex items-center justify-between -mt-1 mb-2.5">
+      <FormSection title="选择食材" className="min-w-0">
+        <div aria-label="选择食材" className="min-w-0 space-y-3">
+          <details className="group overflow-hidden rounded-2xl border border-primary/15 bg-card">
+            <summary aria-label="搭配工具" className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 px-4 py-2 text-sm font-semibold text-text-primary">
+              <span>搭配工具（可选）</span>
+              <ChevronDown size={16} aria-hidden="true" className="shrink-0 transition-transform group-open:rotate-180" />
+            </summary>
+            <div className="min-w-0 space-y-3 border-t border-primary/10 p-3 sm:p-4">
+        <div className="flex min-w-0 items-start justify-between gap-2">
           <p className="text-[11px] text-text-muted">
-            上下滑动或点按微调滚轮，分别选定主食、肉类与蔬菜及克数。
+            {isEdit
+              ? "编辑时先滚动选择候选食材，再点下方按钮加入；已记录食材会保留。"
+              : "滚轮设置基础搭配；常吃菜可按分类多选，每种食材都能单独调克数。"}
           </p>
-          <button
-            type="button"
-            onClick={handleSpin}
-            disabled={isSpinning}
-            className="shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold bg-gradient-to-r from-amber-500 via-rose-500 to-emerald-500 text-white shadow-xs hover:shadow-md transition-all active:scale-95 disabled:opacity-60 cursor-pointer"
-            title="随机转一转"
-          >
-            <Dices size={14} className={isSpinning ? "animate-spin" : ""} />
-            <span>{isSpinning ? "滚动中..." : "🎲 随机转一转"}</span>
-          </button>
+          {!isEdit && (
+            <button
+              type="button"
+              onClick={handleSpin}
+              disabled={isSpinning}
+              className="shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold bg-gradient-to-r from-amber-500 via-rose-500 to-emerald-500 text-white shadow-xs hover:shadow-md transition-all active:scale-95 disabled:opacity-60 cursor-pointer"
+              title="随机转一转"
+            >
+              <Dices size={14} className={isSpinning ? "animate-spin" : ""} />
+              <span>{isSpinning ? "滚动中..." : "🎲 随机转一转"}</span>
+            </button>
+          )}
         </div>
 
         {/* Quick Presets (仅新建模式显示) */}
         {!isEdit && (
-          <div className="mb-3 bg-gradient-to-r from-amber-50/70 to-orange-50/70 dark:from-amber-950/20 dark:to-orange-950/20 p-2.5 rounded-2xl border border-amber-200/50">
-            <div className="flex items-center gap-1.5 text-[11px] font-bold text-amber-900 dark:text-amber-200 mb-1.5">
+          <div className="min-w-0 rounded-2xl border border-amber-200/50 bg-gradient-to-r from-amber-50/70 to-orange-50/70 p-2.5 dark:from-amber-950/20 dark:to-orange-950/20">
+            <div className="mb-1.5 flex items-center gap-1.5 text-xs font-bold text-amber-900 dark:text-amber-200">
               <Sparkles size={13} className="text-amber-500" />
               <span>一键搭配推荐:</span>
             </div>
-            <div className="grid grid-cols-3 gap-1.5">
+            <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,180px),1fr))] gap-2">
               {QUICK_PRESETS.map((preset, idx) => (
                 <button
                   key={idx}
                   type="button"
                   onClick={() => handleApplyPreset(preset)}
-                  className="text-left p-2 rounded-xl bg-white/90 dark:bg-card border border-amber-100/80 hover:border-amber-400 hover:shadow-xs transition-all text-xs btn-press"
+                  className="min-h-14 rounded-xl border border-amber-100/80 bg-white/90 p-2 text-left text-sm transition-all hover:border-amber-400 hover:shadow-xs btn-press dark:bg-card"
                 >
-                  <div className="font-bold text-text-primary text-[11px] truncate">{preset.title}</div>
-                  <div className="text-[10px] text-text-muted truncate mt-0.5">{preset.desc}</div>
+                  <div className="break-words font-bold text-text-primary">{preset.title}</div>
+                  <div className="mt-0.5 break-words text-xs text-text-muted">{preset.desc}</div>
                 </button>
               ))}
             </div>
@@ -747,7 +923,7 @@ export function FoodLogForm({
         )}
 
         {/* 三大滚轮：主食 + 肉类 + 蔬菜 */}
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid min-w-0 grid-cols-[repeat(auto-fit,minmax(min(100%,180px),1fr))] gap-2">
           {/* 1. 主食谷薯 */}
           <WheelSpinnerColumn
             role="staple"
@@ -812,17 +988,176 @@ export function FoodLogForm({
           />
         </div>
 
-        {/* 辅食油与加餐水果 (折叠/展开) */}
-        <div className="mt-3 bg-card rounded-2xl border border-divider/60 p-3">
+        {isEdit && (
+          <div className="mt-2 grid min-w-0 grid-cols-[repeat(auto-fit,minmax(min(100%,140px),1fr))] gap-2">
+            {([
+              { role: "staple" as const, label: "加入主食", item: stapleList[stapleIndex] },
+              { role: "protein" as const, label: "加入蛋白", item: proteinList[proteinIndex] },
+              { role: "vegetable" as const, label: "加入蔬菜", item: vegetableList[vegIndex] },
+            ]).map(({ role, label, item }) => (
+              <button
+                key={role}
+                type="button"
+                onClick={() => handleAddWheelItem(role)}
+                disabled={!item || item.id === "none"}
+                aria-label={`${label}：${item?.name || "无"}`}
+                className="min-h-11 rounded-xl border border-primary/20 bg-primary/5 px-2 py-2 text-xs font-bold text-primary disabled:opacity-40"
+              >
+                + {label}
+              </button>
+            ))}
+          </div>
+        )}
+            </div>
+          </details>
+
+          <div className="grid min-w-0 grid-cols-[repeat(auto-fit,minmax(min(100%,320px),1fr))] gap-3">
+
+        {/* 常吃菜分类，点击只选择本餐，不会写入“已尝试”食材库 */}
+        <div className="min-w-0 space-y-3 rounded-2xl border border-primary/15 bg-card p-3">
+          <div className="flex items-center justify-between gap-2">
+            <div className="text-sm font-bold text-text-primary">常吃菜</div>
+            <span className="shrink-0 rounded-full bg-primary/10 px-2 py-1 text-xs font-semibold text-primary">
+              已选 {activeComponents.length + legacyFoodNames.length}/{MAX_MEAL_FOODS} 样
+            </span>
+          </div>
+
+          <div ref={commonCategoryScrollerRef} className="flex min-w-0 gap-2 overflow-x-auto pb-1" aria-label="常吃菜分类">
+            {COMMON_FOOD_CATEGORIES.map((category) => (
+              <button
+                key={category.id}
+                type="button"
+                aria-label={`常吃菜分类：${category.label}`}
+                aria-pressed={activeCommonCategoryId === category.id}
+                onClick={() => setActiveCommonCategoryId(category.id)}
+                className={`min-h-11 shrink-0 rounded-xl px-3 py-2 text-[13px] font-bold transition-colors ${
+                  activeCommonCategoryId === category.id
+                    ? "bg-primary text-white shadow-xs"
+                    : "bg-gray-100 dark:bg-gray-800 text-text-secondary"
+                }`}
+              >
+                <span className="mr-0.5">{category.icon}</span>{category.label}
+              </button>
+            ))}
+          </div>
+
+          <CuteInput
+            type="search"
+            aria-label="搜索常吃菜"
+            placeholder="搜索所有分类中的常吃菜"
+            value={commonFoodSearch}
+            onChange={(event) => setCommonFoodSearch(event.target.value)}
+            className="w-full min-w-0 px-3 text-sm"
+          />
+
+          <div className="grid min-w-0 grid-cols-2 gap-2" aria-label={`${activeCommonCategory.label}常见食材`}>
+            {commonFoodResults.map(({ category, food }) => {
+              const selected = isFoodSelected(food.name);
+              return (
+                <button
+                  key={food.name}
+                  type="button"
+                  aria-label={`选择${food.name}`}
+                  aria-pressed={selected}
+                  onClick={() => handleToggleCommonFood(category, food)}
+                  className={`btn-press flex min-h-[52px] min-w-0 items-center justify-between gap-1.5 rounded-xl border px-2.5 py-2 text-sm font-medium transition-all ${
+                    selected
+                      ? "border-primary bg-primary text-white font-bold shadow-xs"
+                      : "border-primary/10 bg-gray-50 text-text-secondary hover:bg-gray-100 dark:bg-gray-800"
+                  }`}
+                >
+                  <span className="min-w-0 break-words text-left leading-5">{food.icon} {food.name}</span>
+                  {selected && <Check size={16} aria-hidden="true" className="shrink-0" />}
+                  {normalizedCommonFoodSearch && (
+                    <span className="sr-only">{category.label}</span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+          {normalizedCommonFoodSearch && commonFoodResults.length === 0 && (
+            <p className="text-sm text-text-muted">没有找到匹配的食材。</p>
+          )}
+        </div>
+
+        {/* 本餐完整选择列表：包括初始未知食材，每一项独立克数 */}
+        <div aria-label="本餐食材" className="min-w-0 space-y-2 rounded-2xl border border-primary/15 bg-card p-3">
+          <div className="flex min-w-0 items-center justify-between gap-2">
+            <div className="text-sm font-bold text-text-primary">本餐食材</div>
+            <div className="shrink-0 text-xs font-semibold text-text-muted">
+              {activeComponents.length + legacyFoodNames.length} 样 · {weightSummary}
+            </div>
+          </div>
+          {activeComponents.length === 0 && legacyFoodNames.length === 0 ? (
+            <p className="text-sm text-text-muted">还没有选择食材。</p>
+          ) : (
+            <div className="space-y-1.5">
+              {activeComponents.map((component, index) => (
+                <div
+                  key={`${component.role}:${component.name}:${index}`}
+                  className="flex min-w-0 items-center justify-between gap-2 rounded-xl border border-primary/10 bg-bg/60 px-2 py-1.5"
+                >
+                  <div className="min-w-0 flex-1 break-words text-sm font-bold leading-5 text-text-primary">
+                    <span className="mr-1">{component.icon || "🍽️"}</span>{component.name}
+                  </div>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <input
+                      type="number"
+                      min={0}
+                      max={300}
+                      value={component.grams ?? ""}
+                      aria-label={`${component.name}克数`}
+                      onChange={(event) => handleUpdateComponentGrams(component.name, Number(event.target.value))}
+                      className="h-11 w-16 rounded-lg border border-primary/20 bg-card px-1 text-center text-sm font-bold"
+                    />
+                    <span className="text-xs text-text-muted">g</span>
+                    <button
+                      type="button"
+                      aria-label={`移除${component.name}`}
+                      onClick={() => removeFoodByName(component.name)}
+                      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-text-muted hover:bg-red-50 hover:text-red-600"
+                    >
+                      <X size={16} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+              {legacyFoodNames.map((name, index) => (
+                <div
+                  key={`legacy:${name}:${index}`}
+                  className="flex min-w-0 items-center justify-between gap-2 rounded-xl border border-amber-200/60 bg-amber-50/50 px-2 py-1.5"
+                >
+                  <div className="min-w-0 flex-1 break-words text-sm font-bold leading-5 text-text-primary">🥣 {name}</div>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <span className="text-xs text-text-muted">旧记录</span>
+                    <button
+                      type="button"
+                      aria-label={`移除${name}`}
+                      onClick={() => setLegacyFoodNames((prev) => prev.filter((foodName) => foodName !== name))}
+                      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-text-muted hover:bg-red-50 hover:text-red-600"
+                    >
+                      <X size={16} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+          </div>
+
+        {/* 食材库已尝试的油脂与水果 (保留原入口) */}
+        <div className="mt-3 rounded-2xl border border-primary/15 bg-card p-3">
           <button
             type="button"
             onClick={() => setShowOptionalSection((prev) => !prev)}
-            className="w-full flex items-center justify-between text-xs font-bold text-text-primary"
+            aria-expanded={showOptionalSection}
+            className="flex min-h-11 w-full items-center justify-between gap-2 text-sm font-bold text-text-primary"
           >
             <div className="flex items-center gap-1.5">
-              <span>🥑 辅食油与加餐水果 (可选)</span>
+                  <span className="text-left">食材库水果与油脂（可选）</span>
               {selectedOptionals.length > 0 && (
-                <span className="px-1.5 py-0.2 rounded-full text-[10px] font-semibold bg-sky-100 text-sky-800">
+                <span className="rounded-full bg-sky-100 px-2 py-1 text-xs font-semibold text-sky-800">
                   已加 {selectedOptionals.length} 样
                 </span>
               )}
@@ -831,55 +1166,30 @@ export function FoodLogForm({
           </button>
 
           {showOptionalSection && (
-            <div className="mt-2.5 pt-2 border-t border-divider/40 space-y-2">
-              <div className="flex flex-wrap gap-1.5">
+            <div className="mt-2.5 space-y-2 border-t border-primary/10 pt-2">
+              <div className="grid min-w-0 grid-cols-2 gap-2">
                 {optionalList.map((opt) => {
-                  const isSelected = selectedOptionals.some((o) => o.name === opt.name);
+                  const isSelected = isFoodSelected(opt.name);
                   return (
                     <button
                       key={opt.id}
                       type="button"
+                      aria-label={`选择${opt.name}`}
+                      aria-pressed={isSelected}
                       onClick={() => handleToggleOptional(opt)}
-                      className={`btn-press px-2.5 py-1 rounded-full text-xs font-medium transition-all ${
+                      className={`btn-press flex min-h-11 min-w-0 items-center justify-between gap-1.5 rounded-xl border px-2.5 py-2 text-sm font-medium transition-all ${
                         isSelected
-                          ? "bg-sky-500 text-white font-bold shadow-xs"
-                          : "bg-gray-100 dark:bg-gray-800 text-text-secondary hover:bg-gray-200"
+                          ? "border-sky-500 bg-sky-500 text-white font-bold shadow-xs"
+                          : "border-primary/10 bg-gray-50 text-text-secondary hover:bg-gray-100 dark:bg-gray-800"
                       }`}
                     >
-                      {opt.icon} {opt.name}
-                      {isSelected && <Check size={11} className="inline ml-1" />}
+                      <span className="min-w-0 break-words text-left leading-5">{opt.icon} {opt.name}</span>
+                      {isSelected && <Check size={16} aria-hidden="true" className="shrink-0" />}
                     </button>
                   );
                 })}
               </div>
 
-              {selectedOptionals.length > 0 && (
-                <div className="space-y-1.5 pt-1.5">
-                  {selectedOptionals.map((opt) => (
-                    <div
-                      key={opt.name}
-                      className="flex items-center justify-between text-xs bg-sky-50/50 dark:bg-sky-950/20 p-2 rounded-xl border border-sky-200/50"
-                    >
-                      <div className="flex items-center gap-1 font-bold text-text-primary">
-                        <span>{opt.icon || "🥑"}</span>
-                        <span>{opt.name}</span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <span className="text-[10px] text-text-muted">克数:</span>
-                        <input
-                          type="number"
-                          min={0}
-                          max={200}
-                          value={opt.grams || ""}
-                          onChange={(e) => handleUpdateOptionalGrams(opt.name, Number(e.target.value))}
-                          className="w-12 text-center py-0.5 text-xs font-bold rounded-lg border border-divider bg-card"
-                        />
-                        <span className="text-[10px] text-text-muted">g</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
             </div>
           )}
         </div>
@@ -890,7 +1200,7 @@ export function FoodLogForm({
             type="button"
             disabled={familyLoading || !familyId}
             onClick={() => setShowAddFood(true)}
-            className="btn-press px-3 py-1.5 rounded-full text-xs font-medium bg-card text-primary border border-dashed border-primary/40 hover:bg-primary-light/30 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="btn-press min-h-11 rounded-full border border-dashed border-primary/40 bg-card px-4 py-2 text-sm font-semibold text-primary hover:bg-primary-light/30 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {familyLoading ? "加载家庭..." : "+ 自定义食材"}
           </button>
@@ -910,33 +1220,39 @@ export function FoodLogForm({
         )}
 
         {showAddFood && (
-          <div className="mt-3 bg-card rounded-2xl border border-primary-soft p-3.5 space-y-3 shadow-soft">
+          <div className="mt-3 space-y-3 rounded-2xl border border-primary/20 bg-card p-3.5 shadow-soft">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-text-primary">
-                添加自定义食材到【{ROLE_CONFIG[newFoodCategory].label.split(" ")[0]}】
+              <span className="text-sm font-bold text-text-primary">
+                添加自定义食材到【{selectedCustomCategory.label}】
               </span>
               <button
                 type="button"
                 onClick={() => setShowAddFood(false)}
-                className="text-text-muted hover:text-text-primary"
+                aria-label="关闭自定义食材"
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-text-muted hover:bg-primary/5 hover:text-text-primary"
               >
                 <X size={15} />
               </button>
             </div>
 
-            <div className="flex gap-1.5">
-              {(["staple", "protein", "vegetable", "optional"] as const).map((role) => (
+            <div className="grid min-w-0 grid-cols-[repeat(auto-fit,minmax(min(100%,112px),1fr))] gap-2">
+              {CUSTOM_FOOD_CATEGORIES.map((category) => (
                 <button
-                  key={role}
+                  key={category.id}
                   type="button"
-                  onClick={() => setNewFoodCategory(role)}
-                  className={`flex-1 py-1 rounded-xl text-xs font-bold transition-all ${
-                    newFoodCategory === role
+                  aria-label={`自定义食材分类：${category.label}`}
+                  aria-pressed={newFoodCategory === category.id}
+                  onClick={() => {
+                    setNewFoodCategory(category.id);
+                    setNewFoodIcon(category.icon);
+                  }}
+                  className={`min-h-11 rounded-xl px-2 py-2 text-xs font-bold transition-all ${
+                    newFoodCategory === category.id
                       ? "bg-primary text-white shadow-xs"
                       : "bg-gray-100 dark:bg-gray-800 text-text-secondary"
                   }`}
                 >
-                  {ROLE_CONFIG[role].icon} {ROLE_CONFIG[role].label.split(" ")[0]}
+                  {category.icon} {category.label}
                 </button>
               ))}
             </div>
@@ -955,7 +1271,7 @@ export function FoodLogForm({
                     key={icon}
                     type="button"
                     onClick={() => setNewFoodIcon(icon)}
-                    className={`w-8 h-8 rounded-xl text-base flex items-center justify-center transition-all ${
+                    className={`flex h-11 w-11 items-center justify-center rounded-xl text-base transition-all ${
                       newFoodIcon === icon
                         ? "bg-primary/15 ring-2 ring-primary"
                         : "bg-primary-light/40 hover:bg-primary-light"
@@ -981,16 +1297,22 @@ export function FoodLogForm({
             </div>
           </div>
         )}
+        </div>
       </FormSection>
 
       {/* 📊 餐盘汇总与营养平衡提示 */}
       {activeComponents.length > 0 && (
-        <div className="bg-card p-3.5 rounded-2xl border border-primary/20 space-y-2">
+        <details className="overflow-hidden rounded-2xl border border-primary/15 bg-card">
+          <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 px-4 py-2 text-sm font-semibold text-text-primary">
+            <span>查看餐盘构成</span>
+            <span className="shrink-0 text-xs font-medium text-text-muted">{activeComponents.length} 样 · {weightSummary}</span>
+          </summary>
+          <div className="space-y-2 border-t border-primary/10 bg-card p-3.5">
           <div className="flex items-center justify-between text-xs font-bold text-text-primary">
             <span className="flex items-center gap-1.5">
               <UtensilsCrossed size={14} className="text-primary" />
               <span>本餐总摄入约:</span>
-              <span className="text-base text-primary font-extrabold">{totalGrams}g</span>
+              <span className="text-base text-primary font-extrabold">{weightSummary}</span>
             </span>
             <span className="text-[11px] text-text-muted">已选 {activeComponents.length} 种食材</span>
           </div>
@@ -1021,7 +1343,7 @@ export function FoodLogForm({
               />
               <div
                 style={{
-                  width: `${totalGrams > 0 ? (activeComponents.filter((c) => c.role === "optional").reduce((s, c) => s + (c.grams || 0), 0) / totalGrams) * 100 : 0}%`,
+                  width: `${totalGrams > 0 ? (activeComponents.filter((c) => c.role === "optional" || c.role === "fruit" || c.role === "oil").reduce((s, c) => s + (c.grams || 0), 0) / totalGrams) * 100 : 0}%`,
                 }}
                 className="bg-sky-400 h-full transition-all"
                 title="油脂水果"
@@ -1056,11 +1378,20 @@ export function FoodLogForm({
               </p>
             ) : null}
           </div>
-        </div>
+          </div>
+        </details>
       )}
 
+      <details className="group overflow-hidden rounded-2xl border border-primary/15 bg-card">
+        <summary className="flex min-h-11 cursor-pointer list-none flex-wrap items-center justify-between gap-x-2 gap-y-1 px-4 py-2 text-sm font-semibold text-text-primary">
+          <span>更多进食记录</span>
+          <span className="text-xs font-medium text-text-muted">
+            胃口{currentPortionLabel} · 喜欢{acceptance}/5 · 情绪{currentStateLabel}
+          </span>
+        </summary>
+        <div className="space-y-3 border-t border-primary/10 p-3">
       {/* Portion */}
-      <FormSection title="整体进食胃口">
+      <FormSection title="整体进食胃口" className="min-w-0">
         <div className="grid grid-cols-2 gap-2">
           {portionOptions.map((opt) => (
             <button
@@ -1070,7 +1401,7 @@ export function FoodLogForm({
               className={`btn-press py-2.5 rounded-2xl text-xs font-medium transition-all ${
                 portion === opt.value
                   ? "bg-primary text-white shadow-button font-bold"
-                  : "bg-card text-text-secondary border border-divider hover:bg-gray-50"
+                  : "bg-card text-text-secondary border border-primary/15 hover:bg-gray-50"
               }`}
             >
               {opt.label}
@@ -1080,15 +1411,15 @@ export function FoodLogForm({
       </FormSection>
 
       {/* Acceptance rating */}
-      <FormSection title="宝宝喜欢程度">
+      <FormSection title="宝宝喜欢程度" className="min-w-0">
         <div className="flex justify-center py-1">
           <HeartRating value={acceptance} onChange={setAcceptance} size={28} />
         </div>
       </FormSection>
 
       {/* Baby state */}
-      <FormSection title="进食情绪状态">
-        <div className="flex gap-3">
+      <FormSection title="进食情绪状态" className="min-w-0">
+        <div className="grid grid-cols-3 gap-2">
           {stateOptions.map((opt) => (
             <button
               key={opt.value}
@@ -1097,7 +1428,7 @@ export function FoodLogForm({
               className={`btn-press flex-1 flex flex-col items-center gap-1 py-3 rounded-2xl transition-all ${
                 babyState === opt.value
                   ? "bg-primary text-white shadow-button font-bold"
-                  : "bg-card text-text-secondary border border-divider hover:bg-gray-50"
+                  : "bg-card text-text-secondary border border-primary/15 hover:bg-gray-50"
               }`}
             >
               <span className="text-2xl">{opt.emoji}</span>
@@ -1106,17 +1437,19 @@ export function FoodLogForm({
           ))}
         </div>
       </FormSection>
+        </div>
+      </details>
 
       {/* Abnormal toggle */}
-      <FormSection title="是否有明显过敏 / 异常反应">
-        <div className="flex gap-3">
+      <FormSection title="过敏 / 异常反应" className="min-w-0">
+        <div className="grid min-w-0 grid-cols-2 gap-2">
           <button
             type="button"
             onClick={() => setHasAbnormal(false)}
             className={`btn-press flex-1 py-2.5 rounded-2xl text-xs font-medium transition-all ${
               !hasAbnormal
                 ? "bg-primary text-white shadow-button font-bold"
-                : "bg-card text-text-secondary border border-divider hover:bg-gray-50"
+              : "bg-card text-text-secondary border border-primary/15 hover:bg-gray-50"
             }`}
           >
             正常无异常 ✨
@@ -1127,7 +1460,7 @@ export function FoodLogForm({
             className={`btn-press flex-1 py-2.5 rounded-2xl text-xs font-medium transition-all ${
               hasAbnormal
                 ? "bg-red-500 text-white shadow-button font-bold"
-                : "bg-card text-text-secondary border border-divider hover:bg-gray-50"
+              : "bg-card text-text-secondary border border-red-200 hover:bg-red-50"
             }`}
           >
             有异常 / 泛红 🚨
@@ -1136,7 +1469,11 @@ export function FoodLogForm({
 
         {hasAbnormal && (
           <div className="mt-3">
+            <label htmlFor="food-abnormal-notes" className="mb-1.5 block text-sm font-medium text-text-secondary">
+              异常反应描述
+            </label>
             <CuteTextarea
+              id="food-abnormal-notes"
               placeholder="请详细描述异常情况，如嘴周泛红、起疹子、腹泻等..."
               value={abnormalNotes}
               onChange={(e) => setAbnormalNotes(e.target.value)}
@@ -1147,12 +1484,17 @@ export function FoodLogForm({
       </FormSection>
 
       {/* Buttons */}
-      <div className="pt-2 flex gap-3">
+      <div className="sticky bottom-0 z-20 -mx-2 rounded-2xl border border-primary/20 bg-bg/95 px-2 pb-2 pt-2 shadow-md backdrop-blur">
+        <div className="mb-2 flex items-center justify-between gap-2 px-1 text-xs font-semibold text-text-muted">
+          <span>{activeComponents.length + legacyFoodNames.length} 样食材</span>
+          <span>{weightSummary}</span>
+        </div>
+        <div className="flex min-w-0 gap-2">
         {isEdit && onCancel && (
           <button
             type="button"
             onClick={onCancel}
-            className="flex-1 py-3 rounded-full border border-primary-soft text-text-secondary text-sm font-medium btn-press hover:bg-gray-50"
+            className="min-h-11 flex-1 rounded-full border border-primary/20 bg-card px-3 py-2 text-sm font-medium text-text-secondary btn-press hover:bg-gray-50"
           >
             取消
           </button>
@@ -1162,11 +1504,12 @@ export function FoodLogForm({
           size="lg"
           onClick={() => handleFormSubmit()}
           disabled={saving}
-          className={`flex items-center justify-center gap-2 ${isEdit ? "flex-1" : ""}`}
+          className={`min-h-11 flex items-center justify-center gap-2 ${isEdit ? "flex-1" : ""}`}
         >
           <CheckCircle2 size={18} />
           {saving ? "保存中..." : isEdit ? "保存修改" : "保存辅食记录"}
         </CuteButton>
+        </div>
       </div>
     </div>
   );

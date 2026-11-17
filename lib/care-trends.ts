@@ -4,6 +4,7 @@ import { dayBoundsInTimeZone } from "./growdesk/record-list";
 export interface TrendFeeding { timestamp: string; amountMl: number | null; leftMinutes: number | null; rightMinutes: number | null }
 export interface TrendSleep { startTime: string; endTime: string | null }
 export interface TrendDiaper { timestamp: string }
+export interface TrendFood { date: string }
 export interface CareTrendDay {
   date: string;
   recordedMilkMl: number | null;
@@ -11,6 +12,7 @@ export interface CareTrendDay {
   breastMinutes: number;
   sleepMinutes: number | null;
   diaperCount: number;
+  foodCount: number;
   hasRecords: boolean;
 }
 export interface CareTrends {
@@ -39,13 +41,17 @@ function positive(value: number | null): number {
 /** Real recorded volumes only. Gaps stay null; overlapping sleep is counted once. */
 export function aggregateCareTrends(input: {
   babyId: string; timeZone: string; endDate: string; days: 7 | 30;
-  feeding: TrendFeeding[]; sleep: TrendSleep[]; diaper: TrendDiaper[]; now?: Date;
+  feeding: TrendFeeding[]; sleep: TrendSleep[]; diaper: TrendDiaper[]; food?: TrendFood[]; now?: Date;
 }): CareTrends {
   if (!isValidDateStr(input.endDate) || ![7, 30].includes(input.days)) throw new Error("趋势日期或范围无效");
   const now = input.now ?? new Date();
   const startDate = addDays(input.endDate, 1 - input.days);
   const feeding = input.feeding.map(r => ({ ...r, at: timestamp(r.timestamp) }));
   const diapers = input.diaper.map(r => timestamp(r.timestamp));
+  const foods = (input.food ?? []).map(r => {
+    if (!isValidDateStr(r.date)) throw new Error("辅食日期无效，无法统计趋势");
+    return r.date;
+  });
   const sleeps = input.sleep.map(r => {
     const start = timestamp(r.startTime);
     const end = r.endTime === null ? now.getTime() : timestamp(r.endTime);
@@ -66,6 +72,7 @@ export function aggregateCareTrends(input: {
       lastEnd = Math.max(lastEnd, interval.end);
     }
     const diaperCount = diapers.filter(at => at >= start && at < end).length;
+    const foodCount = foods.filter(recordDate => recordDate === date).length;
     return {
       date,
       recordedMilkMl: measured.length ? Math.round(measured.reduce((sum, r) => sum + positive(r.amountMl), 0) * 100) / 100 : null,
@@ -73,7 +80,8 @@ export function aggregateCareTrends(input: {
       breastMinutes: feeds.reduce((sum, r) => sum + positive(r.leftMinutes) + positive(r.rightMinutes), 0),
       sleepMinutes: intervals.length ? Math.round(sleepMs / 60000) : null,
       diaperCount,
-      hasRecords: feeds.length > 0 || intervals.length > 0 || diaperCount > 0,
+      foodCount,
+      hasRecords: feeds.length > 0 || intervals.length > 0 || diaperCount > 0 || foodCount > 0,
     };
   });
   return { babyId: input.babyId, timeZone: input.timeZone, startDate, endDate: input.endDate, today: dateInTimeZone(now, input.timeZone), days };

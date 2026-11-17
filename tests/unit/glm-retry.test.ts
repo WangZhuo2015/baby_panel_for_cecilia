@@ -10,8 +10,28 @@ test("stream retry classifies transient provider failures and rejects permanent 
   assert.equal(isRetryableModelStageError(new Error("invalid request")), false);
 });
 
-test("Retry-After accepts delta seconds and case-insensitive response headers", () => {
-  assert.equal(getRetryAfterMs({ headers: { "Retry-After": "5" } }), 5000);
+test("default profile is the official GPT-6 API", async () => {
+  const fs = await import("node:fs");
+  const config = fs.readFileSync("lib/config.ts", "utf-8");
+  assert.ok(config.includes("getActiveLlmProfile"), "lib/config should resolve the selected LLM profile");
+  const profiles = fs.readFileSync("lib/llm-profiles.ts", "utf-8");
+  assert.ok(profiles.includes('"gpt-6-luna"'), "the official profile should default to GPT-6 Luna");
+  const model = fs.readFileSync("lib/agent/model.ts", "utf-8");
+  assert.ok(model.includes("openAIResponsesApi()"), "the official profile should use the Responses API");
+});
+
+test("TDD: isRateLimitError should detect 429", async () => {
+  const { isRateLimitError } = await import("../../lib/agent/run.js");
+  assert.equal(isRateLimitError({ status: 429 }), true);
+  assert.equal(isRateLimitError({ message: "429 Too Many Requests" }), true);
+  assert.equal(isRateLimitError({ message: "rate limit exceeded" }), true);
+  assert.equal(isRateLimitError({ message: "ok" }), false);
+  assert.equal(isRateLimitError(null), false);
+});
+
+test("TDD: getRetryAfterMs should parse header", async () => {
+  const { getRetryAfterMs } = await import("../../lib/agent/run.js");
+  assert.equal(getRetryAfterMs({ headers: { "retry-after": "5" } }), 5000);
   assert.equal(getRetryAfterMs({ response: { headers: new Headers({ "retry-after": "2" }) } }), 2000);
   assert.equal(getRetryAfterMs({ headers: {} }), null);
 });

@@ -1,0 +1,11 @@
+{
+  "command": [
+    "next",
+    "build",
+    "--webpack"
+  ],
+  "exitCode": 0,
+  "executionSessionExitCode": 0,
+  "log": "release-build-final.log",
+  "retryAfterSession143": true
+}

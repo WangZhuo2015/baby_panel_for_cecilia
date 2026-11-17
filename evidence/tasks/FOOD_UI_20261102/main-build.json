@@ -1,0 +1,11 @@
+{
+  "name": "main-build",
+  "command": [
+    "next",
+    "build",
+    "--webpack"
+  ],
+  "exitCode": 0,
+  "elapsedSeconds": 93.94,
+  "productionConnections": false
+}

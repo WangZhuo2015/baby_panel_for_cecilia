@@ -40,6 +40,11 @@ import { fromGrowDeskDiaperRecord, type GrowDeskDiaperRecord } from "@/lib/growd
 import { fromGrowDeskFoodRecord, type GrowDeskFoodRecord } from "@/lib/growdesk/food-compat";
 import { toGrowDeskMedicalCreatePayload } from "@/lib/growdesk/medical-compat";
 import { toGrowDeskVaccineRecordPayload } from "@/lib/growdesk/vaccine-compat";
+import {
+  matchVaccineProduct,
+  parseVaccineRecordInput,
+  vaccineRecordDate,
+} from "@/lib/vaccine-records";
 
 export { hhmmToIso } from "./tools/helpers";
 
@@ -659,85 +664,88 @@ export function createBabyPanelTools(ctx: BabyToolContext): AgentTool[] {
   const recordVaccine: AgentTool = {
     name: "record_vaccine",
     label: "记录疫苗接种",
-    description: "记录宝宝已接种的疫苗针次（如乙肝疫苗第1针、卡介苗、13价肺炎第2针等）。",
+    description: "按疫苗本登记一条疫苗记录。必须明确 recordStatus：completed 已接种需提供真实实际日期，planned 预约需提供预约日期，needs_review 用于日期或信息待核对。未知剂次请传 null 或省略 doseNumber；不要猜剂次或日期。",
     parameters: Type.Object({
-      name: Type.String({ description: "疫苗名称，如'13价肺炎疫苗'、'五联疫苗'、'乙肝疫苗'" }),
-      dose: Type.Optional(Type.String({ description: "剂次，如'第1剂'、'第2剂'，默认'第1剂'" })),
-      completedDate: Type.Optional(Type.String({ description: "接种日期 YYYY-MM-DD，默认今天" })),
+      name: Type.String({ description: "疫苗本上记载的名称/产品名，按原文填写" }),
+      vaccineId: Type.Optional(Type.String({ description: "精确匹配到资料目录时可传产品代码；无法确定时省略" })),
+      dose: Type.Optional(Type.String({ description: "疫苗本上的剂次原文；不确定时省略" })),
+      doseNumber: Type.Optional(Type.Union([Type.Integer({ minimum: 1, maximum: 12 }), Type.Null()])),
+      recordStatus: Type.Union([Type.Literal("completed"), Type.Literal("planned"), Type.Literal("needs_review")]),
+      administeredDate: Type.Optional(Type.String({ description: "实际接种日期 YYYY-MM-DD；只在疫苗本明确记载时填写" })),
+      completedDate: Type.Optional(Type.String({ description: "实际接种日期 YYYY-MM-DD；只在疫苗本明确记载时填写" })),
+      scheduledDate: Type.Optional(Type.String({ description: "明确的预约日期 YYYY-MM-DD；预约记录必填" })),
+      manufacturer: Type.Optional(Type.String({ description: "疫苗本上的生产企业" })),
+      clinic: Type.Optional(Type.String({ description: "接种单位/门诊" })),
+      batchNumber: Type.Optional(Type.String({ description: "疫苗本上的批号" })),
+      traceCode: Type.Optional(Type.String({ description: "疫苗本上的电子追溯码" })),
+      administrationRoute: Type.Optional(Type.String({ description: "明确记载的接种途径，如口服或肌内注射" })),
+      injectionSite: Type.Optional(Type.String({ description: "明确记载的接种部位" })),
+      sourceText: Type.Optional(Type.String({ description: "待核对的疫苗本原文" })),
+      notes: Type.Optional(Type.String({ description: "备注" })),
     }),
     executionMode: "sequential",
     execute: async (_id, raw) => {
-      const params = raw as Params;
-      const name = String(params.name || "").trim().slice(0, 100);
-      const dose = String(params.dose || "第1剂").trim().slice(0, 50);
-      const completedDate =
-        typeof params.completedDate === "string" && isValidDateStr(params.completedDate)
-          ? params.completedDate
-          : getLocalDateStr();
-
-      if (!name) fail("请输入疫苗名称");
+      const body = raw as Record<string, unknown>;
+      if (typeof body.recordStatus !== "string" || !body.recordStatus) {
+        fail("必须明确选择 completed、planned 或 needs_review；未确认状态时不要登记为已接种");
+      }
+      const input = parseVaccineRecordInput(body);
+      const catalog = getVaccinesData().vaccines;
+      const matched = matchVaccineProduct(input.vaccineId || input.name, catalog);
+      const matchedCode = matched?.vaccineId || matched?.id || null;
+      const vaccineId = input.vaccineId || matchedCode;
+      const recordInput = { ...input, vaccineId };
+      const date = vaccineRecordDate(recordInput);
+      const statusLabel = input.recordStatus === "completed"
+        ? "已接种"
+        : input.recordStatus === "planned" ? "已预约" : "待核对";
 
       if (GROWDESK_CONFIG.enabled) {
+        if (!ctx.accessToken) fail("云端会话不可用，疫苗记录未保存");
         const payload = toGrowDeskVaccineRecordPayload({
-          babyId,
-          vaccineName: name,
-          doseNumber: dose,
-          inoculatedAt: completedDate,
+          ...recordInput,
+          vaccineCode: matchedCode || undefined,
         });
-
-        let newId = `vaccine_${Date.now()}`;
-        if (ctx.accessToken) {
-          try {
-            const res = await growdeskFetch<{ id: string }>(
-              `/api/v1/babies/${babyId}/vaccines/records`,
-              {
-                method: "POST",
-                accessToken: ctx.accessToken,
-                body: payload,
-              }
-            );
-            if (res.data?.id) newId = res.data.id;
-          } catch {}
+        const res = await growdeskFetch<{ id: string }>(
+          `/api/v1/babies/${babyId}/vaccines/records`,
+          {
+            method: "POST",
+            accessToken: ctx.accessToken,
+            headers: { "x-growdesk-representation": "ledger" },
+            body: payload,
+          }
+        );
+        if (!res.ok || !res.data || typeof res.data.id !== "string" || !res.data.id) {
+          fail(res.error?.message || "云端疫苗记录保存失败，记录未确认写入");
         }
-        return ok(`已记录【${name} ${dose}】于 ${completedDate} 完成接种 💉✨`, {
-          id: newId,
-          recordId: newId,
-          name,
-          dose,
-          completedDate,
+        const dateLabel = date ? `，日期 ${date}` : "，日期待核对";
+        return ok(`${statusLabel}记录已保存：${input.name} ${input.dose}${dateLabel}`, {
+          id: res.data.id,
+          recordId: res.data.id,
+          ...recordInput,
         });
       }
 
       const record = await prisma.vaccineRecord.create({
         data: {
           babyId,
-          name,
-          dose,
-          scheduledDate: completedDate,
-          completedDate,
-          isCompleted: true,
+          ...recordInput,
         },
       });
 
-      const doseMatch = dose.match(/\d+/);
-      const doseNum = doseMatch ? parseInt(doseMatch[0], 10) : 1;
-      const allVaccines = await prisma.vaccine.findMany();
-      const matched = allVaccines.find(
-        (v) => v.name.includes(name) || name.includes(v.name)
-      );
-      if (matched) {
+      if (input.recordStatus === "completed" && matchedCode && input.doseNumber !== null) {
         await prisma.vaccineSelection.upsert({
           where: {
             babyId_vaccineId_doseNumber: {
               babyId,
-              vaccineId: matched.vaccineId,
-              doseNumber: doseNum,
+              vaccineId: matchedCode,
+              doseNumber: input.doseNumber,
             },
           },
           create: {
             babyId,
-            vaccineId: matched.vaccineId,
-            doseNumber: doseNum,
+            vaccineId: matchedCode,
+            doseNumber: input.doseNumber,
             selected: true,
             completed: true,
           },
@@ -748,12 +756,11 @@ export function createBabyPanelTools(ctx: BabyToolContext): AgentTool[] {
         }).catch(() => {});
       }
 
-      return ok(`已记录【${name} ${dose}】于 ${completedDate} 完成接种 💉✨`, {
+      const dateLabel = date ? `，日期 ${date}` : "，日期待核对";
+      return ok(`${statusLabel}记录已保存：${input.name} ${input.dose}${dateLabel}`, {
         id: record.id,
         recordId: record.id,
-        name,
-        dose,
-        completedDate,
+        ...recordInput,
       });
     },
   };

@@ -1,0 +1,89 @@
+{
+  "task": "FOOD_UI_20261102",
+  "planStatus": "READY_FOR_REVIEW",
+  "capturedAtUtc": "2026-11-02T09:08:23Z",
+  "scope": "Web-only UI release; no production environment, database, profile, or secret reads",
+  "sourceBaseline": {
+    "webWorktree": "/tmp/growdesk-food-ui-20261102",
+    "headAtCapture": "ca385c8216e6a7a4581aaf0d8e95c74bc66923c3",
+    "previousPublicSourceManifest": "/tmp/growdesk-food-ui-20261102/evidence/tasks/FEEDING_FOOD_20261102/source-manifest.json",
+    "previousPublicSourceManifestSha256": "a0d6ba20e28a479a7791e6c037e921eba0ff133e8dadeb26ecd92073af5e1a00",
+    "previousPublicSourceFiles": 573,
+    "uiDonors": [
+      "components/records/FoodLogForm.tsx",
+      "components/records/WheelSpinnerColumn.tsx",
+      "app/food/log/page.tsx"
+    ],
+    "sourceCandidate": "/tmp/growdesk-food-ui-web-20261102"
+  },
+  "previousRelease": {
+    "release": "/home/ubuntu/growdesk/feeding-food-releases/20261102-d0912afb57c0",
+    "launcher": "/home/ubuntu/growdesk/feeding-food-releases/20261102-d0912afb57c0/launch-web.py",
+    "launcherSha256": "b9538fa533e41e29b95b99edcd3c900b13fd03fc6582efe24495417f6f5a51a9",
+    "publicManifest": "/home/ubuntu/Github/growdesk-server/evidence/tasks/FEEDING_FOOD_20261102/release-manifest.public.json",
+    "publicManifestRawSha256": "b3e117014b6dd7e2973ae16a99a8d6a8532ba424286d9c53ddb9a638e08bacbb",
+    "manifestSha256": "d0912afb57c0976a143afd78e5634287f26c58be43581c7c95c1d454747401f1",
+    "files": 10700,
+    "links": 0,
+    "verifiedNodeModulesFiles": 9893,
+    "buildId": "CcQtjDhwetuofUs6k5H60"
+  },
+  "currentWebService": {
+    "unit": "baby-panel.service",
+    "fragmentPath": "/etc/systemd/system/baby-panel.service",
+    "fragmentSha256": "23202def38541f9e373c3fe1b28ae9de4541e934008354f9c53a03749e2f6b65",
+    "workingDirectory": "/home/ubuntu/Github/baby_panel_for_cecilia",
+    "execStartLauncher": "/home/ubuntu/growdesk/feeding-food-releases/20261102-d0912afb57c0/launch-web.py",
+    "activeState": "active",
+    "mainPidAtCapture": 1382323,
+    "dropins": [
+      {"name": "90-llm-settings-20261023.conf", "sha256": "752ece1b334255dd090e0d2f7419d8a63fa8ca6784f10258976ec9a8eb25d23a"},
+      {"name": "91-unified-settings-20261023.conf", "sha256": "384af92e7b8d018034ab03b2c58f666374d1255b655b2f97c758a2624b30ab91"},
+      {"name": "92-gpt-features-20261023.conf", "sha256": "effb039ddfadad6922d99f25aafc8b252fa4661717ba2583b2543cc9d2148acc"},
+      {"name": "zz-voice-chatgpt-migration.conf", "sha256": "673739d0cc07f9ab8c8795ecb277cc030c5b8f3a539b2e048b5ea42d29984bb4"},
+      {"name": "zzzzzzzz-openai-defaults-20261030.conf", "sha256": "40681b030368ea75a119ea8af476a53ab1213282194db243f504a18a1b663832"},
+      {"name": "zzzzzzzzz-feeding-food-20261102.conf", "sha256": "92a4b0970ce225c92502c5ba4ec1c0ff7a6cc982f892edff3005bfe9764c2076"}
+    ]
+  },
+  "protectedServicesAtCapture": [
+    {"unit": "growdesk-api.service", "activeState": "active", "mainPid": 3208244},
+    {"unit": "growdesk-mcp-api.service", "activeState": "active", "mainPid": 224009},
+    {"unit": "growdesk-mcp-web.service", "activeState": "active", "mainPid": 224010},
+    {"unit": "growdesk-daily-summary-worker.service", "activeState": "active", "mainPid": 3208386},
+    {"unit": "growdesk-tts-warm-worker.service", "activeState": "active", "mainPid": 1238},
+    {"unit": "growdesk-voice-control.service", "activeState": "active", "mainPid": 3948443}
+  ],
+  "target": {
+    "staging": "/tmp/growdesk-food-ui-release-20261102",
+    "releaseRoot": "/home/ubuntu/growdesk/food-ui-releases",
+    "stateDirectory": "/var/lib/growdesk-food-ui/20261102",
+    "publicReleaseManifest": "evidence/tasks/FOOD_UI_20261102/release-manifest.public.json",
+    "newDropin": "/etc/systemd/system/baby-panel.service.d/zzzzzzzzzz-food-ui-20261102.conf",
+    "restartOnly": "baby-panel.service",
+    "protectedUnits": [
+      "growdesk-api.service",
+      "growdesk-mcp-api.service",
+      "growdesk-mcp-web.service",
+      "growdesk-daily-summary-worker.service",
+      "growdesk-tts-warm-worker.service",
+      "growdesk-voice-control.service"
+    ]
+  },
+  "workflow": [
+    "Complete and review the UI delta; record the merged source commit before release build.",
+    "Run scripts/stage-food-ui.py to verify/copy exactly the previous 573 public files and three named UI donors.",
+    "Build the isolated source candidate with the verified dependency inputs; do not load production environment or profiles.",
+    "Run scripts/package-food-ui.py to verify the previous full release manifest, copy standalone/public/static/catalog files, remove its exact known node_modules symlink, then materialize the 9,893 verified dependency files from the frozen release.",
+    "Run scripts/deploy-food-ui.py audit --write-manifest; review the public manifest fingerprint, exact inventory, source evidence, and service pins.",
+    "After independent review, run prepare with the reviewed manifest SHA, then apply. The helper adds one later-sorting ExecStart-only drop-in and restarts only baby-panel.service.",
+    "Verify Web readiness and require all six protected unit MainPIDs to match their pre-apply values; use the helper rollback if Web readiness or pin checks fail."
+  ],
+  "safetyConstraints": [
+    "Do not read production environment files, secrets, or private profiles; do not connect to production databases.",
+    "The pinned 573-file public source set includes lib/llm-profiles.ts source code; no profile data or configuration files are staged or packaged.",
+    "Do not copy databases, uploads, backups, user records, or private runtime files.",
+    "Preserve the six existing drop-ins and verify their hashes before every systemd mutation.",
+    "Require the exact two prior public SDK file hashes; unknown files and modified SDK files are refused.",
+    "Rollback retains the new immutable release and removes only this task's receipt-owned drop-in."
+  ]
+}

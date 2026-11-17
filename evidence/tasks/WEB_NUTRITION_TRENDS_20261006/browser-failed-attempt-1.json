@@ -1,0 +1,8 @@
+{
+  "scope": "Chromium UI acceptance over local SSH tunnel",
+  "status": "FAIL",
+  "webPort": 45176,
+  "checks": [],
+  "injectedFailures": [],
+  "failure": "browserContext.addCookies: Cookie should have either url or path"
+}

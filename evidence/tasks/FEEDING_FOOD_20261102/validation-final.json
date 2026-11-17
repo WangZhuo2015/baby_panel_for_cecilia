@@ -1,0 +1,43 @@
+[
+  {
+    "name": "typecheck-final",
+    "command": [
+      "node",
+      "node_modules/typescript/bin/tsc",
+      "--noEmit"
+    ],
+    "exitCode": 0,
+    "elapsedSeconds": 32.04
+  },
+  {
+    "name": "food-unit-final",
+    "command": [
+      "node",
+      "--import",
+      "tsx",
+      "--test",
+      "tests/unit/food-log-form-family.test.ts",
+      "tests/unit/growdesk-food-compat-repair.test.ts",
+      "tests/unit/growdesk-food-family-scope.test.ts",
+      "tests/unit/growdesk-food-items-tried.test.ts",
+      "tests/unit/growdesk-food-library-compat.test.ts",
+      "tests/unit/growdesk-food-plan-cas.test.ts",
+      "tests/unit/growdesk-food-plan-history.test.ts",
+      "tests/unit/growdesk-food-plan-reload.test.ts",
+      "tests/unit/growdesk-food-review-regression.test.ts",
+      "tests/unit/growdesk-food-routes-repair.test.ts",
+      "tests/unit/growdesk-food-store-scope.test.ts"
+    ],
+    "exitCode": 0,
+    "elapsedSeconds": 2.57
+  },
+  {
+    "name": "browser-final",
+    "command": [
+      "node",
+      "scripts/test-feeding-food-browser.mjs"
+    ],
+    "exitCode": 0,
+    "elapsedSeconds": 6.29
+  }
+]

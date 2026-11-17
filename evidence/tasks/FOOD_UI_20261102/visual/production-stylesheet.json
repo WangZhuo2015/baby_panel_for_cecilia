@@ -1,0 +1,14 @@
+{
+  "source": "frozen release artifact",
+  "path": "/tmp/growdesk-food-ui-release-20261102/web/.next/static/css/7d0b2358b0345784.css",
+  "sha256": "0ccf5943fcba87e6f6f3d83c14c1a55d39c800d55b53f660e2e8b51966a67026",
+  "captureScript": "scripts/capture-food-ui.mjs",
+  "widths": [
+    320,
+    390,
+    768,
+    1280
+  ],
+  "newScreenshots": 16,
+  "pageErrors": []
+}

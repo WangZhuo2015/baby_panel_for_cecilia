@@ -1,0 +1,7 @@
+{
+  "passed": false,
+  "synthetic": true,
+  "browser": "chromium",
+  "cases": [],
+  "failure": "expect(locator).toBeVisible() failed\n\nLocator: getByRole('alert').filter({ hasText: 'test_push_binding_outage' })\nExpected: visible\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n  - Expect \"to.be.visible\" with timeout 5000ms\n  - waiting for getByRole('alert').filter({ hasText: 'test_push_binding_outage' })\n"
+}

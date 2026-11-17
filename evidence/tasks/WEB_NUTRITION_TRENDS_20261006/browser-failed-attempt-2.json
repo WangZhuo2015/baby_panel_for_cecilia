@@ -1,0 +1,11 @@
+{
+  "scope": "Chromium UI acceptance over local SSH tunnel",
+  "status": "FAIL",
+  "webPort": 45176,
+  "checks": [
+    "real test_ account login and protected BFF session in Chromium",
+    "homepage exposes a working 全量营养 entry"
+  ],
+  "injectedFailures": [],
+  "failure": "ui_element_not_visible:homepage care trend entry"
+}

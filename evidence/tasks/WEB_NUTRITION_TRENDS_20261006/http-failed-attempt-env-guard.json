@@ -1,0 +1,37 @@
+{
+  "scope": "Web nutrition/care trend HTTP acceptance against owned temporary backend",
+  "status": "FAIL",
+  "backendRevision": "8b9edd3be223c2e784bf3ba617d7f11eac27323a",
+  "backendRevisionEvidence": "caller_attested_archive_revision",
+  "backendSourceDigest": "e25e867ad6d44217aed10eb636372721a88fa27edd8259f287db5ed437ad858b",
+  "webRevision": "5fa673c23c8886a097477e01cf200d5279f98348",
+  "webRevisionEvidence": "caller_attested",
+  "dockerTarget": "unix:///var/run/docker.sock",
+  "webLoopbackUrl": null,
+  "webPort": 45176,
+  "browserOrigin": "http://127.0.0.1:45176",
+  "checks": [
+    "frozen Go API and migrator built; binary revision probe matched",
+    "existing standalone artifact provenance and SHA-256 verified",
+    "native PostgreSQL migrations applied twice with checksum replay"
+  ],
+  "httpObservations": [],
+  "externalProviderCalls": 0,
+  "providerKeys": "virtual-test-only",
+  "browserStatus": "NOT_RUN_BY_HTTP_RUNNER",
+  "cleanup": {
+    "status": "PASS",
+    "ownedContainers": "removed",
+    "trackedProcesses": "stopped",
+    "loopbackPorts": "released"
+  },
+  "webBuildProvenance": {
+    "sourceGitSha": "5fa673c23c8886a097477e01cf200d5279f98348",
+    "sourceDirty": false,
+    "buildId": "SEwv3xzJ7OJ9tdoPoqiea",
+    "artifactSha256": "a78a1955b06ca8ad2a6d00cbba5527ac3f92e7da14ec1b60e9fec3ef02036794",
+    "builtAt": "2026-10-06T14:24:32.100Z"
+  },
+  "backendLoopbackUrl": "http://127.0.0.1:55973",
+  "failure": "refusing_Next_env_file_that_may_contain_unapproved_secrets"
+}

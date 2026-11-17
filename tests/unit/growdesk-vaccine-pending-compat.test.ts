@@ -128,7 +128,8 @@ test("pending route sends a normalized scheduled record and propagates 409", asy
   assert.equal(response.status, 409);
   assert.equal(written.vaccineCode, "测试疫苗");
   assert.equal(written.scheduledDate, "2026-09-20");
-  assert.equal(written.administeredDate, "2026-09-20");
+  assert.equal(written.administeredDate, null, "an appointment has no actual administration date");
+  assert.equal(written.recordStatus, "planned");
   assert.equal(written.completedDate, null);
   assert.equal(written.isCompleted, false);
 });

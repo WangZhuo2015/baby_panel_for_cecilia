@@ -1,0 +1,72 @@
+[
+  {
+    "name": "typecheck",
+    "command": [
+      "node",
+      "node_modules/typescript/bin/tsc",
+      "--noEmit"
+    ],
+    "exitCode": 0,
+    "elapsedSeconds": 7.15,
+    "productionConnections": false
+  },
+  {
+    "name": "lint",
+    "command": [
+      "node",
+      "node_modules/oxlint/bin/oxlint",
+      "components/records/FoodLogForm.tsx",
+      "components/records/WheelSpinnerColumn.tsx",
+      "app/food/log/page.tsx",
+      "scripts/capture-food-ui.mjs",
+      "scripts/test-feeding-food-browser.mjs"
+    ],
+    "exitCode": 0,
+    "elapsedSeconds": 0.13,
+    "productionConnections": false
+  },
+  {
+    "name": "food-unit",
+    "command": [
+      "node",
+      "--import",
+      "tsx",
+      "--test",
+      "tests/unit/food-log-form-family.test.ts",
+      "tests/unit/growdesk-food-compat-repair.test.ts",
+      "tests/unit/growdesk-food-family-scope.test.ts",
+      "tests/unit/growdesk-food-items-tried.test.ts",
+      "tests/unit/growdesk-food-library-compat.test.ts",
+      "tests/unit/growdesk-food-plan-cas.test.ts",
+      "tests/unit/growdesk-food-plan-history.test.ts",
+      "tests/unit/growdesk-food-plan-reload.test.ts",
+      "tests/unit/growdesk-food-review-regression.test.ts",
+      "tests/unit/growdesk-food-routes-repair.test.ts",
+      "tests/unit/growdesk-food-store-scope.test.ts"
+    ],
+    "exitCode": 0,
+    "elapsedSeconds": 4.12,
+    "productionConnections": false
+  },
+  {
+    "name": "browser",
+    "command": [
+      "node",
+      "scripts/test-feeding-food-browser.mjs"
+    ],
+    "exitCode": 0,
+    "elapsedSeconds": 6.11,
+    "productionConnections": false
+  },
+  {
+    "name": "visual",
+    "command": [
+      "node",
+      "scripts/capture-food-ui.mjs",
+      "after"
+    ],
+    "exitCode": 0,
+    "elapsedSeconds": 5.95,
+    "productionConnections": false
+  }
+]

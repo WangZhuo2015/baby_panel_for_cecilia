@@ -34,6 +34,7 @@ jobs:
           npm ci
           npx prisma generate
           npm run build
+          python3 scripts/review/check-vaccine-ledger-migration.py
           python3 -m py_compile scripts/review/check-native-go-web.py scripts/review/check-native-boundaries.py
           node --check scripts/review/check-notification-browser.mjs
       - name: Read immutable Go reference

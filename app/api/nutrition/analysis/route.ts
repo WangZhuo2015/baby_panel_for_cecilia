@@ -50,6 +50,7 @@ export async function GET(request: Request) {
       const daysParam = searchParams.get("days") ?? "1";
       if (!/^[1-9]\d*$/.test(daysParam) || Number(daysParam) > 90) throw new BridgeError(400, "INVALID_DAYS", "days 必须为 1–90 的整数");
       const days = Number(daysParam);
+      if (days > 1 && date > getLocalDateStr()) throw new BridgeError(400, "INVALID_DATE", "趋势结束日期不能在未来");
 
       const ageSummary = calculateAge(baby.birthDate);
       const babyAgeMonths = ageSummary.months;
@@ -202,6 +203,7 @@ export async function GET(request: Request) {
     const dateParam = searchParams.get("date");
     const date = dateParam && isValidDateStr(dateParam) ? dateParam : getLocalDateStr();
     const days = Math.min(90, Math.max(1, parseInt(searchParams.get("days") || "1", 10)));
+    if (days > 1 && date > getLocalDateStr()) return NextResponse.json({ error: "趋势结束日期不能在未来" }, { status: 400 });
 
     const ageSummary = calculateAge(baby.birthDate);
     const babyAgeMonths = ageSummary.months;

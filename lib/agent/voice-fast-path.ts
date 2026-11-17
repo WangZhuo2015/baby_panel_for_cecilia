@@ -101,13 +101,29 @@ export function detectVoiceQueryIntent(rawText: string): FastPathIntent | null {
   if (!text) return null;
 
   // 1. Negative filters: Strictly reject write/bookkeeping and open-ended medical symptoms
+  const hasQueryPrefix = /(?:查|查看|查询|看看|看下|搜|找|检索|问问|听听)/i.test(text);
+
+  // Verb-Object writing actions: "记录喂奶", "记一下睡眠", "登记尿布"
+  if (/(?:记录|记|登记|录入)\s*(?:一下|一个|一笔)?\s*(?:喂奶|喝奶|吃奶|睡眠|睡觉|尿布|辅食|身高|体重)/i.test(text)) {
+    if (!hasQueryPrefix) return null;
+  }
+
+  // Explicit write commands: "记一下", "帮我记", "去打卡", "保存", "添加", "新增"
+  if (/(?:记一下|帮我记|记一笔|去打卡|打个卡|做个记录|添加一条|新增一条)/i.test(text)) {
+    if (!hasQueryPrefix) return null;
+  }
+
+  // Standalone action keywords
+  if (/^(?:记录|打卡|保存|添加|新增)$/i.test(text)) {
+    return null;
+  }
+
   const writeIndicators = [
     /(?:喝|吃|喂)了\s*\d+/i,
     /\d+\s*(?:ml|毫升|分钟|分)/i,
     /(?:刚|刚刚|刚才)?睡着了?$/i,
     /(?:刚|刚刚|刚才)?换了(?!几次|多少)(?:个|张|块|片|新|一)?(?:尿布|纸尿裤)/i,
     /(?:刚|刚刚|刚才)?拉了(?!几次|多少)(?:便便|臭臭|粑粑)/i,
-    /(?:记录|记一下|帮我记|打卡|保存|添加|新增)/i,
     /吐奶/i,
     /发烧|拉稀|咳嗽|吃药|疫苗|怎么办|生病|看病|用药/i,
   ];
@@ -140,6 +156,18 @@ export function detectVoiceQueryIntent(rawText: string): FastPathIntent | null {
     /呢$/,
     /\?$/,
     /？$/,
+    /怎么样/,
+    /如何/,
+    /记录/,
+    /作息/,
+    /数据/,
+    /还在睡/,
+    /醒了/,
+    /醒了吗/,
+    /有没/,
+    /有没有/,
+    /有什么/,
+    /有啥/,
   ];
   const isQuestionOrQuery = questionIndicators.some((q) => q.test(text));
   if (!isQuestionOrQuery) {
@@ -159,22 +187,22 @@ export function detectVoiceQueryIntent(rawText: string): FastPathIntent | null {
   }
 
   const isLatestOnly =
-    /(?:上次|最近一次|上一回|刚|什么时候)/.test(text) &&
+    /(?:上次|最近一次|上一回|刚|什么时候|还在睡|醒了吗|睡了吗|在睡吗|醒了)/.test(text) &&
     !/(?:今天|昨天|前天|一共|总共)/.test(text);
 
   // 4. Match domain
-  // A. Feeding (奶量 / 喝奶 / 吃奶 / 喂奶 / 配方奶 / 母乳)
+  // A. Feeding (奶量 / 喝奶 / 吃奶 / 喂奶 / 配方奶 / 母乳 / 喂养)
   if (
     /(?:奶|喂养|喝奶|吃奶|配方奶|母乳)/.test(text) &&
-    /(?:喝|吃|喂|量|多少|几|次|什么时候|上次)/.test(text)
+    /(?:喝|吃|喂|量|多少|几|次|什么时候|上次|记录|数据|情况|查|看|怎么样|了吗|吗)/.test(text)
   ) {
     return { domain: "feeding", targetDate, dateLabel, isLatestOnly };
   }
 
-  // B. Sleep (睡眠 / 睡觉 / 睡了多久 / 小睡)
+  // B. Sleep (睡眠 / 睡觉 / 睡了多久 / 小睡 / 醒)
   if (
-    /(?:睡|睡眠|入睡|清醒|小睡)/.test(text) &&
-    /(?:多久|多长|几小时|几个小时|情况|时间|次|什么时候|上次|醒)/.test(text)
+    /(?:睡|睡眠|入睡|清醒|小睡|醒)/.test(text) &&
+    /(?:多久|多长|几小时|几个小时|情况|时间|次|什么时候|上次|醒|记录|数据|查|看|怎么样|了吗|吗|还在)/.test(text)
   ) {
     return { domain: "sleep", targetDate, dateLabel, isLatestOnly };
   }
@@ -182,7 +210,7 @@ export function detectVoiceQueryIntent(rawText: string): FastPathIntent | null {
   // C. Diaper: Poop specific (拉便便 / 拉臭臭 / 拉粑粑 / 拉了几次)
   if (
     /(?:拉|便便|臭臭|粑粑)/.test(text) &&
-    /(?:几|次|了吗|吗|情况|什么时候|上次)/.test(text)
+    /(?:几|次|了吗|吗|情况|什么时候|上次|记录|数据|查|看)/.test(text)
   ) {
     return { domain: "diaper_poop", targetDate, dateLabel, isLatestOnly };
   }
@@ -190,18 +218,21 @@ export function detectVoiceQueryIntent(rawText: string): FastPathIntent | null {
   // D. Diaper: General / Pee (尿布 / 换尿布 / 嘘嘘 / 尿尿)
   if (
     /(?:尿布|换尿布|嘘嘘|尿尿)/.test(text) &&
-    /(?:几|次|了吗|吗|情况|什么时候|上次)/.test(text)
+    /(?:几|次|了吗|吗|情况|什么时候|上次|记录|数据|查|看)/.test(text)
   ) {
     return { domain: "diaper", targetDate, dateLabel, isLatestOnly };
   }
 
   // E. Food (辅食)
-  if (/辅食/.test(text) && /(?:吃|几|什么|情况|了吗|记录)/.test(text)) {
+  if (/辅食/.test(text) && /(?:吃|几|什么|情况|了吗|记录|查|看|数据)/.test(text)) {
     return { domain: "food", targetDate, dateLabel, isLatestOnly };
   }
 
-  // F. Daily Summary / General (概况 / 总结 / 汇总 / 怎么样 / 情况怎么样 / 带娃情况)
-  if (/(?:概况|总结|汇总|怎么样|情况怎么样|带娃情况)/.test(text)) {
+  // F. Daily Summary / General (概况 / 总结 / 汇总 / 怎么样 / 情况怎么样 / 带娃情况 / 记录)
+  if (
+    /(?:概况|总结|汇总|怎么样|情况怎么样|带娃情况|作息)/.test(text) ||
+    (/(?:记录|情况|数据)/.test(text) && /(?:今天|昨天|前天|宝宝|查|看|有什么|有哪些|所有)/.test(text))
+  ) {
     return { domain: "summary", targetDate, dateLabel, isLatestOnly: false };
   }
 
@@ -220,7 +251,7 @@ export async function tryVoiceFastPath(options: VoiceFastPathOptions): Promise<s
   const babyId = baby.id;
   const babyName = baby.nickname || "宝宝";
   const { domain, targetDate, dateLabel, isLatestOnly } = intent;
-  const useGrowDesk = isGrowDeskEnabled() || Boolean(options.accessToken);
+  const useGrowDesk = isGrowDeskEnabled() && Boolean(options.accessToken);
   const token = options.accessToken || "";
 
   try {

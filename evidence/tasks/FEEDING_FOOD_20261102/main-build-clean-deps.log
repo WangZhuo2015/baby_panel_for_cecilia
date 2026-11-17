@@ -1,0 +1,139 @@
+▲ Next.js 16.3.6 (webpack)
+✓ Running next.config.ts took 33ms
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 31.9s
+  Running TypeScript ...
+  Finished TypeScript in 29.6s ...
+  Collecting page data using 3 workers ...
+  Generating static pages using 3 workers (0/86) ...
+  Generating static pages using 3 workers (21/86)
+  Generating static pages using 3 workers (42/86)
+  Generating static pages using 3 workers (64/86)
+✓ Generating static pages using 3 workers (86/86) in 1497ms
+  Finalizing page optimization ...
+  Collecting build traces ...
+
+Route (app)
+┌ ○ /
+├ ○ /_not-found
+├ ƒ /.well-known/oauth-authorization-server
+├ ƒ /.well-known/oauth-protected-resource
+├ ƒ /.well-known/oauth-protected-resource/mcp
+├ ƒ /api/agent/voice
+├ ƒ /api/agent/voice/logs
+├ ƒ /api/agent/voice/logs/[id]
+├ ƒ /api/ai/backends
+├ ƒ /api/ai/chat
+├ ƒ /api/ai/chat/cancel
+├ ƒ /api/ai/chatgpt
+├ ƒ /api/ai/daily-summary
+├ ƒ /api/ai/jobs
+├ ƒ /api/ai/jobs/[id]
+├ ƒ /api/ai/parse-nutrition
+├ ƒ /api/ai/parse-record
+├ ƒ /api/ai/preferences
+├ ƒ /api/ai/search
+├ ƒ /api/ai/sessions
+├ ƒ /api/ai/sessions/[id]
+├ ƒ /api/ai/tips
+├ ƒ /api/app-config
+├ ƒ /api/asr/transcribe
+├ ƒ /api/attachments/[id]
+├ ƒ /api/auth/login
+├ ƒ /api/auth/logout
+├ ƒ /api/auth/me
+├ ƒ /api/auth/register
+├ ƒ /api/baby
+├ ƒ /api/baby/avatar
+├ ƒ /api/baby/members
+├ ƒ /api/books
+├ ƒ /api/books/[id]
+├ ƒ /api/cron/backup
+├ ƒ /api/cron/daily-summary
+├ ƒ /api/development/activities
+├ ƒ /api/development/milestones
+├ ƒ /api/development/warning-signs
+├ ƒ /api/family/invite
+├ ƒ /api/family/join
+├ ƒ /api/family/members
+├ ƒ /api/family/preview
+├ ƒ /api/food/feeding-guidelines
+├ ƒ /api/food/items
+├ ƒ /api/food/logs
+├ ƒ /api/food/plans
+├ ƒ /api/growth
+├ ƒ /api/growth/chart
+├ ƒ /api/growth/ocr
+├ ƒ /api/legacy-attachments/[...path]
+├ ƒ /api/mcp
+├ ƒ /api/mcp/usage
+├ ƒ /api/medical/ocr
+├ ƒ /api/medical/reports
+├ ƒ /api/medical/reports/[id]
+├ ƒ /api/medical/upload
+├ ƒ /api/notifications
+├ ƒ /api/notifications/[id]
+├ ƒ /api/nutrition/analysis
+├ ƒ /api/nutrition/products
+├ ƒ /api/nutrition/records
+├ ƒ /api/nutrition/schedules
+├ ƒ /api/oauth/authorize
+├ ƒ /api/oauth/register
+├ ƒ /api/oauth/revoke
+├ ƒ /api/oauth/token
+├ ƒ /api/passport/devices
+├ ƒ /api/passport/devices/[id]
+├ ƒ /api/passport/pairings/claim
+├ ƒ /api/push/send
+├ ƒ /api/push/subscribe
+├ ƒ /api/push/test
+├ ƒ /api/push/vapid-key
+├ ƒ /api/records/daily-summary
+├ ƒ /api/records/diaper
+├ ƒ /api/records/feeding
+├ ƒ /api/records/sleep
+├ ƒ /api/records/timeline
+├ ƒ /api/records/trends
+├ ƒ /api/user/tokens
+├ ƒ /api/user/tokens/[id]
+├ ƒ /api/vaccines
+├ ƒ /api/vaccines/selections
+├ ƒ /api/weather
+├ ○ /books
+├ ○ /daily-summary
+├ ○ /dashboard
+├ ○ /development
+├ ○ /family
+├ ○ /family/ai-usage
+├ ○ /family/passport
+├ ○ /food
+├ ○ /food/library
+├ ○ /food/log
+├ ○ /growth
+├ ○ /growth/add
+├ ○ /health/medical
+├ ○ /health/medical/add
+├ ○ /health/vaccines
+├ ○ /login
+├ ƒ /mcp
+├ ○ /notifications
+├ ○ /nutrition
+├ ○ /oauth/authorize
+├ ƒ /oauth/register
+├ ƒ /oauth/revoke
+├ ƒ /oauth/token
+├ ○ /onboarding
+├ ○ /records/diaper
+├ ○ /records/feeding
+├ ○ /records/sleep
+├ ○ /register
+├ ○ /settings
+├ ƒ /uploads/[...path]
+└ ○ /weather
+
+
+ƒ Proxy (Middleware)
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand

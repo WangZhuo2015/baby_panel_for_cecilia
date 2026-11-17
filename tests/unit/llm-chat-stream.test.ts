@@ -147,6 +147,19 @@ test("lazy 429 retries after Retry-After, drops partial output, and reuses compl
   assert.equal(context.messages.filter((message) => message.role === "toolResult").length, 1);
 });
 
+test("transient failures honor ten retries and cap larger limits at ten", async () => {
+  let calls = 0;
+  const retrying = createRetryingModelStreamFn(async () => {
+    calls += 1;
+    return lazyThrowStream("discarded", Object.assign(new Error("Too many requests"), { status: 429 }));
+  }, { maxRetries: 20, wait: async () => {} });
+  const output = await retrying(model, contextWithCompletedTool());
+  const final = await output.result();
+  await collect(output);
+  assert.equal(calls, 11);
+  assert.equal(final.stopReason, "error");
+});
+
 test("401 lazy stream failure is not retried", async () => {
   let calls = 0;
   const waits: number[] = [];

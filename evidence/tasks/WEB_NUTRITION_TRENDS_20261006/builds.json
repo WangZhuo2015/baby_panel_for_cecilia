@@ -1,0 +1,31 @@
+{
+  "sourceRevision": "5fa673c23c8886a097477e01cf200d5279f98348",
+  "sourceBase": "c366c6818887fb400d541dc679fc5c5b936392b0",
+  "local": {
+    "status": "PASS",
+    "nextVersion": "16.3.6",
+    "buildId": "SITMQHC3VVtxjwmt02RMy",
+    "artifactSha256": "bc4ee11ec1fdc4b4bb9c197d49b82f719a7a56bc99aeb2db02d33a20d75c01cc",
+    "sourceRevision": "8d19144b41d777a40330169e82130136783b9a42"
+  },
+  "linux": {
+    "status": "PASS",
+    "nextVersion": "16.3.6",
+    "buildId": "SEwv3xzJ7OJ9tdoPoqiea",
+    "artifactSha256": "a78a1955b06ca8ad2a6d00cbba5527ac3f92e7da14ec1b60e9fec3ef02036794",
+    "sourceInputsMatched": 670,
+    "sourceRevision": "5fa673c23c8886a097477e01cf200d5279f98348"
+  },
+  "failedAttempts": [
+    "Local Prisma generate first blocked by engine cache permissions",
+    "Initial local webpack build failed because Prisma client was not generated; repaired and rebuilt without skipping checks"
+  ],
+  "previousSourceRevision": "8d19144b41d777a40330169e82130136783b9a42",
+  "previousLinux": {
+    "status": "PASS",
+    "nextVersion": "16.3.6",
+    "buildId": "JNjj98BGMuVyqONGQXHuT",
+    "artifactSha256": "b26ec47e93ec181c959f81a09e080d21b174026688db454edb09ac3edf9caa88",
+    "sourceInputsMatched": 670
+  }
+}

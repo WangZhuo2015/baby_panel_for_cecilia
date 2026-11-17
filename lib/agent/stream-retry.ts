@@ -50,6 +50,31 @@ export function getRetryAfterMs(error: unknown): number | null {
   return Number.isFinite(date) ? Math.max(0, date - Date.now()) : null;
 }
 
+/** Compatibility helper retained for callers that specifically classify 429s. */
+export function isRateLimitError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const value = error as {
+    status?: unknown;
+    statusCode?: unknown;
+    message?: unknown;
+    errorMessage?: unknown;
+    cause?: unknown;
+    response?: { status?: unknown };
+  };
+  if (value.status === 429 || value.statusCode === 429 || value.response?.status === 429) return true;
+  const message = [value.message, value.errorMessage]
+    .filter((part): part is string => typeof part === "string")
+    .join(" ")
+    .toLowerCase();
+  if (/\b429\b|rate limit|too many requests/i.test(message)) return true;
+  if (value.cause && typeof value.cause === "object") {
+    const cause = value.cause as { status?: unknown; statusCode?: unknown; message?: unknown };
+    if (cause.status === 429 || cause.statusCode === 429) return true;
+    return typeof cause.message === "string" && /\b429\b|rate limit|too many requests/i.test(cause.message);
+  }
+  return false;
+}
+
 function wait(ms: number): Promise<void> {
   return ms > 0 ? new Promise((resolve) => setTimeout(resolve, ms)) : Promise.resolve();
 }
@@ -97,7 +122,7 @@ export function createRetryingModelStreamFn(
     wait?: (ms: number) => Promise<void>;
   } = {},
 ): StreamFn {
-  const maxRetries = Math.max(0, Math.min(2, options.maxRetries ?? 1));
+  const maxRetries = Math.max(0, Math.min(10, options.maxRetries ?? 1));
 
   return (model, context, callOptions) => {
     const output = createAssistantMessageEventStream();
