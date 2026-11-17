@@ -4,7 +4,13 @@
 import path from "node:path";
 import fs from "node:fs";
 import dotenv from "dotenv";
-import { getActiveLlmProfile } from "./llm-profiles";
+import {
+  getActiveLlmProfile,
+  getActiveLlmProfileId,
+  getLlmProfileScope,
+  getLlmProviderId,
+  resolveLlmProfileModel,
+} from "./llm-profiles";
 
 const isTestDetected =
   process.env.NODE_ENV === "test" ||
@@ -132,27 +138,18 @@ export const AI_CONFIG = {
   },
   get model() {
     const profile = getActiveLlmProfile();
-    if (profile.model) {
-      if (profile.model === "hermes-agent" || (this.baseUrl.includes("opencode.ai") && profile.model.includes("muse-spark"))) {
-        return "Qwen3.8-Flash-Next";
-      }
-      return profile.model;
-    }
-    if (preferOpenRouter()) return process.env.OPENROUTER_MODEL || "muse-spark-1.2-contributor";
-    const model = process.env.AI_MODEL || process.env.OPENAI_MODEL || "";
-    if (!model || model === "hermes-agent" || (this.baseUrl.includes("opencode.ai") && model.includes("muse-spark"))) {
-      return "Qwen3.8-Flash-Next";
-    }
-    return model || "Qwen3.8-Flash-Next";
+    return resolveLlmProfileModel(profile);
   },
   get visionModel() {
     const profile = getActiveLlmProfile();
-    if (profile.visionModel && profile.visionModel !== "hermes-agent") {
-      return profile.visionModel;
-    }
-    const vision = process.env.AI_VISION_MODEL;
-    if (vision && vision !== "hermes-agent") return vision;
-    return "Qwen3.8-Flash-Next";
+    return resolveLlmProfileModel(profile, true);
+  },
+  /** Safe identifiers for response provenance; never returns provider URLs or credentials. */
+  get profileId() {
+    return getLlmProfileScope()?.profileId || getActiveLlmProfileId();
+  },
+  get provider() {
+    return getLlmProviderId(this.baseUrl);
   },
   get headers(): Record<string, string> {
     const profile = getActiveLlmProfile();
@@ -167,9 +164,14 @@ export const AI_CONFIG = {
   /** Ox Alpha spends thinking tokens; without this, OCR/tips can return empty content. */
   get completionExtras(): Record<string, unknown> {
     const profile = getActiveLlmProfile();
-    if (profile.completionExtras) return profile.completionExtras;
-    if (!this.baseUrl.includes("openrouter.ai")) return {};
-    return { reasoning: { effort: "low" } };
+    const extras: Record<string, unknown> = profile.completionExtras
+      ? { ...profile.completionExtras }
+      : this.baseUrl.includes("openrouter.ai")
+        ? { reasoning: { effort: "low" } }
+        : {};
+    // A profile extension must not override the model selected for this request.
+    delete extras.model;
+    return extras;
   },
 } as const;
 

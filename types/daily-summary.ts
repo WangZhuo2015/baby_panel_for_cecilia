@@ -108,6 +108,7 @@ export interface AiDailySummarySections {
 }
 
 export interface AiDailySummaryResult {
+  llm?: { source: "api" | "chatgpt"; provider: string; model: string; profileId?: string } | null;
   date: string;
   babyId: string;
   babyName: string;

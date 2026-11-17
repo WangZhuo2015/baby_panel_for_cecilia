@@ -1,0 +1,294 @@
+{
+  "status": "IMPLEMENTED_NOT_REVIEWED",
+  "baselineHead": "7a781995e3aee62e82fe45dd0db691a7e6be622f",
+  "branch": "codex/llm-feature-preferences",
+  "scopeNote": "Existing uncommitted ChatGPT skeleton was preserved. HEAD diff for touched files includes those earlier edits. Excludes pre-existing environment backups, credentials, unrelated README/package/notifications changes and untouched ChatGPT implementation/tests. This patch is an inspection artifact, not an isolated commit patch.",
+  "files": [
+    {
+      "path": "app/(main)/page.tsx",
+      "trackedAtBaseline": true,
+      "sha256": "d7cdf77e4039cb32622d6168bfbcbbec4cfe2cee4d538b80602f0f7e2928610f"
+    },
+    {
+      "path": "app/api/agent/voice/route.ts",
+      "trackedAtBaseline": true,
+      "sha256": "a388c2e12c0a05acfb731cafbc2318e125676398559c8867b34143f673e2f03b"
+    },
+    {
+      "path": "app/api/ai/chat/route.ts",
+      "trackedAtBaseline": true,
+      "sha256": "df48216be2fbd3992ba3b8b722701abff9fbf00cb3605db0c64eab63317a83df"
+    },
+    {
+      "path": "app/api/ai/daily-summary/route.ts",
+      "trackedAtBaseline": true,
+      "sha256": "bdc85c0898fb46b6405cbc4483bb574c97a6b367f755929c0ae9d704a7c2c015"
+    },
+    {
+      "path": "app/api/ai/parse-nutrition/route.ts",
+      "trackedAtBaseline": true,
+      "sha256": "4babcc6c18c6eba8208fe2423ea88111d12b50ea2597d3517973fb5ca4e290b6"
+    },
+    {
+      "path": "app/api/ai/parse-record/route.ts",
+      "trackedAtBaseline": true,
+      "sha256": "bc073b01a26845856841725e971b82dabbd1da3d6ef60e9cd2efc824dd909cd9"
+    },
+    {
+      "path": "app/api/ai/preferences/route.ts",
+      "trackedAtBaseline": false,
+      "sha256": "9bf63b622917fe3b406d81f1f8afca657fcaf709f31f0df0aed28c85ce8b7534"
+    },
+    {
+      "path": "app/api/ai/search/route.ts",
+      "trackedAtBaseline": true,
+      "sha256": "282a0dace65410c04e1107e39d40e71785c3e29419f0cd340da0a0726d84f632"
+    },
+    {
+      "path": "app/api/ai/tips/route.ts",
+      "trackedAtBaseline": true,
+      "sha256": "bdcec88e0e916f860865b45e18a57b5088410d77d4475a782be81ec67db037f1"
+    },
+    {
+      "path": "app/api/asr/transcribe/route.ts",
+      "trackedAtBaseline": true,
+      "sha256": "8b0dbfb2043c0ab37ee8ec02d95b5fdb5be82b5b239421e8489305c5a14f2f52"
+    },
+    {
+      "path": "app/api/cron/daily-summary/route.ts",
+      "trackedAtBaseline": true,
+      "sha256": "5ccf7db7d200aa7cb0c26ba733c9e0d316b912c5b149bbf704b408107cc7f184"
+    },
+    {
+      "path": "app/api/growth/ocr/route.ts",
+      "trackedAtBaseline": true,
+      "sha256": "3ea77d2081893e1c29df2fee307ad302f64e329b7ef82219e743ac8a51e4aabf"
+    },
+    {
+      "path": "app/api/medical/ocr/route.ts",
+      "trackedAtBaseline": true,
+      "sha256": "ef955515947b3e9bef887c068e431797c57a328eeb9f9345266565c1cf3186f3"
+    },
+    {
+      "path": "app/health/medical/add/page.tsx",
+      "trackedAtBaseline": true,
+      "sha256": "70e13d5a34057c0f2c65ca50c8f5367c2966639921731af90f871537b47b2267"
+    },
+    {
+      "path": "components/daily-summary/DailySummaryPosterModal.tsx",
+      "trackedAtBaseline": true,
+      "sha256": "39b1056056dce6b3d1d8fc4660e63199549cb175c2c721942ade9ffd406c3835"
+    },
+    {
+      "path": "components/nutrition/ProductCatalogModal.tsx",
+      "trackedAtBaseline": true,
+      "sha256": "73e2985b14f6558a36db037acf8a614085b88c0388d46455909e32090400b946"
+    },
+    {
+      "path": "components/records/GrowthForm.tsx",
+      "trackedAtBaseline": true,
+      "sha256": "9c0fafa1942cf37a0f7af88e729968aff899308ad5ffdb4b3ccb1ff21b0cefa0"
+    },
+    {
+      "path": "components/ui/ChatGPTPlanControls.tsx",
+      "trackedAtBaseline": false,
+      "sha256": "204bc04d3937d21a01ab0c64a06e5cb918584ba0470f83652212be62fd6c0d13"
+    },
+    {
+      "path": "components/ui/LlmFeaturePreferences.tsx",
+      "trackedAtBaseline": false,
+      "sha256": "e5fb501cb3059919dc87ade9305eed83fb9535a003461814c5760fca911956c9"
+    },
+    {
+      "path": "components/ui/LlmModelLabel.tsx",
+      "trackedAtBaseline": false,
+      "sha256": "f078e9a8fc8e811d77b0294019160e111644e66753da0983e8e1c6cb710b968e"
+    },
+    {
+      "path": "components/ui/QuickAiModal.tsx",
+      "trackedAtBaseline": true,
+      "sha256": "650942cbabbd1f1cde19e387da6d3721843aedc4b51f390fd28277bbc567c24e"
+    },
+    {
+      "path": "components/ui/VoiceConfirmEntry.tsx",
+      "trackedAtBaseline": true,
+      "sha256": "77acce6cae2438cc119d735263520b2dba2711f6200117959ef8c9d8cb1352d4"
+    },
+    {
+      "path": "lib/agent/chat-client-stream.ts",
+      "trackedAtBaseline": false,
+      "sha256": "55a6a071f7e598a1f014829391929382cc7ebe6c5e373a3debfa61701e08b2fd"
+    },
+    {
+      "path": "lib/agent/chat-retry.ts",
+      "trackedAtBaseline": false,
+      "sha256": "dca0a7af8eef25880347fafbc1527d5b71567a3f3c90cecc52c332af5fd29806"
+    },
+    {
+      "path": "lib/agent/model.ts",
+      "trackedAtBaseline": true,
+      "sha256": "b318c55214ba370974f76249b572d5ab6ba1aaa48afccf979ee3490318b1a99d"
+    },
+    {
+      "path": "lib/agent/run.ts",
+      "trackedAtBaseline": true,
+      "sha256": "4a5259ecae2cc3acdc85a5f4b95c405de3bfbb52b175eeb066d55dfb31a09189"
+    },
+    {
+      "path": "lib/agent/session-runner.ts",
+      "trackedAtBaseline": true,
+      "sha256": "397124796e79e6e772eaec8bbff807ff9a54408ba46ef980db62c91b711a157f"
+    },
+    {
+      "path": "lib/agent/stream-retry.ts",
+      "trackedAtBaseline": false,
+      "sha256": "f629d38f3c8eb8e50ce9b3afadf3dc3c27db38bcd42f0dce31bdcaf617eea248"
+    },
+    {
+      "path": "lib/ai-daily-summary.ts",
+      "trackedAtBaseline": true,
+      "sha256": "afb90fccc0fbc52b2ec67566ca1d2149e9c0ad962a057318723d5c65f3d84358"
+    },
+    {
+      "path": "lib/ai-tips.ts",
+      "trackedAtBaseline": true,
+      "sha256": "1f58bcb3a3d1db8b23fadbdb78715988cd69e44dcfc7e211863a38274ed2bbbc"
+    },
+    {
+      "path": "lib/config.ts",
+      "trackedAtBaseline": true,
+      "sha256": "bf334546fbbe00cf6e95ee76c0049f2d4c96ce49ca6d3694aa0bf9e17b2d1ed5"
+    },
+    {
+      "path": "lib/cron/daily-summary.ts",
+      "trackedAtBaseline": true,
+      "sha256": "855936be2c556fc83cf7cdfcc86c65a4e08a7ff225937c55083b75ce3d1f273b"
+    },
+    {
+      "path": "lib/growdesk/ai-sessions.ts",
+      "trackedAtBaseline": true,
+      "sha256": "915f91e9551242abc8ee4c0aca841d5a4430b909f3df53b8e99aee739327acc8"
+    },
+    {
+      "path": "lib/growdesk/bridge-policy.ts",
+      "trackedAtBaseline": true,
+      "sha256": "a98a761ac6258a3d1cfddf9e1f4644966501cf6fdb3116af4769e7c45e7e0b96"
+    },
+    {
+      "path": "lib/llm-context.ts",
+      "trackedAtBaseline": false,
+      "sha256": "23409821a91a85549edae8e8a8ccb12df3fcf61ae612ec11c95a9215bc9776f3"
+    },
+    {
+      "path": "lib/llm-display.ts",
+      "trackedAtBaseline": false,
+      "sha256": "270e2187fe334ccf9cf996c081e16aef60a6c74546425b06cbc65d07af176aa8"
+    },
+    {
+      "path": "lib/llm-preferences.ts",
+      "trackedAtBaseline": false,
+      "sha256": "cd0725af572e71cf04f655d09510763127c723acf57db3240f053939a1f3caa0"
+    },
+    {
+      "path": "lib/llm-profiles.ts",
+      "trackedAtBaseline": true,
+      "sha256": "5e02db0dd42f1303f5ff13209f50720243ffe62721c15fcdfa2229d3ef99f158"
+    },
+    {
+      "path": "lib/llm-provenance.ts",
+      "trackedAtBaseline": false,
+      "sha256": "a03cb05561835fd2123d2717420b3cbf5e33f986f0670aaf8b89acdf87c57989"
+    },
+    {
+      "path": "lib/llm-route.ts",
+      "trackedAtBaseline": false,
+      "sha256": "9927c3136bd29b1bde2fb84ebc17e3b0f5643ad1e38e59c08560736feba8a9db"
+    },
+    {
+      "path": "stores/slices/auth.ts",
+      "trackedAtBaseline": true,
+      "sha256": "67545aaf80107d816f54d31a1828b1181c4b2de00bbbaf23bcab55a2144f76b2"
+    },
+    {
+      "path": "stores/slices/growth.ts",
+      "trackedAtBaseline": true,
+      "sha256": "2d643e9540e5a6e5b59268d34cdc5db49759bac4dbdf1fff4ac99769e79cc73d"
+    },
+    {
+      "path": "stores/useBabyStore.ts",
+      "trackedAtBaseline": true,
+      "sha256": "911aa7ded8c006b274ce2636258050d7328952e4cdd718d7a0d331a21b172623"
+    },
+    {
+      "path": "tests/unit/agent-backend-credentials.test.ts",
+      "trackedAtBaseline": false,
+      "sha256": "a91653fd3f5ba5d573caa2f0044d52887c0e21e7d141ea58f8c7db035ac9d5c9"
+    },
+    {
+      "path": "tests/unit/chat-retry-context.test.ts",
+      "trackedAtBaseline": false,
+      "sha256": "6cfe7d924695bd880d61046c00dda56002a03b04cf345aef2ced95f0fe0c2fae"
+    },
+    {
+      "path": "tests/unit/glm-retry.test.ts",
+      "trackedAtBaseline": true,
+      "sha256": "6fecfb2364acd93a7614977215e4420a74b33dd79caa184964abd773faa1a9ed"
+    },
+    {
+      "path": "tests/unit/growdesk-ai-repair.test.ts",
+      "trackedAtBaseline": true,
+      "sha256": "b0388948108ae70f0056eb6de2b52e975afb6f43bc5f252a74d4d03b6dde3bb1"
+    },
+    {
+      "path": "tests/unit/llm-chat-retry-metadata.test.ts",
+      "trackedAtBaseline": false,
+      "sha256": "a5cb177953bc232851852f6f36fbf8bc6a4e04c265dcc0f1b357fd762b378399"
+    },
+    {
+      "path": "tests/unit/llm-chat-runner.test.ts",
+      "trackedAtBaseline": false,
+      "sha256": "79b367e23b0fb2b65f8a3b2318a1f4d9d47a4c528a051eca098650fa99e7c09a"
+    },
+    {
+      "path": "tests/unit/llm-chat-stream.test.ts",
+      "trackedAtBaseline": false,
+      "sha256": "cb02c455e2ddd31aad6d063efa3290c76b3f58204935088f8a143b9c82046954"
+    },
+    {
+      "path": "tests/unit/llm-preferences-route.test.ts",
+      "trackedAtBaseline": false,
+      "sha256": "899753a87ef23ca45ac312ad7e1297bfbea342f4d72c710504ab73ae7964014b"
+    },
+    {
+      "path": "tests/unit/llm-preferences.test.ts",
+      "trackedAtBaseline": false,
+      "sha256": "5bacbc98a2d24e4954bcaaa4ad722a0a40125f10a0d14581a1eeffbae0604c11"
+    },
+    {
+      "path": "tests/unit/llm-provenance.test.ts",
+      "trackedAtBaseline": false,
+      "sha256": "c602b605180d6824f63d36e26e4944d90b8e76df19c965b2a985a01f4f249c19"
+    },
+    {
+      "path": "tests/unit/llm-route.test.ts",
+      "trackedAtBaseline": false,
+      "sha256": "9ed66c2e326eab63c87aec1f63d5c1357d673b1f72e08d7467ae5d0a83cc1613"
+    },
+    {
+      "path": "tests/unit/voice-fast-path.test.ts",
+      "trackedAtBaseline": true,
+      "sha256": "34ccaa0209ee0e85debdd24a92482a80ad5eed5f1edc7cd172bfd7d830ab41a1"
+    },
+    {
+      "path": "tsconfig.json",
+      "trackedAtBaseline": true,
+      "sha256": "9b90466455e8b6df0afafa5764282805a09d78252d1223f79409c1bb16494be0"
+    },
+    {
+      "path": "types/daily-summary.ts",
+      "trackedAtBaseline": true,
+      "sha256": "5c6fe6bcdce6739c6a0d566bffe1d84a911b0fa780b8a10251bd0096ce45805b"
+    }
+  ],
+  "diffSha256": "e760f4bff6fc45dd48c36d65b6d5c1f6f3cca365a83c3de300787141100d3e27"
+}

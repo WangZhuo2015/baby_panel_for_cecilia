@@ -31,7 +31,9 @@
     "db:push": "prisma db push",
     "db:deploy": "prisma migrate deploy",
     "check:writers": "node scripts/check-production-writers.mjs",
-    "llm:switch": "tsx scripts/switch-llm.ts"
+    "llm:switch": "tsx scripts/switch-llm.ts",
+    "test:chatgpt": "node --test tests/chatgpt/*.test.mjs",
+    "test:chatgpt:browser": "node tests/chatgpt/browser.mjs"
   },
   "dependencies": {
     "@earendil-works/pi-agent-core": "^0.84.3",

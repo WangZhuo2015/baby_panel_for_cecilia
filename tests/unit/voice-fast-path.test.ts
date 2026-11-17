@@ -1,7 +1,5 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import dotenv from "dotenv";
-dotenv.config();
 
 import { prisma } from "../../lib/prisma";
 import {
@@ -81,7 +79,7 @@ test("Voice Fast-Path Integration with Database (<100ms)", async () => {
       inviteCode: `FP${timestamp.toString().slice(-4)}`,
       babies: {
         create: {
-          nickname: `小星星_${timestamp.toString().slice(-4)}`,
+          nickname: `test_baby_fastpath_${timestamp}`,
           gender: "female",
           birthDate: "2025-06-01",
         },
@@ -172,7 +170,7 @@ test("Voice Fast-Path Integration with Database (<100ms)", async () => {
     assert.ok(diaperReply?.includes("一共拉了1次便便"));
 
     // 5. Test Full Route POST /api/agent/voice directly
-    const req = new Request("http://localhost:3000/api/agent/voice", {
+    const req = new Request("http://127.0.0.1:3089/api/agent/voice", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${validToken}`,

@@ -561,7 +561,7 @@ function NotificationCard({
         <div className="flex-1 min-w-0 pr-6">
           <div className="flex items-center gap-2">
             <p
-              className={`text-sm ${!read ? "font-semibold" : "font-medium"} text-text-primary truncate`}
+              className={`text-sm ${!read ? "font-semibold" : "font-medium"} text-text-primary break-words`}
             >
               {notification.title}
             </p>
@@ -569,7 +569,7 @@ function NotificationCard({
               <span className="w-2 h-2 rounded-full bg-primary flex-shrink-0" />
             )}
           </div>
-          <p className="text-xs text-text-secondary mt-0.5 leading-relaxed line-clamp-2">
+          <p className="text-xs text-text-secondary mt-0.5 leading-relaxed whitespace-pre-wrap break-words">
             {notification.detail}
           </p>
           <p className="text-[10px] text-text-muted mt-1.5">

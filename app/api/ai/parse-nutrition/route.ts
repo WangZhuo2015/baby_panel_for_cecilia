@@ -1,3 +1,5 @@
+import { llmFetch } from "@/lib/llm-provenance";
+import { llmRoute } from "@/lib/llm-route";
 import { NextResponse } from "next/server";
 import { writeFile, mkdir } from "fs/promises";
 import path from "path";
@@ -48,7 +50,7 @@ const SYSTEM_PROMPT = `你是一名儿科与营养品标签识别专家。你的
 3. 务必保证数值准确，禁止幻觉编造。
 `;
 
-export async function POST(request: Request) {
+async function handlePOST(request: Request) {
   try {
     let userId: string;
     if (GROWDESK_CONFIG.enabled) {
@@ -130,7 +132,7 @@ export async function POST(request: Request) {
       },
     ];
 
-    const upstreamRes = await fetch(`${AI_CONFIG.baseUrl.replace(/\/+$/, "")}/chat/completions`, {
+    const upstreamRes = await llmFetch(`${AI_CONFIG.baseUrl.replace(/\/+$/, "")}/chat/completions`, {
       method: "POST",
       headers,
       body: JSON.stringify({
@@ -185,3 +187,5 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "成分表解析失败，请重试" }, { status: 500 });
   }
 }
+
+export const POST = llmRoute("nutrition_parse", handlePOST);

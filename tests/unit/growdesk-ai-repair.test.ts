@@ -1,3 +1,4 @@
+import * as chatRetry from "../../lib/agent/chat-retry";
 import test from "node:test";
 import { verifyBffCsrf } from "../../lib/growdesk/csrf";
 import assert from "node:assert/strict";
@@ -25,7 +26,19 @@ const session = { id: "test_session", userId: "test_user", babyId: "test_baby", 
 function chat(enabled = true, validSession = true, deniedBaby = false) {
   const calls: string[] = [];
   const bff = { user: { id: "test_user" }, accessToken: "test_token" };
+  let active: any = null;
   const route = load("app/api/ai/chat/route.ts", {
+    "@/lib/agent/chat-retry": chatRetry,
+    "@/lib/llm-profiles": {
+      getLlmProfileById: () => { throw new Error("Text-only authorization fixtures must not resolve a vision profile"); },
+      resolveLlmProfileModel: () => { throw new Error("Text-only authorization fixtures must not resolve a vision model"); },
+    },
+    "@/lib/llm-context": {
+      withLlmFeature: async (owner: string, feature: string, token: string, work: () => unknown) => { assert.equal(owner, "test_user"); assert.equal(feature, "chat"); assert.equal(token, "test_token"); return work(); },
+      getCurrentLlmFeatureScope: () => undefined,
+      getCurrentLlmModelInfo: () => ({ source: "api", provider: "test_provider", model: "test_model" }),
+    },
+    "@/lib/chatgpt-plan": { createChatGPTBackend: async () => { throw new Error("Subscription backend must be explicitly selected"); }, ChatGPTPlanError: class ChatGPTPlanError extends Error {}, planErrorMessage: () => "test_subscription_error" },
     "next/server": { NextResponse: Response },
     "@/lib/config": { GROWDESK_CONFIG: { enabled } },
     "@/lib/prisma": { prisma: new Proxy({}, { get() { throw new Error("Legacy prisma must not run"); } }) },
@@ -37,10 +50,16 @@ function chat(enabled = true, validSession = true, deniedBaby = false) {
     "@/lib/growdesk/client": { growdeskFetch: async () => { throw new Error("Use mocked loadWebBaby"); } },
     "@/lib/growdesk/bridge-identity": { loadWebBaby: async (_fetch: unknown, token: string, babyId: string) => { calls.push("baby"); assert.equal(token, "test_token"); assert.equal(babyId, "test_baby"); if (deniedBaby) throw new BridgeError(403, "BABY_ACCESS_DENIED", "test_denied"); return { id: babyId, familyId: "test_family" }; } },
     "@/lib/growdesk/bridge-protocol": { BridgeError },
-    "@/lib/growdesk/ai-sessions": { bffAiSessionStore: { getSession: async (_id: string, userId: string, token: string) => { assert.equal(userId, "test_user"); assert.equal(token, "test_token"); return session; }, createSession: async () => session, addMessage: async () => { calls.push("append"); return {}; } } },
+    "@/lib/growdesk/ai-sessions": { bffAiSessionStore: { getSession: async (_id: string, userId: string, token: string) => { assert.equal(userId, "test_user"); assert.equal(token, "test_token"); return session; }, createSession: async () => session, addMessage: async () => { calls.push("append"); return { created: true }; } } },
     "@/lib/rate-limit": { getClientIp: () => "test_ip", checkRateLimit: () => ({ success: true }) },
     "@/lib/archive": { archiveText: async () => {} },
-    "@/lib/agent": { createLlmBackend: () => ({ getApiKey: () => "test_fake_key" }), buildAgentSystemPrompt: () => "test_prompt", activeChatRunManager: { get: () => null, startRun: () => { calls.push("run"); }, attachSubscriber: (_id: string, cb: any) => cb({ type: "done" }) } },
+    "@/lib/agent": { createLlmBackend: () => ({ getApiKey: () => "test_fake_key" }), buildAgentSystemPrompt: () => "test_prompt", activeChatRunManager: {
+      get: () => active, getByTurnId: () => active,
+      startRun: (params: any) => { calls.push("run"); active = { ...params, status: "running", fullText: "", toolTraces: [], subscribers: new Set() }; return active; },
+      attachSubscriber: (_id: string, cb: any) => cb({ type: "done" }),
+      attachRunSubscriber: (_run: unknown, cb: any) => cb({ type: "done" }),
+      detachRunSubscriber: () => undefined,
+    } },
   });
   return { route, calls };
 }

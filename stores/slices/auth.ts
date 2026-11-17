@@ -126,6 +126,7 @@ function clearScopedData(set: any): void {
     warningSigns: [],
     activities: [],
     aiTips: [],
+    aiTipsModel: null,
     aiError: null,
     medicalReports: [],
     babyMembers: [],

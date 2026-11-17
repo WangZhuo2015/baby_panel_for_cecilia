@@ -1,3 +1,5 @@
+import { llmFetch } from "@/lib/llm-provenance";
+import { llmRoute } from "@/lib/llm-route";
 import { NextResponse } from "next/server";
 import { writeFile, mkdir } from "fs/promises";
 import path from "path";
@@ -23,7 +25,7 @@ interface OcrResult {
 
 export const maxDuration = 120;
 
-export async function POST(request: Request) {
+async function handlePOST(request: Request) {
   if (GROWDESK_CONFIG.enabled) {
     const csrfErr = verifyBffCsrf(request);
     if (csrfErr) return csrfErr;
@@ -89,7 +91,7 @@ export async function POST(request: Request) {
       const imageUrl = `/api/attachments/${created.id}`;
       const imageBase64 = bytes.toString("base64");
 
-      const res = await fetch(`${AI_CONFIG.baseUrl.replace(/\/+$/, "")}/chat/completions`, {
+      const res = await llmFetch(`${AI_CONFIG.baseUrl.replace(/\/+$/, "")}/chat/completions`, {
         method: "POST",
         headers: AI_CONFIG.headers,
         body: JSON.stringify({
@@ -217,7 +219,7 @@ export async function POST(request: Request) {
 
 
   try {
-    const res = await fetch(`${AI_CONFIG.baseUrl.replace(/\/+$/, "")}/chat/completions`, {
+    const res = await llmFetch(`${AI_CONFIG.baseUrl.replace(/\/+$/, "")}/chat/completions`, {
       method: "POST",
       headers: AI_CONFIG.headers,
       body: JSON.stringify({
@@ -305,3 +307,5 @@ export async function POST(request: Request) {
     );
   }
 }
+
+export const POST = llmRoute("growth_ocr", handlePOST);

@@ -6,7 +6,11 @@ import {
 } from "@earendil-works/pi-ai";
 import { openAICompletionsApi } from "@earendil-works/pi-ai/api/openai-completions.lazy";
 import { openAIResponsesApi } from "@earendil-works/pi-ai/api/openai-responses.lazy";
-import { getActiveLlmProfile } from "@/lib/llm-profiles";
+import {
+  getActiveLlmProfile,
+  getActiveLlmProfileId,
+  OPENAI_OFFICIAL_PROFILE_ID,
+} from "@/lib/llm-profiles";
 
 export type LlmBackendId = "openrouter" | "opencode";
 
@@ -20,7 +24,7 @@ export interface LlmBackendPublic {
 export interface LlmBackendSession {
   id: LlmBackendId;
   models: ReturnType<typeof createModels>;
-  model: Model<"openai-completions">;
+  model: Model<"openai-completions"> | Model<"openai-responses">;
   getApiKey: () => string | undefined;
 }
 
@@ -49,6 +53,7 @@ function opencodeBaseUrl(): string {
 
 function opencodeApiKey(): string {
   const profile = getActiveLlmProfile();
+  if (getActiveLlmProfileId() === OPENAI_OFFICIAL_PROFILE_ID) return profile.apiKey || "";
   if (profile.apiKey) return profile.apiKey;
   return process.env.AI_API_KEY || "";
 }
@@ -57,6 +62,10 @@ function opencodeModelId(): string {
   const profile = getActiveLlmProfile();
   if (profile.model) return profile.model;
   return process.env.AI_MODEL || "Qwen3.8-Flash-Next";
+}
+
+function opencodeHeaders(): Record<string, string> {
+  return { ...(getActiveLlmProfile().headers || {}) };
 }
 
 function opencodeVisionModelId(): string {
@@ -86,6 +95,8 @@ export function listLlmBackends(): LlmBackendPublic[] {
 }
 
 export function resolveLlmBackendId(_raw?: unknown): LlmBackendId {
+  // A missing official key is a configuration error, never a reason to switch providers.
+  if (getActiveLlmProfileId() === OPENAI_OFFICIAL_PROFILE_ID) return "opencode";
   if (opencodeApiKey()) return "opencode";
   return "openrouter";
 }
@@ -95,6 +106,42 @@ export function createLlmBackend(
   options?: { isVision?: boolean }
 ): LlmBackendSession {
   const isVision = Boolean(options?.isVision);
+
+  if (_id !== "openrouter" && getActiveLlmProfileId() === OPENAI_OFFICIAL_PROFILE_ID) {
+    const models = createModels();
+    const modelId = opencodeModelId();
+    const model: Model<"openai-responses"> = {
+      id: modelId,
+      name: modelId,
+      api: "openai-responses",
+      provider: "openai",
+      baseUrl: opencodeBaseUrl(),
+      reasoning: true,
+      input: ["text", "image"],
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+      contextWindow: 256_000,
+      maxTokens: 16_384,
+      headers: opencodeHeaders(),
+    };
+    models.setProvider(
+      createProvider({
+        id: "openai",
+        name: "OpenAI",
+        baseUrl: opencodeBaseUrl(),
+        auth: {
+          apiKey: envApiKeyAuth("OpenAI API key", ["GROWDESK_AI_API_KEY", "OPENAI_API_KEY"]),
+        },
+        models: [model as unknown as Model<"openai-completions">],
+        api: openAIResponsesApi(),
+      })
+    );
+    return {
+      id: "opencode",
+      models,
+      model,
+      getApiKey: () => opencodeApiKey() || undefined,
+    };
+  }
 
   // Opencode / Primary provider
   if (_id === "opencode" || (opencodeApiKey() && _id !== "openrouter")) {
@@ -115,7 +162,7 @@ export function createLlmBackend(
         cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
         contextWindow: 1_048_576,
         maxTokens: 4096,
-        headers: {},
+        headers: opencodeHeaders(),
       };
       models.setProvider(
         createProvider({
@@ -148,7 +195,7 @@ export function createLlmBackend(
       cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
       contextWindow: 1_050_000,
       maxTokens: 4096,
-      headers: {},
+      headers: opencodeHeaders(),
     };
     models.setProvider(
       createProvider({
@@ -217,7 +264,7 @@ export function createOpencodeResponsesBackend(): LlmBackendSession {
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
     contextWindow: 1_048_576,
     maxTokens: 4096,
-    headers: {},
+    headers: opencodeHeaders(),
   };
   models.setProvider(
     createProvider({

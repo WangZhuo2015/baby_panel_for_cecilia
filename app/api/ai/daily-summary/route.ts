@@ -1,3 +1,4 @@
+import { llmRoute } from "@/lib/llm-route";
 import { NextResponse } from "next/server";
 import { requireAuth, requireBaby } from "@/lib/api-helpers";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
@@ -9,10 +10,26 @@ import { loadWebBaby } from "@/lib/growdesk/bridge-identity";
 import { growdeskFetch } from "@/lib/growdesk/client";
 import { BridgeError, bridgeErrorResponse } from "@/lib/growdesk/bridge-protocol";
 import { verifyBffCsrf } from "@/lib/growdesk/csrf";
+import { fetchScheduledDailySummary, type ScheduledDailySummary } from "@/lib/growdesk/scheduled-daily-summary";
 
 export const maxDuration = 120;
 
-export async function GET(request: Request) {
+async function readScheduledSummary(
+  accessToken: string,
+  babyId: string,
+  date: string,
+): Promise<ScheduledDailySummary | null> {
+  try {
+    return await fetchScheduledDailySummary(growdeskFetch, accessToken, babyId, date);
+  } catch (error) {
+    // A secondary summary outage must not hide deterministic stats, but a
+    // rejected session or baby permission remains an authorization failure.
+    if (error instanceof BridgeError && (error.status === 401 || error.status === 403)) throw error;
+    return null;
+  }
+}
+
+async function handleGET(request: Request) {
   try {
     if (GROWDESK_CONFIG.enabled) {
       const bffSession = await resolveBffSession(request);
@@ -41,7 +58,8 @@ export async function GET(request: Request) {
         },
         date
       );
-      return NextResponse.json({ summary }, { headers: { "cache-control": "no-store" } });
+      const scheduledSummary = await readScheduledSummary(bffSession.accessToken, baby.id, date);
+      return NextResponse.json({ summary, scheduledSummary }, { headers: { "cache-control": "no-store" } });
     }
 
     const auth = await requireAuth(request);
@@ -73,7 +91,7 @@ export async function GET(request: Request) {
       date
     );
 
-    return NextResponse.json({ summary }, { headers: { "cache-control": "no-store" } });
+    return NextResponse.json({ summary, scheduledSummary: null }, { headers: { "cache-control": "no-store" } });
   } catch (error: unknown) {
     if (error instanceof BridgeError) return bridgeErrorResponse(error);
     console.error("GET /api/ai/daily-summary error:", error);
@@ -85,7 +103,7 @@ export async function GET(request: Request) {
   }
 }
 
-export async function POST(request: Request) {
+async function handlePOST(request: Request) {
   try {
     if (GROWDESK_CONFIG.enabled) {
       const csrf = verifyBffCsrf(request, { enforceInTest: true });
@@ -161,3 +179,7 @@ export async function POST(request: Request) {
     );
   }
 }
+
+export const GET = llmRoute("daily_summary", handleGET);
+
+export const POST = llmRoute("daily_summary", handlePOST);

@@ -1,3 +1,5 @@
+import { llmFetch, recordLlmModel } from "@/lib/llm-provenance";
+import { getCurrentLlmFeatureScope, hasCurrentLlmConfiguration } from "@/lib/llm-context";
 import { prisma } from "@/lib/prisma";
 import { calculateAge } from "@/lib/age";
 import { AI_CONFIG } from "@/lib/config";
@@ -68,8 +70,11 @@ export async function getAiTips(babyIdOrBaby?: string | any): Promise<string[]> 
   const nickname = baby.nickname || "宝宝";
   const genderWord = baby.gender === "male" ? "男" : "女";
 
-  // If no AI API key is configured, return professional curated pediatric tips directly
-  if (!AI_CONFIG.apiKey) {
+  const chatGPTSelected = getCurrentLlmFeatureScope()?.selection?.source === "chatgpt";
+
+  // Preserve curated tips when no backend is configured; a selected ChatGPT account is a valid backend.
+  if (!hasCurrentLlmConfiguration()) {
+    recordLlmModel(null);
     return getCuratedTips(ageMonths, nickname, genderWord);
   }
 
@@ -90,7 +95,7 @@ export async function getAiTips(babyIdOrBaby?: string | any): Promise<string[]> 
 - 直接返回严格的JSON字符串数组，如：["建议1", "建议2", "建议3"]`;
 
   try {
-    const res = await fetch(`${AI_CONFIG.baseUrl.replace(/\/+$/, "")}/chat/completions`, {
+    const res = await llmFetch(`${AI_CONFIG.baseUrl.replace(/\/+$/, "")}/chat/completions`, {
       method: "POST",
       headers: AI_CONFIG.headers,
       body: JSON.stringify({
@@ -112,6 +117,8 @@ export async function getAiTips(babyIdOrBaby?: string | any): Promise<string[]> 
 
     if (!res.ok) {
       console.warn(`AI API returned status ${res.status}, falling back to curated tips.`);
+      recordLlmModel(null);
+      if (chatGPTSelected) throw new Error("ChatGPT tips model is unavailable");
       return getCuratedTips(ageMonths, nickname, genderWord);
     }
 
@@ -142,9 +149,13 @@ export async function getAiTips(babyIdOrBaby?: string | any): Promise<string[]> 
       return lines.slice(0, 3);
     }
 
+    recordLlmModel(null);
+    if (chatGPTSelected) throw new Error("ChatGPT tips model returned no usable suggestions");
     return getCuratedTips(ageMonths, nickname, genderWord);
   } catch (err) {
     console.warn("AI API call failed, using curated pediatric tips:", err);
+    recordLlmModel(null);
+    if (chatGPTSelected) throw err;
     return getCuratedTips(ageMonths, nickname, genderWord);
   }
 }

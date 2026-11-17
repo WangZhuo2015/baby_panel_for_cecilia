@@ -2,6 +2,7 @@ if (typeof window !== "undefined") {
   throw new Error("This module can only be loaded on the server.");
 }
 import { GROWDESK_CONFIG } from "@/lib/config";
+import { selectAiSettingsBackend } from "./ai-settings-backend";
 import {
   fetchGrowDeskTransport,
   type GrowDeskFetchOptions,
@@ -19,5 +20,5 @@ export async function growdeskFetch<T>(
   pathname: string,
   options: GrowDeskFetchOptions = {},
 ): Promise<GrowDeskResponse<T>> {
-  return fetchGrowDeskTransport<T>(GROWDESK_CONFIG.apiUrl, pathname, options, GROWDESK_CONFIG.timeoutMs);
+  return fetchGrowDeskTransport<T>(selectAiSettingsBackend(pathname, GROWDESK_CONFIG.apiUrl, options), pathname, options, GROWDESK_CONFIG.timeoutMs);
 }

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, TrendingUp, UtensilsCrossed, ShieldCheck, Sparkles } from "lucide-react";
+import { Home, TrendingUp, UtensilsCrossed, ShieldCheck, Sparkles, Settings } from "lucide-react";
 import { openQuickAI } from "@/lib/quickai-bus";
 
 const leftNavItems = [
@@ -13,6 +13,7 @@ const leftNavItems = [
 const rightNavItems = [
   { path: "/food", label: "辅食", icon: UtensilsCrossed },
   { path: "/health/vaccines", label: "健康", icon: ShieldCheck },
+  { path: "/settings", label: "设置", icon: Settings },
 ];
 
 export function BottomNav() {
@@ -24,8 +25,8 @@ export function BottomNav() {
   };
 
   return (
-    <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md workbench:hidden bg-white/95 dark:bg-card/95 backdrop-blur-xl border-t border-primary-soft/40 dark:border-white/10 z-50 pb-[max(8px,env(safe-area-inset-bottom,0px))]">
-      <div className="grid grid-cols-5 items-end justify-items-center px-1 pt-1.5 pb-0.5">
+    <nav aria-label="主导航" className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md workbench:hidden bg-white/95 dark:bg-card/95 backdrop-blur-xl border-t border-primary-soft/40 dark:border-white/10 z-50 pb-[max(8px,env(safe-area-inset-bottom,0px))]">
+      <div className="grid grid-cols-6 items-end justify-items-center px-1 pt-1.5 pb-0.5">
         {/* 左侧导航项 */}
         {leftNavItems.map((item) => {
           const Icon = item.icon;
@@ -35,7 +36,8 @@ export function BottomNav() {
               key={item.path}
               href={item.path}
               prefetch={true}
-              className={`flex flex-col items-center justify-center gap-0.5 w-full py-1 rounded-2xl transition-all duration-200 btn-spring cursor-pointer ${
+              aria-current={active ? "page" : undefined}
+              className={`flex min-w-0 min-h-[44px] flex-col items-center justify-center gap-0.5 w-full py-1 rounded-2xl transition-all duration-200 btn-spring cursor-pointer ${
                 active ? "text-primary font-bold scale-105" : "text-text-muted hover:text-text-secondary"
               }`}
             >
@@ -49,13 +51,13 @@ export function BottomNav() {
           );
         })}
 
-        {/* 中央 AI 入口专属卡位（留足左右间距） */}
-        <div className="relative flex flex-col items-center justify-end w-full py-1">
+        {/* AI 快捷项独占一格；设置入口加入后它不再严格居中。 */}
+        <div className="relative flex min-w-0 min-h-[44px] flex-col items-center justify-end w-full py-1">
           <button
             type="button"
             onClick={() => openQuickAI({ contextTitle: "AI 育儿智能中枢" })}
             aria-label="打开 AI 育儿智能中枢（语音/问答/复盘/识别）"
-            className="absolute -top-5.5 w-[50px] h-[50px] rounded-full bg-gradient-to-br from-primary via-pink-500 to-lavender text-white shadow-button flex items-center justify-center active:scale-90 hover:scale-105 transition-all duration-200 cursor-pointer ring-4 ring-white dark:ring-card animate-pulse-glow-ai group"
+            className="absolute -top-4 w-11 h-11 min-w-[44px] min-h-[44px] rounded-full bg-gradient-to-br from-primary via-pink-500 to-lavender text-white shadow-button flex items-center justify-center active:scale-90 hover:scale-105 transition-all duration-200 cursor-pointer ring-2 ring-white dark:ring-card animate-pulse-glow-ai group"
           >
             <Sparkles size={22} className="drop-shadow transition-transform duration-300 group-hover:rotate-12 group-active:scale-90" />
           </button>
@@ -73,7 +75,8 @@ export function BottomNav() {
               key={item.path}
               href={item.path}
               prefetch={true}
-              className={`flex flex-col items-center justify-center gap-0.5 w-full py-1 rounded-2xl transition-all duration-200 btn-spring cursor-pointer ${
+              aria-current={active ? "page" : undefined}
+              className={`flex min-w-0 min-h-[44px] flex-col items-center justify-center gap-0.5 w-full py-1 rounded-2xl transition-all duration-200 btn-spring cursor-pointer ${
                 active ? "text-primary font-bold scale-105" : "text-text-muted hover:text-text-secondary"
               }`}
             >

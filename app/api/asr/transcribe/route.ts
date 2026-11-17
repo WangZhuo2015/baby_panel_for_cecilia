@@ -107,7 +107,7 @@ export async function POST(request: Request) {
       }
       const finalText = text.slice(0, 4000);
       void archiveText("output_json", finalText).catch(() => {});
-      return NextResponse.json({ text: finalText });
+      return NextResponse.json({ asrModel: process.env.ASR_MODEL || "服务器 ASR（型号未配置）", text: finalText });
     } finally {
       unlink(tmpPath).catch(() => {});
     }

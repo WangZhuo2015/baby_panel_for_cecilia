@@ -1,4 +1,5 @@
 "use client";
+import { LlmModelLabel } from "@/components/ui/LlmModelLabel";
 
 import React, { useCallback, useRef, useState } from "react";
 import { Loader2, Mic, Square, X } from "lucide-react";
@@ -17,6 +18,7 @@ export function VoiceConfirmEntry({ contextType }: VoiceConfirmEntryProps) {
   const [recording, setRecording] = useState(false);
   const [recordingStream, setRecordingStream] = useState<MediaStream | null>(null);
   const [busy, setBusy] = useState<"transcribe" | "parse" | null>(null);
+  const [parseModel, setParseModel] = useState<unknown>(null);
   const [transcript, setTranscript] = useState("");
   const [actions, setActions] = useState<ActionCardData[]>([]);
   const [open, setOpen] = useState(false);
@@ -57,6 +59,7 @@ export function VoiceConfirmEntry({ contextType }: VoiceConfirmEntryProps) {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || "整理失败");
       const list = Array.isArray(data.actions) ? data.actions : [];
+      setParseModel(data.llm);
       setTranscript(text);
       setActions(list);
       setOpen(true);
@@ -166,6 +169,7 @@ export function VoiceConfirmEntry({ contextType }: VoiceConfirmEntryProps) {
             <div className="flex items-start justify-between gap-3 mb-3">
               <div className="min-w-0">
                 <p className="text-sm font-bold text-text-primary">确认后保存</p>
+                <LlmModelLabel info={parseModel} />
                 {transcript && (
                   <p className="text-xs text-text-muted mt-1 leading-relaxed">「{transcript}」</p>
                 )}

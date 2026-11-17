@@ -337,6 +337,22 @@ export const PORTION_LABELS: Record<string, string> = {
 };
 
 /**
+ * 婴幼儿常用辅食基准份量标准克数 (Standard Serving Grams)
+ * 用于当家长输入具体食材进食克数时，精准换算营养素乘数: factor = grams / stdGrams
+ */
+export const STANDARD_SERVING_GRAMS: Record<string, number> = {
+  grain: 20,       // 强化铁婴儿米粉/谷物干粉单次基准约 20g
+  staple: 20,      // 主食 (米粉/粥/面) 基准 20g
+  protein: 25,     // 肉蛋水产泥 (猪牛鸡鱼虾肝) 基准约 25g
+  vegetable: 30,   // 蔬菜泥基准约 30g
+  fruit: 30,       // 水果泥基准约 30g
+  oil: 2,          // 辅食油基准约 2g
+  dairy: 50,       // 酸奶/乳制品基准约 50g
+  optional: 15,    // 配料/加餐
+  other: 25,       // 其他食材默认 25g
+};
+
+/**
  * 食材类别兜底均值 (Category Fallback Nutrients)
  * 当用户自定义录入了食材库中未预置具体单品的数据时，按类别给出安全保守的估算
  */
@@ -466,16 +482,18 @@ const FOOD_ALIAS_MAP: Record<string, string> = {
 };
 
 /**
- * 根据食材标识/名称及进食份量，计算单次摄入的微量与宏量营养素
+ * 根据食材标识/名称及进食份量（或具体克数），计算单次摄入的微量与宏量营养素
  *
  * @param foodNameOrId 食材ID（如 food_egg）或食材名称（如 鸡蛋、胡萝卜泥）
  * @param portion 进食分量：little(少量), half(半碗), most(大部分), all(全部)
  * @param categoryHint 可选的分类提示 (grain, protein, vegetable, fruit, dairy, oil)
+ * @param grams 可选的具体进食克数 (如 20g)，提供时优先按克数精准折算，否则沿用粗略份量乘数
  */
 export function getFoodNutrients(
   foodNameOrId: string,
   portion: string = "most",
-  categoryHint?: string
+  categoryHint?: string,
+  grams?: number
 ): NutrientsMap {
   if (!foodNameOrId || typeof foodNameOrId !== "string") return {};
 
@@ -504,13 +522,18 @@ export function getFoodNutrients(
   }
 
   // 4. 类别兜底
+  const cat = (categoryHint || inferCategory(cleanName)).toLowerCase();
   if (!standardNutrients) {
-    const cat = (categoryHint || inferCategory(cleanName)).toLowerCase();
     standardNutrients = CATEGORY_FALLBACK_NUTRIENTS[cat] || CATEGORY_FALLBACK_NUTRIENTS.other;
   }
 
   // 计算分量乘数
-  const factor = PORTION_MULTIPLIERS[portion] ?? 0.8;
+  let factor = PORTION_MULTIPLIERS[portion] ?? 0.8;
+  if (typeof grams === "number" && grams > 0) {
+    const stdGrams = STANDARD_SERVING_GRAMS[cat] || STANDARD_SERVING_GRAMS.other;
+    factor = Number((grams / stdGrams).toFixed(3));
+  }
+
   const result: NutrientsMap = {};
 
   for (const [key, val] of Object.entries(standardNutrients)) {

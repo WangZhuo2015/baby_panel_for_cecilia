@@ -1,4 +1,5 @@
 "use client";
+import { LlmModelLabel } from "@/components/ui/LlmModelLabel";
 
 import { useState, useRef } from "react";
 import Image from "next/image";
@@ -76,6 +77,7 @@ export function GrowthForm({
 
   const [ocrLoading, setOcrLoading] = useState(false);
   const [ocrElapsed, setOcrElapsed] = useState(0);
+  const [ocrModel, setOcrModel] = useState<unknown>(null);
   const [ocrDone, setOcrDone] = useState(false);
   const [ocrError, setOcrError] = useState<string | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(initialData?.imageUrl || null);
@@ -145,6 +147,7 @@ export function GrowthForm({
       if (data.heightCm != null) setHeight(String(data.heightCm));
       if (data.headCircumferenceCm != null) setHead(String(data.headCircumferenceCm));
       if (data.imageUrl) setUploadedImageUrl(data.imageUrl);
+      setOcrModel(data.llm);
       setOcrDone(true);
       showToast("识别完成！请核对下方数据 ✨");
     } catch (err: any) {
@@ -274,6 +277,7 @@ export function GrowthForm({
                     <p className="text-xs font-medium text-mint mb-2 flex items-center gap-1">
                       <CheckCircle2 size={14} /> 识别完成，请核对下方数据
                     </p>
+                    <LlmModelLabel info={ocrModel} />
                     <div className="flex items-center gap-3">
                       <button
                         type="button"

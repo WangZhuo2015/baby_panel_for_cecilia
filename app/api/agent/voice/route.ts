@@ -1,3 +1,6 @@
+import { withLlmFeature, getCurrentLlmModelInfo, getCurrentLlmFeatureScope } from "@/lib/llm-context";
+import { createChatGPTBackend, ChatGPTPlanError, planErrorMessage } from "@/lib/chatgpt-plan";
+import { actualLlmModel, recordLlmModel, withLlmProvenance } from "@/lib/llm-provenance";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthSession } from "@/lib/auth";
@@ -51,13 +54,15 @@ async function logVoiceInteraction(data: {
   accessToken?: string;
   baby?: any;
 }): Promise<string | null> {
+  const usedModel = actualLlmModel();
+  const storedReply = usedModel ? `${data.reply}\n\n模型：${usedModel.provider} · ${usedModel.model}` : data.reply;
   if (GROWDESK_CONFIG.enabled) {
     if (!data.accessToken) return null;
     try {
       const log = await createGrowDeskVoiceLog(growdeskFetch, data.accessToken, {
         babyId: data.babyId,
         prompt: data.prompt,
-        reply: data.reply,
+        reply: storedReply,
         isAsync: data.isAsync,
         isFastPath: data.isFastPath,
         acknowledged: data.acknowledged,
@@ -74,7 +79,7 @@ async function logVoiceInteraction(data: {
         userId: data.userId,
         babyId: data.babyId,
         prompt: data.prompt,
-        reply: data.reply,
+        reply: storedReply,
         isAsync: data.isAsync,
         isFastPath: data.isFastPath,
         acknowledged: data.acknowledged,
@@ -193,6 +198,7 @@ export async function POST(request: Request) {
     }
 
     const { user, baby } = principal;
+    return await withLlmFeature(user.id, "voice", principal.accessToken, () => withLlmProvenance(async () => {
 
     // Rate limiting
     const ip = getClientIp(request);
@@ -276,6 +282,7 @@ export async function POST(request: Request) {
         async: false,
         fastPath: true,
         reply,
+        llm: actualLlmModel(),
       });
     }
 
@@ -297,7 +304,12 @@ export async function POST(request: Request) {
         ? Boolean(body.asyncPush)
         : process.env.VOICE_ASYNC_PUSH !== "false";
 
-    if (!getTestMockStreamFn() && !createLlmBackend().getApiKey()) {
+    const selection = getCurrentLlmFeatureScope()?.selection;
+    const subscriptionBackend = selection?.source === "chatgpt"
+      ? await createChatGPTBackend(user.id, selection.profileId, selection.modelId)
+      : undefined;
+    const configured = subscriptionBackend ? undefined : createLlmBackend(selection?.source === "api" ? "opencode" : undefined);
+    if (!subscriptionBackend && !getTestMockStreamFn() && !configured?.getApiKey()) {
       return NextResponse.json(
         { success: false, error: "未配置 AI 服务 API Key，无法使用语音助手" },
         { status: 503 }
@@ -318,10 +330,19 @@ export async function POST(request: Request) {
       familyId: principal.familyId || baby.familyId,
     });
 
+    const backendSession = subscriptionBackend ?? {
+      model: configured!.model,
+      streamFn: configured!.models.streamSimple.bind(configured!.models),
+      getApiKey: async () => configured!.getApiKey() || "",
+    };
+
     // 3. Execute agent loop (Sync mode vs Configurable Timeout-Race mode)
     if (timeoutMs <= 0) {
       let assistantFull = "";
       await runBabyAgent({
+        backendSession,
+        llmInfo: getCurrentLlmModelInfo(),
+        onModelUsed: recordLlmModel,
         systemPrompt,
         history: [],
         prompt: rawText,
@@ -342,6 +363,7 @@ export async function POST(request: Request) {
         success: true,
         async: false,
         reply,
+        llm: actualLlmModel(),
       });
     }
 
@@ -354,6 +376,9 @@ export async function POST(request: Request) {
     const agentPromise = (async () => {
       let assistantFull = "";
       await runBabyAgent({
+        backendSession,
+        llmInfo: getCurrentLlmModelInfo(),
+        onModelUsed: recordLlmModel,
         systemPrompt,
         history: [],
         prompt: rawText,
@@ -449,8 +474,13 @@ export async function POST(request: Request) {
       success: true,
       async: false,
       reply,
+      llm: actualLlmModel(),
     });
+    }));
   } catch (error: any) {
+    if (error instanceof ChatGPTPlanError) {
+      return NextResponse.json({ success: false, error: planErrorMessage(error), code: error.code }, { status: 503 });
+    }
     console.error("POST /api/agent/voice error:", error);
     return NextResponse.json(
       { success: false, error: error?.message || "服务器内部错误，请稍后重试" },

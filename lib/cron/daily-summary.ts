@@ -1,3 +1,5 @@
+import { withLlmFeature, type LlmModelInfo } from "@/lib/llm-context";
+import { withLlmProvenance } from "@/lib/llm-provenance";
 /**
  * Daily Summary Scheduled Cron Task Core Logic
  */
@@ -13,6 +15,7 @@ export interface CronDailySummaryResult {
   isAiGenerated: boolean;
   headline: string;
   durationMs: number;
+  llm?: LlmModelInfo | null;
   error?: string;
 }
 
@@ -75,11 +78,11 @@ export async function runDailySummaryCron(options?: {
       const startTime = Date.now();
       try {
         console.log(`[Cron Daily Summary] Generating summary for baby "${babyName}" (${baby.id}) on ${date}...`);
-        const summary = await generateAiDailySummary(
+        const summary = await withLlmFeature(userId, "daily_summary", undefined, () => withLlmProvenance(() => generateAiDailySummary(
           { userId, babyId: baby.id, baby },
           date,
           { forceRefresh: options?.forceRefresh ?? true }
-        );
+        )));
 
         const durationMs = Date.now() - startTime;
         console.log(
@@ -92,6 +95,7 @@ export async function runDailySummaryCron(options?: {
           date,
           isAiGenerated: summary.isAiGenerated,
           headline: summary.headline,
+          llm: summary.llm,
           durationMs,
         });
       } catch (err: any) {

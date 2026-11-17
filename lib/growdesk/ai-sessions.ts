@@ -20,6 +20,7 @@ export interface BffAiChatMessage {
   image?: string | null;
   toolsJson?: string | null;
   createdAt: string;
+  created?: boolean;
 }
 
 export interface BffAiSession {
@@ -248,6 +249,7 @@ class BffAiSessionStore {
       image?: string | null;
       toolsJson?: string | null;
       id?: string;
+      claim?: boolean;
     },
     accessToken?: string
   ): Promise<BffAiChatMessage | null> {
@@ -275,10 +277,19 @@ class BffAiSessionStore {
     if (!session.messages) {
       session.messages = [];
     }
+    if (message.claim) {
+      const existing = session.messages.find((item) => item.id === (message.id || undefined));
+      if (existing) {
+        const matches = existing.role === message.role && existing.content === message.content &&
+          (existing.image || null) === (message.image || null) && (existing.toolsJson || null) === (message.toolsJson || null);
+        if (!matches) throw new BridgeError(409, "MESSAGE_ID_CONFLICT", "Chat message claim conflicts with an existing message");
+        return { ...existing, created: false };
+      }
+    }
     session.messages.push(msg);
     session.updatedAt = msg.createdAt;
     this.persist();
-    return msg;
+    return message.claim ? { ...msg, created: true } : msg;
   }
 
   public clearAllForTest(): void {

@@ -2,6 +2,8 @@
  * OAuth 2.1 Configuration and Constants
  */
 
+import { GROWDESK_CONFIG } from "@/lib/config";
+
 export const OAUTH_SCOPES = {
   BABY_READ: "baby:read",
   BABY_WRITE: "baby:write",
@@ -63,6 +65,25 @@ export const STATIC_OAUTH_CLIENTS = [
  * to ensure public HTTPS domain is reported to Gemini Spark and OAuth clients.
  */
 export function getBaseUrl(request?: Request): string {
+  if (GROWDESK_CONFIG.enabled) {
+    const configured = (
+      process.env.GROWDESK_WEB_ORIGIN ||
+      process.env.NEXT_PUBLIC_APP_URL ||
+      process.env.APP_URL ||
+      ""
+    ).split(",")[0]?.trim();
+    if (!configured) throw new Error("Shared OAuth requires GROWDESK_WEB_ORIGIN or NEXT_PUBLIC_APP_URL");
+    try {
+      const canonical = new URL(configured);
+      if (!["http:", "https:"].includes(canonical.protocol) || canonical.username || canonical.password || canonical.search || canonical.hash) {
+        throw new Error("invalid canonical origin");
+      }
+      return canonical.origin;
+    } catch {
+      throw new Error("Shared OAuth canonical Web origin is invalid");
+    }
+  }
+
   if (request) {
     const forwardedProto = request.headers.get("x-forwarded-proto");
     const forwardedHost = request.headers.get("x-forwarded-host");

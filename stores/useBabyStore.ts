@@ -80,6 +80,7 @@ interface BabyStore {
   warningSigns: DevelopmentWarningSign[];
   activities: ActivityRecommendation[];
   aiTips: string[];
+  aiTipsModel: unknown;
   aiError: string | null;
   fetchUser: () => Promise<User | null>;
   login: (data: { username: string; password: string }) => Promise<void>;

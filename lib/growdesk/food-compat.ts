@@ -16,6 +16,8 @@ export interface LegacyFoodRecord {
   portion?: string | null;
   reaction?: string | null;
   notes?: string | null;
+  components?: unknown;
+  totalGrams?: number;
   acceptance?: number;
   babyState?: string;
   hasAbnormal?: boolean;
@@ -52,7 +54,7 @@ const REACTIONS = ["like", "normal", "dislike"] as const;
 // assume modern Asia/Shanghai (UTC+08:00), never the Node host's timezone.
 const FOOD_FAMILY_TIMEZONE = "Asia/Shanghai";
 const FOOD_FAMILY_UTC_OFFSET = "+08:00";
-const OBSERVATION_KEYS = ["acceptance", "babyState", "hasAbnormal", "abnormalNotes"] as const;
+const OBSERVATION_KEYS = ["acceptance", "babyState", "hasAbnormal", "abnormalNotes", "components", "totalGrams"] as const;
 const OBSERVATION_PREFIX = "[growdesk-web-food:v1]";
 
 // The backend has no observation fields. A versioned JSON notes envelope keeps
@@ -128,7 +130,11 @@ function updateOccurredAt(body: Record<string, unknown>, date: string | undefine
 
 export function toGrowDeskFoodCreatePayload(body: Record<string, unknown>) {
   const date = recordDate(body);
-  const rawFoods = body.foodItemIds !== undefined ? body.foodItemIds : body.foods;
+  const rawFoods = body.foodItemIds !== undefined
+    ? body.foodItemIds
+    : Array.isArray(body.components)
+    ? (body.components as Array<{ name?: string }>).map((c) => c.name || "").filter(Boolean)
+    : body.foods;
   return {
     recordDate: date,
     mealType: inferredMealType(body),
@@ -150,7 +156,14 @@ export function toGrowDeskFoodUpdatePayload(body: Record<string, unknown>, exist
   if (body.mealType !== undefined) payload.mealType = mealType(body.mealType);
   const occurredAt = updateOccurredAt(body, date ?? (typeof body.recordDate === "string" ? body.recordDate : typeof body.date === "string" ? body.date : undefined));
   if (occurredAt !== undefined) payload.occurredAt = occurredAt;
-  if (body.foodItemIds !== undefined || body.foods !== undefined) payload.foodItemIds = foodItemIds(body.foodItemIds !== undefined ? body.foodItemIds : body.foods);
+  if (body.foodItemIds !== undefined || body.foods !== undefined || body.components !== undefined) {
+    const raw = body.foodItemIds !== undefined
+      ? body.foodItemIds
+      : Array.isArray(body.components)
+      ? (body.components as Array<{ name?: string }>).map((c) => c.name || "").filter(Boolean)
+      : body.foods;
+    payload.foodItemIds = foodItemIds(raw);
+  }
   if (body.portionDescription !== undefined || body.portion !== undefined) payload.portionDescription = portion(body.portionDescription !== undefined ? body.portionDescription : body.portion);
   if (body.reaction !== undefined) payload.reaction = reaction(body.reaction);
   if (body.notes !== undefined || OBSERVATION_KEYS.some(key => body[key] !== undefined)) payload.notes = encodeNotes(body, existing?.notes);
