@@ -15,7 +15,7 @@ test("default profile is the official GPT-6 API", async () => {
   const config = fs.readFileSync("lib/config.ts", "utf-8");
   assert.ok(config.includes("getActiveLlmProfile"), "lib/config should resolve the selected LLM profile");
   const profiles = fs.readFileSync("lib/llm-profiles.ts", "utf-8");
-  assert.ok(profiles.includes('"gpt-6-luna"'), "the official profile should default to GPT-6 Luna");
+  assert.ok(profiles.includes('"gpt-6.2-sol"'), "the official profile should default to GPT-6.2 Sol");
   const model = fs.readFileSync("lib/agent/model.ts", "utf-8");
   assert.ok(model.includes("openAIResponsesApi()"), "the official profile should use the Responses API");
 });

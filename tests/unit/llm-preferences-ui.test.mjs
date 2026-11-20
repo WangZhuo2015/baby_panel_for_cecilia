@@ -284,6 +284,9 @@ test('real UI keeps model choices available, persists the latest choice, restore
     await page.waitForFunction(() => document.querySelector('[aria-label=\"ChatGPT 模型\"]')?.options.length >= 2);
     await waitForFlag(() => putLog.filter(item => item.body.feature === 'chat').length >= 3, 'ChatGPT selection after catalog refresh');
     assert.equal(putLog.filter(item => item.body.feature === 'chat').at(-1).body.modelId, 'test_gpt_alpha');
+    const chatEffort = page.getByLabel('AI 聊天推理强度', { exact: true });
+    await chatEffort.locator('..').getByText('ChatGPT 套餐 · test_gpt_alpha', { exact: true }).waitFor();
+    assert.equal(await chatEffort.isDisabled(), true);
     const dailyProfile = page.getByLabel('每日日报 API 配置', { exact: true });
     await dailyProfile.selectOption('test_api_beta');
     const dailySave = featureDetails.getByRole('button', { name: '保存', exact: true }).first();
@@ -322,6 +325,11 @@ test('real UI keeps model choices available, persists the latest choice, restore
         item.vision ? item.label + ' must only offer image-capable GPT models' : item.label + ' must offer text-capable GPT models',
       );
       await modelSelect.selectOption(item.model);
+      if (item.feature === 'daily_summary') {
+        const effort = page.getByLabel('每日日报推理强度', { exact: true });
+        await effort.locator('..').getByText('ChatGPT 套餐 · test_gpt_alpha', { exact: true }).waitFor();
+        assert.equal(await effort.isDisabled(), true, 'choosing a subscription model disables effort before saving');
+      }
       await row.getByRole('button', { name: '保存', exact: true }).click();
       await waitForFlag(() => putLog.some(entry => entry.owner === 'test_user_alpha'
         && entry.body.feature === item.feature && entry.body.source === 'chatgpt' && entry.body.modelId === item.model), item.feature + ' ChatGPT preference save');

@@ -17,6 +17,7 @@ import {
 import { getActiveLlmProfileId, OPENAI_OFFICIAL_PROFILE_ID } from "@/lib/llm-profiles";
 import { createRetryingModelStreamFn } from "@/lib/agent/stream-retry";
 import type { ChatLlmModelInfo } from "@/lib/agent/chat-retry";
+import { getCurrentLlmFeatureScope } from "@/lib/llm-context";
 
 export { getRetryAfterMs, isRateLimitError } from "@/lib/agent/stream-retry";
 
@@ -179,7 +180,7 @@ export async function runBabyAgent(opts: RunBabyAgentOptions): Promise<void> {
       systemPrompt: opts.systemPrompt,
       model,
       tools: opts.tools,
-      thinkingLevel: "low",
+      thinkingLevel: getCurrentLlmFeatureScope()?.effort || "low",
       messages: opts.history,
     },
     streamFn,

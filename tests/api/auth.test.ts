@@ -5,8 +5,9 @@ dotenv.config();
 
 import { prisma } from "../../lib/prisma";
 import { destroyTestTenant } from "../helpers/tenant";
+import { getTestServerUrl } from "../helpers/test-server-url";
 
-const BASE_URL = process.env.BABY_PANEL_URL || "http://127.0.0.1:3089";
+const BASE_URL = getTestServerUrl();
 
 test("API: Authentication Flow (Register, Login, Me, Logout)", async (t) => {
   const stamp = Date.now();

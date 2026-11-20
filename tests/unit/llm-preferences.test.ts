@@ -20,6 +20,7 @@ import { AI_CONFIG } from "../../lib/config";
 import {
   getCurrentLlmCacheKey,
   getCurrentLlmModelInfo,
+  getCurrentLlmFeatureScope,
   withLlmFeature,
 } from "../../lib/llm-context";
 
@@ -29,6 +30,74 @@ const chatSelection: LlmSelection = {
   profileId: "test-profile",
   modelId: "test-model",
 };
+
+test("effort is isolated per feature and owner, preserved on model change, and can be reset", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "baby-effort-preferences-"));
+  const filename = path.join(directory, "preferences.json");
+  try {
+    const store = new FileLlmPreferenceStore(filename);
+    await Promise.all([
+      store.set("test_parent_a", { ...chatSelection, reasoningEffort: "xhigh" }),
+      store.set("test_parent_a", { ...chatSelection, feature: "medical_ocr", reasoningEffort: "medium" }),
+      store.set("test_parent_b", { ...chatSelection, reasoningEffort: "low" }),
+    ]);
+    await store.set("test_parent_a", { ...chatSelection, modelId: "another-test-model" });
+    assert.equal((await store.get("test_parent_a", "chat"))?.reasoningEffort, "xhigh");
+    assert.equal((await store.get("test_parent_a", "medical_ocr"))?.reasoningEffort, "medium");
+    assert.equal((await store.get("test_parent_b", "chat"))?.reasoningEffort, "low");
+    await store.set("test_parent_a", { ...chatSelection, reasoningEffort: null });
+    assert.equal((await store.get("test_parent_a", "chat"))?.reasoningEffort, null);
+    await assert.rejects(store.set("test_parent_a", { ...chatSelection, reasoningEffort: "none" }));
+    await assert.rejects(store.set("test_parent_a", { ...chatSelection, feature: "medical_ocr", reasoningEffort: "max" }));
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+test("GPT effort changes the result cache key without affecting another feature", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "test-effort-cache-"));
+  const keys = ["LLM_PREFERENCES_FILE", "GROWDESK_AI_API_KEY", "GROWDESK_ENABLED", "GROWDESK_API_URL"] as const;
+  const previous = Object.fromEntries(keys.map(key => [key, process.env[key]]));
+  try {
+    process.env.LLM_PREFERENCES_FILE = path.join(directory, "preferences.json");
+    process.env.GROWDESK_AI_API_KEY = "test_fake_key";
+    process.env.GROWDESK_ENABLED = "false";
+    delete process.env.GROWDESK_API_URL;
+    const store = new FileLlmPreferenceStore(process.env.LLM_PREFERENCES_FILE);
+    const selection: LlmSelection = { feature: "chat", source: "api", profileId: "openai-official", modelId: "gpt-6.2-sol", reasoningEffort: "low" };
+    await store.set("test_cache_owner", selection);
+    const low = await withLlmFeature("test_cache_owner", "chat", undefined, getCurrentLlmCacheKey);
+    await store.set("test_cache_owner", { ...selection, reasoningEffort: "high" });
+    const high = await withLlmFeature("test_cache_owner", "chat", undefined, getCurrentLlmCacheKey);
+    assert.notEqual(low, high);
+  } finally {
+    for (const key of keys) { const value = previous[key]; if (value === undefined) delete process.env[key]; else process.env[key] = value; }
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("saved official GPT-6 Luna selections resolve to the updated official default", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "baby-panel-model-upgrade-"));
+  const previous = process.env.LLM_PREFERENCES_FILE;
+  const previousKey = process.env.GROWDESK_AI_API_KEY;
+  const filename = path.join(directory, "preferences.json");
+  try {
+    process.env.LLM_PREFERENCES_FILE = filename;
+    process.env.GROWDESK_AI_API_KEY = "test_fake_key";
+    const store = new FileLlmPreferenceStore(filename);
+    await store.set("test_upgrade", { feature: "chat", source: "api", profileId: "openai-official", modelId: "gpt-6-luna", reasoningEffort: "xhigh" });
+    await store.set("test_upgrade", { feature: "tips", source: "api", profileId: "default", modelId: "test-other" });
+    const selections = await getLlmPreferences("test_upgrade");
+    assert.equal(selections.find(item => item.feature === "chat")?.modelId, "gpt-6.2-sol");
+    assert.equal(await withLlmFeature("test_upgrade", "chat", undefined, () => getCurrentLlmFeatureScope()?.effort), "xhigh");
+    assert.equal(selections.find(item => item.feature === "tips")?.modelId, "test-other");
+    assert.equal((await store.list("test_upgrade")).find(item => item.feature === "chat")?.modelId, "gpt-6-luna");
+  } finally {
+    if (previous === undefined) delete process.env.LLM_PREFERENCES_FILE;
+    else process.env.LLM_PREFERENCES_FILE = previous;
+    if (previousKey === undefined) delete process.env.GROWDESK_AI_API_KEY;
+    else process.env.GROWDESK_AI_API_KEY = previousKey;
+    await rm(directory, { recursive: true, force: true });
+  }
+});
 
 test("legacy preference file survives reopen and concurrent owner/feature writes", async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), "baby-panel-test-llm-preferences-"));
@@ -227,7 +296,7 @@ test("parallel feature scopes pin selected models and isolate cache keys by owne
     assert.equal(medical.model, "test-vision-model");
     assert.equal(medical.visionModel, "test-vision-model");
     assert.equal(medical.info?.model, "test-vision-model");
-    assert.equal(otherOwner.model, "gpt-6-luna");
+    assert.equal(otherOwner.model, "gpt-6.2-sol");
     assert.equal(otherOwner.info?.profileId, "openai-official");
     assert.equal(dailySummary.model, "DeepSeek-V4.1-Flash");
     assert.equal(dailySummary.info?.profileId, "amd-v4.1-flash");

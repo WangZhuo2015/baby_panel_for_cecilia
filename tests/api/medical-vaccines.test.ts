@@ -6,8 +6,9 @@ dotenv.config();
 import { prisma } from "../../lib/prisma";
 import { getLocalDateStr } from "../../lib/date";
 import { createTestTenant, destroyTestTenant } from "../helpers/tenant";
+import { getTestServerUrl } from "../helpers/test-server-url";
 
-const BASE_URL = process.env.BABY_PANEL_URL || "http://127.0.0.1:3089";
+const BASE_URL = getTestServerUrl();
 after(async () => { await prisma.$disconnect(); });
 
 test("API: Medical Reports and Vaccines Domain", async (t) => {

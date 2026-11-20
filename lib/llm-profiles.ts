@@ -1,6 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
 import { AsyncLocalStorage } from "node:async_hooks";
+import { AMD_V41_PROFILE_ID, OPENAI_OFFICIAL_PROFILE_ID } from "@/lib/llm-feature-model";
+
+export { AMD_V41_PROFILE_ID, OPENAI_OFFICIAL_PROFILE_ID } from "@/lib/llm-feature-model";
 
 export interface LlmProfile {
   name?: string;
@@ -43,8 +46,6 @@ function isTestEnvironment(): boolean {
   );
 }
 
-export const OPENAI_OFFICIAL_PROFILE_ID = "openai-official";
-export const AMD_V41_PROFILE_ID = "amd-v4.1-flash";
 const OPENAI_OFFICIAL_BASE = "https://api.openai.com/v1";
 const AMD_V41_BASE = "https://developer.amd.com.cn/radeon/api/v1";
 const MAX_OPENAI_KEY_BYTES = 16_384;
@@ -106,11 +107,11 @@ function getBuiltInProfiles(config: LlmProfilesConfig | null): Array<{ id: strin
     {
       id: OPENAI_OFFICIAL_PROFILE_ID,
       profile: {
-        name: "OpenAI official API · GPT-6 Luna",
+        name: "OpenAI official API · GPT-6.2 Sol",
         baseUrl: OPENAI_OFFICIAL_BASE,
         apiKey: resolveOfficialOpenAiKey(),
-        model: "gpt-6-luna",
-        visionModel: "gpt-6-luna",
+        model: "gpt-6.2-sol",
+        visionModel: "gpt-6.2-sol",
       },
     },
     {

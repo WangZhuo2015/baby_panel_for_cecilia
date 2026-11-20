@@ -16,6 +16,7 @@ export type LlmPreferenceSelection = {
   source: "api" | "chatgpt";
   profileId: string;
   modelId: string;
+  reasoningEffort?: "low" | "medium" | "high" | "xhigh" | "max" | null;
 };
 
 export type LlmProfileMetadata = {
@@ -100,7 +101,11 @@ function normalizeSelection(value: unknown): LlmPreferenceSelection | null {
   const modelId = safeString(value.modelId, 256);
   if (typeof feature !== "string" || !FEATURES.has(feature as LlmPreferenceFeature)
     || (source !== "api" && source !== "chatgpt") || !profileId || !modelId) return null;
-  return { feature: feature as LlmPreferenceFeature, source, profileId, modelId };
+  const reasoningEffort = value.reasoningEffort;
+  return { feature: feature as LlmPreferenceFeature, source, profileId, modelId,
+    ...(["low", "medium", "high", "xhigh", "max"].includes(String(reasoningEffort))
+      ? { reasoningEffort: reasoningEffort as "low" | "medium" | "high" | "xhigh" | "max" } : {}),
+  };
 }
 
 export function normalizeLlmPreferenceSnapshot(value: unknown): LlmPreferenceSnapshot | null {

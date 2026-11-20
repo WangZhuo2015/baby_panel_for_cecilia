@@ -9,13 +9,14 @@ import { transformSync } from "esbuild";
 
 const require = createRequire(import.meta.url);
 let activeProfileId = "test_profile";
+let currentEffort: string | undefined;
 let fetchImpl: typeof fetch = fetch;
 const source = readFileSync(new URL("../../lib/llm-provenance.ts", import.meta.url), "utf8");
 const module = { exports: {} as Record<string, Function> };
 const code = transformSync(source, { loader: "ts", format: "cjs" }).code;
 vm.runInNewContext(code, { module, exports: module.exports, URL, Response, fetch: (...args: Parameters<typeof fetch>) => fetchImpl(...args), require: (id: string) => {
   if (id === "@/lib/chatgpt-plan/task-adapter") return { chatGPTPlanTaskFetch: () => assert.fail("API tasks must not call the ChatGPT adapter") };
-  if (id === "@/lib/llm-context") return { getCurrentLlmFeatureScope: () => undefined, getCurrentLlmModelInfo: () => ({ source: "api", provider: "test_provider", model: "test_alias", profileId: "test_profile" }) };
+  if (id === "@/lib/llm-context") return { getCurrentLlmFeatureScope: () => currentEffort ? { effort: currentEffort } : undefined, getCurrentLlmModelInfo: () => ({ source: "api", provider: "test_provider", model: "test_alias", profileId: "test_profile" }) };
   if (id === "@/lib/llm-profiles") return {
     OPENAI_OFFICIAL_PROFILE_ID: "openai-official",
     getActiveLlmProfileId: () => activeProfileId,
@@ -62,9 +63,11 @@ test("concurrent feature results keep independent provenance and rules clear mod
 test("official GPT-6 direct requests use compatible token limits and sampling defaults", async () => {
   const priorFetch = fetchImpl;
   activeProfileId = "openai-official";
+  currentEffort = "high";
   fetchImpl = async (input, init) => {
     assert.equal(String(input), "https://api.openai.com/v1/chat/completions");
     const body = JSON.parse(String(init?.body));
+    assert.equal(body.reasoning_effort, "high");
     assert.equal(body.model, "gpt-6-luna");
     assert.equal(body.max_completion_tokens, 321);
     assert.equal("max_tokens" in body, false);
@@ -88,5 +91,6 @@ test("official GPT-6 direct requests use compatible token limits and sampling de
   } finally {
     fetchImpl = priorFetch;
     activeProfileId = "test_profile";
+    currentEffort = undefined;
   }
 });

@@ -7,6 +7,7 @@ import { transformSync } from "esbuild";
 import type { ChatGPTPlan } from "../../lib/chatgpt-plan/core.mjs";
 import { ChatGPTPlanError } from "../../lib/chatgpt-plan/core.mjs";
 import { createChatGPTTaskAdapter, type ChatGPTTaskScope } from "../../lib/chatgpt-plan/task-adapter";
+import * as featureModelRules from "../../lib/llm-feature-model";
 
 const require = createRequire(import.meta.url);
 const encoder = new TextEncoder();
@@ -309,6 +310,7 @@ test("llmFetch routes trusted ChatGPT scopes and keeps ChatGPT provenance", asyn
           },
         };
       }
+      if (id === "@/lib/llm-profiles") return {};
       if (id.startsWith("node:")) return require(id);
       throw new Error("Unexpected dependency: " + id);
     },
@@ -376,6 +378,7 @@ test("ChatGPT selection accepts text features, requires image capability for vis
           resolveLlmProfileModel: () => "test_api_model",
         };
       }
+      if (id === "@/lib/llm-feature-model") return featureModelRules;
       if (id === "@/lib/chatgpt-plan") return { getChatGPTPlan: () => plan };
       if (id === "@/lib/growdesk/client") return { growdeskFetch: async () => ({}) };
       if (id === "@/lib/growdesk/bridge-protocol") return { requireData: (value: unknown) => value };

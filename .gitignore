@@ -28,6 +28,7 @@ node_modules/
 .next/
 generated/
 .env
+.env.bak*
 llm-profiles.json
 prisma/*.db*
 .playwright-mcp/

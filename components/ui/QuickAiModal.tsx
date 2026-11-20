@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useLayoutEffect, useEffectEvent, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -482,6 +482,7 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
 }) => {
   const router = useRouter();
   const baby = useBabyStore((s) => s.baby);
+  const babyId = baby?.id;
   const age = baby ? calculateAge(baby.birthDate) : { months: 0, days: 0, label: "0月0天" };
 
   const [activeTab, setActiveTab] = useState<AiHubTab>("chat");
@@ -493,13 +494,14 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
   const [messages, setMessages] = useState<Message[]>([]);
   const { showToast } = useToast();
 
-  const [keyboardInset, setKeyboardInset] = useState(0);
+  const [viewport, setViewport] = useState<{ top: number; height: number; compact: boolean } | null>(null);
   useEffect(() => {
     const vv = window.visualViewport;
-    if (!vv) return;
+    if (!isOpen || !vv) return;
     const update = () => {
-      const inset = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
-      setKeyboardInset(inset > 120 ? inset : 0);
+      const compact = window.matchMedia("(pointer: coarse)").matches &&
+        window.innerHeight - vv.height > 100;
+      setViewport({ top: vv.offsetTop, height: vv.height, compact });
     };
     update();
     vv.addEventListener("resize", update);
@@ -510,7 +512,7 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
       vv.removeEventListener("scroll", update);
       window.removeEventListener("orientationchange", update);
     };
-  }, []);
+  }, [isOpen]);
 
   const [inputText, setInputText] = useState("");
   const [selectedImages, setSelectedImages] = useState<string[]>([]);
@@ -528,6 +530,7 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
   const [historyFilter, setHistoryFilter] = useState<"all" | "current">("all");
   const [sessionList, setSessionList] = useState<SessionSummary[]>([]);
   const [loadingSessions, setLoadingSessions] = useState(false);
+  const sessionListScopeRef = useRef<{ babyId: string | undefined; request?: AbortController } | null>(null);
 
   const [dailySummaryData, setDailySummaryData] = useState<AiDailySummaryResult | null>(null);
   const [loadingDailySummary, setLoadingDailySummary] = useState(false);
@@ -556,21 +559,43 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
   }, [activeTab, dailySummaryData, fetchDailySummaryInline]);
 
   const fetchSessions = useCallback(async () => {
+    const scope = sessionListScopeRef.current;
+    if (!scope || scope.babyId !== babyId) return;
+
+    scope.request?.abort();
+    const controller = new AbortController();
+    scope.request = controller;
     setLoadingSessions(true);
     try {
       const query = new URLSearchParams({ limit: "50" });
-      if (baby?.id) query.set("babyId", baby.id);
-      const res = await fetch(`/api/ai/sessions?${query.toString()}`);
+      if (babyId) query.set("babyId", babyId);
+      const res = await fetch(`/api/ai/sessions?${query.toString()}`, { signal: controller.signal });
       if (res.ok) {
         const data = await res.json();
-        setSessionList(data.sessions || []);
+        if (!controller.signal.aborted) setSessionList(data.sessions || []);
       }
     } catch {
       // ignore
     } finally {
-      setLoadingSessions(false);
+      if (!controller.signal.aborted) {
+        scope.request = undefined;
+        setLoadingSessions(false);
+      }
     }
-  }, [baby?.id]);
+  }, [babyId]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const scope: NonNullable<typeof sessionListScopeRef.current> = { babyId };
+    sessionListScopeRef.current = scope;
+    setSessionList([]);
+    void fetchSessions();
+    return () => {
+      sessionListScopeRef.current = null;
+      scope.request?.abort();
+    };
+  }, [isOpen, babyId, fetchSessions]);
 
   const loadSessionDetail = async (targetId: string) => {
     const summary = sessionList.find((session) => session.id === targetId);
@@ -660,7 +685,9 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
     setMessages([welcome]);
     setShowHistory(false);
     setActiveTab("chat");
-    setTimeout(() => inputRef.current?.focus(), 150);
+    if (window.matchMedia("(pointer: fine)").matches) {
+      setTimeout(() => inputRef.current?.focus({ preventScroll: true }), 150);
+    }
   };
 
   const handleDeleteSession = async (e: React.MouseEvent, targetId: string) => {
@@ -680,7 +707,7 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
     }
   };
 
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messageListRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const visionInputRef = useRef<HTMLInputElement>(null);
@@ -766,7 +793,8 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
   loadingRef.current = loading;
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    const list = messageListRef.current;
+    list?.scrollTo({ top: list.scrollHeight, behavior: "smooth" });
   };
 
   const executeChatTurn = useCallback(async (input: {
@@ -1179,49 +1207,54 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
     babyId: baby?.id ?? null,
   });
 
-  useEffect(() => {
-    if (isOpen) {
-      const previousScope = prevScopeRef.current;
-      const isScopeChanged =
-        previousScope.contextType !== initialContextType ||
-        previousScope.babyId !== (baby?.id ?? null);
-      prevScopeRef.current = {
-        contextType: initialContextType,
-        babyId: baby?.id ?? null,
-      };
+  const initializeConversation = useEffectEvent(() => {
+    const previousScope = prevScopeRef.current;
+    const isScopeChanged =
+      previousScope.contextType !== initialContextType ||
+      previousScope.babyId !== (babyId ?? null);
+    prevScopeRef.current = {
+      contextType: initialContextType,
+      babyId: babyId ?? null,
+    };
 
-      if (isScopeChanged) {
-        setSessionId(null);
-        sessionIdRef.current = null;
-        setSessionTitle(null);
-        setSelectedImages([]);
-        setCurrentContextType(initialContextType || "general");
-      }
-
-      fetchSessions();
-
-      if (sessionIdRef.current && !isScopeChanged) {
-        syncSessionState(sessionIdRef.current);
-      }
-
-      if (messagesRef.current.length === 0 || isScopeChanged) {
-        const welcome: Message = {
-          id: "welcome",
-          role: "assistant",
-          content: `你好！我是 **${baby?.nickname || "宝宝"}**（${age.label}）的专属 **${displayTitle}** ✨\n\n你可以一句话快捷录入（如“刚才喂了120ml奶”）、拍照上传单据，或选择上方【专科题库】与【今日复盘】深度了解宝宝状态：`,
-          timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-        };
-        setMessages([welcome]);
-
-        if (initialPrompt) {
-          handleSend(initialPrompt);
-        }
-      }
-      setTimeout(() => inputRef.current?.focus(), 150);
-    } else {
-      useBabyStore.getState().refreshAll().catch(() => {});
+    if (isScopeChanged) {
+      setSessionId(null);
+      sessionIdRef.current = null;
+      setSessionTitle(null);
+      setSelectedImages([]);
+      setCurrentContextType(initialContextType || "general");
     }
-  }, [isOpen, initialContextType, initialPrompt, displayTitle, baby?.id, baby?.nickname, age.label, handleSend, fetchSessions, syncSessionState]);
+
+    if (sessionIdRef.current && !isScopeChanged) {
+      syncSessionState(sessionIdRef.current);
+    }
+
+    if (messagesRef.current.length === 0 || isScopeChanged) {
+      const welcome: Message = {
+        id: "welcome",
+        role: "assistant",
+        content: `你好！我是 **${baby?.nickname || "宝宝"}**（${age.label}）的专属 **${displayTitle}** ✨\n\n你可以一句话快捷录入（如“刚才喂了120ml奶”）、拍照上传单据，或选择上方【专科题库】与【今日复盘】深度了解宝宝状态：`,
+        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      };
+      setMessages([welcome]);
+
+      if (initialPrompt) {
+        handleSend(initialPrompt, undefined, initialContextType);
+      }
+    }
+  });
+
+  useEffect(() => {
+    if (!isOpen) {
+      useBabyStore.getState().refreshAll().catch(() => {});
+      return;
+    }
+
+    initializeConversation();
+    if (!window.matchMedia("(pointer: fine)").matches) return;
+    const focusTimeout = setTimeout(() => inputRef.current?.focus({ preventScroll: true }), 150);
+    return () => clearTimeout(focusTimeout);
+  }, [isOpen, initialContextType, babyId]);
 
   useEffect(() => {
     if (!isOpen && abortControllerRef.current) {
@@ -1341,26 +1374,57 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
     setMounted(true);
   }, []);
 
+  useLayoutEffect(() => {
+    if (!isOpen || !mounted) return;
+    const mobile = window.matchMedia("(pointer: coarse), (max-width: 639px)");
+    const body = document.body;
+    let savedScroll: { top: number; left: number } | undefined;
+    const unlock = () => {
+      if (!savedScroll) return;
+      body.classList.remove("quick-ai-scroll-locked");
+      window.scrollTo({ ...savedScroll, behavior: "instant" });
+      savedScroll = undefined;
+    };
+    const sync = () => {
+      if (!mobile.matches) return unlock();
+      if (savedScroll) return;
+      savedScroll = { top: window.scrollY, left: window.scrollX };
+      body.classList.add("quick-ai-scroll-locked");
+    };
+    sync();
+    mobile.addEventListener("change", sync);
+    return () => {
+      mobile.removeEventListener("change", sync);
+      unlock();
+    };
+  }, [isOpen, mounted]);
+
   if (!isOpen || !mounted) return null;
 
   const modalContent = (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="quick-ai-title"
-      className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in"
-    >
-      {/* Backdrop */}
+    <div className="quick-ai-overlay fixed inset-0 z-[100] animate-fade-in">
       <div
-        className="absolute inset-0 bg-slate-950/45 backdrop-blur-xs transition-opacity duration-200"
+        aria-hidden="true"
+        className="absolute inset-0 bg-card sm:bg-slate-950/45 sm:backdrop-blur-xs pointer-coarse:bg-card"
         onClick={onClose}
       />
-
+      {viewport && (
+        <div
+          aria-hidden="true"
+          className="absolute inset-x-0 bottom-0 bg-card"
+          style={{ top: viewport.top + viewport.height }}
+        />
+      )}
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="quick-ai-title"
+        style={viewport ? { top: viewport.top, height: viewport.height, bottom: "auto" } : undefined}
+        className="pointer-events-none absolute inset-0 flex items-end justify-center sm:items-center sm:p-4"
+      >
       {/* Drawer Container (Mobile: iOS-style bottom drawer sheet; Desktop: smooth rising sheet) */}
-      <div className="relative w-full max-w-full sm:max-w-4xl lg:max-w-5xl bg-card h-[92vh] sm:h-[740px] lg:h-[800px] max-h-[92vh] rounded-t-[28px] sm:rounded-[28px] shadow-2xl overflow-hidden flex flex-col sm:flex-row border-t sm:border border-primary/20 animate-drawer-bottom z-10">
+      <div className="pointer-events-auto relative w-full max-w-full sm:max-w-4xl lg:max-w-5xl bg-card h-full sm:h-[740px] lg:h-[800px] max-h-full sm:rounded-[28px] shadow-2xl overflow-hidden flex flex-col sm:flex-row border-t sm:border border-primary/20 animate-drawer-bottom z-10">
         
-        {/* Mobile Drawer Grab Handle */}
-        <div className="w-12 h-1.5 rounded-full bg-primary/25 dark:bg-white/20 mx-auto mt-2.5 mb-1 sm:hidden shrink-0" />
 
         {/* ===== Desktop/iPad History Sidebar ===== */}
         <div className="w-60 lg:w-72 border-r border-primary/10 hidden md:flex flex-col bg-white/50 dark:bg-card/50 shrink-0 select-none">
@@ -1369,7 +1433,7 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
               <div className="w-7 h-7 rounded-xl bg-primary-soft/50 text-primary flex items-center justify-center">
                 <History size={15} />
               </div>
-              <span className="font-bold text-xs sm:text-sm text-text-primary">历史对话</span>
+              <span className="font-bold text-xs sm:text-sm text-text-primary">聊天记录</span>
             </div>
             <button
               type="button"
@@ -1489,7 +1553,7 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
         </div>
 
         {/* ===== Right Main Area with Unified Tabs ===== */}
-        <div className="flex-1 flex flex-col min-w-0 h-full relative">
+        <div className="flex-1 flex flex-col min-h-0 min-w-0 h-full relative">
           
           {/* 1. Header with Unified Hub Tab Navigation */}
           <div className="px-4 py-2.5 pt-[max(12px,env(safe-area-inset-top))] bg-white/95 dark:bg-card/95 backdrop-blur-md border-b border-primary/10 shrink-0 space-y-2">
@@ -1499,11 +1563,11 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
                   <Sparkles size={16} />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-1.5">
-                    <h3 id="quick-ai-title" className="font-bold text-text-primary text-sm sm:text-base truncate">
+                  <div className="flex min-w-0 flex-col items-start gap-0.5 sm:flex-row sm:items-center sm:gap-1.5">
+                    <h3 id="quick-ai-title" className="max-w-full font-bold text-text-primary text-sm sm:text-base truncate">
                       AI 育儿智能中枢
                     </h3>
-                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary-soft/50 text-primary font-bold">
+                    <span className="max-w-full truncate text-[10px] px-1.5 py-0.5 rounded-full bg-primary-soft/50 text-primary font-bold">
                       {baby?.nickname || "宝宝"}·{age.label}
                     </span>
                   </div>
@@ -1517,11 +1581,11 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
                     setShowHistory(true);
                     fetchSessions();
                   }}
-                  className="md:hidden w-8 h-8 rounded-full bg-primary-soft/40 hover:bg-primary-soft text-text-muted hover:text-primary flex items-center justify-center transition-colors cursor-pointer btn-press"
-                  title="历史对话记录"
-                  aria-label="历史对话记录"
+                  className="md:hidden inline-flex min-h-11 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl border border-primary/35 bg-primary-light px-3 text-sm font-bold text-text-primary shadow-xs hover:border-primary cursor-pointer btn-press"
+                  aria-expanded={showHistory}
                 >
-                  <History size={16} />
+                  <History size={16} aria-hidden="true" />
+                  聊天记录
                 </button>
                 <button
                   type="button"
@@ -1544,7 +1608,7 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
             </div>
 
             {/* Hub Navigation Tabs Bar */}
-            <div className="flex items-center gap-1.5 p-1 bg-primary-light/40 dark:bg-card/70 rounded-2xl border border-primary/15 overflow-x-auto scrollbar-hide">
+            <div className={viewport?.compact && activeTab === "chat" ? "hidden" : "flex items-center gap-1.5 p-1 bg-primary-light/40 dark:bg-card/70 rounded-2xl border border-primary/15 overflow-x-auto scrollbar-hide"}>
               <button
                 type="button"
                 onClick={() => setActiveTab("chat")}
@@ -1603,13 +1667,14 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
+                    aria-label="返回对话"
                     onClick={() => setShowHistory(false)}
                     className="w-8 h-8 rounded-full bg-primary-soft/40 hover:bg-primary-soft text-text-muted hover:text-text-primary flex items-center justify-center transition-colors cursor-pointer"
                   >
                     <ChevronLeft size={18} />
                   </button>
                   <div>
-                    <h3 className="font-bold text-text-primary text-sm sm:text-base">历史对话记录</h3>
+                    <h3 className="font-bold text-text-primary text-sm sm:text-base">聊天记录</h3>
                     <p className="text-[11px] text-text-muted">随时查看与续聊</p>
                   </div>
                 </div>
@@ -1694,7 +1759,7 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
               </div>
 
               {/* Message Scroll Area */}
-              <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4 bg-gradient-to-b from-transparent to-primary-light/10">
+              <div ref={messageListRef} className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4 bg-gradient-to-b from-transparent to-primary-light/10">
                 {messages.map((m, mIdx) => {
                   const isUser = m.role === "user";
                   const isThinking =
@@ -1962,23 +2027,15 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
                   );
                 })}
 
-                <div ref={messagesEndRef} />
               </div>
 
               {/* Bottom Input Area */}
               <div
                 className="p-3 pb-[max(14px,env(safe-area-inset-bottom))] relative bg-card border-t border-primary/15 flex flex-col gap-2 shrink-0 z-30"
-                style={{
-                  transform: keyboardInset > 0 ? `translateY(-${keyboardInset}px)` : undefined,
-                  paddingBottom: keyboardInset > 0 ? 12 : undefined,
-                  transition: "transform 0.15s ease-out",
-                }}
               >
-                {keyboardInset > 0 && (
-                  <div aria-hidden className="absolute left-0 right-0 top-full h-[40vh] bg-card pointer-events-none" />
-                )}
-                
-                <ChatGPTPlanControls presentation="compact" disabled={loading} onReadinessChange={setChatReadiness} onClose={onClose} />
+                <div className={viewport?.compact && chatReadiness.ready ? "hidden" : "contents"}>
+                  <ChatGPTPlanControls presentation="compact" disabled={loading} onReadinessChange={setChatReadiness} onClose={onClose} />
+                </div>
                 {selectedImages.length > 0 && (
                   <div className="flex items-center gap-2 overflow-x-auto py-1 px-1 max-w-full animate-fade-in no-scrollbar">
                     <span className="text-[11px] font-bold text-primary px-2.5 py-1.5 rounded-xl bg-primary-light/60 shrink-0 flex items-center gap-1.5 border border-primary/20">
@@ -2084,7 +2141,7 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
                       onChange={(e) => setInputText(e.target.value)}
                       placeholder={selectedImages.length > 0 ? `已附加 ${selectedImages.length} 张图片，可输入说明或直接发送...` : meta.placeholder}
                       disabled={loading || !chatReadiness.ready}
-                      className="flex-1 px-4 py-2.5 bg-slate-50/90 hover:bg-white focus:bg-white dark:bg-card rounded-2xl text-xs sm:text-sm text-text-primary font-medium border-2 border-primary/20 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all placeholder:text-text-muted/70 shadow-2xs"
+                      className="min-w-0 flex-1 px-4 py-2.5 bg-slate-50/90 hover:bg-white focus:bg-white dark:bg-card rounded-2xl text-base pointer-fine:sm:text-sm text-text-primary font-medium border-2 border-primary/20 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all placeholder:text-text-muted/70 shadow-2xs"
                     />
 
                     {loading ? (
@@ -2466,6 +2523,7 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
           )}
 
         </div>
+      </div>
       </div>
     </div>
   );

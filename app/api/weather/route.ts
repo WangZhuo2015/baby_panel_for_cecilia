@@ -1,6 +1,6 @@
 import { GROWDESK_CONFIG } from "@/lib/config";
 import { growdeskFetch } from "@/lib/growdesk/client";
-import { requireData, bridgeErrorResponse } from "@/lib/growdesk/bridge-protocol";
+import { BridgeError, requireData, bridgeErrorResponse } from "@/lib/growdesk/bridge-protocol";
 import { NextResponse } from "next/server";
 
 // Default coordinates (Suzhou)
@@ -52,13 +52,32 @@ function getAirQualityLevel(aqi: number): string {
   return "重度污染";
 }
 
+async function fetchAirQuality(url: string): Promise<number | null> {
+  try {
+    const response = await fetch(url, { next: { revalidate: 600 } });
+    if (!response.ok) return null;
+
+    const data = await response.json();
+    const aqi = data?.current?.european_aqi;
+    return typeof aqi === "number" && Number.isFinite(aqi) && aqi >= 0 ? aqi : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function GET(request: Request) {
+  const { search, searchParams } = new URL(request.url);
   if (GROWDESK_CONFIG.enabled) {
-    try { return Response.json(requireData(await growdeskFetch(`/api/v1/weather${new URL(request.url).search}`, { timeoutMs: 15000 }))); }
-    catch (error) { return bridgeErrorResponse(error); }
+    try {
+      return Response.json(requireData(await growdeskFetch(`/api/v1/weather${search}`, { timeoutMs: 15000 })));
+    } catch (error) {
+      if (!(error instanceof BridgeError && error.status === 404 && error.code === "NOT_FOUND")) {
+        return bridgeErrorResponse(error);
+      }
+      // Older GrowDesk backends do not expose the weather route.
+    }
   }
   try {
-    const { searchParams } = new URL(request.url);
     const latParam = parseFloat(searchParams.get("lat") ?? "");
     const lonParam = parseFloat(searchParams.get("lon") ?? "");
     const cityParam = searchParams.get("city");
@@ -71,9 +90,9 @@ export async function GET(request: Request) {
     const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,weather_code&hourly=temperature_2m,weather_code&daily=uv_index_max,precipitation_probability_max&timezone=Asia%2FShanghai&forecast_days=1`;
     const airUrl = `https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${lat}&longitude=${lon}&current=european_aqi&timezone=Asia%2FShanghai`;
 
-    const [weatherRes, airRes] = await Promise.all([
+    const [weatherRes, airQuality] = await Promise.all([
       fetch(weatherUrl, { next: { revalidate: 600 } }), // cache 10 min
-      fetch(airUrl, { next: { revalidate: 600 } }),
+      fetchAirQuality(airUrl),
     ]);
 
     if (!weatherRes.ok) {
@@ -81,7 +100,6 @@ export async function GET(request: Request) {
     }
 
     const weatherData = await weatherRes.json();
-    const airData = airRes.ok ? await airRes.json() : {};
     if (!weatherData.current || !weatherData.daily || !weatherData.hourly) {
       throw new Error("Open-Meteo response is missing current/daily/hourly data");
     }
@@ -89,8 +107,6 @@ export async function GET(request: Request) {
     const current = weatherData.current;
     const daily = weatherData.daily;
     const hourly = weatherData.hourly;
-    const airQuality = airData.current?.european_aqi ?? 0;
-
     const weatherInfo = WMO_CODE_MAP[current.weather_code] ?? { condition: "多云", icon: "⛅" };
     const uv = Math.round(daily.uv_index_max?.[0] ?? 0);
     const rainProb = daily.precipitation_probability_max?.[0] ?? 0;
@@ -125,7 +141,7 @@ export async function GET(request: Request) {
       uv,
       rainProbability: rainProb,
       humidity: current.relative_humidity_2m,
-      airQuality: getAirQualityLevel(airQuality),
+      airQuality: airQuality === null ? "暂无数据" : getAirQualityLevel(airQuality),
       outdoorAdvice: getOutdoorAdvice(current.weather_code, current.temperature_2m, uv, rainProb),
       hourlyForecast,
     });

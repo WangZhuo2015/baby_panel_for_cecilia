@@ -22,12 +22,13 @@ const browserEntry = `
 
   function ChatCallerHarness() {
     const [isOpen, setIsOpen] = useState(true);
+    const [, setReadiness] = useState(null);
     return isOpen
       ? <div role="dialog" aria-label="测试对话弹窗">
           <ChatGPTPlanControls
             presentation="compact"
             disabled={false}
-            onReadinessChange={() => {}}
+            onReadinessChange={value => { window.__testReadinessCalls = (window.__testReadinessCalls || 0) + 1; setReadiness(value); }}
             onClose={() => { sessionStorage.setItem('test-quick-ai-closed', 'true'); setIsOpen(false); }}
           />
         </div>
@@ -215,6 +216,7 @@ test('compact chat settings show only current model and direct settings link, an
   if (await compact.count() === 0) throw new Error(`compact controls did not render; body=${(await page.locator('body').innerText()).slice(0, 800)}; errors=${pageErrors.join(' | ')}`);
   await compact.getByRole('status', { name: '当前聊天模型' }).waitFor({ timeout: 5000 });
   await page.getByText(/当前模型：Test API Settings · test-settings-text/).waitFor();
+  assert.ok(await page.evaluate(() => window.__testReadinessCalls < 20), 'readiness updates settle instead of repeatedly rerendering the chat');
   assert.equal(await compact.locator('select, details, summary').count(), 0, 'compact mode contains no editors or expandable controls');
   for (const feature of ['每日日报', '育儿建议', '记录解析', '营养识别', '生长记录 OCR', '医疗单据 OCR', '语音记录整理']) {
     assert.equal(await compact.getByText(feature, { exact: true }).count(), 0, `${feature} is hidden from compact chat controls`);
