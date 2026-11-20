@@ -90,13 +90,16 @@ test("TDD: push/subscribe must check ownership", () => {
   assert.ok(content.includes("已归属其他用户"), "should have ownership error");
 });
 
-// ── TDD: .dockerignore must contain data/archive and db-wal ──
-test("TDD: .dockerignore protects sensitive paths", () => {
-  const content = fs.readFileSync(path.join(process.cwd(), ".dockerignore"), "utf-8");
-  assert.ok(content.includes("data/archive/"), ".dockerignore should ignore data/archive");
-  assert.ok(content.includes("*.db-wal"), "should ignore wal");
-  assert.ok(content.includes("*.db-shm"), "should ignore shm");
-  assert.ok(content.includes("generated/"), "should ignore generated");
+test("Docker build context excludes runtime data and allows only reference datasets under data", () => {
+  const rules = fs.readFileSync(path.join(process.cwd(), ".dockerignore"), "utf8").split(/\r?\n/);
+  for (const rule of ["data/*", "**/*.db*", "public/uploads/", "generated/"]) {
+    assert.ok(rules.includes(rule), `Missing exclusion: ${rule}`);
+  }
+  const exceptions = rules.filter(rule => rule.startsWith("!data/"));
+  assert.deepEqual(exceptions.sort(), [
+    "!data/01_sources.json", "!data/02_vaccines.json", "!data/03_milestones.json",
+    "!data/04_foods.json", "!data/05_books.json", "!data/06_activities.json",
+  ]);
 });
 
 // ── TDD: Dockerfile must have wget and correct seed-data copy ──
