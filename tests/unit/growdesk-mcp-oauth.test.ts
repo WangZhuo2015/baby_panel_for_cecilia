@@ -303,6 +303,7 @@ test("Issue #5: GrowDesk MCP, OAuth 2.1 & Personal Access Tokens Matrix", async 
     const verified = await verifyMcpAccessToken("test_bound_audience");
     assert.equal(verified.userId, userId);
     assert.equal(verified.babyId, babyId);
+    assert.ok(verified.baby);
     assert.equal(verified.baby.familyId, familyId);
     assert.deepEqual(verified.scopes, new Set([scope]));
     await assert.rejects(verifyMcpAccessToken("test_inconsistent_principal"), isOAuthError("invalid_token", 401));
