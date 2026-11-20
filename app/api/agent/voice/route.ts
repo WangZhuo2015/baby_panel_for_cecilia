@@ -1,4 +1,5 @@
 import { withLlmFeature, getCurrentLlmModelInfo, getCurrentLlmFeatureScope } from "@/lib/llm-context";
+import { LlmPreferenceError } from "@/lib/llm-preferences";
 import { createChatGPTBackend, ChatGPTPlanError, planErrorMessage } from "@/lib/chatgpt-plan";
 import { actualLlmModel, recordLlmModel, withLlmProvenance } from "@/lib/llm-provenance";
 import { NextResponse } from "next/server";
@@ -202,7 +203,6 @@ export async function POST(request: Request) {
     }
 
     const { user, baby } = principal;
-    return await withLlmFeature(user.id, "voice", principal.accessToken, () => withLlmProvenance(async () => {
 
     // Rate limiting
     const ip = getClientIp(request);
@@ -298,10 +298,11 @@ export async function POST(request: Request) {
         async: false,
         fastPath: true,
         reply,
-        llm: actualLlmModel(),
+        llm: null,
       });
     }
 
+    return await withLlmFeature(user.id, "voice", principal.accessToken, () => withLlmProvenance(async () => {
     // Timeout configuration:
     // - Default: 13500ms (13.5s, allowing a safety buffer before iOS Shortcuts 15s client timeout)
     // - Can be configured globally via process.env.VOICE_TIMEOUT_MS (e.g. 15000)
@@ -321,11 +322,12 @@ export async function POST(request: Request) {
         : process.env.VOICE_ASYNC_PUSH !== "false";
 
     const selection = getCurrentLlmFeatureScope()?.selection;
-    const subscriptionBackend = selection?.source === "chatgpt"
+    const mockStream = getTestMockStreamFn();
+    const subscriptionBackend = !mockStream && selection?.source === "chatgpt"
       ? await createChatGPTBackend(user.id, selection.profileId, selection.modelId)
       : undefined;
-    const configured = subscriptionBackend ? undefined : createLlmBackend(selection?.source === "api" ? "opencode" : undefined);
-    if (!subscriptionBackend && !getTestMockStreamFn() && !configured?.getApiKey()) {
+    const configured = subscriptionBackend || mockStream ? undefined : createLlmBackend(selection?.source === "api" ? "opencode" : undefined);
+    if (!subscriptionBackend && !mockStream && !configured?.getApiKey()) {
       return NextResponse.json(
         {
           success: false,
@@ -350,11 +352,11 @@ export async function POST(request: Request) {
       familyId: principal.familyId || baby.familyId,
     });
 
-    const backendSession = subscriptionBackend ?? {
-      model: configured!.model,
-      streamFn: configured!.models.streamSimple.bind(configured!.models),
-      getApiKey: async () => configured!.getApiKey() || "",
-    };
+    const backendSession = subscriptionBackend ?? (configured && {
+      model: configured.model,
+      streamFn: configured.models.streamSimple.bind(configured.models),
+      getApiKey: async () => configured.getApiKey() || "",
+    });
     // Helper for query fallback
     const isLikelyQuery = /(?:查|看|几|多少|多久|多长|什么时候|情况|记录|作息|汇总|总结|概况|吗|呢)/.test(rawText);
 
@@ -507,6 +509,14 @@ export async function POST(request: Request) {
     });
     }));
   } catch (error: any) {
+    if (error instanceof LlmPreferenceError && error.code === "llm_profile_unavailable") {
+      return NextResponse.json({
+        success: false,
+        error: "所选 AI 服务配置不可用",
+        code: error.code,
+        reply: "抱歉，当前 AI 助手服务不可用，请检查系统设置。",
+      }, { status: 503 });
+    }
     if (error instanceof ChatGPTPlanError) {
       return NextResponse.json({ success: false, error: planErrorMessage(error), code: error.code }, { status: 503 });
     }
