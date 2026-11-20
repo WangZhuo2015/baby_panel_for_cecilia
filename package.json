@@ -16,11 +16,11 @@
     "test": "npm run test:unit && npm run test:ai",
     "pretest:unit": "DATABASE_URL=\"file:./dev_test.db\" prisma migrate deploy",
     "test:unit": "tsx --env-file=.env.test --test --test-concurrency=1 tests/unit/*.test.ts lib/date.test.ts lib/vaccine.test.ts lib/nutrition/engine.test.ts",
-    "test:api": "tsx --env-file=.env.test --test tests/api/*.test.ts",
+    "test:api": "bash scripts/test-api.sh",
     "test:api:server": "bash scripts/test-api.sh",
     "test:e2e": "bash scripts/test-e2e.sh",
     "test:ai": "tsx --env-file=.env.test --test --test-concurrency=1 tests/ai/*.test.ts lib/agent/run.test.ts",
-    "test:quick": "tsx --env-file=.env.test --test tests/unit/*.test.ts tests/api/records.test.ts tests/api/food.test.ts tests/api/medical-vaccines.test.ts tests/api/development.test.ts lib/nutrition/engine.test.ts",
+    "test:quick": "bash scripts/test-api.sh '' tests/api/records.test.ts tests/api/food.test.ts tests/api/medical-vaccines.test.ts tests/api/development.test.ts && tsx --env-file=.env.test --test tests/unit/*.test.ts lib/nutrition/engine.test.ts",
     "test:agent": "tsx lib/agent/run.test.ts",
     "test:mcp-session": "tsx lib/mcp-session.test.ts",
     "db:seed": "npx tsx prisma/seed.ts",
@@ -31,7 +31,9 @@
     "db:push": "prisma db push",
     "db:deploy": "prisma migrate deploy",
     "check:writers": "node scripts/check-production-writers.mjs",
-    "llm:switch": "tsx scripts/switch-llm.ts"
+    "llm:switch": "tsx scripts/switch-llm.ts",
+    "test:chatgpt": "node --test tests/chatgpt/*.test.mjs",
+    "test:chatgpt:browser": "node tests/chatgpt/browser.mjs"
   },
   "dependencies": {
     "@earendil-works/pi-agent-core": "^0.84.3",
@@ -44,7 +46,7 @@
     "html-to-image": "^1.11.13",
     "jose": "^6.2.9",
     "lucide-react": "1.28.0",
-    "next": "16.3.6",
+    "next": "16.4.6",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "react-hook-form": "7.84.0",

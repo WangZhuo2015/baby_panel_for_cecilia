@@ -29,10 +29,7 @@ ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
 RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nextjs
-
-# Create data directory for SQLite persistence
-RUN mkdir -p /app/data && chown -R nextjs:nodejs /app/data
+RUN adduser --system --uid 1001 --ingroup nodejs nextjs
 
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/prisma ./prisma
@@ -44,6 +41,11 @@ COPY --from=builder /app/package.json ./package.json
 # Copy standalone build
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+
+# Create writable runtime directories after copying the build artifacts.
+RUN mkdir -p /app/data /app/public/uploads /app/.data \
+    && chmod 0700 /app/.data \
+    && chown nextjs:nodejs /app/data /app/public/uploads /app/.data
 
 USER nextjs
 

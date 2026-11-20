@@ -23,6 +23,7 @@ import {
   HelpCircle,
   Key,
   Bot,
+  Settings,
 } from "lucide-react";
 import { useBabyStore } from "@/stores/useBabyStore";
 import { calculateAge } from "@/lib/age";
@@ -37,6 +38,7 @@ import { AiUsageModal } from "@/components/mcp/AiUsageModal";
 
 const mainNavItems = [
   { path: "/", label: "今日看板", icon: Home },
+  { path: "/settings", label: "设置", icon: Settings },
   { path: "/daily-summary", label: "每日统计与AI解读", icon: FileText },
   { path: "/dashboard", label: "奶量与照护趋势", icon: TrendingUp },
   { path: "/growth", label: "WHO 生长曲线", icon: TrendingUp },
@@ -131,7 +133,7 @@ export function DesktopSidebar() {
       </div>
 
       {/* 3. Main Navigation List */}
-      <div className="flex-1 min-h-0 overflow-y-auto px-3 py-3 space-y-1">
+      <nav aria-label="主导航" className="flex-1 min-h-0 overflow-y-auto px-3 py-3 space-y-1">
         {mainNavItems.map((item) => {
           const Icon = item.icon;
           const active = isActive(item.path);
@@ -140,6 +142,7 @@ export function DesktopSidebar() {
               key={item.path}
               href={item.path}
               prefetch={true}
+              aria-current={active ? "page" : undefined}
               className={`flex items-center gap-3 px-3.5 py-3 rounded-2xl min-h-[46px] transition-all duration-150 btn-press cursor-pointer ${
                 active
                   ? "bg-primary text-white font-bold shadow-sm shadow-primary/25"
@@ -151,7 +154,7 @@ export function DesktopSidebar() {
             </Link>
           );
         })}
-      </div>
+      </nav>
 
       {/* 4. Bottom AI Assistant & Theme Toggle Area */}
       <div className="p-3.5 border-t border-primary/10 space-y-2 bg-gradient-to-t from-primary-light/20 to-transparent">

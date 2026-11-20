@@ -172,6 +172,41 @@ body {
   }
 }
 
+/* The chat portal is a sibling of the app shell. Keep dashboard pixels out of
+   the keyboard backdrop even while Safari is repositioning the fixed overlay. */
+@media (pointer: coarse), (max-width: 639px) {
+  html:has(> body > .quick-ai-overlay),
+  body:has(> .quick-ai-overlay) {
+    overflow: hidden;
+    overscroll-behavior: none;
+    background: var(--color-card);
+  }
+
+  body:has(> .quick-ai-overlay) > .app-wrapper {
+    visibility: hidden;
+    opacity: 0;
+  }
+}
+
+/* Removing the dashboard from document flow also removes its scroll range. */
+body.quick-ai-scroll-locked {
+  position: fixed;
+  inset: 0;
+  min-height: 0;
+}
+
+body.quick-ai-scroll-locked > .app-wrapper {
+  display: none;
+}
+
+html:has(> body.quick-ai-scroll-locked) {
+  height: 100%;
+}
+
+.quick-ai-overlay .overflow-y-auto {
+  overscroll-behavior-y: contain;
+}
+
 /* ===== Safe Area Helpers ===== */
 .safe-top {
   padding-top: max(10px, env(safe-area-inset-top, 0px));

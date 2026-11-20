@@ -9,6 +9,7 @@ import {
   runWithLlmProfileScope,
 } from "../../lib/llm-profiles";
 import { createLlmBackend, resolveLlmBackendId } from "../../lib/agent/model";
+import { clampThinkingLevel } from "@earendil-works/pi-ai";
 
 const KEY_ENV = ["GROWDESK_AI_API_KEY", "OPENAI_API_KEY", "GROWDESK_AI_API_KEY_FILE"] as const;
 type KeyEnv = (typeof KEY_ENV)[number];
@@ -87,6 +88,8 @@ test("official profile selects the OpenAI Responses adapter and never resolves t
     runWithLlmProfileScope(OPENAI_OFFICIAL_PROFILE_ID, "gpt-6-luna", () => {
       assert.equal(resolveLlmBackendId(), "opencode");
       const backend = createLlmBackend("opencode", { isVision: true });
+      assert.equal(clampThinkingLevel(backend.model, "xhigh"), "xhigh");
+      assert.equal(clampThinkingLevel(backend.model, "max"), "max");
       assert.equal(backend.model.id, "gpt-6-luna");
       assert.equal(backend.model.api, "openai-responses");
       assert.equal(backend.model.provider, "openai");

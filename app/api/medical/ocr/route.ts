@@ -1,3 +1,6 @@
+import { llmFetch, actualLlmModel } from "@/lib/llm-provenance";
+import { llmRoute } from "@/lib/llm-route";
+import { getCurrentLlmFeatureScope } from "@/lib/llm-context";
 import { NextResponse } from "next/server";
 import { writeFile, mkdir } from "fs/promises";
 import path from "path";
@@ -45,7 +48,7 @@ items[]：
 - 参考区间必须从单据提取；没有印刷区间时填儿科通用值并加 " (通用)"
 `;
 
-export async function POST(request: Request) {
+async function handlePOST(request: Request) {
   if (GROWDESK_CONFIG.enabled) {
     const csrfErr = verifyBffCsrf(request);
     if (csrfErr) return csrfErr;
@@ -115,7 +118,7 @@ export async function POST(request: Request) {
       const imageBase64 = bytes.toString("base64");
       const imageDataUrl = `data:${mimeType};base64,${imageBase64}`;
 
-      const res = await fetch(`${AI_CONFIG.baseUrl.replace(/\/+$/, "")}/chat/completions`, {
+      const res = await llmFetch(`${AI_CONFIG.baseUrl.replace(/\/+$/, "")}/chat/completions`, {
         method: "POST",
         headers: AI_CONFIG.headers,
         body: JSON.stringify({
@@ -291,7 +294,7 @@ async function runMedicalOcrJob(jobId: string, imageDataUrl: string, savedImageU
     ];
 
     const fetchOnce = (withFormat: boolean) =>
-      fetch(`${AI_CONFIG.baseUrl.replace(/\/+$/, "")}/chat/completions`, {
+      llmFetch(`${AI_CONFIG.baseUrl.replace(/\/+$/, "")}/chat/completions`, {
         method: "POST",
         headers,
         body: JSON.stringify({
@@ -312,14 +315,15 @@ async function runMedicalOcrJob(jobId: string, imageDataUrl: string, savedImageU
     try {
       data = await fetchOnce(true);
     } catch (e: any) {
-      if (e?.status && e.status < 500 && e.status !== 408) {
+      const chatGPTSelected = getCurrentLlmFeatureScope()?.selection?.source === "chatgpt";
+      if (e?.status && e.status < 500 && e.status !== 408 && !chatGPTSelected) {
         data = await fetchOnce(false);
       } else {
         throw e;
       }
     }
 
-    const parsed = parseOcrSuccess(data, savedImageUrl);
+    const parsed = { ...parseOcrSuccess(data, savedImageUrl), llm: actualLlmModel() };
     await archiveText("output_json", JSON.stringify(parsed));
     await prisma.aiJob.update({
       where: { id: jobId },
@@ -408,3 +412,5 @@ function parseOcrSuccess(data: any, savedImageUrl: string | null) {
     imageUrl: savedImageUrl,
   };
 }
+
+export const POST = llmRoute("medical_ocr", handlePOST);

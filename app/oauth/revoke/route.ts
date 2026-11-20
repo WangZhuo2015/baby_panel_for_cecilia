@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
-import { revokeToken } from "@/lib/oauth/service";
+import { OAuthError, revokeToken } from "@/lib/oauth/service";
 import { getClientIp } from "@/lib/rate-limit";
+import { GROWDESK_CONFIG } from "@/lib/config";
 
 export const dynamic = "force-dynamic";
 
@@ -49,17 +50,31 @@ export async function POST(request: Request) {
     const body = await parseRequestBody(request);
     let clientId = body.client_id || "";
     let clientSecret = body.client_secret;
+    let clientAuthMethod = body.client_auth_method;
 
     const authHeader = request.headers.get("authorization");
     if (authHeader?.startsWith("Basic ")) {
       try {
         const decoded = Buffer.from(authHeader.slice(6), "base64").toString("utf-8");
         const colonIdx = decoded.indexOf(":");
-        if (colonIdx !== -1) {
-          clientId = decoded.slice(0, colonIdx);
-          clientSecret = decoded.slice(colonIdx + 1);
+        if (colonIdx <= 0) throw new Error("malformed basic credentials");
+        const basicClientId = decoded.slice(0, colonIdx);
+        if (clientId && clientId !== basicClientId) {
+          return NextResponse.json({ error: "invalid_client", error_description: "Basic authorization client_id mismatch" }, { status: 401 });
         }
-      } catch {}
+        if (clientAuthMethod && clientAuthMethod !== "client_secret_basic") {
+          return NextResponse.json({ error: "invalid_client", error_description: "Client authentication method mismatch" }, { status: 401 });
+        }
+        clientId = basicClientId;
+        clientSecret = decoded.slice(colonIdx + 1);
+        clientAuthMethod = "client_secret_basic";
+      } catch {
+        return NextResponse.json({ error: "invalid_client", error_description: "Malformed Basic authorization" }, { status: 401 });
+      }
+    }
+    if (!clientAuthMethod) clientAuthMethod = clientSecret ? "client_secret_post" : "none";
+    if (!["none", "client_secret_post", "client_secret_basic"].includes(clientAuthMethod)) {
+      return NextResponse.json({ error: "invalid_client", error_description: "Unsupported client authentication method" }, { status: 401 });
     }
 
     const token = body.token;
@@ -75,6 +90,7 @@ export async function POST(request: Request) {
       clientId,
       clientSecret,
       ip,
+      clientAuthMethod: clientAuthMethod as "none" | "client_secret_post" | "client_secret_basic",
     });
 
     return new NextResponse(null, {
@@ -87,6 +103,9 @@ export async function POST(request: Request) {
     });
   } catch (err: any) {
     console.error("[OAuth Revoke Error]:", err);
+    if (GROWDESK_CONFIG.enabled && err instanceof OAuthError) {
+      return NextResponse.json({ error: err.error, error_description: err.errorDescription }, { status: err.statusCode });
+    }
     return new NextResponse(null, { status: 200 }); // RFC 7009: return 200 even on lookup failure
   }
 }

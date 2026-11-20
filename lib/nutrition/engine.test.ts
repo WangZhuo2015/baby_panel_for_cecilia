@@ -418,6 +418,42 @@ test("Food Nutrition: Complementary solid foods contribute to iron, protein, and
   assert.ok(iron.sources.some((s) => s.sourceType === "food" && s.sourceName.includes("牛肉泥")));
 });
 
+test("Food Nutrition: Structured components with exact grams (staple + protein + veg) calculates nutrients precisely", () => {
+  const analysis = calculateDailyNutrition({
+    date: "2026-09-02",
+    babyAgeMonths: 9,
+    feedings: [],
+    supplements: [],
+    foodLogs: [
+      {
+        id: "food_plate_1",
+        date: "2026-09-02",
+        time: "12:00",
+        foods: ["强化铁婴儿谷物", "牛肉泥", "西兰花"],
+        components: [
+          { role: "staple", name: "强化铁婴儿谷物", grams: 20 },
+          { role: "protein", name: "牛肉泥", grams: 25 },
+          { role: "vegetable", name: "西兰花", grams: 30 },
+        ],
+        totalGrams: 75,
+      },
+    ],
+  });
+
+  assert.equal(analysis.foodCount, 1);
+  assert.ok(analysis.foodsTried.includes("强化铁婴儿谷物"));
+  assert.ok(analysis.foodsTried.includes("牛肉泥"));
+  assert.ok(analysis.foodsTried.includes("西兰花"));
+
+  const iron = analysis.coreMetrics.iron;
+  // Cereal: 20g (std 20g -> factor 1.0) = 5.0mg
+  // Beef: 25g (std 25g -> factor 1.0) = 1.5mg
+  // Total solid food iron should be >= 6.5mg
+  assert.ok(iron.foodAmount >= 6.5, `Expected solid food iron >= 6.5mg, got ${iron.foodAmount}`);
+  assert.ok(iron.sources.some((s) => s.sourceType === "food" && s.sourceName.includes("20g")));
+  assert.ok(iron.sources.some((s) => s.sourceType === "food" && s.sourceName.includes("25g")));
+});
+
 test("Feeding Volume: getFeedingEffectiveMl handles all feeding types and estimations", () => {
   // Breast with explicit amount
   assert.equal(getFeedingEffectiveMl({ type: "breast", amountMl: 80, leftMinutes: 10, rightMinutes: 10 }), 80);

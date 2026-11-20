@@ -7,13 +7,10 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO_ROOT"
 
-if [ -f "$REPO_ROOT/.env.test" ]; then
-  set -a
-  source "$REPO_ROOT/.env.test"
-  set +a
-fi
+# shellcheck source=scripts/test-server-common.sh
+source scripts/test-server-common.sh
+load_test_server_env test-api "${@:1:1}"
 
-PORT="${1:-${PORT:-3089}}"
 if [ "$#" -gt 0 ]; then shift; fi
 TEST_FILES=("$@")
 if [ "${#TEST_FILES[@]}" -eq 0 ]; then TEST_FILES=(tests/api/*.test.ts); fi
@@ -23,10 +20,6 @@ for f in "${TEST_FILES[@]}"; do
     exit 1
   fi
 done
-export DATABASE_URL="${DATABASE_URL:-file:./dev_test.db}"
-export PORT
-export BABY_PANEL_URL="http://127.0.0.1:${PORT}"
-
 echo "==> [test-api] migrate deploy ($DATABASE_URL)"
 npx prisma migrate deploy
 
@@ -36,43 +29,18 @@ node --import tsx prisma/seed.ts
 echo "==> [test-api] purge leftover test tenants"
 node --import tsx scripts/purge-test-data.ts
 
-# 预检：端口被占（常见为生产服务）必须直接失败，否则测试会打到错误服务上
-if (echo > /dev/tcp/127.0.0.1/"${PORT}") 2>/dev/null; then
-  echo "[test-api] 端口 ${PORT} 已被占用（可能是生产服务），拒绝运行，换端口重试：bash scripts/test-api.sh 3089"
-  exit 1
-fi
-
 echo "==> [test-api] start server on :${PORT}"
-if command -v setsid >/dev/null 2>&1; then
-  setsid node node_modules/next/dist/bin/next dev --hostname 127.0.0.1 --port "${PORT}" > /tmp/baby-test-server.log 2>&1 &
-else
-  node node_modules/next/dist/bin/next dev --hostname 127.0.0.1 --port "${PORT}" > /tmp/baby-test-server.log 2>&1 &
-fi
-SERVER_PID=$!
-cleanup() {
-  kill -- -"$SERVER_PID" 2>/dev/null || kill "$SERVER_PID" 2>/dev/null || true
-  pkill -f "next-server.*--port ${PORT}" 2>/dev/null || true
-}
-trap cleanup EXIT
+trap stop_test_server EXIT
+start_test_server
 
 echo "==> [test-api] wait for server"
-for i in $(seq 1 60); do
-  if curl -sf -o /dev/null "http://127.0.0.1:${PORT}/api/app-config"; then
-    break
-  fi
-  if [ "$i" = 60 ]; then
-    echo "[test-api] server boot timeout, log tail:"
-    tail -20 /tmp/baby-test-server.log
-    exit 1
-  fi
-  sleep 2
-done
+wait_for_test_server test-api
 
 echo "==> [test-api] run api tests (sequential: files share one SQLite file)"
 TEST_EXIT=0
 for f in "${TEST_FILES[@]}"; do
   echo "---- $f"
-  if ! node --env-file=.env.test --import tsx --test "$f"; then
+  if ! node --import tsx --test "$f"; then
     TEST_EXIT=1
   fi
 done

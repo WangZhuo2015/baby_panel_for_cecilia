@@ -1,10 +1,9 @@
-import test from "node:test";
+import test, { type TestContext } from "node:test";
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 
-import { GROWDESK_CONFIG } from "../../lib/config";
 import { prisma } from "../../lib/prisma";
 import {
   ensureStaticClients,
@@ -16,7 +15,6 @@ import {
   revokeToken,
   verifyMcpAccessToken,
   OAuthError,
-  resolveSourceAgent,
 } from "../../lib/oauth/service";
 import {
   createPersonalAccessToken,
@@ -24,8 +22,54 @@ import {
   listPersonalAccessTokens,
   revokePersonalAccessToken,
 } from "../../lib/tokens";
-import { createMcpServer, checkScope } from "../../lib/mcp/server";
+import { createMcpServer } from "../../lib/mcp/server";
 import type { UserPrincipal } from "../../lib/oauth/types";
+import type { McpBridgeRequest } from "../../lib/growdesk/mcp-client";
+
+const upstream = "https://growdesk.test";
+
+function reply(data: unknown): Response {
+  return Response.json({ data });
+}
+
+function oauthError(status: number, code: string): Response {
+  return Response.json({ error: { code, message: code } }, { status });
+}
+
+function isOAuthError(code: string, status: number) {
+  return (error: unknown) => error instanceof OAuthError && error.error === code && error.statusCode === status;
+}
+
+function tokenResponse(accessToken: string, refreshToken: string) {
+  return { access_token: accessToken, refresh_token: refreshToken, token_type: "Bearer", expires_in: 900, scope: "baby:read" };
+}
+
+type OAuthRequest = { path: string; body?: object; accessToken?: string; response: Response };
+
+function mockOAuthRequests(t: TestContext, expectations: OAuthRequest[]) {
+  const pending = [...expectations];
+  t.mock.method(globalThis, "fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+    const expected = pending.shift();
+    assert.ok(expected, "Unexpected OAuth request to " + String(input));
+    assert.equal(String(input), upstream + expected.path);
+    assert.equal(init?.method, expected.body === undefined ? "GET" : "POST");
+    const headers = new Headers(init?.headers);
+    assert.equal(headers.get("authorization"), expected.accessToken ? "Bearer " + expected.accessToken : null);
+    assert.equal(headers.has("x-user-id"), false);
+    assert.deepEqual(init?.body === undefined ? undefined : JSON.parse(String(init.body)), expected.body);
+    return expected.response;
+  });
+  t.after(() => assert.deepEqual(pending.map(({ path }) => path), [], "Missing OAuth requests"));
+}
+
+function readBridgeRequest(input: RequestInfo | URL, init?: RequestInit) {
+  assert.equal(String(input), upstream + "/api/v1/mcp/bridge");
+  assert.equal(init?.method, "POST");
+  const request = JSON.parse(String(init?.body)) as McpBridgeRequest;
+  const headers = new Headers(init?.headers);
+  for (const name of ["x-user-id", "x-family-id", "x-baby-id"]) assert.equal(headers.has(name), false);
+  return { ...request, authorization: headers.get("authorization") };
+}
 
 function generatePkce() {
   const codeVerifier = crypto.randomBytes(32).toString("base64url");
@@ -42,287 +86,261 @@ function parseToolJson<T = any>(res: unknown): T {
 }
 
 test("Issue #5: GrowDesk MCP, OAuth 2.1 & Personal Access Tokens Matrix", async (t) => {
-  const prevEnv = process.env.GROWDESK_ENABLED;
-  process.env.GROWDESK_ENABLED = "true";
-
-  t.after(() => {
-    process.env.GROWDESK_ENABLED = prevEnv;
+  const env = {
+    GROWDESK_ENABLED: "true",
+    GROWDESK_BACKEND: "go",
+    GROWDESK_API_URL: upstream,
+  };
+  for (const [key, value] of Object.entries(env)) {
+    const previous = process.env[key];
+    process.env[key] = value;
+    t.after(() => {
+      if (previous === undefined) delete process.env[key];
+      else process.env[key] = previous;
+    });
+  }
+  t.mock.method(globalThis, "fetch", async (input: RequestInfo | URL) => {
+    throw new Error(`Unexpected GrowDesk request: ${String(input)}`);
   });
 
   const baseUrl = "http://127.0.0.1:3089";
 
-  // ═════════════════════════════════════════════════════════════════════
-  // Section 1: OAuth 2.1 Full Protocol & Memory Persistence (Zero DB)
-  // ═════════════════════════════════════════════════════════════════════
-  await t.test("OAuth 2.1: Static Clients initialization in BFF mode", async () => {
-    await ensureStaticClients();
-    const staticClient = await findClient("gemini-spark-client");
-    assert.ok(staticClient, "Static gemini-spark-client should be available in memory");
-    assert.equal(staticClient.clientName, "Gemini Spark Connected App (Static Fallback)");
-  });
+  const clientId = "test_oauth_client";
+  const clientSecret = "test_oauth_secret";
+  const redirectUri = "https://client.test/callback";
+  const babyId = "test_baby_oauth";
+  const session = "test_bff_session";
+  const resource = baseUrl + "/mcp";
+  const scope = "baby:read";
+  const credentials = { clientId, clientSecret };
+  const clientAuthentication = {
+    client_id: clientId,
+    client_secret: clientSecret,
+    client_auth_method: "client_secret_post",
+  };
+  const authorizePath = "/api/v1/mcp/oauth/authorize";
+  const tokenPath = "/api/v1/mcp/oauth/token";
 
-  await t.test("OAuth 2.1: Dynamic Client Registration (RFC 7591)", async () => {
-    const regPayload = {
+  await t.test("OAuth client registration delegates to GrowDesk and lookup omits secrets", async (t) => {
+    const client = {
+      client_id: clientId,
       client_name: "Test External Agent",
-      redirect_uris: ["https://agent.example.com/oauth/callback"],
-      grant_types: ["authorization_code", "refresh_token"],
-      response_types: ["code"],
-      client_uri: "https://agent.example.com",
+      redirect_uris: [redirectUri],
       token_endpoint_auth_method: "client_secret_post" as const,
+      scope,
     };
-    const registered = await registerClient(regPayload, "127.0.0.1");
-    assert.ok(registered.client_id, "Should return client_id");
-    assert.ok(registered.client_secret, "Should return client_secret");
-    assert.equal(registered.client_name, "Test External Agent");
+    const registration = {
+      client_name: client.client_name,
+      redirect_uris: client.redirect_uris,
+      token_endpoint_auth_method: client.token_endpoint_auth_method,
+      scope,
+    };
+    mockOAuthRequests(t, [
+      { path: "/api/v1/mcp/oauth/register", body: registration, response: reply({ ...client, client_secret: clientSecret }) },
+      { path: "/api/v1/mcp/oauth/clients/" + clientId, response: reply(client) },
+      { path: "/api/v1/mcp/oauth/clients/test_missing", response: oauthError(404, "NOT_FOUND") },
+    ]);
 
-    const found = await findClient(registered.client_id);
-    assert.ok(found, "Registered client should be queryable via findClient");
-    assert.equal(found.clientId, registered.client_id);
-    assert.equal(found.clientName, "Test External Agent");
+    await ensureStaticClients();
+    const registered = await registerClient(registration);
+    assert.equal(registered.client_id, clientId);
+    assert.equal(registered.client_secret, clientSecret);
 
-    // Reject non-HTTPS redirect URI
+    const found = await findClient(clientId);
+    assert.equal(found?.clientId, clientId);
+    assert.equal(found?.clientName, client.client_name);
+    assert.equal(found?.clientSecret, null);
+    assert.equal(await findClient("test_missing"), null);
     await assert.rejects(
-      async () => {
-        await registerClient({
-          client_name: "Insecure Agent",
-          redirect_uris: ["http://insecure.example.com/cb"],
-        });
-      },
-      (err: any) => err instanceof OAuthError && err.error === "invalid_redirect_uri"
+      registerClient({ redirect_uris: ["http://client.test/callback"] }),
+      isOAuthError("invalid_redirect_uri", 400),
     );
   });
 
-  await t.test("OAuth 2.1: PKCE S256, Code Exchange & Replay Protection", async () => {
-    const pkce = generatePkce();
-
-    // 1. Exchange with wrong codeVerifier fails
-    const authCode1 = await createAuthorizationCode({
-      clientId: "gemini-spark-client",
-      userId: "test-user-oauth-1",
-      babyId: "test-baby-oauth-1",
-      redirectUri: "https://gemini.google.com/oauth/callback",
-      scope: "baby:read baby:write",
-      codeChallenge: pkce.codeChallenge,
+  await t.test("OAuth forwards the authenticated baby, S256 exchange, and single-use rejection", async (t) => {
+    const { codeVerifier, codeChallenge } = generatePkce();
+    const authorization = {
+      clientId,
+      babyId,
+      redirectUri,
+      scope,
+      resource,
+      codeChallenge,
       codeChallengeMethod: "S256",
-    });
-    assert.ok(authCode1.startsWith("code_"), "Auth code should start with code_");
+    };
+    const code = "code_test";
+    const exchangeParams = { ...credentials, code, redirectUri, codeVerifier, resource, baseUrl };
+    const exchangeBody = {
+      ...clientAuthentication,
+      grant_type: "authorization_code",
+      code,
+      redirect_uri: redirectUri,
+      code_verifier: codeVerifier,
+      resource,
+    };
+    const invalidVerifier = generatePkce().codeVerifier;
+    const otherRedirect = "https://client.test/other";
+    const tokens = tokenResponse("test_access", "test_refresh");
+    mockOAuthRequests(t, [
+      { path: authorizePath, body: authorization, accessToken: session, response: reply({ code }) },
+      { path: tokenPath, body: { ...exchangeBody, code_verifier: invalidVerifier }, response: oauthError(400, "invalid_grant") },
+      { path: tokenPath, body: { ...exchangeBody, redirect_uri: otherRedirect }, response: oauthError(400, "invalid_grant") },
+      { path: tokenPath, body: exchangeBody, response: reply(tokens) },
+      { path: tokenPath, body: exchangeBody, response: oauthError(400, "invalid_grant") },
+    ]);
 
+    const params = { ...authorization, userId: "test_user_oauth" };
+    await assert.rejects(createAuthorizationCode(params), isOAuthError("unauthorized", 401));
     await assert.rejects(
-      async () => {
-        await exchangeAuthorizationCode({
-          clientId: "gemini-spark-client",
-          clientSecret: "gemini-spark-secret-fallback-2026",
-          code: authCode1,
-          redirectUri: "https://gemini.google.com/oauth/callback",
-          codeVerifier: "invalid_verifier_that_does_not_match_pkce_challenge",
-          baseUrl,
-        });
-      },
-      (err: any) => err instanceof OAuthError && err.error === "invalid_grant" && Boolean(err.errorDescription?.includes("PKCE"))
+      createAuthorizationCode({ ...params, babyId: undefined, accessToken: session }),
+      isOAuthError("unauthorized", 401),
     );
-
-    // 2. Exchange with wrong redirect_uri fails
-    const authCode2 = await createAuthorizationCode({
-      clientId: "gemini-spark-client",
-      userId: "test-user-oauth-1",
-      babyId: "test-baby-oauth-1",
-      redirectUri: "https://gemini.google.com/oauth/callback",
-      scope: "baby:read baby:write",
-      codeChallenge: pkce.codeChallenge,
-      codeChallengeMethod: "S256",
-    });
-
+    assert.equal(await createAuthorizationCode({ ...params, accessToken: session }), code);
     await assert.rejects(
-      async () => {
-        await exchangeAuthorizationCode({
-          clientId: "gemini-spark-client",
-          clientSecret: "gemini-spark-secret-fallback-2026",
-          code: authCode2,
-          redirectUri: "https://attacker.example.com/callback",
-          codeVerifier: pkce.codeVerifier,
-          baseUrl,
-        });
-      },
-      (err: any) => err instanceof OAuthError && err.error === "invalid_grant" && Boolean(err.errorDescription?.includes("redirect_uri"))
+      exchangeAuthorizationCode({ ...exchangeParams, codeVerifier: invalidVerifier }),
+      isOAuthError("invalid_grant", 400),
     );
-
-    // 3. Successful exchange consumes code and returns tokens
-    const authCode3 = await createAuthorizationCode({
-      clientId: "gemini-spark-client",
-      userId: "test-user-oauth-1",
-      babyId: "test-baby-oauth-1",
-      redirectUri: "https://gemini.google.com/oauth/callback",
-      scope: "baby:read baby:write",
-      codeChallenge: pkce.codeChallenge,
-      codeChallengeMethod: "S256",
-    });
-
-    const tokens = await exchangeAuthorizationCode({
-      clientId: "gemini-spark-client",
-      clientSecret: "gemini-spark-secret-fallback-2026",
-      code: authCode3,
-      redirectUri: "https://gemini.google.com/oauth/callback",
-      codeVerifier: pkce.codeVerifier,
-      baseUrl,
-    });
-    assert.ok(tokens.access_token, "Must return access_token");
-    assert.ok(tokens.refresh_token, "Must return refresh_token");
-    assert.equal(tokens.token_type, "Bearer");
-
-    // Replay attack: reusing the same code must fail immediately
     await assert.rejects(
-      async () => {
-        await exchangeAuthorizationCode({
-          clientId: "gemini-spark-client",
-          clientSecret: "gemini-spark-secret-fallback-2026",
-          code: authCode3,
-          redirectUri: "https://gemini.google.com/oauth/callback",
-          codeVerifier: pkce.codeVerifier,
-          baseUrl,
-        });
+      exchangeAuthorizationCode({ ...exchangeParams, redirectUri: otherRedirect }),
+      isOAuthError("invalid_grant", 400),
+    );
+    assert.deepEqual(await exchangeAuthorizationCode(exchangeParams), tokens);
+    await assert.rejects(exchangeAuthorizationCode(exchangeParams), isOAuthError("invalid_grant", 400));
+  });
+
+  await t.test("OAuth preserves refresh rotation, revocation, and Go rejection status", async (t) => {
+    const refreshBody = {
+      ...clientAuthentication,
+      grant_type: "refresh_token",
+      refresh_token: "test_refresh_original",
+      resource,
+    };
+    const tokens = tokenResponse("test_access_rotated", "test_refresh_rotated");
+    mockOAuthRequests(t, [
+      { path: tokenPath, body: refreshBody, response: reply(tokens) },
+      { path: tokenPath, body: refreshBody, response: oauthError(400, "invalid_grant") },
+      {
+        path: "/api/v1/mcp/oauth/revoke",
+        body: { ...clientAuthentication, token: tokens.refresh_token },
+        response: reply({ success: true }),
       },
-      (err: any) => err instanceof OAuthError && err.error === "invalid_grant" && Boolean(err.errorDescription?.includes("replay detected"))
+      {
+        path: tokenPath,
+        body: { ...refreshBody, refresh_token: tokens.refresh_token },
+        response: oauthError(400, "invalid_grant"),
+      },
+    ]);
+    const params = { ...credentials, baseUrl, resource, refreshToken: refreshBody.refresh_token };
+    assert.deepEqual(await refreshAccessToken(params), tokens);
+    assert.notEqual(tokens.refresh_token, params.refreshToken);
+    await assert.rejects(refreshAccessToken(params), isOAuthError("invalid_grant", 400));
+    await revokeToken({ ...credentials, token: tokens.refresh_token });
+    await assert.rejects(
+      refreshAccessToken({ ...params, refreshToken: tokens.refresh_token }),
+      isOAuthError("invalid_grant", 400),
     );
   });
 
-  await t.test("OAuth 2.1: Refresh Token Rotation and Revocation", async () => {
-    const pkce = generatePkce();
-    const authCode = await createAuthorizationCode({
-      clientId: "gemini-spark-client",
-      userId: "test-user-oauth-rot",
-      babyId: "test-baby-oauth-rot",
-      redirectUri: "https://gemini.google.com/oauth/callback",
-      scope: "baby:read baby:write",
-      codeChallenge: pkce.codeChallenge,
+  await t.test("OAuth honors GrowDesk resource and principal validation", async (t) => {
+    const { codeChallenge, codeVerifier } = generatePkce();
+    const foreignResource = "https://other.test/mcp";
+    const userId = "test_user_oauth";
+    const familyId = "test_family_oauth";
+    const authorization = {
+      clientId,
+      babyId,
+      redirectUri,
+      scope,
+      codeChallenge,
       codeChallengeMethod: "S256",
-    });
-
-    const tokens = await exchangeAuthorizationCode({
-      clientId: "gemini-spark-client",
-      clientSecret: "gemini-spark-secret-fallback-2026",
-      code: authCode,
-      redirectUri: "https://gemini.google.com/oauth/callback",
-      codeVerifier: pkce.codeVerifier,
-      baseUrl,
-    });
-
-    // 1. Refresh token exchange
-    const refreshed = await refreshAccessToken({
-      clientId: "gemini-spark-client",
-      clientSecret: "gemini-spark-secret-fallback-2026",
-      refreshToken: tokens.refresh_token!,
-      baseUrl,
-    });
-    assert.ok(refreshed.access_token, "Should issue new access_token");
-    assert.ok(refreshed.refresh_token, "Should issue new refresh_token");
-    assert.notEqual(refreshed.refresh_token, tokens.refresh_token, "Refresh token must rotate");
-
-    // 2. Old refresh token is revoked upon rotation
-    await assert.rejects(
-      async () => {
-        await refreshAccessToken({
-          clientId: "gemini-spark-client",
-          clientSecret: "gemini-spark-secret-fallback-2026",
-          refreshToken: tokens.refresh_token!,
-          baseUrl,
-        });
+      resource: foreignResource,
+    };
+    const principalPath = "/api/v1/mcp/principal";
+    const principal = {
+      userId,
+      username: userId,
+      displayName: "Test caregiver",
+      clientId,
+      sourceAgent: "Test External Agent",
+      scopes: [scope],
+      babyId,
+      baby: { id: babyId, familyId, nickname: babyId, gender: "unknown", birthDate: "2026-01-01" },
+      member: { babyId, familyId, relation: "caregiver" },
+    };
+    mockOAuthRequests(t, [
+      { path: authorizePath, body: authorization, accessToken: session, response: oauthError(400, "INVALID_RESOURCE") },
+      {
+        path: tokenPath,
+        body: {
+          ...clientAuthentication,
+          grant_type: "authorization_code",
+          code: "code_test_resource",
+          redirect_uri: redirectUri,
+          code_verifier: codeVerifier,
+          resource: foreignResource,
+        },
+        response: oauthError(400, "invalid_target"),
       },
-      (err: any) => err instanceof OAuthError && err.error === "invalid_grant"
-    );
-
-    // 3. RFC 7009 Revoke Token
-    await revokeToken({
-      token: refreshed.refresh_token!,
-      clientId: "gemini-spark-client",
-      clientSecret: "gemini-spark-secret-fallback-2026",
-    });
-
-    // 4. Revoked token can no longer be refreshed
-    await assert.rejects(
-      async () => {
-        await refreshAccessToken({
-          clientId: "gemini-spark-client",
-          clientSecret: "gemini-spark-secret-fallback-2026",
-          refreshToken: refreshed.refresh_token!,
-          baseUrl,
-        });
+      { path: principalPath, accessToken: "test_wrong_audience", response: oauthError(401, "UNAUTHORIZED") },
+      { path: principalPath, accessToken: "test_bound_audience", response: reply(principal) },
+      {
+        path: principalPath,
+        accessToken: "test_inconsistent_principal",
+        response: reply({ ...principal, member: { ...principal.member, familyId: "test_family_other" } }),
       },
-      (err: any) => err instanceof OAuthError && err.error === "invalid_grant"
+    ]);
+    await assert.rejects(
+      createAuthorizationCode({ ...authorization, userId, accessToken: session }),
+      isOAuthError("INVALID_RESOURCE", 400),
     );
+    await assert.rejects(
+      exchangeAuthorizationCode({
+        ...credentials, baseUrl, code: "code_test_resource", redirectUri, codeVerifier, resource: foreignResource,
+      }),
+      isOAuthError("invalid_target", 400),
+    );
+    await assert.rejects(verifyMcpAccessToken("test_wrong_audience"), isOAuthError("invalid_token", 401));
+    const verified = await verifyMcpAccessToken("test_bound_audience");
+    assert.equal(verified.userId, userId);
+    assert.equal(verified.babyId, babyId);
+    assert.ok(verified.baby);
+    assert.equal(verified.baby.familyId, familyId);
+    assert.deepEqual(verified.scopes, new Set([scope]));
+    await assert.rejects(verifyMcpAccessToken("test_inconsistent_principal"), isOAuthError("invalid_token", 401));
   });
 
-  await t.test("OAuth 2.1: Audience & Resource Validation", async () => {
-    const pkce = generatePkce();
-    const authCode = await createAuthorizationCode({
-      clientId: "gemini-spark-client",
-      userId: "test-user-oauth-aud",
-      babyId: "test-baby-oauth-aud",
-      redirectUri: "https://gemini.google.com/oauth/callback",
-      scope: "baby:read",
-      codeChallenge: pkce.codeChallenge,
-      codeChallengeMethod: "S256",
-      resource: "https://attacker-resource.com/api",
-    });
-
-    const tokens = await exchangeAuthorizationCode({
-      clientId: "gemini-spark-client",
-      clientSecret: "gemini-spark-secret-fallback-2026",
-      code: authCode,
-      redirectUri: "https://gemini.google.com/oauth/callback",
-      codeVerifier: pkce.codeVerifier,
-      baseUrl,
-      resource: "https://attacker-resource.com/api",
-    });
-
-    // Verification against local /mcp must reject token bound to attacker-resource
-    await assert.rejects(
-      async () => {
-        await verifyMcpAccessToken(tokens.access_token);
-      },
-      (err: any) => err instanceof OAuthError && err.error === "invalid_token" && Boolean(err.errorDescription?.includes("audience mismatch"))
-    );
+  await t.test("Shared mode rejects PATs as MCP grants and Go rejects PAT storage", async () => {
+    const userId = "test_user_pat";
+    await assert.rejects(createPersonalAccessToken(userId), /not yet persisted by the Go backend/);
+    await assert.rejects(listPersonalAccessTokens(userId), /not yet persisted by the Go backend/);
+    await assert.rejects(revokePersonalAccessToken(userId, "test_pat"), /not yet persisted by the Go backend/);
+    assert.equal(await verifyPersonalAccessToken("bp_pat_test"), null);
+    await assert.rejects(verifyMcpAccessToken("bp_pat_test"), isOAuthError("invalid_token", 401));
   });
 
-  // ═════════════════════════════════════════════════════════════════════
-  // Section 2: Personal Access Tokens (PAT) Full Lifecycle in BFF Mode
-  // ═════════════════════════════════════════════════════════════════════
-  await t.test("PAT: Full Lifecycle & verifyMcpAccessToken compatibility", async () => {
-    const userId = "pat-user-123";
-    const pat = await createPersonalAccessToken(userId, "iOS Shortcut Agent");
-    assert.ok(pat.token.startsWith("bp_pat_"), "Token must start with bp_pat_");
-    assert.equal(pat.name, "iOS Shortcut Agent");
+  await t.test("TypeScript PAT storage remains isolated by owner", async (t) => {
+    process.env.GROWDESK_BACKEND = "typescript";
+    const userId = "test_user_pat";
+    const otherUserId = "test_user_pat_other";
+    let tokenId: string | undefined;
+    t.after(async () => {
+      try {
+        if (tokenId) await revokePersonalAccessToken(userId, tokenId);
+      } finally {
+        process.env.GROWDESK_BACKEND = "go";
+      }
+    });
+    const pat = await createPersonalAccessToken(userId, "Test Shortcut Agent");
+    tokenId = pat.id;
 
-    // List PATs
-    const list = await listPersonalAccessTokens(userId);
-    assert.equal(list.length, 1);
-    assert.equal(list[0].id, pat.id);
-
-    // Verify raw PAT
-    const verified = await verifyPersonalAccessToken(pat.token);
-    assert.ok(verified, "PAT must verify");
-    assert.equal(verified.user.id, userId);
-
-    // Verify through verifyMcpAccessToken
-    const principal = await verifyMcpAccessToken(pat.token);
-    assert.equal(principal.userId, userId);
-    assert.equal(principal.clientId, "pat-client");
-    assert.ok(principal.scopes.has("baby:read"), "Must include baby:read");
-    assert.ok(principal.scopes.has("baby:write"), "Must include baby:write");
-
-    // Revoke PAT
-    const revokedOk = await revokePersonalAccessToken(userId, pat.id);
-    assert.equal(revokedOk, true);
-
-    // Verification after revocation must fail
-    const verifyAfterRevoke = await verifyPersonalAccessToken(pat.token);
-    assert.equal(verifyAfterRevoke, null);
-
-    await assert.rejects(
-      async () => {
-        await verifyMcpAccessToken(pat.token);
-      },
-      (err: any) => err instanceof OAuthError && err.error === "invalid_token"
-    );
+    assert.ok(pat.token.startsWith("bp_pat_"));
+    assert.equal((await listPersonalAccessTokens(userId))[0]?.id, pat.id);
+    assert.deepEqual(await listPersonalAccessTokens(otherUserId), []);
+    assert.equal(await revokePersonalAccessToken(otherUserId, pat.id), false);
+    assert.equal((await verifyPersonalAccessToken(pat.token))?.user.id, userId);
+    await assert.rejects(verifyMcpAccessToken(pat.token), isOAuthError("invalid_token", 401));
+    assert.equal(await revokePersonalAccessToken(userId, pat.id), true);
+    assert.equal(await verifyPersonalAccessToken(pat.token), null);
   });
 
   // ═════════════════════════════════════════════════════════════════════
@@ -382,13 +400,13 @@ test("Issue #5: GrowDesk MCP, OAuth 2.1 & Personal Access Tokens Matrix", async 
 
   await t.test("Remote MCP Server: Fine-Grained Upstream GrowDesk Operations", async () => {
     const originalFetch = globalThis.fetch;
-    const interceptedRequests: Array<{ url: string; method: string; body: any; headers: any }> = [];
+    const interceptedPaths: string[] = [];
 
     globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = String(input);
-      const method = init?.method || "GET";
-      const body = init?.body ? JSON.parse(String(init.body)) : null;
-      interceptedRequests.push({ url, method, body, headers: init?.headers });
+      const { path: url, method, body: payload, authorization } = readBridgeRequest(input, init);
+      assert.equal(authorization, "Bearer token-rw");
+      const body = payload as Record<string, unknown>;
+      interceptedPaths.push(url);
 
       // Feeding write
       if (url.includes("/records/feeding") && method === "POST") {
@@ -557,26 +575,11 @@ test("Issue #5: GrowDesk MCP, OAuth 2.1 & Personal Access Tokens Matrix", async 
         );
       }
 
-      // Delete endpoint
-      if (method === "DELETE") {
-        return new Response(
-          JSON.stringify({ success: true }),
-          { status: 200, headers: { "content-type": "application/json" } }
-        );
+      if (method === "GET" && url === "/api/v1/families/fam-rw/nutrition/products") return reply([]);
+      if (method === "GET" && url === "/api/v1/food/items?familyId=fam-rw") {
+        return reply([{ id: "test_food_apple", name: "苹果" }]);
       }
-
-      // Record lists / timeline
-      if (method === "GET") {
-        return new Response(
-          JSON.stringify({
-            data: [],
-            items: [],
-          }),
-          { status: 200, headers: { "content-type": "application/json" } }
-        );
-      }
-
-      return new Response(JSON.stringify({ success: true }), { status: 200 });
+      assert.fail(`Unexpected bridge request: ${method} ${url}`);
     };
 
     try {
@@ -685,7 +688,7 @@ test("Issue #5: GrowDesk MCP, OAuth 2.1 & Personal Access Tokens Matrix", async 
       assert.equal(restoreData.success, true);
       assert.equal(restoreData.restoredId, "growdesk-feed-1");
 
-      // 7. Offline static knowledge query
+      // 7. Family-scoped knowledge query
       const foodItemRes = await client.callTool({
         name: "query_food_item",
         arguments: { name: "苹果" },
@@ -695,10 +698,11 @@ test("Issue #5: GrowDesk MCP, OAuth 2.1 & Personal Access Tokens Matrix", async 
       assert.ok(foodItemData.length > 0, "Should match at least one food item");
 
       // Assert all upstream requests used the authenticated baby ID or family ID in the path
-      for (const req of interceptedRequests) {
+      for (const path of interceptedPaths) {
         assert.ok(
-          req.url.includes("/api/v1/babies/baby-rw/") || req.url.includes("/api/v1/families/fam-rw/"),
-          `Expected request to be scoped to baby-rw or fam-rw, got: ${req.url}`
+          path.startsWith("/api/v1/babies/baby-rw/") || path.startsWith("/api/v1/families/fam-rw/") ||
+            path === "/api/v1/food/items?familyId=fam-rw",
+          `Expected request to be scoped to baby-rw or fam-rw, got: ${path}`
         );
       }
     } finally {
@@ -708,14 +712,17 @@ test("Issue #5: GrowDesk MCP, OAuth 2.1 & Personal Access Tokens Matrix", async 
 
   await t.test("Remote MCP Server: Multi-Tenant Session Isolation & IDOR Defense", async () => {
     const originalFetch = globalThis.fetch;
-    const requestedUrls: string[] = [];
+    const requests: ReturnType<typeof readBridgeRequest>[] = [];
 
-    globalThis.fetch = async (input: RequestInfo | URL) => {
-      requestedUrls.push(String(input));
-      return new Response(JSON.stringify({ data: { id: "res-id", version: "1" } }), {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      });
+    globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+      const request = readBridgeRequest(input, init);
+      requests.push(request);
+      if (request.method === "GET" && request.path === "/api/v1/families/fam-alpha/nutrition/products") return reply([]);
+      if (request.method === "POST" && request.path.endsWith("/records/feeding")) {
+        const body = request.body as Record<string, unknown>;
+        return reply({ id: "test_feeding", version: "1", ...body });
+      }
+      assert.fail(`Unexpected bridge request: ${request.method} ${request.path}`);
     };
 
     try {
@@ -755,35 +762,34 @@ test("Issue #5: GrowDesk MCP, OAuth 2.1 & Personal Access Tokens Matrix", async 
       const clientB = new Client({ name: "client-b", version: "1.0" }, { capabilities: {} });
       await clientB.connect(cTB);
 
-      // Alice tries an IDOR attack by passing babyId: 'baby-beta' in args
-      await clientA.callTool({
+      // Tenant identifiers in tool arguments cannot replace the verified principal.
+      const aliceResponse = await clientA.callTool({
         name: "record_feeding",
         arguments: {
           type: "formula",
           amountMl: 120,
-          babyId: "baby-beta", // Malicious injection
+          babyId: "baby-beta",
           familyId: "fam-beta",
           userId: "usr-bob",
         } as any,
       });
 
-      // Bob makes a normal call
-      await clientB.callTool({
+      const bobResponse = await clientB.callTool({
         name: "record_feeding",
         arguments: { type: "breast", amountMl: 90 },
       });
 
-      // Assert that Alice's requests strictly went to baby-alpha / fam-alpha despite argument injection
-      const aliceFeedUrl = requestedUrls.find((u) => u.includes("/babies/baby-alpha/records/feeding"));
-      assert.ok(aliceFeedUrl, "Alice's feeding request must be scoped to baby-alpha");
-      assert.ok(
-        !requestedUrls.some((u) => u.includes("fam-beta") || (u.includes("baby-beta") && u.includes("usr-alice"))),
-        "No parameters from Alice should leak to Bob's tenant"
-      );
-
-      // Assert that Bob's call went strictly to baby-beta
-      const bobFeedUrl = requestedUrls.find((u) => u.includes("/babies/baby-beta/records/feeding"));
-      assert.ok(bobFeedUrl, "Bob's feeding request must be scoped to baby-beta");
+      assert.equal(parseToolJson(aliceResponse).success, true);
+      assert.equal(parseToolJson(bobResponse).success, true);
+      assert.deepEqual(requests.map(({ method, path, authorization }) => [method, path, authorization]), [
+        ["GET", "/api/v1/families/fam-alpha/nutrition/products", "Bearer token-alice"],
+        ["POST", "/api/v1/babies/baby-alpha/records/feeding", "Bearer token-alice"],
+        ["POST", "/api/v1/babies/baby-beta/records/feeding", "Bearer token-bob"],
+      ]);
+      for (const { body } of requests.filter(({ method }) => method === "POST")) {
+        assert.ok(body && typeof body === "object");
+        for (const field of ["userId", "familyId", "babyId"]) assert.equal(Object.hasOwn(body, field), false);
+      }
     } finally {
       globalThis.fetch = originalFetch;
     }
@@ -794,41 +800,35 @@ test("Issue #5: GrowDesk MCP, OAuth 2.1 & Personal Access Tokens Matrix", async 
     const requestedPaths: string[] = [];
 
     globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = String(input);
-      const method = init?.method || "GET";
+      const { method, path: url, body, authorization } = readBridgeRequest(input, init);
+      assert.equal(authorization, "Bearer token-comp");
       requestedPaths.push(`${method} ${url}`);
 
-      if (url.endsWith("/babies/baby-comp")) {
-        return new Response(JSON.stringify({ data: { id: "baby-comp", familyId: "fam-comp", name: "Baby Comp" } }), { status: 200, headers: { "content-type": "application/json" } });
+      if (method === "GET" && url === "/api/v1/babies/baby-comp") return reply({ id: "baby-comp", familyId: "fam-comp" });
+      if (method === "GET" && url === "/api/v1/families/fam-comp") return reply({ id: "fam-comp", timeZone: "Asia/Shanghai" });
+      if (method === "GET" && url === "/api/v1/families/fam-comp/nutrition/products") return reply([]);
+      if (method === "GET" && /^\/api\/v1\/babies\/baby-comp\/(?:timeline|records\/(?:feeding|sleep|diaper|food))\?limit=\d+$/.test(url)) {
+        return Response.json({ data: [], page: { nextCursor: null } });
       }
-      if (url.includes("/families/fam-comp")) {
-        return new Response(JSON.stringify({ data: { id: "fam-comp", timeZone: "Asia/Shanghai" } }), { status: 200, headers: { "content-type": "application/json" } });
+      if (method === "BATCH" && url === "/api/v1/mcp/atomic-records") {
+        const { requests } = body as { requests: McpBridgeRequest[] };
+        assert.deepEqual(requests.map((request) => [request.method, request.path]), [
+          ["POST", "/api/v1/babies/baby-comp/records/feeding"],
+          ["POST", "/api/v1/babies/baby-comp/records/sleep"],
+          ["POST", "/api/v1/babies/baby-comp/records/diaper"],
+        ]);
+        return reply({ results: requests.map(({ path }, index) => ({ path, status: "applied", result: { id: `test_record_${index}` } })) });
       }
-      if (url.includes("/timeline")) {
-        return new Response(JSON.stringify({ data: { items: [] }, page: { nextCursor: null } }), { status: 200, headers: { "content-type": "application/json" } });
+      if (method === "POST" && url === "/api/v1/babies/baby-comp/growth-measurements") {
+        return reply({ id: "test_growth", weightKg: "8.5", heightCm: "70.0", version: "1" });
       }
-      if (url.includes("/records/feeding") && method === "POST") {
-        return new Response(JSON.stringify({ data: { id: "feed-comp-1", feedingType: "formula", occurredAt: new Date().toISOString(), version: "1" } }), { status: 200, headers: { "content-type": "application/json" } });
+      if (method === "POST" && url === "/api/v1/babies/baby-comp/medical-reports") {
+        return reply({ id: "test_medical_report", title: "体检", reportDate: "2026-09-15", version: "1" });
       }
-      if (url.includes("/records/sleep") && method === "POST") {
-        return new Response(JSON.stringify({ data: { id: "sleep-comp-1", sleepType: "nap", startedAt: new Date().toISOString(), endedAt: new Date().toISOString(), version: "1" } }), { status: 200, headers: { "content-type": "application/json" } });
+      if (method === "GET" && url === "/api/v1/food/items?familyId=fam-comp") {
+        return reply([{ id: "test_food_rice_cereal", name: "米粉" }]);
       }
-      if (url.includes("/records/diaper") && method === "POST") {
-        return new Response(JSON.stringify({ data: { id: "diaper-comp-1", diaperType: "pee", occurredAt: new Date().toISOString(), version: "1" } }), { status: 200, headers: { "content-type": "application/json" } });
-      }
-      if (url.includes("/growth-measurements") && method === "POST") {
-        return new Response(JSON.stringify({ data: { id: "growth-comp-1", weightKg: "8.5", heightCm: "70.0", measuredAt: new Date().toISOString(), version: "1" } }), { status: 200, headers: { "content-type": "application/json" } });
-      }
-      if (url.includes("/medical-reports") && method === "POST") {
-        return new Response(JSON.stringify({ data: { id: "med-comp-1", title: "体检", reportDate: "2026-09-15", version: "1" } }), { status: 200, headers: { "content-type": "application/json" } });
-      }
-      if (url.includes("/records/supplement") && method === "POST") {
-        return new Response(JSON.stringify({ data: { id: "supp-comp-1", supplementName: "D3", occurredAt: new Date().toISOString(), version: "1" } }), { status: 200, headers: { "content-type": "application/json" } });
-      }
-      if (method === "GET") {
-        return new Response(JSON.stringify({ data: [], items: [], page: { nextCursor: null } }), { status: 200, headers: { "content-type": "application/json" } });
-      }
-      return new Response(JSON.stringify({ success: true }), { status: 200, headers: { "content-type": "application/json" } });
+      assert.fail(`Unexpected bridge request: ${method} ${url}`);
     };
 
     try {
@@ -879,18 +879,19 @@ test("Issue #5: GrowDesk MCP, OAuth 2.1 & Personal Access Tokens Matrix", async 
       assert.ok(eventsText.includes("睡眠记录"), "Should include sleep");
       assert.ok(eventsText.includes("换尿布"), "Should include diaper");
 
-      // 3. record_health_measurement (growth + medical report)
-      const healthRes = await client.callTool({
-        name: "record_health_measurement",
-        arguments: {
-          growth: { weightKg: 8.5, heightCm: 70.0 },
-          medicalReport: { title: "六月龄体检", date: "2026-09-15" },
-        },
-      });
-      const healthText = getToolText(healthRes);
-      assert.ok(healthText.includes("健康档案更新成功"), "Should confirm health update");
-      assert.ok(healthText.includes("生长测量"), "Should include growth");
-      assert.ok(healthText.includes("化验单/体检档案"), "Should include medical report");
+      // Each shared health request can perform only one write.
+      const growth = { weightKg: 8.5, heightCm: 70.0 };
+      const medicalReport = { title: "六月龄体检", date: "2026-09-15" };
+      const requestCount = requestedPaths.length;
+      await assert.rejects(
+        client.callTool({ name: "record_health_measurement", arguments: { growth, medicalReport } }),
+        /one write action per request/,
+      );
+      assert.equal(requestedPaths.length, requestCount);
+      const growthRes = await client.callTool({ name: "record_health_measurement", arguments: { growth } });
+      assert.match(getToolText(growthRes), /健康档案更新成功[\s\S]*生长测量/);
+      const reportRes = await client.callTool({ name: "record_health_measurement", arguments: { medicalReport } });
+      assert.match(getToolText(reportRes), /健康档案更新成功[\s\S]*化验单\/体检档案/);
 
       // 4. query_parenting_knowledge (knowledge composite)
       const knowRes = await client.callTool({

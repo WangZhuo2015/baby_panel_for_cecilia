@@ -36,7 +36,9 @@ function normalizeOfficialChatRequest(input: string | URL, init: RequestInit): R
   const payload = { ...(body as Record<string, unknown>) };
   const scope = getLlmProfileScope();
   const profile = getActiveLlmProfile();
-  payload.model = scope?.modelId || profile.model || "gpt-6-luna";
+  payload.model = scope?.modelId || profile.model || "gpt-6.2-sol";
+  const effort = getCurrentLlmFeatureScope()?.effort;
+  if (effort) payload.reasoning_effort = effort;
   if (payload.max_completion_tokens === undefined && typeof payload.max_tokens === "number") {
     payload.max_completion_tokens = payload.max_tokens;
   }

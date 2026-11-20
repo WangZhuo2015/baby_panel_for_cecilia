@@ -1,4 +1,5 @@
 "use client";
+import { LlmModelLabel } from "@/components/ui/LlmModelLabel";
 
 import { useRef, useState, useEffect } from "react";
 import {
@@ -304,6 +305,8 @@ export function DailySummaryPosterModal({
 月龄：${summary.babyAgeLabel}
 状态评价：${summary.overallScore} (${summary.overallRating.toFixed(1)}/5.0)
 
+模型：${summary.llm ? `${summary.llm.provider} · ${summary.llm.model}` : summary.isAiGenerated ? "模型未知" : "规则统计 · 未调用模型"}
+
 💡 核心亮点：
 ${summary.headline}
 🏷️ ${summary.highlights.join(" · ")}
@@ -450,6 +453,7 @@ ${summary.sections.tomorrowTips}
               <p className="text-xs font-bold text-[#4A252B] leading-relaxed">
                 “{cleanHeadline}”
               </p>
+                  <LlmModelLabel info={summary.llm} deterministic={!summary.isAiGenerated} />
 
               <div className="flex flex-wrap gap-1.5 pt-0.5">
                 {summary.highlights.slice(0, 4).map((tag, idx) => (

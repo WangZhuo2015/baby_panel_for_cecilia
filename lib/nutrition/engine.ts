@@ -144,6 +144,8 @@ export interface FoodLogInputItem {
   date?: string;
   time?: string;
   foods: string | string[];
+  components?: Array<{ role?: string; name: string; grams?: number; foodId?: string }>;
+  totalGrams?: number;
   portion?: string;
   acceptance?: number;
   babyState?: string;
@@ -339,42 +341,83 @@ export function calculateDailyNutrition(input: EngineInput): DailyNutritionAnaly
 
   for (const foodLog of foodLogs) {
     let foodsList: string[] = [];
-    if (Array.isArray(foodLog.foods)) {
-      foodsList = foodLog.foods;
+    let componentsList: Array<{ role?: string; name: string; grams?: number; foodId?: string }> = [];
+
+    if (Array.isArray(foodLog.components) && foodLog.components.length > 0) {
+      componentsList = foodLog.components;
+      foodsList = componentsList.map((c) => c.name).filter(Boolean);
+    } else if (Array.isArray(foodLog.foods)) {
+      if (foodLog.foods.length > 0 && typeof foodLog.foods[0] === "object" && foodLog.foods[0] !== null && "name" in (foodLog.foods[0] as any)) {
+        componentsList = foodLog.foods as any[];
+        foodsList = componentsList.map((c) => c.name).filter(Boolean);
+      } else {
+        foodsList = foodLog.foods as string[];
+      }
     } else if (typeof foodLog.foods === "string") {
       try {
         const parsed = JSON.parse(foodLog.foods);
-        if (Array.isArray(parsed)) foodsList = parsed;
-        else if (foodLog.foods.trim()) foodsList = [foodLog.foods.trim()];
+        if (Array.isArray(parsed)) {
+          if (parsed.length > 0 && typeof parsed[0] === "object" && parsed[0] !== null && "name" in parsed[0]) {
+            componentsList = parsed;
+            foodsList = componentsList.map((c) => c.name).filter(Boolean);
+          } else {
+            foodsList = parsed;
+          }
+        } else if (foodLog.foods.trim()) {
+          foodsList = [foodLog.foods.trim()];
+        }
       } catch {
         if (foodLog.foods.trim()) foodsList = [foodLog.foods.trim()];
       }
     }
 
-    if (foodsList.length > 0) {
+    if (foodsList.length > 0 || componentsList.length > 0) {
       foodCount += 1;
     }
 
     const portion = foodLog.portion || "most";
     const portionText = PORTION_LABELS[portion] || portion;
 
-    for (const rawFood of foodsList) {
-      if (!rawFood || typeof rawFood !== "string") continue;
-      const cleanName = rawFood.trim();
-      if (!cleanName) continue;
-      foodsTriedSet.add(cleanName);
+    if (componentsList.length > 0) {
+      for (const comp of componentsList) {
+        if (!comp || !comp.name || typeof comp.name !== "string") continue;
+        const cleanName = comp.name.trim();
+        if (!cleanName) continue;
+        foodsTriedSet.add(cleanName);
 
-      const foodNutrients = getFoodNutrients(cleanName, portion);
-      for (const [nId, val] of Object.entries(foodNutrients)) {
-        ensureNutrientSlot(nId);
-        intakeAggregates[nId].food += val.amount;
-        intakeAggregates[nId].sources.push({
-          sourceId: `food_${cleanName}`,
-          sourceName: `辅食: ${cleanName} (${portionText})`,
-          sourceType: "food",
-          amount: val.amount,
-          unit: val.unit,
-        });
+        const gramsLabel = typeof comp.grams === "number" && comp.grams > 0 ? `${comp.grams}g` : portionText;
+        const foodNutrients = getFoodNutrients(cleanName, portion, comp.role, comp.grams);
+        for (const [nId, val] of Object.entries(foodNutrients)) {
+          ensureNutrientSlot(nId);
+          intakeAggregates[nId].food += val.amount;
+          intakeAggregates[nId].sources.push({
+            sourceId: `food_${cleanName}`,
+            sourceName: `辅食: ${cleanName} (${gramsLabel})`,
+            sourceType: "food",
+            amount: val.amount,
+            unit: val.unit,
+          });
+        }
+      }
+    } else {
+      for (const rawFood of foodsList) {
+        if (!rawFood || typeof rawFood !== "string") continue;
+        const cleanName = rawFood.trim();
+        if (!cleanName) continue;
+        foodsTriedSet.add(cleanName);
+
+        const foodNutrients = getFoodNutrients(cleanName, portion);
+        for (const [nId, val] of Object.entries(foodNutrients)) {
+          ensureNutrientSlot(nId);
+          intakeAggregates[nId].food += val.amount;
+          intakeAggregates[nId].sources.push({
+            sourceId: `food_${cleanName}`,
+            sourceName: `辅食: ${cleanName} (${portionText})`,
+            sourceType: "food",
+            amount: val.amount,
+            unit: val.unit,
+          });
+        }
       }
     }
   }

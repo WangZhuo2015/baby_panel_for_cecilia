@@ -14,6 +14,7 @@ import type { FoodLogRecord } from "@/types";
 import { openRecordDrawer } from "@/lib/drawer-bus";
 import { BabyAvatar } from "@/components/ui/BabyAvatar";
 import { isWorkbenchViewport } from "@/lib/responsive";
+import { inferFoodRole } from "@/components/records/FoodLogForm";
 
 function generateWeeklyDates() {
   const todayStr = getLocalDateStr();
@@ -258,22 +259,68 @@ export default function FoodPage() {
                           <div className="flex items-center gap-1 text-[11px] text-text-muted">
                             <span>分量:</span>
                             <span className="font-semibold text-text-secondary">
-                              {PORTION_LABELS[log.portion] || log.portion}
+                              {(log as any).totalGrams ? `${(log as any).totalGrams}g` : (PORTION_LABELS[log.portion] || log.portion)}
                             </span>
                           </div>
                         </div>
 
-                        {/* 食材列表 */}
-                        <div className="flex flex-wrap gap-1.5 pt-0.5">
-                          {foods.map((food, idx) => (
-                            <span
-                              key={idx}
-                              className="px-2.5 py-1 bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200 border border-amber-200/60 text-xs font-bold rounded-xl"
-                            >
-                              {food}
-                            </span>
-                          ))}
-                        </div>
+                        {/* 结构化餐盘展示 (如果存在 components) */}
+                        {Array.isArray((log as any).components) && (log as any).components.length > 0 ? (
+                          <div className="flex flex-wrap gap-1.5 pt-0.5">
+                            {(log as any).components.map((comp: any, idx: number) => {
+                              const roleBadge = comp.role === "staple"
+                                ? "bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200 border-amber-300/70"
+                                : comp.role === "protein"
+                                ? "bg-rose-50 dark:bg-rose-950/40 text-rose-900 dark:text-rose-200 border-rose-300/70"
+                                : comp.role === "vegetable"
+                                ? "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-200 border-emerald-300/70"
+                                : "bg-sky-50 dark:bg-sky-950/40 text-sky-900 dark:text-sky-200 border-sky-300/70";
+                              const roleIcon = comp.role === "staple"
+                                ? "🍚"
+                                : comp.role === "protein"
+                                ? "🥩"
+                                : comp.role === "vegetable"
+                                ? "🥦"
+                                : "🥑";
+                              return (
+                                <span
+                                  key={idx}
+                                  className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold rounded-xl border ${roleBadge}`}
+                                >
+                                  <span>{comp.icon || roleIcon}</span>
+                                  <span>{comp.name}</span>
+                                  {comp.grams && <span className="opacity-75 font-normal text-[11px]">{comp.grams}g</span>}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          /* 食材列表（历史扁平数据兜底，动态归类，保留原始数据不变） */
+                          <div className="flex flex-wrap gap-1.5 pt-0.5">
+                            {foods.map((foodName, idx) => {
+                              const role = inferFoodRole({ name: foodName });
+                              const roleBadge =
+                                role === "staple"
+                                  ? "bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200 border-amber-300/70"
+                                  : role === "protein"
+                                  ? "bg-rose-50 dark:bg-rose-950/40 text-rose-900 dark:text-rose-200 border-rose-300/70"
+                                  : role === "vegetable"
+                                  ? "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-200 border-emerald-300/70"
+                                  : "bg-sky-50 dark:bg-sky-950/40 text-sky-900 dark:text-sky-200 border-sky-300/70";
+                              const roleIcon =
+                                role === "staple" ? "🍚" : role === "protein" ? "🥩" : role === "vegetable" ? "🥦" : "🥑";
+                              return (
+                                <span
+                                  key={idx}
+                                  className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold rounded-xl border ${roleBadge}`}
+                                >
+                                  <span>{roleIcon}</span>
+                                  <span>{foodName}</span>
+                                </span>
+                              );
+                            })}
+                          </div>
+                        )}
 
                         {/* 喜欢程度与状态 */}
                         <div className="flex items-center gap-3 pt-0.5 text-xs text-text-secondary">

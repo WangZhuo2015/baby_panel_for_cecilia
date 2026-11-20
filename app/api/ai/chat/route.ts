@@ -203,7 +203,7 @@ export async function GET(request: Request) {
     }
     let sessionId = url.searchParams.get("sessionId");
     const turnRun = turnId ? activeChatRunManager.getByTurnId(user.id, turnId) : undefined;
-    if (!sessionId && turnRun && turnRun.userId === user.id) sessionId = turnRun.sessionId;
+    if (!sessionId && turnRun?.userId === user.id) sessionId = turnRun.sessionId;
     if (!sessionId) {
       return NextResponse.json({ error: "sessionId is required" }, { status: 400 });
     }

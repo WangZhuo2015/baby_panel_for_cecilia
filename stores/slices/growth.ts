@@ -30,6 +30,7 @@ export interface GrowthSlice {
   /** Internal scope marker used to clear stale food-library rows on family switch. */
   foodItemsScopeFamilyId?: string;
   aiTips: string[];
+  aiTipsModel: unknown;
   aiError: string | null;
   fetchGrowthMeasurements: (force?: boolean) => Promise<void>;
   fetchMedicalReports: (category?: string, force?: boolean) => Promise<void>;
@@ -66,6 +67,7 @@ export const createGrowthSlice = (set: any, get: any): GrowthSlice => ({
   activities: [],
   weather: null,
   aiTips: [],
+  aiTipsModel: null,
   aiError: null,
 
   fetchGrowthMeasurements: async (force?: boolean) => {
@@ -274,7 +276,7 @@ export const createGrowthSlice = (set: any, get: any): GrowthSlice => ({
         const res = await fetch("/api/ai/tips");
         const data = await res.json();
         if (!res.ok) { set({ aiTips: [], aiError: data?.error || "AI 育儿建议服务暂时不可用" }); return; }
-        set({ aiTips: Array.isArray(data) ? data : [], aiError: null });
+        set({ aiTips: Array.isArray(data) ? data : [], aiTipsModel: res.headers.get("X-LLM-Model") === null ? undefined : res.headers.get("X-LLM-Model") !== "none" ? { model: decodeURIComponent(res.headers.get("X-LLM-Model")!), provider: decodeURIComponent(res.headers.get("X-LLM-Provider") || "") } : null, aiError: null });
         markFetched('aiTips');
       } catch (e: any) {
         if (!isAuthError(e)) console.error("Failed to fetch AI tips:", e);

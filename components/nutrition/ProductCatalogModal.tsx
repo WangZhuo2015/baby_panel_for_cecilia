@@ -1,4 +1,5 @@
 "use client";
+import { LlmModelLabel } from "@/components/ui/LlmModelLabel";
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import {
@@ -65,6 +66,7 @@ function ScopedProductCatalogModal({ isOpen, onClose, babyId, onUpdated }: Produ
   });
 
   // OCR 识别中状态
+  const [ocrModel, setOcrModel] = useState<unknown>(undefined);
   const [ocrLoading, setOcrLoading] = useState<boolean>(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -367,6 +369,7 @@ function ScopedProductCatalogModal({ isOpen, onClose, babyId, onUpdated }: Produ
       }
 
       const data = await res.json();
+      setOcrModel(data.llm);
       const parsed: ParsedNutritionLabel = data.parsed;
 
       if (parsed.type === "formula") {
@@ -423,6 +426,7 @@ function ScopedProductCatalogModal({ isOpen, onClose, babyId, onUpdated }: Produ
               <p className="text-[11px] text-text-secondary dark:text-gray-300">
                 添加补剂自动加入计划 · 支持爱他美全版本、Witsbb与拍照OCR
               </p>
+              {ocrModel !== undefined && <LlmModelLabel info={ocrModel} />}
             </div>
           </div>
           <button

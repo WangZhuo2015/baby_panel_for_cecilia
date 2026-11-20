@@ -21,6 +21,12 @@ export function makeRecordFoodTool(ctx: {
     description: "记录一次辅食。foods 为食材名称数组（如 [\"高铁米粉\", \"胡萝卜泥\"]），portion: little(少量)/half(半碗)/most(大部分)/all(全部)，acceptance(喜欢程度 1-5)，babyState: happy(开心)/neutral(一般)/rejected(抗拒)，hasAbnormal(是否有过敏等异常)。",
     parameters: Type.Object({
       foods: Type.Array(Type.String({ description: "食材名称，如米粉、苹果泥、胡萝卜泥" })),
+      components: Type.Optional(Type.Array(Type.Object({
+        role: Type.String({ description: "staple(主食)/protein(肉蛋优质蛋白)/vegetable(蔬菜)/optional(辅食油或加餐)" }),
+        name: Type.String({ description: "食材名称" }),
+        grams: Type.Optional(Type.Number({ description: "进食克数" })),
+      }))),
+      totalGrams: Type.Optional(Type.Number({ description: "总克数" })),
       date: Type.Optional(Type.String({ description: "YYYY-MM-DD，默认今天" })),
       time: Type.Optional(Type.String({ description: "HH:mm，如 12:30，默认当前时间" })),
       portion: Type.Optional(Type.Union([Type.Literal("little"), Type.Literal("half"), Type.Literal("most"), Type.Literal("all")])),
@@ -46,6 +52,8 @@ export function makeRecordFoodTool(ctx: {
         const payload = toGrowDeskFoodCreatePayload({
           babyId: ctx.baby.id,
           foods,
+          components: Array.isArray((params as any).components) ? (params as any).components : undefined,
+          totalGrams: typeof (params as any).totalGrams === "number" ? (params as any).totalGrams : undefined,
           date,
           time,
           portion: typeof (params as any).portion === "string" ? (params as any).portion : "most",

@@ -5,8 +5,9 @@ dotenv.config();
 
 import { prisma } from "../../lib/prisma";
 import { createTestTenant, destroyTestTenant } from "../helpers/tenant";
+import { getTestServerUrl } from "../helpers/test-server-url";
 
-const BASE_URL = process.env.BABY_PANEL_URL || "http://127.0.0.1:3088";
+const BASE_URL = getTestServerUrl();
 
 test("API: Family, Config, Notifications, and Books Domain", async (t) => {
   // 隔离租户（本文件仅 GET，但仍不用真实账号）

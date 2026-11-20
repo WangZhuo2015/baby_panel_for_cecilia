@@ -1,7 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
+import { getTestServerUrl } from "./tests/helpers/test-server-url";
 
-const PORT = process.env.PORT || "3089";
-const BASE_URL = `http://127.0.0.1:${PORT}`;
+const BASE_URL = getTestServerUrl();
 
 export default defineConfig({
   testDir: "./tests/e2e",
@@ -24,15 +24,4 @@ export default defineConfig({
       use: { ...devices["Desktop Chrome"] },
     },
   ],
-  webServer: {
-    command: `npx next dev --port ${PORT}`,
-    url: `${BASE_URL}/api/app-config`,
-    reuseExistingServer: true,
-    timeout: 120_000,
-    env: {
-      DATABASE_URL: "file:./dev_test.db",
-      PORT: PORT,
-      NODE_ENV: "development",
-    },
-  },
 });

@@ -1,4 +1,5 @@
 "use client";
+import { LlmModelLabel } from "@/components/ui/LlmModelLabel";
 
 import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
@@ -90,6 +91,7 @@ export default function HomePage() {
   const weather = useBabyStore((s) => s.weather);
   const feedingRecords = useBabyStore((s) => s.feedingRecords);
   const sleepRecords = useBabyStore((s) => s.sleepRecords);
+  const aiTipsModel = useBabyStore((s) => s.aiTipsModel);
   const aiTips = useBabyStore((s) => s.aiTips);
   const aiError = useBabyStore((s) => s.aiError);
   const authLoading = useBabyStore((s) => s.authLoading);
@@ -588,6 +590,7 @@ export default function HomePage() {
 
         {/* ===== 右栏：智能顾问、补剂打卡与环境分析 (Col 5) ===== */}
         <div className="workbench:col-span-5 space-y-5">
+          {aiDailySummary && <LlmModelLabel info={aiDailySummary.llm} deterministic={!aiDailySummary.isAiGenerated} />}
           {/* AI Assistant Advice & Unified AI Hub Launcher */}
           <CuteCard className="bg-gradient-to-br from-primary-light via-pink-50/40 to-lavender/15 border border-primary/20 p-4.5 space-y-3.5 shadow-soft hover:shadow-elevated transition-all">
             <div className="flex items-center justify-between">
@@ -657,6 +660,7 @@ export default function HomePage() {
               </button>
             </div>
 
+            {!aiLoading && aiTips.length > 0 && <LlmModelLabel info={aiTipsModel} deterministic={aiTipsModel === null} />}
             {/* AI Real-time Advice List */}
             {aiLoading ? (
               <div className="space-y-2 py-2 animate-pulse">

@@ -10,10 +10,12 @@ import {
   validateLlmSelection,
 } from "./llm-preferences";
 import { AI_CONFIG } from "./config";
+import type { GptEffort } from "./llm-preferences";
 import {
   getActiveLlmProfile,
   getActiveLlmProfileId,
   getLlmProfileProvider,
+  OPENAI_OFFICIAL_PROFILE_ID,
   resolveLlmProfileModel,
   runWithLlmProfileScope,
 } from "./llm-profiles";
@@ -24,6 +26,7 @@ export interface LlmFeatureScope {
   owner: string;
   feature: LlmFeature;
   selection?: LlmSelection;
+  effort?: GptEffort;
 }
 
 const featureScope = new AsyncLocalStorage<LlmFeatureScope>();
@@ -46,7 +49,10 @@ export async function withLlmFeature<T>(
     }
     throw error;
   }
-  const execute = () => featureScope.run({ owner, feature, selection }, work);
+  const effort = selection.source === "api" && selection.profileId === OPENAI_OFFICIAL_PROFILE_ID
+    ? selection.reasoningEffort || (feature === "chat" ? "xhigh" : undefined)
+    : undefined;
+  const execute = () => featureScope.run({ owner, feature, selection, effort }, work);
   if (selection?.source === "api") {
     return runWithLlmProfileScope(selection.profileId, selection.modelId, execute);
   }
@@ -97,6 +103,7 @@ export function getCurrentLlmCacheKey(): string | undefined {
         source: scope.selection.source,
         profileId: scope.selection.profileId,
         modelId: scope.selection.modelId,
+        ...(scope.effort ? { reasoningEffort: scope.effort } : {}),
       }
     : {
         source: "api",

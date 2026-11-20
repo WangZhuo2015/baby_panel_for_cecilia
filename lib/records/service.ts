@@ -73,6 +73,8 @@ export interface CreateFoodLogInput {
   date?: string;
   time?: string;
   foods?: unknown;
+  components?: unknown[];
+  totalGrams?: number;
   portion?: string;
   acceptance?: number;
   babyState?: string;
@@ -440,7 +442,11 @@ export async function createFoodLog(ctx: RecordContext, input: CreateFoodLogInpu
     ? await prisma.foodLogRecord.upsert({ where: { babyId_clientId: { babyId: ctx.babyId, clientId } }, create: { ...data, clientId }, update: {} })
     : await prisma.foodLogRecord.create({ data });
   void triggerFamilyPush(ctx, "记录了辅食 🍚", `${foodsArr.join("、") || "辅食"} · 份量: ${validatedPortion}`, "/food");
-  return { ...record, foods: safeJsonParse(record.foods, []) };
+  return {
+    ...record,
+    foods: safeJsonParse(record.foods, []),
+    ...(input.components ? { components: input.components, totalGrams: input.totalGrams } : {}),
+  };
 }
 
 export async function createGrowth(ctx: RecordContext, input: CreateGrowthInput) {

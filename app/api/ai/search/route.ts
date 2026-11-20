@@ -40,7 +40,7 @@ export async function GET(request: Request) {
 
   try {
     const results = await performWebSearch(q, limit);
-    return NextResponse.json({ query: q, total: results.length, results });
+    return NextResponse.json({ query: q, total: results.length, results, llm: null });
   } catch (err: any) {
     return NextResponse.json({ error: err?.message || "搜索失败" }, { status: 500 });
   }
@@ -78,7 +78,7 @@ export async function POST(request: Request) {
 
   try {
     const results = await performWebSearch(q, limit);
-    return NextResponse.json({ query: q, total: results.length, results });
+    return NextResponse.json({ query: q, total: results.length, results, llm: null });
   } catch (err: any) {
     return NextResponse.json({ error: err?.message || "搜索失败" }, { status: 500 });
   }

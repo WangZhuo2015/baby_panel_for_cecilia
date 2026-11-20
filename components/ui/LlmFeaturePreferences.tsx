@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { defaultLlmFeatureProfileId } from "@/lib/llm-feature-model";
 import {
   cacheLlmPreferenceSelection,
   normalizeLlmPreferenceSnapshot,
@@ -50,10 +51,6 @@ function featureSelectionMap(snapshot: LlmPreferenceSnapshot): SelectionMap {
   return selections;
 }
 
-function defaultProfileId(feature: Feature): string {
-  return feature === "daily_summary" ? "amd-v4.1-flash" : "openai-official";
-}
-
 function initialDrafts(snapshot: LlmPreferenceSnapshot): SelectionMap {
   const persisted = featureSelectionMap(snapshot);
   const fallbackProfileId = snapshot.activeProfileId || snapshot.defaultModelInfo?.profileId || "";
@@ -65,7 +62,7 @@ function initialDrafts(snapshot: LlmPreferenceSnapshot): SelectionMap {
       defaults[row.id] = persisted[row.id];
       continue;
     }
-    const preferredProfileId = defaultProfileId(row.id);
+    const preferredProfileId = defaultLlmFeatureProfileId(row.id);
     const profile = snapshot.profiles.find(item => item.id === preferredProfileId)
       || snapshot.profiles.find(item => item.id === fallbackProfileId)
       || fallbackProfile;
@@ -106,6 +103,8 @@ type LlmFeaturePreferencesProps = {
   chatGPTStatusError: string;
   chatGPTModelCatalogs: Record<string, ModelCatalogState>;
   onLoadChatGPTModels: (profileId: string) => Promise<ChatGPTModelMetadata[]>;
+  onModelChoice?: (selection: Selection) => void;
+  onModelSaved?: (selection: Selection) => void;
 };
 
 export function LlmFeaturePreferences({
@@ -119,6 +118,8 @@ export function LlmFeaturePreferences({
   chatGPTStatusError,
   chatGPTModelCatalogs,
   onLoadChatGPTModels,
+  onModelChoice,
+  onModelSaved,
 }: LlmFeaturePreferencesProps) {
   const [saved, setSaved] = useState<SelectionMap>({});
   const [drafts, setDrafts] = useState<SelectionMap>({});
@@ -173,11 +174,13 @@ export function LlmFeaturePreferences({
     for (const row of FEATURE_ROWS) {
       const savedUnchanged = (saveRevisionRef.current[row.id] || 0) === (applied.saveRevisions[row.id] || 0);
       const draftUnchanged = (draftRevisionRef.current[row.id] || 0) === (applied.draftRevisions[row.id] || 0);
+      const hasUnsavedDraft = Boolean(draftRevisionRef.current[row.id])
+        && !sameSelection(draftsRef.current[row.id], savedRef.current[row.id]);
       if (savedUnchanged) {
         if (incomingSaved[row.id]) nextSaved[row.id] = incomingSaved[row.id];
         else delete nextSaved[row.id];
       }
-      if (draftUnchanged) {
+      if (draftUnchanged && !hasUnsavedDraft) {
         const initial = defaults[row.id];
         if (initial) {
           nextDrafts[row.id] = initial;
@@ -213,6 +216,7 @@ export function LlmFeaturePreferences({
     draftsRef.current = nextDrafts; sourcesRef.current = nextSources; profileIdsRef.current = nextProfileIds;
     draftRevisionRef.current[feature] = (draftRevisionRef.current[feature] || 0) + 1;
     setDrafts(nextDrafts); setSources(nextSources); setProfileIds(nextProfileIds);
+    onModelChoice?.(selection || { feature, source, profileId, modelId: "" });
     setErrors(current => ({ ...current, [feature]: "" }));
     const queue = queuesRef.current.get(feature);
     if (queue?.running) {
@@ -227,7 +231,7 @@ export function LlmFeaturePreferences({
     const row = FEATURE_ROWS.find(item => item.id === feature)!;
     const persisted = savedRef.current[feature];
     if (source === "api") {
-      const fallbackId = defaultProfileId(feature);
+      const fallbackId = defaultLlmFeatureProfileId(feature);
       const profileId = persisted?.source === "api" ? persisted.profileId
         : snapshot?.profiles.find(item => item.id === fallbackId)?.id
           || snapshot?.profiles.find(item => item.id === snapshot?.activeProfileId && item.available)?.id
@@ -342,6 +346,7 @@ export function LlmFeaturePreferences({
           const savedNext = { ...savedRef.current, [feature]: savedSelection };
           savedRef.current = savedNext; setSaved(savedNext);
           cacheLlmPreferenceSelection(saveOwner, savedSelection);
+          onModelSaved?.(savedSelection);
           const pending = queue.pending;
           if (pending && !sameSelection(pending, savedSelection)) {
             next = pending; queue.pending = undefined;

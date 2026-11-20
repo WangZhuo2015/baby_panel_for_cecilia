@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useLayoutEffect, useEffectEvent, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -52,6 +52,10 @@ import { AiActionCard, ActionCardData } from "@/components/ui/AiActionCard";
 import { VoiceRecordingBar } from "@/components/ui/VoiceRecordingBar";
 import { useToast } from "@/components/ui/Toast";
 import { compressImageForOcr } from "@/lib/upload";
+import { ChatGPTPlanControls } from "@/components/ui/ChatGPTPlanControls";
+import type { ChatControlReadiness } from "@/components/ui/ChatGPTPlanControls";
+import { LlmModelLabel } from "@/components/ui/LlmModelLabel";
+import { ChatStreamError, consumeChatEventStream } from "@/lib/agent/chat-client-stream";
 import type { AiDailySummaryResult } from "@/types/daily-summary";
 
 export type AiContextType =
@@ -184,6 +188,83 @@ interface Message {
   timestamp: string;
   isStreaming?: boolean;
   tools?: ToolTrace[];
+  llm?: { source: "api" | "chatgpt"; provider: string; model: string; profileId?: string } | null;
+  turnId?: string;
+  turnStatus?: "running" | "completed" | "failed" | "cancelled";
+  retryable?: boolean;
+  writeToolStarted?: boolean;
+  error?: string;
+  retryContextDetail?: string | object;
+  retryContextDetailAvailable?: boolean;
+}
+
+function parseToolMetadata(value: unknown): { tools: ToolTrace[]; llm?: Message["llm"]; turn?: Record<string, unknown>; request?: Record<string, unknown> } {
+  let entries: unknown[] = Array.isArray(value) ? value : [];
+  if (typeof value === "string") {
+    try { const parsed: unknown = JSON.parse(value); entries = Array.isArray(parsed) ? parsed : []; } catch { entries = []; }
+  }
+  let llm: Message["llm"];
+  let turn: Record<string, unknown> | undefined;
+  let request: Record<string, unknown> | undefined;
+  const tools: ToolTrace[] = [];
+  for (const entry of entries) {
+    if (!entry || typeof entry !== "object") continue;
+    const item = entry as Record<string, any>;
+    if (item.type === "llm_model" && item.llm && typeof item.llm.model === "string") llm = item.llm;
+    else if (item.type === "llm_turn") turn = item;
+    else if (item.type === "llm_turn_request") request = item;
+    else if (item.type !== "llm_retry_claim" && typeof item.name === "string" && (item.status === "start" || item.status === "end")) tools.push(item as ToolTrace);
+  }
+  return { tools, llm, turn, request };
+}
+
+function mapPersistedChatMessages(rawMessages: any[]): Message[] {
+  const mapped = (rawMessages || []).filter((m) => m.role === "user" || m.role === "assistant").map((m: any) => {
+    let imgs: string[] = [];
+    if (Array.isArray(m.images)) imgs = m.images;
+    else if (m.image) {
+      try { const parsed = JSON.parse(m.image); imgs = Array.isArray(parsed) ? parsed : [m.image]; }
+      catch { imgs = [m.image]; }
+    }
+    const metadata = parseToolMetadata(m.tools ?? m.toolsJson);
+    const isUser = m.role === "user";
+    const turn = metadata.turn;
+    return {
+      id: m.id,
+      role: m.role,
+      content: m.content,
+      image: m.image || undefined,
+      images: imgs.length > 0 ? imgs : undefined,
+      timestamp: new Date(m.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      tools: metadata.tools,
+      llm: metadata.llm,
+      turnId: isUser ? (typeof metadata.request?.turnId === "string" ? metadata.request.turnId : undefined) : (typeof turn?.turnId === "string" ? turn.turnId : undefined),
+      turnStatus: !isUser && (turn?.status === "running" || turn?.status === "completed" || turn?.status === "failed" || turn?.status === "cancelled") ? turn.status : undefined,
+      retryable: !isUser && turn?.retryable === true,
+      writeToolStarted: !isUser && turn?.writeToolStarted === true,
+      error: !isUser && typeof turn?.error === "string" ? turn.error : undefined,
+      retryContextDetail: isUser && metadata.request?.contextDetailPresent === true && metadata.request.contextDetailStored === true
+        ? metadata.request.contextDetail as string | object
+        : undefined,
+      retryContextDetailAvailable: isUser && typeof metadata.request?.contextDetailPresent === "boolean" && typeof metadata.request.contextDetailStored === "boolean"
+        ? metadata.request.contextDetailStored === true
+        : undefined,
+    } as Message;
+  });
+  const retryContextByTurn = new Map<string, Pick<Message, "retryContextDetail" | "retryContextDetailAvailable">>();
+  for (const message of mapped) {
+    if (message.role === "user" && message.turnId) {
+      retryContextByTurn.set(message.turnId, {
+        retryContextDetail: message.retryContextDetail,
+        retryContextDetailAvailable: message.retryContextDetailAvailable,
+      });
+    }
+  }
+  return mapped.map((message) => {
+    if (message.role !== "assistant" || !message.turnId) return message;
+    const retryContext = retryContextByTurn.get(message.turnId);
+    return retryContext ? { ...message, ...retryContext } : message;
+  });
 }
 
 const CONTEXT_META: Record<
@@ -401,6 +482,7 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
 }) => {
   const router = useRouter();
   const baby = useBabyStore((s) => s.baby);
+  const babyId = baby?.id;
   const age = baby ? calculateAge(baby.birthDate) : { months: 0, days: 0, label: "0月0天" };
 
   const [activeTab, setActiveTab] = useState<AiHubTab>("chat");
@@ -412,13 +494,14 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
   const [messages, setMessages] = useState<Message[]>([]);
   const { showToast } = useToast();
 
-  const [keyboardInset, setKeyboardInset] = useState(0);
+  const [viewport, setViewport] = useState<{ top: number; height: number; compact: boolean } | null>(null);
   useEffect(() => {
     const vv = window.visualViewport;
-    if (!vv) return;
+    if (!isOpen || !vv) return;
     const update = () => {
-      const inset = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
-      setKeyboardInset(inset > 120 ? inset : 0);
+      const compact = window.matchMedia("(pointer: coarse)").matches &&
+        window.innerHeight - vv.height > 100;
+      setViewport({ top: vv.offsetTop, height: vv.height, compact });
     };
     update();
     vv.addEventListener("resize", update);
@@ -429,12 +512,13 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
       vv.removeEventListener("scroll", update);
       window.removeEventListener("orientationchange", update);
     };
-  }, []);
+  }, [isOpen]);
 
   const [inputText, setInputText] = useState("");
   const [selectedImages, setSelectedImages] = useState<string[]>([]);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [chatReadiness, setChatReadiness] = useState<ChatControlReadiness>({ ready: false, message: "正在加载模型配置…" });
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -446,6 +530,7 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
   const [historyFilter, setHistoryFilter] = useState<"all" | "current">("all");
   const [sessionList, setSessionList] = useState<SessionSummary[]>([]);
   const [loadingSessions, setLoadingSessions] = useState(false);
+  const sessionListScopeRef = useRef<{ babyId: string | undefined; request?: AbortController } | null>(null);
 
   const [dailySummaryData, setDailySummaryData] = useState<AiDailySummaryResult | null>(null);
   const [loadingDailySummary, setLoadingDailySummary] = useState(false);
@@ -474,21 +559,43 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
   }, [activeTab, dailySummaryData, fetchDailySummaryInline]);
 
   const fetchSessions = useCallback(async () => {
+    const scope = sessionListScopeRef.current;
+    if (!scope || scope.babyId !== babyId) return;
+
+    scope.request?.abort();
+    const controller = new AbortController();
+    scope.request = controller;
     setLoadingSessions(true);
     try {
       const query = new URLSearchParams({ limit: "50" });
-      if (baby?.id) query.set("babyId", baby.id);
-      const res = await fetch(`/api/ai/sessions?${query.toString()}`);
+      if (babyId) query.set("babyId", babyId);
+      const res = await fetch(`/api/ai/sessions?${query.toString()}`, { signal: controller.signal });
       if (res.ok) {
         const data = await res.json();
-        setSessionList(data.sessions || []);
+        if (!controller.signal.aborted) setSessionList(data.sessions || []);
       }
     } catch {
       // ignore
     } finally {
-      setLoadingSessions(false);
+      if (!controller.signal.aborted) {
+        scope.request = undefined;
+        setLoadingSessions(false);
+      }
     }
-  }, [baby?.id]);
+  }, [babyId]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const scope: NonNullable<typeof sessionListScopeRef.current> = { babyId };
+    sessionListScopeRef.current = scope;
+    setSessionList([]);
+    void fetchSessions();
+    return () => {
+      sessionListScopeRef.current = null;
+      scope.request?.abort();
+    };
+  }, [isOpen, babyId, fetchSessions]);
 
   const loadSessionDetail = async (targetId: string) => {
     const summary = sessionList.find((session) => session.id === targetId);
@@ -504,37 +611,10 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
       const data = await res.json();
       const s = data.session;
       setSessionId(s.id);
+      sessionIdRef.current = s.id;
       setSessionTitle(s.title);
       if (s.messages && s.messages.length > 0) {
-        const mappedMessages: Message[] = s.messages.map((m: any) => {
-          let imgs: string[] = [];
-          if (Array.isArray(m.images)) {
-            imgs = m.images;
-          } else if (m.image) {
-            if (m.image.startsWith("[")) {
-              try {
-                const parsed = JSON.parse(m.image);
-                if (Array.isArray(parsed)) imgs = parsed;
-              } catch {
-                imgs = [m.image];
-              }
-            } else {
-              imgs = [m.image];
-            }
-          }
-          return {
-            id: m.id,
-            role: m.role,
-            content: m.content,
-            image: m.image || undefined,
-            images: imgs.length > 0 ? imgs : undefined,
-            timestamp: new Date(m.createdAt).toLocaleTimeString([], {
-              hour: "2-digit",
-              minute: "2-digit",
-            }),
-            tools: Array.isArray(m.tools) ? m.tools : [],
-          };
-        });
+        const mappedMessages = mapPersistedChatMessages(s.messages);
 
         if (data.activeRun && data.activeRun.status === "running") {
           mappedMessages.push({
@@ -605,7 +685,9 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
     setMessages([welcome]);
     setShowHistory(false);
     setActiveTab("chat");
-    setTimeout(() => inputRef.current?.focus(), 150);
+    if (window.matchMedia("(pointer: fine)").matches) {
+      setTimeout(() => inputRef.current?.focus({ preventScroll: true }), 150);
+    }
   };
 
   const handleDeleteSession = async (e: React.MouseEvent, targetId: string) => {
@@ -625,7 +707,7 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
     }
   };
 
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messageListRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const visionInputRef = useRef<HTMLInputElement>(null);
@@ -711,8 +793,129 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
   loadingRef.current = loading;
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    const list = messageListRef.current;
+    list?.scrollTo({ top: list.scrollHeight, behavior: "smooth" });
   };
+
+  const executeChatTurn = useCallback(async (input: {
+    turnId: string;
+    sessionId: string;
+    assistantId: string;
+    body: Record<string, unknown>;
+    signal: AbortSignal;
+    retry: boolean;
+  }) => {
+    let accumulatedText = "";
+    const update = (change: (message: Message) => Message) => setMessages((previous) => previous.map((message) => message.id === input.assistantId ? change(message) : message));
+    const applyEvent = (event: Record<string, unknown>) => {
+      if (event.session && typeof event.session === "object") {
+        const session = event.session as { id?: unknown; title?: unknown };
+        if (typeof session.id === "string") {
+          setSessionId(session.id); sessionIdRef.current = session.id;
+          if (typeof session.title === "string") setSessionTitle(session.title);
+        }
+      }
+      if (typeof event.text === "string") {
+        accumulatedText = event.replay === true ? event.text : accumulatedText + event.text;
+        update((message) => ({ ...message, content: accumulatedText, isStreaming: true }));
+      }
+      if (event.llm && typeof event.llm === "object") {
+        update((message) => ({ ...message, llm: event.llm as Message["llm"] }));
+      }
+      if (event.tool && typeof event.tool === "object" && typeof (event.tool as ToolTrace).name === "string") {
+        const incoming = event.tool as ToolTrace;
+        update((message) => {
+          const tools = [...(message.tools || [])];
+          const index = tools.findIndex((tool) => tool.name === incoming.name && tool.status === "start");
+          if (incoming.status === "end" && index >= 0) tools[index] = { ...tools[index], ...incoming };
+          else if (index < 0) tools.push(incoming);
+          return { ...message, tools, isStreaming: true };
+        });
+      }
+      if (typeof event.error === "string") {
+        update((message) => ({
+          ...message,
+          error: event.error as string,
+          turnId: typeof event.turnId === "string" ? event.turnId : message.turnId,
+          turnStatus: "failed",
+          retryable: event.retryable === true,
+          writeToolStarted: event.writeToolStarted === true,
+        }));
+      }
+    };
+    const consume = (response: Response) => consumeChatEventStream(response, applyEvent);
+    const statusUrl = `/api/ai/chat?turnId=${encodeURIComponent(input.turnId)}&sessionId=${encodeURIComponent(input.sessionId)}`;
+    const readStatus = async () => {
+      const response = await fetch(statusUrl, { credentials: "same-origin", cache: "no-store", signal: input.signal });
+      const value = await response.json().catch(() => ({}));
+      if (!response.ok) throw new ChatStreamError(typeof value.error === "string" ? value.error : "无法核对后台请求状态", { code: value.code }, true);
+      return value as { active?: boolean; status?: string; retryable?: boolean; writeToolStarted?: boolean };
+    };
+    const readExistingStream = async () => {
+      const response = await fetch(`${statusUrl}&stream=true`, {
+        headers: { Accept: "text/event-stream" }, credentials: "same-origin", cache: "no-store", signal: input.signal,
+      });
+      await consume(response);
+    };
+    const postTurn = async (retry: boolean) => fetch("/api/ai/chat", {
+      method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, signal: input.signal,
+      body: JSON.stringify({ ...input.body, turnId: input.turnId, sessionId: input.sessionId, ...(retry ? { retry: true } : {}) }),
+    });
+
+    try {
+      if (input.retry) {
+        const status = await readStatus();
+        if (status.active || status.status === "running" || status.status === "completed") {
+          await readExistingStream();
+        } else if (status.status === "failed" && status.retryable === true && status.writeToolStarted !== true) {
+          await consume(await postTurn(true));
+        } else {
+          throw new ChatStreamError("后台状态不支持安全重试；请勿重新发送相同请求", { retryable: false });
+        }
+      } else {
+        await consume(await postTurn(false));
+      }
+      update((message) => ({ ...message, content: accumulatedText || message.content, isStreaming: false, error: undefined, turnStatus: "completed", retryable: false }));
+    } catch (error) {
+      let failure = error;
+      if (error instanceof ChatStreamError && error.uncertain && !input.signal.aborted) {
+        try {
+          const status = await readStatus();
+          if (status.active || status.status === "running" || status.status === "completed" || status.status === "failed" || status.status === "cancelled") {
+            await readExistingStream();
+            update((message) => ({ ...message, content: accumulatedText || message.content, isStreaming: false, error: undefined, turnStatus: "completed", retryable: false }));
+            failure = undefined;
+          } else {
+            throw new ChatStreamError("连接中断，后台状态尚未确认；为避免重复处理，请稍后查看历史记录", { retryable: false }, true);
+          }
+        } catch (recoveryError) {
+          failure = recoveryError;
+        }
+      }
+      if (failure) {
+        if (input.signal.aborted) {
+          update((message) => ({ ...message, isStreaming: false, turnStatus: "cancelled", retryable: false }));
+        } else {
+          const messageText = failure instanceof Error ? failure.message : "AI 请求未完成";
+          const details = failure instanceof ChatStreamError ? failure.details : {};
+          update((message) => ({
+            ...message,
+            content: accumulatedText || messageText,
+            isStreaming: false,
+            error: messageText,
+            turnStatus: details.retryable === true && details.writeToolStarted !== true ? "failed" : undefined,
+            retryable: details.retryable === true && details.writeToolStarted !== true,
+            writeToolStarted: details.writeToolStarted === true,
+          }));
+        }
+      }
+    } finally {
+      setLoading(false);
+      loadingRef.current = false;
+      useBabyStore.getState().refreshAll().catch(() => {});
+      fetchSessions();
+    }
+  }, [fetchSessions]);
 
   const handleSend = useCallback(
     async (textToSend?: string, imagesOverride?: string[] | string, customContext?: AiContextType) => {
@@ -724,179 +927,121 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
           : selectedImagesRef.current;
 
       if ((!query && currentImgs.length === 0) || loadingRef.current) return;
+      if (!chatReadiness.ready) { showToast(chatReadiness.message || "模型配置尚未就绪"); return; }
+      if (!baby?.id) { showToast("请先选择宝宝档案"); return; }
 
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
       }
       const controller = new AbortController();
       abortControllerRef.current = controller;
+      loadingRef.current = true;
+      setLoading(true);
 
       const targetContext = customContext || currentContextType;
+      const promptText = query || (currentImgs.length > 1 ? `请帮我同时对比和解读这 ${currentImgs.length} 张图片/单据` : "请帮我结构化识别这张单据并提供儿科解读");
+      const turnId = crypto.randomUUID();
+      let activeSessionId = sessionIdRef.current;
+      try {
+        if (!activeSessionId) {
+          const response = await fetch("/api/ai/sessions", {
+            method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, signal: controller.signal,
+            body: JSON.stringify({ babyId: baby.id, title: promptText.slice(0, 24) || "新对话", contextType: targetContext }),
+          });
+          const value = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(value.error || "无法创建对话，请重试");
+          const created = value.session || value.data?.session || value;
+          if (typeof created.id !== "string") throw new Error("服务器没有返回对话标识");
+          activeSessionId = created.id;
+          sessionIdRef.current = created.id;
+          setSessionId(created.id);
+          setSessionTitle(typeof created.title === "string" ? created.title : promptText.slice(0, 24));
+        }
+      } catch (error) {
+        loadingRef.current = false; setLoading(false);
+        showToast(error instanceof Error ? error.message : "无法创建对话，请重试");
+        return;
+      }
 
       const userMsg: Message = {
-        id: `user_${Date.now()}`,
+        id: `user_${turnId}`,
         role: "user",
-        content: query || (currentImgs.length > 1 ? `请帮我同时对比和解读这 ${currentImgs.length} 张图片/单据` : "请帮我结构化识别这张单据并提供儿科解读"),
+        content: promptText,
         image: currentImgs.length === 1 ? currentImgs[0] : undefined,
         images: currentImgs.length > 0 ? currentImgs : undefined,
+        turnId,
         timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
       };
 
-      const aiMsgId = `ai_${Date.now()}`;
+      const aiMsgId = `ai_${turnId}_1`;
       const initialAiMsg: Message = {
         id: aiMsgId,
         role: "assistant",
         content: "",
         timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
         isStreaming: true,
+        turnId,
+        turnStatus: "running",
+        retryContextDetail: contextDetail,
+        retryContextDetailAvailable: true,
       };
 
+      const previousHistory = messagesRef.current
+        .filter((message) => message.id !== "welcome" && (message.role === "user" || message.role === "assistant"))
+        .map((message) => ({ role: message.role, content: message.content }));
       setMessages((prev) => [...prev, userMsg, initialAiMsg]);
       setInputText("");
       setSelectedImages([]);
-      setLoading(true);
       setActiveTab("chat");
-
-      let accumulatedText = "";
-
-      try {
-        const history = messagesRef.current
-          .filter((m) => m.id !== "welcome")
-          .map((m) => ({ role: m.role, content: m.content }));
-
-        const res = await fetch("/api/ai/chat", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          signal: controller.signal,
-          body: JSON.stringify({
-            messages: [
-              ...history,
-              {
-                role: "user",
-                content: query || (currentImgs.length > 1 ? `请帮我同时对比和解读这 ${currentImgs.length} 张图片/单据` : "请帮我结构化识别这张单据并提供儿科解读"),
-              },
-            ],
-            contextType: targetContext,
-            contextDetail,
-            babyId: baby?.id,
-            images: currentImgs,
-            image: currentImgs.length === 1 ? currentImgs[0] : undefined,
-            sessionId: sessionIdRef.current || undefined,
-          }),
-        });
-
-        if (!res.body) throw new Error("No response stream");
-
-        const reader = res.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = "";
-
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split("\n");
-          buffer = lines.pop() || "";
-
-          for (const line of lines) {
-            const trimmed = line.trim();
-            if (!trimmed || trimmed.startsWith(":")) continue;
-
-            if (trimmed === "data: [DONE]") break;
-
-            if (trimmed.startsWith("data: ")) {
-              try {
-                const data = JSON.parse(trimmed.slice(6));
-                if (data.session && typeof data.session.id === "string") {
-                  setSessionId(data.session.id);
-                  sessionIdRef.current = data.session.id;
-                  setSessionTitle(data.session.title);
-                }
-                if (data.text) {
-                  if (data.replay) {
-                    accumulatedText = data.text;
-                  } else {
-                    accumulatedText += data.text;
-                  }
-                  setMessages((prev) =>
-                    prev.map((msg) =>
-                      msg.id === aiMsgId
-                        ? { ...msg, content: accumulatedText, isStreaming: true }
-                        : msg
-                    )
-                  );
-                }
-                if (data.tool && typeof data.tool.name === "string") {
-                  const incoming = data.tool as ToolTrace;
-                  setMessages((prev) =>
-                    prev.map((msg) => {
-                      if (msg.id !== aiMsgId) return msg;
-                      const tools = [...(msg.tools || [])];
-                      const idx = tools.findIndex(
-                        (t) => t.name === incoming.name && t.status === "start"
-                      );
-                      if (incoming.status === "end" && idx >= 0) {
-                        tools[idx] = { ...tools[idx], ...incoming };
-                      } else if (idx < 0) {
-                        tools.push(incoming);
-                      }
-                      return { ...msg, tools, isStreaming: true };
-                    })
-                  );
-                }
-              } catch {}
-            }
-          }
-        }
-
-        setMessages((prev) =>
-          prev.map((msg) =>
-            msg.id === aiMsgId
-              ? {
-                  ...msg,
-                  content: accumulatedText || "未能获取有效回复，请重试。",
-                  isStreaming: false,
-                }
-              : msg
-          )
-        );
-      } catch (err: unknown) {
-        if (err instanceof Error && err.name === "AbortError") {
-          setMessages((prev) =>
-            prev.map((msg) =>
-              msg.id === aiMsgId ? { ...msg, isStreaming: false } : msg
-            )
-          );
-          return;
-        }
-        if (typeof document !== "undefined" && (document.hidden || !isOpen)) {
-          setMessages((prev) =>
-            prev.map((msg) =>
-              msg.id === aiMsgId ? { ...msg, isStreaming: false } : msg
-            )
-          );
-          return;
-        }
-        setMessages((prev) =>
-          prev.map((msg) =>
-            msg.id === aiMsgId
-              ? {
-                  ...msg,
-                  content: accumulatedText || "网络连接暂时中断，后台仍将继续处理。稍后切回将自动同步完整结果。",
-                  isStreaming: false,
-                }
-              : msg
-          )
-        );
-      }
- finally {
-        setLoading(false);
-        useBabyStore.getState().refreshAll().catch(() => {});
-      }
+      const payload = {
+        messages: [...previousHistory, { role: "user", content: promptText }],
+        contextType: targetContext,
+        contextDetail,
+        babyId: baby.id,
+        images: currentImgs,
+        image: currentImgs.length === 1 ? currentImgs[0] : undefined,
+      };
+      await executeChatTurn({ turnId, sessionId: activeSessionId!, assistantId: aiMsgId, body: payload, signal: controller.signal, retry: false });
     },
-    [currentContextType, contextDetail, baby?.id]
+    [chatReadiness, showToast, baby?.id, contextDetail, currentContextType, executeChatTurn]
   );
+
+  const handleRetry = useCallback(async (failedMessage: Message) => {
+    if (!failedMessage.turnId || !failedMessage.retryable || failedMessage.writeToolStarted || loadingRef.current) return;
+    if (failedMessage.retryContextDetailAvailable === false) { showToast("原始请求上下文过大，无法安全恢复；请重新发起问题"); return; }
+    if (!chatReadiness.ready) { showToast(chatReadiness.message || "模型配置尚未就绪"); return; }
+    const current = messagesRef.current;
+    const userIndex = current.findIndex((message) => message.role === "user" && message.turnId === failedMessage.turnId);
+    if (userIndex < 0 || !sessionIdRef.current) { showToast("找不到原始请求或所属对话，不能安全重试"); return; }
+    const userMessage = current[userIndex];
+    const images = userMessage.images || (userMessage.image ? [userMessage.image] : []);
+    const history = current.slice(0, userIndex).filter((message) => message.role === "user" || message.role === "assistant").map((message) => ({ role: message.role, content: message.content }));
+    const aiMsgId = `ai_${failedMessage.turnId}_${Date.now()}`;
+    const retryMessage: Message = {
+      id: aiMsgId, role: "assistant", content: "", timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      isStreaming: true, turnId: failedMessage.turnId, turnStatus: "running",
+      retryContextDetail: failedMessage.retryContextDetailAvailable === true ? failedMessage.retryContextDetail : contextDetail,
+      retryContextDetailAvailable: failedMessage.retryContextDetailAvailable,
+    };
+    setMessages((previous) => [...previous, retryMessage]);
+    loadingRef.current = true; setLoading(true); setActiveTab("chat");
+    const controller = new AbortController(); abortControllerRef.current?.abort(); abortControllerRef.current = controller;
+    await executeChatTurn({
+      turnId: failedMessage.turnId,
+      sessionId: sessionIdRef.current,
+      assistantId: aiMsgId,
+      signal: controller.signal,
+      retry: true,
+      body: {
+        messages: [...history, { role: "user", content: userMessage.content }],
+        contextType: currentContextType,
+        contextDetail: failedMessage.retryContextDetailAvailable === true ? failedMessage.retryContextDetail : contextDetail,
+        babyId: baby?.id,
+        images,
+        image: images.length === 1 ? images[0] : undefined,
+      },
+    });
+  }, [chatReadiness, showToast, contextDetail, currentContextType, baby?.id, executeChatTurn]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -910,31 +1055,7 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
   }, [isOpen, onClose]);
 
   const mapDbMessages = useCallback((rawMessages: any[]): Message[] => {
-    return (rawMessages || []).map((m: any) => {
-      let imgs: string[] = [];
-      if (Array.isArray(m.images)) imgs = m.images;
-      else if (m.image) {
-        try {
-          const p = JSON.parse(m.image);
-          if (Array.isArray(p)) imgs = p;
-          else imgs = [m.image];
-        } catch {
-          imgs = [m.image];
-        }
-      }
-      return {
-        id: m.id,
-        role: m.role,
-        content: m.content,
-        image: m.image || undefined,
-        images: imgs.length > 0 ? imgs : undefined,
-        timestamp: new Date(m.createdAt).toLocaleTimeString([], {
-          hour: "2-digit",
-          minute: "2-digit",
-        }),
-        tools: Array.isArray(m.tools) ? m.tools : [],
-      };
-    });
+    return mapPersistedChatMessages(rawMessages);
   }, []);
 
   const isResumingRef = useRef(false);
@@ -961,68 +1082,37 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
       try {
         const res = await fetch(`/api/ai/chat?sessionId=${encodeURIComponent(sid)}&stream=true`, {
           headers: { Accept: "text/event-stream" },
+          credentials: "same-origin",
+          cache: "no-store",
           signal: controller.signal,
         });
-
-        if (!res.body) throw new Error("No response stream");
-
-        const reader = res.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = "";
-
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split("\n");
-          buffer = lines.pop() || "";
-
-          for (const line of lines) {
-            const trimmed = line.trim();
-            if (!trimmed || trimmed.startsWith(":")) continue;
-
-            if (trimmed === "data: [DONE]") break;
-
-            if (trimmed.startsWith("data: ")) {
-              try {
-                const data = JSON.parse(trimmed.slice(6));
-                if (data.text) {
-                  if (data.replay) {
-                    accumulatedText = data.text;
-                  } else {
-                    accumulatedText += data.text;
-                  }
-                  setMessages((prev) =>
-                    prev.map((msg) =>
-                      msg.id === activeAiId
-                        ? { ...msg, content: accumulatedText, isStreaming: true }
-                        : msg
-                    )
-                  );
-                }
-                if (data.tool && typeof data.tool.name === "string") {
-                  const incoming = data.tool as ToolTrace;
-                  setMessages((prev) =>
-                    prev.map((msg) => {
-                      if (msg.id !== activeAiId) return msg;
-                      const tools = [...(msg.tools || [])];
-                      const idx = tools.findIndex(
-                        (t) => t.name === incoming.name && t.status === "start"
-                      );
-                      if (incoming.status === "end" && idx >= 0) {
-                        tools[idx] = { ...tools[idx], ...incoming };
-                      } else if (idx < 0) {
-                        tools.push(incoming);
-                      }
-                      return { ...msg, tools, isStreaming: true };
-                    })
-                  );
-                }
-              } catch {}
-            }
+        await consumeChatEventStream(res, (event) => {
+          if (typeof event.text === "string") {
+            accumulatedText = event.replay === true ? event.text : accumulatedText + event.text;
+            setMessages((previous) => previous.map((message) => message.id === activeAiId ? { ...message, content: accumulatedText, isStreaming: true } : message));
           }
-        }
+          if (event.llm && typeof event.llm === "object") {
+            setMessages((previous) => previous.map((message) => message.id === activeAiId ? { ...message, llm: event.llm as Message["llm"] } : message));
+          }
+          if (event.tool && typeof event.tool === "object" && typeof (event.tool as ToolTrace).name === "string") {
+            const incoming = event.tool as ToolTrace;
+            setMessages((previous) => previous.map((message) => {
+              if (message.id !== activeAiId) return message;
+              const tools = [...(message.tools || [])];
+              const index = tools.findIndex((tool) => tool.name === incoming.name && tool.status === "start");
+              if (incoming.status === "end" && index >= 0) tools[index] = { ...tools[index], ...incoming };
+              else if (index < 0) tools.push(incoming);
+              return { ...message, tools, isStreaming: true };
+            }));
+          }
+          if (typeof event.error === "string") {
+            setMessages((previous) => previous.map((message) => message.id === activeAiId ? {
+              ...message, error: event.error as string, turnStatus: "failed", retryable: event.retryable === true,
+              writeToolStarted: event.writeToolStarted === true, turnId: typeof event.turnId === "string" ? event.turnId : message.turnId,
+            } : message));
+          }
+        });
+        setMessages((previous) => previous.map((message) => message.id === activeAiId ? { ...message, isStreaming: false, turnStatus: "completed" } : message));
 
         // Stream completed normally, pull finalized messages from DB
         const query = new URLSearchParams();
@@ -1039,6 +1129,12 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
         if (err instanceof Error && err.name === "AbortError") {
           return;
         }
+        const details = err instanceof ChatStreamError ? err.details : {};
+        setMessages((previous) => previous.map((message) => message.id === activeAiId ? {
+          ...message, content: accumulatedText || (err instanceof Error ? err.message : "AI 请求未完成"), isStreaming: false,
+          error: err instanceof Error ? err.message : "AI 请求未完成", turnStatus: details.retryable === true ? "failed" : undefined,
+          retryable: details.retryable === true && details.writeToolStarted !== true, writeToolStarted: details.writeToolStarted === true,
+        } : message));
         try {
           const query = new URLSearchParams();
           if (baby?.id) query.set("babyId", baby.id);
@@ -1111,49 +1207,54 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
     babyId: baby?.id ?? null,
   });
 
-  useEffect(() => {
-    if (isOpen) {
-      const previousScope = prevScopeRef.current;
-      const isScopeChanged =
-        previousScope.contextType !== initialContextType ||
-        previousScope.babyId !== (baby?.id ?? null);
-      prevScopeRef.current = {
-        contextType: initialContextType,
-        babyId: baby?.id ?? null,
-      };
+  const initializeConversation = useEffectEvent(() => {
+    const previousScope = prevScopeRef.current;
+    const isScopeChanged =
+      previousScope.contextType !== initialContextType ||
+      previousScope.babyId !== (babyId ?? null);
+    prevScopeRef.current = {
+      contextType: initialContextType,
+      babyId: babyId ?? null,
+    };
 
-      if (isScopeChanged) {
-        setSessionId(null);
-        sessionIdRef.current = null;
-        setSessionTitle(null);
-        setSelectedImages([]);
-        setCurrentContextType(initialContextType || "general");
-      }
-
-      fetchSessions();
-
-      if (sessionIdRef.current && !isScopeChanged) {
-        syncSessionState(sessionIdRef.current);
-      }
-
-      if (messagesRef.current.length === 0 || isScopeChanged) {
-        const welcome: Message = {
-          id: "welcome",
-          role: "assistant",
-          content: `你好！我是 **${baby?.nickname || "宝宝"}**（${age.label}）的专属 **${displayTitle}** ✨\n\n你可以一句话快捷录入（如“刚才喂了120ml奶”）、拍照上传单据，或选择上方【专科题库】与【今日复盘】深度了解宝宝状态：`,
-          timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-        };
-        setMessages([welcome]);
-
-        if (initialPrompt) {
-          handleSend(initialPrompt);
-        }
-      }
-      setTimeout(() => inputRef.current?.focus(), 150);
-    } else {
-      useBabyStore.getState().refreshAll().catch(() => {});
+    if (isScopeChanged) {
+      setSessionId(null);
+      sessionIdRef.current = null;
+      setSessionTitle(null);
+      setSelectedImages([]);
+      setCurrentContextType(initialContextType || "general");
     }
-  }, [isOpen, initialContextType, initialPrompt, displayTitle, baby?.id, baby?.nickname, age.label, handleSend, fetchSessions, syncSessionState]);
+
+    if (sessionIdRef.current && !isScopeChanged) {
+      syncSessionState(sessionIdRef.current);
+    }
+
+    if (messagesRef.current.length === 0 || isScopeChanged) {
+      const welcome: Message = {
+        id: "welcome",
+        role: "assistant",
+        content: `你好！我是 **${baby?.nickname || "宝宝"}**（${age.label}）的专属 **${displayTitle}** ✨\n\n你可以一句话快捷录入（如“刚才喂了120ml奶”）、拍照上传单据，或选择上方【专科题库】与【今日复盘】深度了解宝宝状态：`,
+        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      };
+      setMessages([welcome]);
+
+      if (initialPrompt) {
+        handleSend(initialPrompt, undefined, initialContextType);
+      }
+    }
+  });
+
+  useEffect(() => {
+    if (!isOpen) {
+      useBabyStore.getState().refreshAll().catch(() => {});
+      return;
+    }
+
+    initializeConversation();
+    if (!window.matchMedia("(pointer: fine)").matches) return;
+    const focusTimeout = setTimeout(() => inputRef.current?.focus({ preventScroll: true }), 150);
+    return () => clearTimeout(focusTimeout);
+  }, [isOpen, initialContextType, babyId]);
 
   useEffect(() => {
     if (!isOpen && abortControllerRef.current) {
@@ -1273,26 +1374,57 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
     setMounted(true);
   }, []);
 
+  useLayoutEffect(() => {
+    if (!isOpen || !mounted) return;
+    const mobile = window.matchMedia("(pointer: coarse), (max-width: 639px)");
+    const body = document.body;
+    let savedScroll: { top: number; left: number } | undefined;
+    const unlock = () => {
+      if (!savedScroll) return;
+      body.classList.remove("quick-ai-scroll-locked");
+      window.scrollTo({ ...savedScroll, behavior: "instant" });
+      savedScroll = undefined;
+    };
+    const sync = () => {
+      if (!mobile.matches) return unlock();
+      if (savedScroll) return;
+      savedScroll = { top: window.scrollY, left: window.scrollX };
+      body.classList.add("quick-ai-scroll-locked");
+    };
+    sync();
+    mobile.addEventListener("change", sync);
+    return () => {
+      mobile.removeEventListener("change", sync);
+      unlock();
+    };
+  }, [isOpen, mounted]);
+
   if (!isOpen || !mounted) return null;
 
   const modalContent = (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="quick-ai-title"
-      className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in"
-    >
-      {/* Backdrop */}
+    <div className="quick-ai-overlay fixed inset-0 z-[100] animate-fade-in">
       <div
-        className="absolute inset-0 bg-slate-950/45 backdrop-blur-xs transition-opacity duration-200"
+        aria-hidden="true"
+        className="absolute inset-0 bg-card sm:bg-slate-950/45 sm:backdrop-blur-xs pointer-coarse:bg-card"
         onClick={onClose}
       />
-
+      {viewport && (
+        <div
+          aria-hidden="true"
+          className="absolute inset-x-0 bottom-0 bg-card"
+          style={{ top: viewport.top + viewport.height }}
+        />
+      )}
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="quick-ai-title"
+        style={viewport ? { top: viewport.top, height: viewport.height, bottom: "auto" } : undefined}
+        className="pointer-events-none absolute inset-0 flex items-end justify-center sm:items-center sm:p-4"
+      >
       {/* Drawer Container (Mobile: iOS-style bottom drawer sheet; Desktop: smooth rising sheet) */}
-      <div className="relative w-full max-w-full sm:max-w-4xl lg:max-w-5xl bg-card h-[92vh] sm:h-[740px] lg:h-[800px] max-h-[92vh] rounded-t-[28px] sm:rounded-[28px] shadow-2xl overflow-hidden flex flex-col sm:flex-row border-t sm:border border-primary/20 animate-drawer-bottom z-10">
+      <div className="pointer-events-auto relative w-full max-w-full sm:max-w-4xl lg:max-w-5xl bg-card h-full sm:h-[740px] lg:h-[800px] max-h-full sm:rounded-[28px] shadow-2xl overflow-hidden flex flex-col sm:flex-row border-t sm:border border-primary/20 animate-drawer-bottom z-10">
         
-        {/* Mobile Drawer Grab Handle */}
-        <div className="w-12 h-1.5 rounded-full bg-primary/25 dark:bg-white/20 mx-auto mt-2.5 mb-1 sm:hidden shrink-0" />
 
         {/* ===== Desktop/iPad History Sidebar ===== */}
         <div className="w-60 lg:w-72 border-r border-primary/10 hidden md:flex flex-col bg-white/50 dark:bg-card/50 shrink-0 select-none">
@@ -1301,7 +1433,7 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
               <div className="w-7 h-7 rounded-xl bg-primary-soft/50 text-primary flex items-center justify-center">
                 <History size={15} />
               </div>
-              <span className="font-bold text-xs sm:text-sm text-text-primary">历史对话</span>
+              <span className="font-bold text-xs sm:text-sm text-text-primary">聊天记录</span>
             </div>
             <button
               type="button"
@@ -1421,7 +1553,7 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
         </div>
 
         {/* ===== Right Main Area with Unified Tabs ===== */}
-        <div className="flex-1 flex flex-col min-w-0 h-full relative">
+        <div className="flex-1 flex flex-col min-h-0 min-w-0 h-full relative">
           
           {/* 1. Header with Unified Hub Tab Navigation */}
           <div className="px-4 py-2.5 pt-[max(12px,env(safe-area-inset-top))] bg-white/95 dark:bg-card/95 backdrop-blur-md border-b border-primary/10 shrink-0 space-y-2">
@@ -1431,11 +1563,11 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
                   <Sparkles size={16} />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-1.5">
-                    <h3 id="quick-ai-title" className="font-bold text-text-primary text-sm sm:text-base truncate">
+                  <div className="flex min-w-0 flex-col items-start gap-0.5 sm:flex-row sm:items-center sm:gap-1.5">
+                    <h3 id="quick-ai-title" className="max-w-full font-bold text-text-primary text-sm sm:text-base truncate">
                       AI 育儿智能中枢
                     </h3>
-                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary-soft/50 text-primary font-bold">
+                    <span className="max-w-full truncate text-[10px] px-1.5 py-0.5 rounded-full bg-primary-soft/50 text-primary font-bold">
                       {baby?.nickname || "宝宝"}·{age.label}
                     </span>
                   </div>
@@ -1449,11 +1581,11 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
                     setShowHistory(true);
                     fetchSessions();
                   }}
-                  className="md:hidden w-8 h-8 rounded-full bg-primary-soft/40 hover:bg-primary-soft text-text-muted hover:text-primary flex items-center justify-center transition-colors cursor-pointer btn-press"
-                  title="历史对话记录"
-                  aria-label="历史对话记录"
+                  className="md:hidden inline-flex min-h-11 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl border border-primary/35 bg-primary-light px-3 text-sm font-bold text-text-primary shadow-xs hover:border-primary cursor-pointer btn-press"
+                  aria-expanded={showHistory}
                 >
-                  <History size={16} />
+                  <History size={16} aria-hidden="true" />
+                  聊天记录
                 </button>
                 <button
                   type="button"
@@ -1476,7 +1608,7 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
             </div>
 
             {/* Hub Navigation Tabs Bar */}
-            <div className="flex items-center gap-1.5 p-1 bg-primary-light/40 dark:bg-card/70 rounded-2xl border border-primary/15 overflow-x-auto scrollbar-hide">
+            <div className={viewport?.compact && activeTab === "chat" ? "hidden" : "flex items-center gap-1.5 p-1 bg-primary-light/40 dark:bg-card/70 rounded-2xl border border-primary/15 overflow-x-auto scrollbar-hide"}>
               <button
                 type="button"
                 onClick={() => setActiveTab("chat")}
@@ -1535,13 +1667,14 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
+                    aria-label="返回对话"
                     onClick={() => setShowHistory(false)}
                     className="w-8 h-8 rounded-full bg-primary-soft/40 hover:bg-primary-soft text-text-muted hover:text-text-primary flex items-center justify-center transition-colors cursor-pointer"
                   >
                     <ChevronLeft size={18} />
                   </button>
                   <div>
-                    <h3 className="font-bold text-text-primary text-sm sm:text-base">历史对话记录</h3>
+                    <h3 className="font-bold text-text-primary text-sm sm:text-base">聊天记录</h3>
                     <p className="text-[11px] text-text-muted">随时查看与续聊</p>
                   </div>
                 </div>
@@ -1609,7 +1742,7 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
                   <button
                     key={idx}
                     type="button"
-                    disabled={loading}
+                    disabled={loading || !chatReadiness.ready}
                     onClick={() => {
                       if (chip.startsWith("📷")) {
                         fileInputRef.current?.click();
@@ -1626,7 +1759,7 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
               </div>
 
               {/* Message Scroll Area */}
-              <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4 bg-gradient-to-b from-transparent to-primary-light/10">
+              <div ref={messageListRef} className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4 bg-gradient-to-b from-transparent to-primary-light/10">
                 {messages.map((m, mIdx) => {
                   const isUser = m.role === "user";
                   const isThinking =
@@ -1839,6 +1972,17 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
                                 <AiActionCard action={a} />
                               </div>
                             ))}
+                            {m.id !== "welcome" && !m.isStreaming && <LlmModelLabel info={m.llm} />}
+                            {m.error && <p role="alert" className="text-xs text-red-700">{m.error}</p>}
+                            {m.turnStatus === "failed" && m.retryable && !m.writeToolStarted && m.retryContextDetailAvailable !== false && m.turnId &&
+                              !messages.slice(mIdx + 1).some((later) => later.role === "assistant" && later.turnId === m.turnId) && (
+                                <button type="button" className="inline-flex items-center gap-1 rounded-lg border border-primary/20 px-2.5 py-1 text-xs text-primary disabled:opacity-40" disabled={loading || !chatReadiness.ready} onClick={() => { void handleRetry(m); }}>
+                                  <RefreshCw size={12} />安全重试
+                                </button>
+                              )}
+                            {m.turnStatus === "failed" && m.retryable && m.retryContextDetailAvailable === false && (
+                              <p role="status" className="text-[11px] text-amber-700">原始请求上下文过大，无法安全恢复；请重新发起问题。</p>
+                            )}
                           </div>
                         )}
 
@@ -1883,22 +2027,15 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
                   );
                 })}
 
-                <div ref={messagesEndRef} />
               </div>
 
               {/* Bottom Input Area */}
               <div
                 className="p-3 pb-[max(14px,env(safe-area-inset-bottom))] relative bg-card border-t border-primary/15 flex flex-col gap-2 shrink-0 z-30"
-                style={{
-                  transform: keyboardInset > 0 ? `translateY(-${keyboardInset}px)` : undefined,
-                  paddingBottom: keyboardInset > 0 ? 12 : undefined,
-                  transition: "transform 0.15s ease-out",
-                }}
               >
-                {keyboardInset > 0 && (
-                  <div aria-hidden className="absolute left-0 right-0 top-full h-[40vh] bg-card pointer-events-none" />
-                )}
-                
+                <div className={viewport?.compact && chatReadiness.ready ? "hidden" : "contents"}>
+                  <ChatGPTPlanControls presentation="compact" disabled={loading} onReadinessChange={setChatReadiness} onClose={onClose} />
+                </div>
                 {selectedImages.length > 0 && (
                   <div className="flex items-center gap-2 overflow-x-auto py-1 px-1 max-w-full animate-fade-in no-scrollbar">
                     <span className="text-[11px] font-bold text-primary px-2.5 py-1.5 rounded-xl bg-primary-light/60 shrink-0 flex items-center gap-1.5 border border-primary/20">
@@ -1968,7 +2105,7 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
 
                     <button
                       type="button"
-                      disabled={loading || uploadingImage}
+                      disabled={loading || uploadingImage || !chatReadiness.ready}
                       onClick={() => fileInputRef.current?.click()}
                       className="w-10 h-10 rounded-2xl bg-slate-100 dark:bg-card hover:bg-primary-light text-text-secondary hover:text-primary flex items-center justify-center border border-primary/15 transition-all shrink-0 active:scale-95 cursor-pointer disabled:opacity-40 btn-press relative"
                       title="拍照 / 上传化验单或图片（支持一次选择多张）"
@@ -1989,7 +2126,7 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
 
                     <button
                       type="button"
-                      disabled={loading || transcribing}
+                      disabled={loading || transcribing || !chatReadiness.ready}
                       onClick={() => (recording ? stopRecording() : startRecording())}
                       className="w-10 h-10 rounded-2xl flex items-center justify-center border transition-all shrink-0 active:scale-95 cursor-pointer disabled:opacity-40 btn-spring bg-slate-100 dark:bg-card hover:bg-primary-light text-text-secondary hover:text-primary border-primary/15 hover:border-primary/40 hover:shadow-xs group"
                       title="按一下说话，自动转成文字并分析"
@@ -2003,8 +2140,8 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
                       value={inputText}
                       onChange={(e) => setInputText(e.target.value)}
                       placeholder={selectedImages.length > 0 ? `已附加 ${selectedImages.length} 张图片，可输入说明或直接发送...` : meta.placeholder}
-                      disabled={loading}
-                      className="flex-1 px-4 py-2.5 bg-slate-50/90 hover:bg-white focus:bg-white dark:bg-card rounded-2xl text-xs sm:text-sm text-text-primary font-medium border-2 border-primary/20 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all placeholder:text-text-muted/70 shadow-2xs"
+                      disabled={loading || !chatReadiness.ready}
+                      className="min-w-0 flex-1 px-4 py-2.5 bg-slate-50/90 hover:bg-white focus:bg-white dark:bg-card rounded-2xl text-base pointer-fine:sm:text-sm text-text-primary font-medium border-2 border-primary/20 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all placeholder:text-text-muted/70 shadow-2xs"
                     />
 
                     {loading ? (
@@ -2019,7 +2156,7 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
                     ) : (
                       <button
                         type="submit"
-                        disabled={(!inputText.trim() && selectedImages.length === 0) || loading}
+                        disabled={(!inputText.trim() && selectedImages.length === 0) || loading || !chatReadiness.ready}
                         className="w-10 h-10 rounded-2xl bg-gradient-to-r from-primary to-pink-500 text-white flex items-center justify-center shadow-button hover:opacity-95 disabled:opacity-35 transition-all shrink-0 active:scale-95 cursor-pointer btn-spring"
                         title="发送提问或一句话记账"
                       >
@@ -2047,6 +2184,7 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
                     <span>今日 AI 综合复盘与全维点评</span>
                   </h4>
                   <p className="text-[11px] text-text-muted">多维度汇聚今日喂养、睡眠、排便与生长状态</p>
+                  <LlmModelLabel info={dailySummaryData?.llm} deterministic={dailySummaryData?.source === "deterministic" || dailySummaryData?.isAiGenerated === false} />
                 </div>
                 <div className="flex items-center gap-2">
                   <button
@@ -2385,6 +2523,7 @@ export const QuickAiModal: React.FC<QuickAiModalProps> = ({
           )}
 
         </div>
+      </div>
       </div>
     </div>
   );

@@ -1,12 +1,13 @@
 import { GROWDESK_CONFIG } from "@/lib/config";
 import { uploadAttachment } from "@/lib/growdesk/attachment-bridge";
 import { NextResponse } from "next/server";
-import { writeFile, mkdir } from "fs/promises";
+import { writeFile, mkdir, unlink } from "fs/promises";
 import path from "path";
 import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
-import { requireAuth, getActiveBaby } from "@/lib/api-helpers";
-import { validateUploadedImage } from "@/lib/upload";
+import { requireAuth, requireBaby } from "@/lib/api-helpers";
+import { createPendingAvatarFilename } from "@/lib/pending-avatar";
+import { getUploadsDir, validateUploadedImage } from "@/lib/upload";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 
 export async function POST(request: Request) {
@@ -26,10 +27,36 @@ export async function POST(request: Request) {
     }
 
     const formData = await request.formData();
-    const file = formData.get("file") as File | null;
+    const file = formData.get("file");
+    const requestedBabyId = formData.get("babyId");
+    const requestedFamilyId = formData.get("familyId");
 
-    if (!file || file.size === 0) {
+    if (!(file instanceof File) || file.size === 0) {
       return NextResponse.json({ error: "请选择需要上传的照片" }, { status: 400 });
+    }
+    if ((requestedBabyId !== null && (typeof requestedBabyId !== "string" || !requestedBabyId.trim())) ||
+        (requestedFamilyId !== null && (typeof requestedFamilyId !== "string" || !requestedFamilyId.trim())) ||
+        (requestedBabyId !== null && requestedFamilyId !== null)) {
+      return NextResponse.json({ error: "请指定一个有效的宝宝或家庭" }, { status: 400 });
+    }
+
+    let babyId: string | undefined;
+    let familyId: string | undefined;
+    if (requestedBabyId !== null) {
+      const active = await requireBaby(user, requestedBabyId);
+      if (active.errorResponse) return active.errorResponse;
+      babyId = active.baby.id;
+    } else if (requestedFamilyId !== null) {
+      const membership = user.memberships.find((item) => item.familyId === requestedFamilyId);
+      if (!membership) return NextResponse.json({ error: "无权访问该家庭" }, { status: 403 });
+      familyId = membership.familyId;
+    } else {
+      const babies = user.memberships.flatMap(({ family }) => family.babies);
+      if (babies.length > 1 || (babies.length === 0 && user.memberships.length > 1)) {
+        return NextResponse.json({ error: "请选择宝宝或所属家庭" }, { status: 409 });
+      }
+      babyId = babies[0]?.id;
+      familyId = user.memberships[0]?.familyId;
     }
 
     const buffer = Buffer.from(await file.arrayBuffer());
@@ -38,27 +65,35 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: validation.error || "仅支持 JPG、PNG、WebP、HEIC 格式图片" }, { status: 400 });
     }
 
-    const ext = validation.ext || ".jpg";
-    const filename = `avatar_${Date.now()}_${crypto.randomBytes(8).toString("hex")}${ext}`;
-    const uploadDir = path.join(process.cwd(), "public", "uploads", "avatars");
+    const ext = validation.ext === ".heif" ? ".heic" : validation.ext || ".jpg";
+    const filename = babyId
+      ? `avatar_${Date.now()}_${crypto.randomBytes(8).toString("hex")}${ext}`
+      : createPendingAvatarFilename(user.id, familyId, ext);
+    const uploadDir = getUploadsDir("avatars");
 
     await mkdir(uploadDir, { recursive: true });
     const filePath = path.join(uploadDir, filename);
     await writeFile(filePath, buffer);
-
-
     const avatarUrl = `/uploads/avatars/${filename}`;
 
-    const active = await getActiveBaby(user.id);
-    if (active.baby) {
-      await prisma.baby.update({
-        where: { id: active.baby.id },
-        data: { avatarUrl },
-      });
+    if (babyId) {
+      try {
+        const updated = await prisma.baby.updateMany({
+          where: { id: babyId, family: { members: { some: { userId: user.id } } } },
+          data: { avatarUrl },
+        });
+        if (!updated.count) {
+          await unlink(filePath);
+          return NextResponse.json({ error: "宝宝档案已变更，请重新选择" }, { status: 404 });
+        }
+      } catch (error) {
+        await unlink(filePath).catch(() => {});
+        throw error;
+      }
     }
 
     return NextResponse.json({ success: true, avatarUrl });
-  } catch (error: any) {
+  } catch (error) {
     console.error("POST /api/baby/avatar error:", error);
     return NextResponse.json({ error: "头像上传保存失败，请重试" }, { status: 500 });
   }

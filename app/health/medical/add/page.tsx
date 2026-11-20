@@ -1,4 +1,6 @@
 "use client";
+import { llmModelLabel } from "@/lib/llm-display";
+import { LlmModelLabel } from "@/components/ui/LlmModelLabel";
 
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
@@ -50,6 +52,7 @@ export default function MedicalAddPage() {
   const [claimJobId, setClaimJobId] = useState<string | null>(null);
   const [jobElapsed, setJobElapsed] = useState(0);
   const [ocrError, setOcrError] = useState<string | null>(null);
+  const [ocrModel, setOcrModel] = useState<unknown>(null);
   const [ocrDone, setOcrDone] = useState(false);
   const [saving, setSaving] = useState(false);
   const isSubmittingRef = useRef(false);
@@ -122,6 +125,7 @@ export default function MedicalAddPage() {
 
   // 将 OCR 结构化结果填入表单
   const applyOcrResult = (data: any) => {
+    setOcrModel(data?.llm ?? data?.data?.llm);
     const payload = data?.data && typeof data.data === "object" ? data.data : data;
     if (payload.title) setTitle(payload.title);
     if (payload.category) setCategory(payload.category);
@@ -131,7 +135,7 @@ export default function MedicalAddPage() {
     const summary = payload.aiSummary || data.aiSummary;
     const itemList = Array.isArray(payload.items) ? payload.items : data.items;
     if (typeof summary === "string" && summary.trim()) {
-      setAiSummary(summary.trim());
+      setAiSummary(summary.trim() + "\n\n模型：" + llmModelLabel(data?.llm ?? payload.llm));
     } else if (Array.isArray(itemList)) {
       const fallback = composeMedicalAiSummary(itemList);
       if (fallback) setAiSummary(fallback);
@@ -313,6 +317,7 @@ export default function MedicalAddPage() {
   return (
     <div className="min-h-[100dvh] bg-bg max-w-md mx-auto px-4 pb-28">
       <AppHeader title="录入化验 / 体检单" showBack />
+      {ocrDone && <LlmModelLabel info={ocrModel} />}
       {/* SSR controls must not accept edits before React owns their values. */}
       <fieldset disabled={!hydrated} className="m-0 min-w-0 border-0 p-0">
 

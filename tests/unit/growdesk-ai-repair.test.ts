@@ -99,6 +99,17 @@ function chat(enabled = true, validSession = true, deniedBaby = false) {
     }
   }
   const route = load("app/api/ai/chat/route.ts", {
+    "@/lib/agent/chat-retry": chatRetry,
+    "@/lib/llm-profiles": {
+      getLlmProfileById: () => { throw new Error("Text-only authorization fixtures must not resolve a vision profile"); },
+      resolveLlmProfileModel: () => { throw new Error("Text-only authorization fixtures must not resolve a vision model"); },
+    },
+    "@/lib/llm-context": {
+      withLlmFeature: async (owner: string, feature: string, token: string, work: () => unknown) => { assert.equal(owner, "test_user"); assert.equal(feature, "chat"); assert.equal(token, "test_token"); return work(); },
+      getCurrentLlmFeatureScope: () => undefined,
+      getCurrentLlmModelInfo: () => ({ source: "api", provider: "test_provider", model: "test_model" }),
+    },
+    "@/lib/chatgpt-plan": { createChatGPTBackend: async () => { throw new Error("Subscription backend must be explicitly selected"); }, ChatGPTPlanError: class ChatGPTPlanError extends Error {}, planErrorMessage: () => "test_subscription_error" },
     "next/server": { NextResponse: Response },
     "@/lib/config": { GROWDESK_CONFIG: { enabled } },
     "@/lib/prisma": { prisma: new Proxy({}, { get() { throw new Error("Legacy prisma must not run"); } }) },
@@ -114,21 +125,6 @@ function chat(enabled = true, validSession = true, deniedBaby = false) {
     "@/lib/rate-limit": { getClientIp: () => "test_ip", checkRateLimit: () => ({ success: true }) },
     "@/lib/archive": { archiveText: async () => {} },
     "@/lib/agent": { createLlmBackend: () => ({ getApiKey: () => "test_fake_key" }), buildAgentSystemPrompt: () => "test_prompt", activeChatRunManager },
-    "@/lib/agent/chat-retry": chatRetry,
-    "@/lib/chatgpt-plan": {
-      createChatGPTBackend: async () => { throw new Error("ChatGPT backend must not start in these route tests"); },
-      ChatGPTPlanError: TestChatGPTPlanError,
-      planErrorMessage: (error: TestChatGPTPlanError) => error.message,
-    },
-    "@/lib/llm-context": {
-      withLlmFeature: async (_userId: string, _feature: string, _accessToken: string | undefined, work: () => unknown) => work(),
-      getCurrentLlmFeatureScope: () => undefined,
-      getCurrentLlmModelInfo: () => undefined,
-    },
-    "@/lib/llm-profiles": {
-      getLlmProfileById: () => undefined,
-      resolveLlmProfileModel: () => undefined,
-    },
   });
   return { route, calls };
 }

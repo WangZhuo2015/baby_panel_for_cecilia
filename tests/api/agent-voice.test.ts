@@ -1,12 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import dotenv from "dotenv";
-dotenv.config();
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import { prisma } from "../../lib/prisma";
-import { signAuthToken } from "../../lib/auth";
 import { POST } from "../../app/api/agent/voice/route";
 import { setTestMockStreamFn } from "../../lib/agent";
+import { FileLlmPreferenceStore, getDefaultFeatureLlmSelection } from "../../lib/llm-preferences";
+import { createTestTenant, destroyTestTenant } from "../helpers/tenant";
 import {
   createFauxCore,
   fauxAssistantMessage,
@@ -14,56 +16,28 @@ import {
   fauxToolCall,
 } from "@earendil-works/pi-ai/providers/faux";
 
-test("Voice Agent MVP API: /api/agent/voice", async () => {
-  const timestamp = Date.now();
-  const testUsername = `test_${timestamp}_voice_user`;
-
-  // 1. Setup isolated test user and baby
-  const testFamily = await prisma.family.create({
-    data: {
-      name: `test_family_${timestamp}`,
-      inviteCode: `TV${timestamp.toString().slice(-4)}`,
-      babies: {
-        create: {
-          nickname: `test_baby_${timestamp}`,
-          gender: "female",
-          birthDate: "2025-06-01",
-        },
-      },
-    },
-    include: { babies: true },
+test("Voice Agent MVP API: /api/agent/voice", async (t) => {
+  const tenant = await createTestTenant(prisma, "voice");
+  t.after(() => destroyTestTenant(prisma, tenant.username));
+  const { token: validToken, babyId, userId } = tenant;
+  const directory = await mkdtemp(join(tmpdir(), "test-voice-preferences-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  t.mock.method(globalThis, "fetch", async () => {
+    assert.fail("Voice tests must use the local database and the test agent stream");
   });
-
-  const testBaby = testFamily.babies[0];
-
-  const testUser = await prisma.user.create({
-    data: {
-      username: testUsername,
-      passwordHash: "$2b$10$CwTycUXWue0Thq9StjUM0uJ8.PxHqXn5rJQWvFPGf1PVLfZGmOB7a",
-      displayName: "Test Voice Parent",
-      memberships: {
-        create: {
-          familyId: testFamily.id,
-          role: "admin",
-          relation: "mother",
-        },
-      },
-    },
-  });
-
-  const validToken = await signAuthToken({
-    userId: testUser.id,
-    username: testUser.username,
-  });
-
-  const originalEnvSecret = process.env.VOICE_MVP_SECRET;
-  const originalEnvUser = process.env.VOICE_MVP_USER_ID;
-  const originalEnvBaby = process.env.VOICE_MVP_BABY_ID;
-
+  const envKeys = [
+    "VOICE_MVP_SECRET", "VOICE_MVP_USER_ID", "VOICE_MVP_BABY_ID",
+    "LLM_PREFERENCES_FILE", "GROWDESK_AI_API_KEY", "GROWDESK_AI_API_KEY_FILE", "OPENAI_API_KEY",
+  ] as const;
+  const originalEnv = Object.fromEntries(envKeys.map(key => [key, process.env[key]]));
   const mvpSecret = "voice_mvp_test_secret_abc123";
   process.env.VOICE_MVP_SECRET = mvpSecret;
-  process.env.VOICE_MVP_USER_ID = testUser.id;
-  process.env.VOICE_MVP_BABY_ID = testBaby.id;
+  process.env.VOICE_MVP_USER_ID = userId;
+  process.env.VOICE_MVP_BABY_ID = babyId;
+  process.env.LLM_PREFERENCES_FILE = join(directory, "preferences.json");
+  delete process.env.GROWDESK_AI_API_KEY;
+  delete process.env.GROWDESK_AI_API_KEY_FILE;
+  delete process.env.OPENAI_API_KEY;
 
   try {
     // -------------------------------------------------------------------------
@@ -138,14 +112,27 @@ test("Voice Agent MVP API: /api/agent/voice", async () => {
     assert.equal(resQuery.status, 200);
     const jsonQuery = await resQuery.json();
     assert.equal(jsonQuery.success, true);
+    assert.equal(jsonQuery.fastPath, true);
+    assert.equal(jsonQuery.llm, null);
     assert.ok(typeof jsonQuery.reply === "string" && jsonQuery.reply.length > 0);
     assert.ok(!jsonQuery.reply.includes("```json:action"), "Should not contain raw action code blocks");
     console.log("   Query Reply:", jsonQuery.reply);
+
+    const unavailable = await POST(new Request("http://localhost:3000/api/agent/voice", {
+      method: "POST",
+      headers: tenant.headers,
+      body: JSON.stringify({ text: "宝宝刚刚喝了120毫升配方奶", timeoutMs: 0 }),
+    }));
+    assert.equal(unavailable.status, 503);
+    assert.equal((await unavailable.json()).code, "llm_profile_unavailable");
 
     // -------------------------------------------------------------------------
     // Test 5: Natural Language Write via VOICE_MVP_SECRET
     // -------------------------------------------------------------------------
     console.log("-> Test 5: Write feeding record via VOICE_MVP_SECRET...");
+    process.env.GROWDESK_AI_API_KEY = "test_voice_mock_api_key";
+    const store = new FileLlmPreferenceStore(process.env.LLM_PREFERENCES_FILE);
+    await store.set(userId, { ...getDefaultFeatureLlmSelection("voice"), reasoningEffort: "medium" });
     const fauxWrite = createFauxCore({ models: [{ id: "mock-model" }] });
     fauxWrite.setResponses([
       fauxAssistantMessage([
@@ -153,7 +140,11 @@ test("Voice Agent MVP API: /api/agent/voice", async () => {
       ]),
       fauxAssistantMessage([fauxText("好的，已为宝宝记录喝了120毫升配方奶。")]),
     ]);
-    setTestMockStreamFn(fauxWrite.streamSimple, fauxWrite.getModel());
+    const efforts: unknown[] = [];
+    setTestMockStreamFn((model, context, options) => {
+      efforts.push(options?.reasoning);
+      return fauxWrite.streamSimple(model, context, options);
+    }, fauxWrite.getModel());
 
     const resWrite = await POST(
       new Request("http://localhost:3000/api/agent/voice", {
@@ -171,12 +162,13 @@ test("Voice Agent MVP API: /api/agent/voice", async () => {
     assert.equal(resWrite.status, 200);
     const jsonWrite = await resWrite.json();
     assert.equal(jsonWrite.success, true);
+    assert.deepEqual(efforts, ["medium", "medium"]);
     assert.ok(typeof jsonWrite.reply === "string" && jsonWrite.reply.length > 0);
     console.log("   Write Reply:", jsonWrite.reply);
 
     // Verify DB record creation
     const feedingRecord = await prisma.feedingRecord.findFirst({
-      where: { babyId: testBaby.id },
+      where: { babyId },
       orderBy: { createdAt: "desc" },
     });
     assert.ok(feedingRecord, "Feeding record must be created in DB");
@@ -236,6 +228,7 @@ test("Voice Agent MVP API: /api/agent/voice", async () => {
           text: "宝宝发烧了有什么物理降温方法？",
           timeoutMs: 10,
           timeoutReply: "正在后台为您加速计算，稍后将通过通知发送给您。",
+          asyncPush: false,
         }),
       })
     );
@@ -251,18 +244,10 @@ test("Voice Agent MVP API: /api/agent/voice", async () => {
 
   } finally {
     setTestMockStreamFn(null);
-    // Restore environment variables
-    process.env.VOICE_MVP_SECRET = originalEnvSecret;
-    process.env.VOICE_MVP_USER_ID = originalEnvUser;
-    process.env.VOICE_MVP_BABY_ID = originalEnvBaby;
-
-    // Cleanup test data to prevent database pollution
-    console.log("-> Cleaning up test user and family data...");
-    await prisma.user.deleteMany({
-      where: { username: testUsername },
-    });
-    await prisma.family.deleteMany({
-      where: { id: testFamily.id },
-    });
+    for (const key of envKeys) {
+      const value = originalEnv[key];
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
   }
 });

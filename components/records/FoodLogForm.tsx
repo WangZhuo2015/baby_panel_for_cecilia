@@ -732,6 +732,12 @@ export function FoodLogForm({
     }
     setAddingFood(true);
     try {
+      const catMap: Record<"staple" | "protein" | "vegetable" | "optional", string> = {
+        staple: "grain",
+        protein: "protein",
+        vegetable: "vegetable",
+        optional: "other",
+      };
       const res = await fetch("/api/food/items", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

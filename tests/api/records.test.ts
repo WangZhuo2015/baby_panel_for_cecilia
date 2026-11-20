@@ -6,8 +6,9 @@ dotenv.config();
 import { prisma } from "../../lib/prisma";
 import { getLocalDateStr } from "../../lib/date";
 import { createTestTenant, destroyTestTenant } from "../helpers/tenant";
+import { getTestServerUrl } from "../helpers/test-server-url";
 
-const BASE_URL = process.env.BABY_PANEL_URL || "http://127.0.0.1:3088";
+const BASE_URL = getTestServerUrl();
 
 test("API: Core Records (Feeding, Sleep, Diaper, Daily Summary, Timeline)", async (t) => {
   // 隔离租户：禁止 findFirst 抓取真实用户/宝宝（AGENTS.md）

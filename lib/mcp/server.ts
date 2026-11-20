@@ -20,18 +20,17 @@ import {
   getLocalDayUtcRange,
   localTimeToUtcIso,
 } from "@/lib/date";
-import { formatSupplementAmount, fromGrowDeskSupplementProduct, normalizeNutrients, type GrowDeskSupplementProduct } from "@/lib/growdesk/nutrition-compat";
+import { formatSupplementAmount, fromGrowDeskSupplementProduct, normalizeNutrients, parseSupplementAmount, type GrowDeskSupplementProduct } from "@/lib/growdesk/nutrition-compat";
 import * as records from "@/lib/records/service";
 import { performWebSearch } from "@/lib/agent/search";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { logOAuthAudit } from "@/lib/oauth/service";
 import { safeJsonParse } from "@/lib/json";
 import type { UserPrincipal } from "@/lib/oauth/types";
-import fs from "node:fs";
-import path from "node:path";
 import { GROWDESK_CONFIG } from "@/lib/config";
-import { growdeskFetch } from "@/lib/growdesk/client";
-import { requireData } from "@/lib/growdesk/bridge-protocol";
+import { mcpGrowdeskFetch, withMcpRequestContext } from "@/lib/growdesk/mcp-client";
+import { countHealthMeasurementMutations } from "@/lib/mcp/health-measurement-actions";
+import { BridgeError, requireData } from "@/lib/growdesk/bridge-protocol";
 import { toGrowDeskFeedingCreatePayload, fromGrowDeskFeedingRecord } from "@/lib/growdesk/feeding-compat";
 import { toGrowDeskSleepCreatePayload, fromGrowDeskSleepRecord } from "@/lib/growdesk/sleep-compat";
 import { toGrowDeskDiaperCreatePayload, fromGrowDeskDiaperRecord } from "@/lib/growdesk/diaper-compat";
@@ -50,6 +49,8 @@ import { type GrowDeskGrowthRecord } from "@/lib/growdesk/growth-compat";
 import { fromGrowDeskTimelineResponse } from "@/lib/growdesk/timeline-compat";
 import { fetchLegacyRecordList } from "@/lib/growdesk/record-list";
 import { recordPath, requireWriteData } from "@/lib/growdesk/record-route-helpers";
+import { foodPlanWriteBody, readGrowDeskFoodPlan } from "@/lib/growdesk/food-plan-state";
+import { fromGrowDeskBook } from "@/lib/growdesk/book-compat";
 
 export interface UserIdentitySummary {
   id: string;
@@ -129,20 +130,17 @@ async function syncCompletedVaccineSelection(
 async function getFamilyMemberLookup(familyId: string, accessToken?: string): Promise<Map<string, UserIdentitySummary>> {
   if (GROWDESK_CONFIG.enabled) {
     const map = new Map<string, UserIdentitySummary>();
-    if (accessToken) {
-      try {
-        const res = await growdeskFetch<any[]>(`/api/v1/families/${familyId}/members`, { accessToken });
-        const list = Array.isArray(res.data) ? res.data : (res.data as any)?.data || [];
-        for (const m of list) {
-          map.set(m.userId, {
-            id: m.userId,
-            username: m.user?.username || m.username || "family_member",
-            displayName: m.user?.displayName || m.displayName || "家庭成员",
-            relation: m.relation || "caregiver",
-            role: m.role || "member",
-          });
-        }
-      } catch {}
+    if (!accessToken) throw new BridgeError(401, "MCP_TOKEN_REQUIRED", "缺少 MCP 授权令牌");
+    const list = requireList<any>(await mcpGrowdeskFetch<any[]>(`/api/v1/families/${encodeURIComponent(familyId)}/members`, { accessToken }), "家庭成员");
+    for (const m of list) {
+      if (typeof m.userId !== "string" || !m.userId) throw new BridgeError(502, "UPSTREAM_INVALID_RESPONSE", "GrowDesk 家庭成员缺少用户 ID");
+      map.set(m.userId, {
+        id: m.userId,
+        username: m.user?.username || m.username || "family_member",
+        displayName: m.user?.displayName || m.displayName || "家庭成员",
+        relation: m.relation || "caregiver",
+        role: m.role || "member",
+      });
     }
     return map;
   }
@@ -199,9 +197,111 @@ function resolveRecorder(
 /**
  * Queries all photos and visual artifacts related to the baby across medical reports, growth measurements, and avatars.
  */
-async function getBabyPhotos(babyId: string, type?: string, limit = 50) {
+function requireList<T>(response: { ok: boolean; status: number; data?: unknown; error?: { code: string; message: string; details?: unknown } }, label: string): T[] {
+  const data = requireData(response as any);
+  if (!Array.isArray(data)) throw new BridgeError(502, "UPSTREAM_INVALID_RESPONSE", `GrowDesk ${label}列表格式错误`);
+  return data as T[];
+}
+
+function detailsOf(value: any): any {
+  return value && typeof value === "object" && value.details && typeof value.details === "object"
+    ? { ...value, ...value.details }
+    : value;
+}
+
+function arrayFrom(value: any, field: string, jsonField?: string): any[] {
+  const item = detailsOf(value);
+  if (Array.isArray(item?.[field])) return item[field];
+  if (jsonField && typeof item?.[jsonField] === "string") return safeJsonParse(item[jsonField], []);
+  return [];
+}
+
+async function getMcpFoodLibrary(familyId: string, accessToken?: string): Promise<any[]> {
+  const query = new URLSearchParams({ familyId });
+  return requireList<any>(
+    await mcpGrowdeskFetch(`/api/v1/food/items?${query}`, { accessToken }),
+    "辅食知识",
+  );
+}
+
+async function getMcpBooks(familyId: string, accessToken?: string): Promise<any[]> {
+  const query = new URLSearchParams({ familyId });
+  return requireList<any>(
+    await mcpGrowdeskFetch(`/api/v1/books?${query}`, { accessToken }),
+    "绘本知识",
+  );
+}
+
+async function getMcpActivities(month: number, accessToken?: string): Promise<any[]> {
+  const query = new URLSearchParams({ month: String(month) });
+  return requireList<any>(
+    await mcpGrowdeskFetch(`/api/v1/development/activities?${query}`, { accessToken }),
+    "亲子活动知识",
+  );
+}
+
+function textMatches(value: unknown, query: string): boolean {
+  return typeof value === "string" && value.toLocaleLowerCase().includes(query);
+}
+
+async function getBabyPhotos(babyId: string, type?: string, limit = 50, accessToken?: string) {
   if (GROWDESK_CONFIG.enabled) {
-    return [];
+    if (!accessToken) throw new BridgeError(401, "MCP_TOKEN_REQUIRED", "缺少 MCP 授权令牌");
+    const photos: Array<{
+      id: string;
+      type: "medical_report" | "growth" | "avatar";
+      category?: string;
+      title: string;
+      date: string | null;
+      imageUrl: string;
+      recordedById: string | null;
+    }> = [];
+    const requests: Promise<void>[] = [];
+    if (!type || type === "all" || type === "medical_report") {
+      requests.push((async () => {
+        const reports = requireList<any>(await mcpGrowdeskFetch(`/api/v1/babies/${encodeURIComponent(babyId)}/medical-reports?limit=${limit}`, { accessToken }), "医疗报告");
+        for (const report of reports) {
+          const legacy = fromGrowDeskMedicalRecord(report);
+          if (typeof legacy.imageUrl === "string" && legacy.imageUrl.trim()) photos.push({
+            id: String(legacy.id), type: "medical_report", category: legacy.category,
+            title: String(legacy.title || "医疗报告"), date: legacy.date || null,
+            imageUrl: legacy.imageUrl, recordedById: legacy.recordedById || null,
+          });
+        }
+      })());
+    }
+    if (!type || type === "all" || type === "growth") {
+      requests.push((async () => {
+        const growths = requireList<any>(await mcpGrowdeskFetch(`/api/v1/babies/${encodeURIComponent(babyId)}/growth-measurements?limit=${limit}`, { accessToken }), "生长测量");
+        for (const growth of growths) {
+          const imageUrl = typeof growth.imageUrl === "string" ? growth.imageUrl :
+            typeof growth.attachmentId === "string" && growth.attachmentId ? `/api/attachments/${encodeURIComponent(growth.attachmentId)}` : null;
+          if (imageUrl && imageUrl.trim()) photos.push({
+            id: String(growth.id), type: "growth", title: `生长测量照片 (${growth.ageLabel || growth.date || ""})`,
+            date: growth.date || growth.measurementDate || null, imageUrl,
+            recordedById: growth.recordedById || growth.legacyRecordedById || growth.userId || null,
+          });
+        }
+      })());
+    }
+    if (!type || type === "all" || type === "avatar") {
+      requests.push((async () => {
+        const baby = requireData(await mcpGrowdeskFetch<any>(`/api/v1/babies/${encodeURIComponent(babyId)}`, { accessToken }));
+        const avatarUrl = baby?.avatarUrl;
+        if (typeof avatarUrl === "string" && avatarUrl.trim()) photos.push({
+          id: babyId, type: "avatar", title: `${baby.nickname || baby.name || "宝宝"} 头像`,
+          date: null, imageUrl: avatarUrl, recordedById: null,
+        });
+      })());
+    }
+    await Promise.all(requests);
+    photos.sort((a, b) => {
+      if (!a.date && !b.date) return 0;
+      if (!a.date) return -1;
+      if (!b.date) return 1;
+      return b.date.localeCompare(a.date);
+    });
+    return photos.slice(0, limit);
   }
   const photos: Array<{
     id: string;
@@ -298,23 +398,21 @@ export async function resolveFormulaProductId(
     return null;
   }
   if (GROWDESK_CONFIG.enabled) {
+    if (!accessToken) throw new BridgeError(401, "MCP_TOKEN_REQUIRED", "缺少 MCP 授权令牌");
+    const list = requireList<any>(await mcpGrowdeskFetch<any[]>(`/api/v1/families/${encodeURIComponent(familyId)}/nutrition/products`, { accessToken }), "配方奶产品");
     if (typeof formulaProductId === "string" && formulaProductId.trim()) {
-      return formulaProductId.trim();
+      const selected = list.find((product) => product.id === formulaProductId.trim());
+      if (!selected) throw new BridgeError(403, "FORMULA_PRODUCT_ACCESS_DENIED", "指定的配方奶产品不属于当前家庭");
+      return selected.id;
     }
-    if (accessToken) {
-      try {
-        const res = await growdeskFetch<any[]>(`/api/v1/families/${familyId}/formula-products`, { accessToken });
-        const list = Array.isArray(res.data) ? res.data : (res.data as any)?.data || [];
-        if (typeof formulaName === "string" && formulaName.trim()) {
-          const q = formulaName.trim().toLowerCase();
-          const found = list.find((p: any) => p.name?.toLowerCase().includes(q) || p.brand?.toLowerCase().includes(q));
-          if (found) return found.id;
-        }
-        const def = list.find((p: any) => p.isDefault) || list[0];
-        return def ? def.id : null;
-      } catch {}
+    if (typeof formulaName === "string" && formulaName.trim()) {
+      const query = formulaName.trim().toLocaleLowerCase();
+      const found = list.find((product) => String(product.name || "").toLocaleLowerCase().includes(query) || String(product.brand || "").toLocaleLowerCase().includes(query));
+      if (!found) throw new BridgeError(404, "FORMULA_PRODUCT_NOT_FOUND", "当前家庭中没有匹配的配方奶产品");
+      return typeof found.id === "string" ? found.id : null;
     }
-    return formulaProductId ? String(formulaProductId).trim() : null;
+    const defaultProduct = list.find((product) => product.isDefault);
+    return typeof defaultProduct?.id === "string" ? defaultProduct.id : null;
   }
   if (typeof formulaProductId === "string" && formulaProductId.trim()) {
     const verified = await prisma.formulaProduct.findFirst({
@@ -352,70 +450,6 @@ export async function resolveFormulaProductId(
       orderBy: { createdAt: "desc" },
     }));
   return defaultFormula ? defaultFormula.id : null;
-}
-
-let cachedFoods: any[] | null = null;
-function getFoodsData(): any[] {
-  if (!cachedFoods) {
-    try {
-      const p = path.resolve(process.cwd(), "data/04_foods.json");
-      if (fs.existsSync(p)) {
-        const raw = JSON.parse(fs.readFileSync(p, "utf-8"));
-        cachedFoods = raw.foodItems || [];
-      }
-    } catch {
-      cachedFoods = [];
-    }
-  }
-  return cachedFoods || [];
-}
-
-let cachedMilestones: any[] | null = null;
-function getMilestonesData(): any[] {
-  if (!cachedMilestones) {
-    try {
-      const p = path.resolve(process.cwd(), "data/03_milestones.json");
-      if (fs.existsSync(p)) {
-        const raw = JSON.parse(fs.readFileSync(p, "utf-8"));
-        cachedMilestones = raw.milestones || [];
-      }
-    } catch {
-      cachedMilestones = [];
-    }
-  }
-  return cachedMilestones || [];
-}
-
-let cachedBooks: any[] | null = null;
-function getBooksData(): any[] {
-  if (!cachedBooks) {
-    try {
-      const p = path.resolve(process.cwd(), "data/05_books.json");
-      if (fs.existsSync(p)) {
-        const raw = JSON.parse(fs.readFileSync(p, "utf-8"));
-        cachedBooks = raw.books || [];
-      }
-    } catch {
-      cachedBooks = [];
-    }
-  }
-  return cachedBooks || [];
-}
-
-let cachedActivities: any[] | null = null;
-function getActivitiesData(): any[] {
-  if (!cachedActivities) {
-    try {
-      const p = path.resolve(process.cwd(), "data/06_activities.json");
-      if (fs.existsSync(p)) {
-        const raw = JSON.parse(fs.readFileSync(p, "utf-8"));
-        cachedActivities = raw.activities || [];
-      }
-    } catch {
-      cachedActivities = [];
-    }
-  }
-  return cachedActivities || [];
 }
 
 export function createMcpServer(principal: UserPrincipal, options?: { accessToken?: string }): Server {
@@ -1007,7 +1041,10 @@ export function createMcpServer(principal: UserPrincipal, options?: { accessToke
   });
 
   // Handle Tool Calls
-  server.setRequestHandler(CallToolRequestSchema, async (request) => {
+  server.setRequestHandler(CallToolRequestSchema, async (request, extra) => withMcpRequestContext({
+    clientId: principal.clientId,
+    requestId: extra.requestId,
+  }, async () => {
     const { name, arguments: rawArgs = {} } = request.params;
     const startTime = Date.now();
 
@@ -1055,22 +1092,32 @@ export function createMcpServer(principal: UserPrincipal, options?: { accessToke
         }
 
         if (GROWDESK_CONFIG.enabled) {
-          const ageDetail = baby.birthDate ? calculateAgeDetail(baby.birthDate) : null;
-          const memberLookup = await getFamilyMemberLookup(baby.familyId, accessToken);
+          const [babyResult, familyResult, memberLookup] = await Promise.all([
+            mcpGrowdeskFetch<any>(`/api/v1/babies/${encodeURIComponent(babyId)}`, { accessToken }),
+            mcpGrowdeskFetch<any>(`/api/v1/families/${encodeURIComponent(baby.familyId)}`, { accessToken }),
+            getFamilyMemberLookup(baby.familyId, accessToken),
+          ]);
+          const babyRecord = requireData(babyResult);
+          const familyRecord = requireData(familyResult);
+          if (babyRecord.id !== babyId || babyRecord.familyId !== baby.familyId || familyRecord.id !== baby.familyId) {
+            throw new BridgeError(502, "UPSTREAM_SCOPE_MISMATCH", "GrowDesk 返回了其他宝宝或家庭档案");
+          }
+          const birthDate = babyRecord.birthDate || baby.birthDate;
+          const ageDetail = birthDate ? calculateAgeDetail(birthDate) : null;
           const data = {
             baby: {
-              id: baby.id,
-              familyId: baby.familyId,
-              nickname: baby.nickname,
-              gender: baby.gender,
-              birthDate: baby.birthDate,
-              gestationalAge: baby.gestationalAge,
-              avatarUrl: (baby as any).avatarUrl || null,
+              id: babyRecord.id,
+              familyId: babyRecord.familyId,
+              nickname: babyRecord.nickname || babyRecord.name,
+              gender: babyRecord.gender === "boy" ? "male" : babyRecord.gender === "girl" ? "female" : babyRecord.gender || "unknown",
+              birthDate,
+              gestationalAge: babyRecord.gestationalAge ?? babyRecord.gestationalWeeks ?? null,
+              avatarUrl: babyRecord.avatarUrl || null,
               age: ageDetail,
             },
             family: {
-              id: baby.familyId,
-              name: (baby as any).familyName || null,
+              id: familyRecord.id,
+              name: familyRecord.name || null,
               members: Array.from(memberLookup.values()),
             },
             currentUser: currentUserSummary,
@@ -1124,7 +1171,7 @@ export function createMcpServer(principal: UserPrincipal, options?: { accessToke
           if (args.date) query.set("date", args.date);
           if (args.limit) query.set("limit", String(args.limit));
           const [feedings, memberLookup] = await Promise.all([
-            fetchLegacyRecordList<GrowDeskFeedingRecord>(growdeskFetch, accessToken || "", babyId, query, "feeding"),
+            fetchLegacyRecordList<GrowDeskFeedingRecord>(mcpGrowdeskFetch, accessToken || "", babyId, query, "feeding"),
             getFamilyMemberLookup(baby.familyId, accessToken),
           ]);
           const rawList = feedings.map((item: any) => {
@@ -1190,7 +1237,7 @@ export function createMcpServer(principal: UserPrincipal, options?: { accessToke
           if (args.date) query.set("date", args.date);
           if (args.limit) query.set("limit", String(args.limit));
           const [sleeps, memberLookup] = await Promise.all([
-            fetchLegacyRecordList<GrowDeskSleepRecord>(growdeskFetch, accessToken || "", babyId, query, "sleep"),
+            fetchLegacyRecordList<GrowDeskSleepRecord>(mcpGrowdeskFetch, accessToken || "", babyId, query, "sleep"),
             getFamilyMemberLookup(baby.familyId, accessToken),
           ]);
           const rawList = sleeps.map((item: any) => {
@@ -1250,7 +1297,7 @@ export function createMcpServer(principal: UserPrincipal, options?: { accessToke
           if (args.date) query.set("date", args.date);
           if (args.limit) query.set("limit", String(args.limit));
           const [diapers, memberLookup] = await Promise.all([
-            fetchLegacyRecordList<GrowDeskDiaperRecord>(growdeskFetch, accessToken || "", babyId, query, "diaper"),
+            fetchLegacyRecordList<GrowDeskDiaperRecord>(mcpGrowdeskFetch, accessToken || "", babyId, query, "diaper"),
             getFamilyMemberLookup(baby.familyId, accessToken),
           ]);
           const rawList = diapers.map((item: any) => {
@@ -1310,7 +1357,7 @@ export function createMcpServer(principal: UserPrincipal, options?: { accessToke
           if (args.date) query.set("date", args.date);
           if (args.limit) query.set("limit", String(args.limit));
           const [foods, memberLookup] = await Promise.all([
-            fetchLegacyRecordList<GrowDeskFoodRecord>(growdeskFetch, accessToken || "", babyId, query, "food"),
+            fetchLegacyRecordList<GrowDeskFoodRecord>(mcpGrowdeskFetch, accessToken || "", babyId, query, "food"),
             getFamilyMemberLookup(baby.familyId, accessToken),
           ]);
           const rawList = foods.map((item: any) => {
@@ -1374,10 +1421,10 @@ export function createMcpServer(principal: UserPrincipal, options?: { accessToke
         if (GROWDESK_CONFIG.enabled) {
           const limit = typeof args.limit === "number" ? Math.min(100, Math.max(1, args.limit)) : 50;
           const [res, memberLookup] = await Promise.all([
-            growdeskFetch<GrowDeskGrowthRecord[]>(`/api/v1/babies/${babyId}/growth-measurements?limit=${limit}`, { accessToken }),
+            mcpGrowdeskFetch<GrowDeskGrowthRecord[]>(`/api/v1/babies/${babyId}/growth-measurements?limit=${limit}`, { accessToken }),
             getFamilyMemberLookup(baby.familyId, accessToken),
           ]);
-          const list = Array.isArray(res.data) ? res.data : (res.data as any)?.data || [];
+          const list = requireList<any>(res, "MCP 数据");
           let filtered = list;
           if (args.date) {
             filtered = filtered.filter((g: any) => (g.measurementDate || g.date) === args.date);
@@ -1443,10 +1490,10 @@ export function createMcpServer(principal: UserPrincipal, options?: { accessToke
         if (GROWDESK_CONFIG.enabled) {
           const limit = typeof args.limit === "number" ? Math.min(100, Math.max(1, args.limit)) : 50;
           const [res, memberLookup] = await Promise.all([
-            growdeskFetch<GrowDeskMedicalReport[]>(`/api/v1/babies/${babyId}/medical/reports?limit=${limit}`, { accessToken }),
+            mcpGrowdeskFetch<GrowDeskMedicalReport[]>(`/api/v1/babies/${babyId}/medical-reports?limit=${limit}`, { accessToken }),
             getFamilyMemberLookup(baby.familyId, accessToken),
           ]);
-          const list = Array.isArray(res.data) ? res.data : (res.data as any)?.data || [];
+          const list = requireList<any>(res, "MCP 数据");
           let legacyList = list.map(fromGrowDeskMedicalRecord);
           if (args.category && args.category !== "all") {
             legacyList = legacyList.filter((r: any) => r.category === args.category);
@@ -1512,7 +1559,7 @@ export function createMcpServer(principal: UserPrincipal, options?: { accessToke
 
         if (GROWDESK_CONFIG.enabled) {
           const [res, memberLookup] = await Promise.all([
-            growdeskFetch<GrowDeskMedicalReport>(`/api/v1/babies/${babyId}/medical-reports/${targetId}`, { accessToken }),
+            mcpGrowdeskFetch<GrowDeskMedicalReport>(`/api/v1/babies/${babyId}/medical-reports/${targetId}`, { accessToken }),
             getFamilyMemberLookup(baby.familyId, accessToken),
           ]);
           if (!res.ok || !res.data) {
@@ -1578,9 +1625,15 @@ export function createMcpServer(principal: UserPrincipal, options?: { accessToke
           throw new McpError(ErrorCode.InvalidRequest, "Forbidden: Missing baby:read scope");
         }
 
+        const photoTypes = new Set(["all", "medical_report", "growth", "avatar"]);
+        const photoType = typeof args.type === "string" ? args.type : undefined;
+        if (photoType && !photoTypes.has(photoType)) throw new Error("type 必须是 all、medical_report、growth 或 avatar");
+        const photoLimit = typeof args.limit === "number" && Number.isFinite(args.limit)
+          ? Math.max(1, Math.min(100, Math.floor(args.limit)))
+          : 50;
         const [photos, memberLookup] = await Promise.all([
-          getBabyPhotos(babyId, args.type, args.limit || 50),
-          getFamilyMemberLookup(baby.familyId),
+          getBabyPhotos(babyId, photoType, photoLimit, accessToken),
+          getFamilyMemberLookup(baby.familyId, accessToken),
         ]);
 
         const rawList = photos.map((p) => ({
@@ -1603,10 +1656,8 @@ export function createMcpServer(principal: UserPrincipal, options?: { accessToke
         const limit = typeof args.limit === "number" ? Math.min(100, Math.max(1, args.limit)) : 50;
 
         if (GROWDESK_CONFIG.enabled) {
-          const res = await growdeskFetch<any[]>(`/api/v1/babies/${babyId}/vaccines/records?limit=${limit}`, {
-            accessToken, headers: { "x-growdesk-representation": "ledger" },
-          });
-          const list = Array.isArray(res.data) ? res.data : (res.data as any)?.data || [];
+          const res = await mcpGrowdeskFetch<any[]>(`/api/v1/babies/${babyId}/vaccines/records?limit=${limit}`, { accessToken, headers: { "x-growdesk-representation": "ledger" } });
+          const list = requireList<any>(res, "MCP 数据");
           const rawList = list.slice(0, limit).map((v: any) => {
             const rec = fromGrowDeskVaccineRecord(v);
             return {
@@ -1655,9 +1706,9 @@ export function createMcpServer(principal: UserPrincipal, options?: { accessToke
         const maxMonths = typeof args.maxAgeMonths === "number" ? args.maxAgeMonths : currentMonth + 3;
 
         if (GROWDESK_CONFIG.enabled) {
-          const fullKb = loadFullVaccineKnowledge("CN-JS");
-          const scheduleList = (fullKb?.schedule || [])
-            .filter((e: any) => (e.ageMonths ?? 0) <= maxMonths)
+          const schedule = requireList<any>(await mcpGrowdeskFetch<any[]>(`/api/v1/babies/${encodeURIComponent(babyId)}/vaccines/schedule`, { accessToken }), "疫苗计划");
+          const scheduleList = schedule
+            .filter((e: any) => (e.ageMonths ?? e.recommendedAgeMonths ?? 0) <= maxMonths)
             .sort((a: any, b: any) => (a.ageMonths ?? 0) - (b.ageMonths ?? 0))
             .slice(0, 30);
           const rawList = scheduleList.map((e: any) => ({
@@ -1717,10 +1768,10 @@ export function createMcpServer(principal: UserPrincipal, options?: { accessToke
 
         if (GROWDESK_CONFIG.enabled) {
           const [res, memberLookup] = await Promise.all([
-            growdeskFetch<any[]>(`/api/v1/babies/${babyId}/records/supplement?limit=${limit}`, { accessToken }),
+            mcpGrowdeskFetch<any[]>(`/api/v1/babies/${babyId}/records/supplement?limit=${limit}`, { accessToken }),
             getFamilyMemberLookup(baby.familyId, accessToken),
           ]);
-          const list = Array.isArray(res.data) ? res.data : (res.data as any)?.data || [];
+          const list = requireList<any>(res, "MCP 数据");
           let filtered = list;
           if (args.date) {
             filtered = filtered.filter((s: any) => {
@@ -1730,17 +1781,22 @@ export function createMcpServer(principal: UserPrincipal, options?: { accessToke
           }
           const rawList = filtered.slice(0, limit).map((s: any) => {
             const rec = fromGrowDeskSupplementRecord(s);
-            const d = s.occurredAt ? new Date(s.occurredAt) : null;
-            const timeStr = d ? `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}` : "08:00";
+            const d = typeof s.occurredAt === "string" ? new Date(s.occurredAt) : null;
+            if (!d || !Number.isFinite(d.getTime())) {
+              throw new BridgeError(502, "UPSTREAM_INVALID_TIMESTAMP", "GrowDesk 补剂记录缺少有效时间");
+            }
+            const timeStr = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+            const parsedAmount = rec.amount ? parseSupplementAmount(rec.amount) : null;
+            const numericDose = s.dose !== undefined && s.dose !== null ? Number(s.dose) : parsedAmount?.dose;
             return {
               id: rec.id,
-              date: (s.occurredAt ? s.occurredAt.slice(0, 10) : rec.timestamp?.slice(0, 10)) || getLocalDateStr(),
+              date: s.occurredAt.slice(0, 10),
               time: timeStr,
               productId: (rec as any).productId || s.productId || null,
               productName: rec.supplementName || rec.name,
-              brand: (rec as any).brand || "家庭自选",
-              dose: s.amount ? Number(s.amount) || 1 : 1,
-              unitName: (rec as any).unitName || "粒",
+              ...(typeof s.brand === "string" ? { brand: s.brand } : {}),
+              dose: Number.isFinite(numericDose) ? numericDose : null,
+              unitName: typeof s.unitName === "string" ? s.unitName : parsedAmount?.unitName || null,
               notes: rec.notes,
               recordedById: s.recordedById || s.userId || null,
               recordedBy: resolveRecorder(s.recordedById || s.userId, memberLookup, principal),
@@ -1802,26 +1858,25 @@ export function createMcpServer(principal: UserPrincipal, options?: { accessToke
         const limit = typeof args.limit === "number" ? Math.min(20, Math.max(1, args.limit)) : 5;
 
         if (GROWDESK_CONFIG.enabled) {
-          const res = await growdeskFetch<any>(`/api/v1/babies/${babyId}/food-plan`, { accessToken });
-          const planData = res.data?.data?.planData || res.data?.planData || res.data;
-          let plans: any[] = [];
-          if (Array.isArray(planData)) {
-            plans = planData;
-          } else if (planData && typeof planData === "object" && Object.keys(planData).length > 0) {
-            plans = [planData];
+          const res = await mcpGrowdeskFetch<any>(`/api/v1/babies/${babyId}/food-plan`, { accessToken });
+          const state = readGrowDeskFoodPlan(res, babyId);
+          const rawPlans = state.planData.plans;
+          if (rawPlans !== undefined && !Array.isArray(rawPlans)) {
+            throw new BridgeError(502, "UPSTREAM_INVALID_RESPONSE", "GrowDesk 辅食计划列表格式错误");
           }
+          let plans: any[] = rawPlans ? [...rawPlans] as any[] : [];
           if (args.date) {
             plans = plans.filter((p: any) => p.date === args.date);
           }
           const rawList = plans.slice(0, limit).map((p: any) => ({
-            id: p.id || `fp_${babyId}`,
-            date: p.date || getLocalDateStr(),
-            name: p.name || "辅食食谱",
+            id: p.id,
+            date: p.date,
+            name: p.name,
             ingredients: Array.isArray(p.ingredients) ? p.ingredients : safeJsonParse(p.ingredients, []),
             steps: Array.isArray(p.steps) ? p.steps : safeJsonParse(p.steps, []),
             nutrition: p.nutrition || "",
             tags: Array.isArray(p.tags) ? p.tags : safeJsonParse(p.tags, []),
-            createdAt: p.createdAt || new Date().toISOString(),
+            createdAt: p.createdAt,
           }));
 
           await logToolCall(name, "success", startTime);
@@ -1871,10 +1926,10 @@ export function createMcpServer(principal: UserPrincipal, options?: { accessToke
         if (GROWDESK_CONFIG.enabled) {
           const dateQuery = new URLSearchParams({ date: targetDate });
           const [feedings, sleeps, diapers, foods] = await Promise.all([
-            fetchLegacyRecordList<GrowDeskFeedingRecord>(growdeskFetch, accessToken || "", babyId, dateQuery, "feeding"),
-            fetchLegacyRecordList<GrowDeskSleepRecord>(growdeskFetch, accessToken || "", babyId, dateQuery, "sleep"),
-            fetchLegacyRecordList<GrowDeskDiaperRecord>(growdeskFetch, accessToken || "", babyId, dateQuery, "diaper"),
-            fetchLegacyRecordList<GrowDeskFoodRecord>(growdeskFetch, accessToken || "", babyId, dateQuery, "food"),
+            fetchLegacyRecordList<GrowDeskFeedingRecord>(mcpGrowdeskFetch, accessToken || "", babyId, dateQuery, "feeding"),
+            fetchLegacyRecordList<GrowDeskSleepRecord>(mcpGrowdeskFetch, accessToken || "", babyId, dateQuery, "sleep"),
+            fetchLegacyRecordList<GrowDeskDiaperRecord>(mcpGrowdeskFetch, accessToken || "", babyId, dateQuery, "diaper"),
+            fetchLegacyRecordList<GrowDeskFoodRecord>(mcpGrowdeskFetch, accessToken || "", babyId, dateQuery, "food"),
           ]);
           const legacyFeedings = feedings.map(fromGrowDeskFeedingRecord);
           const legacySleeps = sleeps.map(fromGrowDeskSleepRecord);
@@ -1913,23 +1968,29 @@ export function createMcpServer(principal: UserPrincipal, options?: { accessToke
         }
 
         const ageDetail = baby.birthDate ? calculateAgeDetail(baby.birthDate) : null;
-        const currentMonth = typeof args.month === "number" ? Math.max(1, Math.min(36, args.month)) : ageDetail?.months || 6;
+        const currentMonth = typeof args.month === "number" && Number.isFinite(args.month)
+          ? Math.max(1, Math.min(36, Math.floor(args.month)))
+          : ageDetail?.months || 6;
         const category = typeof args.category === "string" ? args.category : undefined;
 
         if (GROWDESK_CONFIG.enabled) {
-          const all = getMilestonesData();
-          let filtered = all.filter((m: any) => m.assessmentAgeMonths === currentMonth);
-          if (category) {
-            filtered = filtered.filter((m: any) => m.category === category);
-          }
-          const rawList = filtered.slice(0, 20).map((m: any) => ({
-            milestoneId: m.milestoneId,
-            category: m.category,
-            assessmentAgeMonths: m.assessmentAgeMonths,
-            title: m.title,
-            description: m.description,
-            observationMethod: m.observationMethod,
-          }));
+          const query = new URLSearchParams({ month: String(currentMonth) });
+          if (category) query.set("category", category);
+          const items = requireList<any>(
+            await mcpGrowdeskFetch(`/api/v1/development/milestones?${query}`, { accessToken }),
+            "发育里程碑",
+          );
+          const rawList = items.slice(0, 20).map((row: any) => {
+            const milestone = detailsOf(row);
+            return {
+              milestoneId: milestone.milestoneId || milestone.id,
+              category: milestone.category,
+              assessmentAgeMonths: milestone.assessmentAgeMonths ?? milestone.monthAge,
+              title: milestone.title,
+              description: milestone.description,
+              observationMethod: milestone.observationMethod,
+            };
+          });
 
           await logToolCall(name, "success", startTime);
           return { content: [{ type: "text", text: JSON.stringify(rawList, null, 2) }] };
@@ -1988,7 +2049,7 @@ export function createMcpServer(principal: UserPrincipal, options?: { accessToke
             source: "mcp",
             sourceAgent,
           });
-          const res = await growdeskFetch<GrowDeskFeedingRecord>(recordPath("feeding", babyId), {
+          const res = await mcpGrowdeskFetch<GrowDeskFeedingRecord>(recordPath("feeding", babyId), {
             method: "POST",
             accessToken,
             body: payload,
@@ -2061,7 +2122,7 @@ export function createMcpServer(principal: UserPrincipal, options?: { accessToke
             source: "mcp",
             sourceAgent,
           });
-          const res = await growdeskFetch<GrowDeskSleepRecord>(recordPath("sleep", babyId), {
+          const res = await mcpGrowdeskFetch<GrowDeskSleepRecord>(recordPath("sleep", babyId), {
             method: "POST",
             accessToken,
             body: payload,
@@ -2127,7 +2188,7 @@ export function createMcpServer(principal: UserPrincipal, options?: { accessToke
             source: "mcp",
             sourceAgent,
           });
-          const res = await growdeskFetch<GrowDeskDiaperRecord>(recordPath("diaper", babyId), {
+          const res = await mcpGrowdeskFetch<GrowDeskDiaperRecord>(recordPath("diaper", babyId), {
             method: "POST",
             accessToken,
             body: payload,
@@ -2189,7 +2250,7 @@ export function createMcpServer(principal: UserPrincipal, options?: { accessToke
             source: "mcp",
             sourceAgent,
           });
-          const res = await growdeskFetch<GrowDeskFoodRecord>(recordPath("food", babyId), {
+          const res = await mcpGrowdeskFetch<GrowDeskFoodRecord>(recordPath("food", babyId), {
             method: "POST",
             accessToken,
             body: payload,
@@ -2249,7 +2310,7 @@ export function createMcpServer(principal: UserPrincipal, options?: { accessToke
             headCircumferenceCm: args.headCircumferenceCm,
             imageUrl: args.imageUrl,
           });
-          const res = await growdeskFetch<GrowDeskGrowthRecord>(`/api/v1/babies/${babyId}/growth-measurements`, {
+          const res = await mcpGrowdeskFetch<GrowDeskGrowthRecord>(`/api/v1/babies/${babyId}/growth-measurements`, {
             method: "POST",
             accessToken,
             body: payload,
@@ -2308,7 +2369,7 @@ export function createMcpServer(principal: UserPrincipal, options?: { accessToke
             ...input,
             vaccineCode: matchedCode || input.vaccineId || undefined,
           });
-          const res = await growdeskFetch<GrowDeskVaccineRecord>(`/api/v1/babies/${babyId}/vaccines/records`, {
+          const res = await mcpGrowdeskFetch<GrowDeskVaccineRecord>(`/api/v1/babies/${babyId}/vaccines/records`, {
             method: "POST",
             accessToken,
             headers: { "x-growdesk-representation": "ledger" },
@@ -2395,7 +2456,7 @@ export function createMcpServer(principal: UserPrincipal, options?: { accessToke
             source: "mcp",
             sourceAgent,
           });
-          const res = await growdeskFetch<GrowDeskMedicalReport>(`/api/v1/babies/${babyId}/medical/reports`, {
+          const res = await mcpGrowdeskFetch<GrowDeskMedicalReport>(`/api/v1/babies/${babyId}/medical-reports`, {
             method: "POST",
             accessToken,
             body: payload,
@@ -2466,7 +2527,7 @@ export function createMcpServer(principal: UserPrincipal, options?: { accessToke
         if (GROWDESK_CONFIG.enabled) {
           const occurredAt = localTimeToUtcIso(recordTime, recordDate);
           const formattedAmount = formatSupplementAmount(dose, unitName);
-          const res = await growdeskFetch<GrowDeskSupplementRecord>(`/api/v1/babies/${babyId}/records/supplement`, {
+          const res = await mcpGrowdeskFetch<GrowDeskSupplementRecord>(`/api/v1/babies/${babyId}/records/supplement`, {
             method: "POST",
             accessToken,
             body: {
@@ -2579,7 +2640,7 @@ export function createMcpServer(principal: UserPrincipal, options?: { accessToke
 
         let product: unknown;
         if (GROWDESK_CONFIG.enabled) {
-          const response = await growdeskFetch<GrowDeskSupplementProduct>(
+          const response = await mcpGrowdeskFetch<GrowDeskSupplementProduct>(
             `/api/v1/families/${baby.familyId}/nutrition/supplement-products`,
             {
               method: "POST",
@@ -2627,11 +2688,12 @@ export function createMcpServer(principal: UserPrincipal, options?: { accessToke
         if (typeof args.tags === "string") tags = safeJsonParse(args.tags, ["营养辅食"]);
 
         if (GROWDESK_CONFIG.enabled) {
-          const existingRes = await growdeskFetch<any>(`/api/v1/babies/${babyId}/food-plan`, {
+          const existingRes = await mcpGrowdeskFetch<any>(`/api/v1/babies/${babyId}/food-plan`, {
             method: "GET",
             accessToken,
           });
-          const existingData = (existingRes.ok && (existingRes.data?.data?.planData || existingRes.data?.planData)) || {};
+          const state = readGrowDeskFoodPlan(existingRes, babyId);
+          const existingData = state.planData;
           const newPlan = {
             id: crypto.randomUUID(),
             name: String(args.name || "辅食食谱").trim().slice(0, 100),
@@ -2643,22 +2705,18 @@ export function createMcpServer(principal: UserPrincipal, options?: { accessToke
             recordedBy: currentUserSummary,
             createdAt: new Date().toISOString(),
           };
-          const plans = Array.isArray(existingData.plans) ? existingData.plans : [];
+          if (existingData.plans !== undefined && !Array.isArray(existingData.plans)) {
+            throw new BridgeError(502, "UPSTREAM_INVALID_RESPONSE", "GrowDesk 辅食计划列表格式错误");
+          }
+          const plans = Array.isArray(existingData.plans) ? [...existingData.plans] : [];
           plans.unshift(newPlan);
 
-          const putRes = await growdeskFetch(`/api/v1/babies/${babyId}/food-plan`, {
+          const putRes = await mcpGrowdeskFetch(`/api/v1/babies/${babyId}/food-plan`, {
             method: "PUT",
             accessToken,
-            body: {
-              planData: {
-                ...existingData,
-                plans,
-              },
-            },
+            body: foodPlanWriteBody(state, { ...existingData, plans }),
           });
-          if (!putRes.ok) {
-            throw new Error(putRes.error?.message || "Failed to save food plan");
-          }
+          requireWriteData(putRes, "Failed to save food plan");
 
           const data = {
             success: true,
@@ -2717,34 +2775,32 @@ export function createMcpServer(principal: UserPrincipal, options?: { accessToke
         if (GROWDESK_CONFIG.enabled) {
           if (!targetId && date) {
             if (type === "growth") {
-              const res = await growdeskFetch<any[]>(`/api/v1/babies/${babyId}/growth-measurements`, { accessToken });
-              const list = Array.isArray(res.data) ? res.data : (res.data as any)?.data || [];
+              const res = await mcpGrowdeskFetch<any[]>(`/api/v1/babies/${babyId}/growth-measurements`, { accessToken });
+              const list = requireList<any>(res, "MCP 数据");
               const found = list.find((r: any) => r.measurementDate?.slice(0, 10) === date || r.date === date);
               if (found) {
                 targetId = found.id;
                 if (Number.isInteger(found.version)) baseVersion = found.version;
               }
             } else if (type === "medical_report") {
-              const res = await growdeskFetch<any[]>(`/api/v1/babies/${babyId}/medical/reports`, { accessToken });
-              const list = Array.isArray(res.data) ? res.data : (res.data as any)?.data || [];
+              const res = await mcpGrowdeskFetch<any[]>(`/api/v1/babies/${babyId}/medical-reports`, { accessToken });
+              const list = requireList<any>(res, "MCP 数据");
               const found = list.find((r: any) => r.reportDate?.slice(0, 10) === date || r.date === date);
               if (found) {
                 targetId = found.id;
                 if (Number.isInteger(found.version)) baseVersion = found.version;
               }
             } else if (type === "vaccine") {
-              const res = await growdeskFetch<any[]>(`/api/v1/babies/${babyId}/vaccines/records?limit=50`, {
-                accessToken, headers: { "x-growdesk-representation": "ledger" },
-              });
-              const list = Array.isArray(res.data) ? res.data : (res.data as any)?.data || [];
+              const res = await mcpGrowdeskFetch<any[]>(`/api/v1/babies/${babyId}/vaccines/records?limit=50`, { accessToken, headers: { "x-growdesk-representation": "ledger" } });
+              const list = requireList<any>(res, "MCP 数据");
               const found = list.find((r: any) => (r.completedDate || r.administeredDate || r.scheduledDate || r.date)?.slice(0, 10) === date);
               if (found) {
                 targetId = found.id;
                 if (Number.isInteger(found.version)) baseVersion = found.version;
               }
             } else if (type === "feeding" || type === "sleep" || type === "diaper" || type === "food" || type === "supplement") {
-              const res = await growdeskFetch<any[]>(`/api/v1/babies/${babyId}/records/${type}?limit=50`, { accessToken });
-              const list = Array.isArray(res.data) ? res.data : (res.data as any)?.data || [];
+              const res = await mcpGrowdeskFetch<any[]>(`/api/v1/babies/${babyId}/records/${type}?limit=50`, { accessToken });
+              const list = requireList<any>(res, "MCP 数据");
               const found = list.find((r: any) => (r.occurredAt || r.startTime || r.date)?.slice(0, 10) === date);
               if (found) {
                 targetId = found.id;
@@ -2758,7 +2814,7 @@ export function createMcpServer(principal: UserPrincipal, options?: { accessToke
           }
 
           const clientId = typeof args.clientId === "string" && args.clientId.trim() ? args.clientId.trim() : undefined;
-          const delRes = await growdeskFetch<any>(`/api/v1/babies/${babyId}/record-snapshots/${encodeURIComponent(type)}/${encodeURIComponent(targetId)}`, {
+          const delRes = await mcpGrowdeskFetch<any>(`/api/v1/babies/${babyId}/record-snapshots/${encodeURIComponent(type)}/${encodeURIComponent(targetId)}`, {
             method: "DELETE",
             accessToken,
             idempotencyKey: clientId,
@@ -2847,11 +2903,11 @@ export function createMcpServer(principal: UserPrincipal, options?: { accessToke
 
         if (GROWDESK_CONFIG.enabled) {
           const restoreRes = args.snapshotId
-            ? await growdeskFetch<any>(`/api/v1/babies/${babyId}/record-snapshots/${encodeURIComponent(String(args.snapshotId))}/restore`, {
+            ? await mcpGrowdeskFetch<any>(`/api/v1/babies/${babyId}/record-snapshots/${encodeURIComponent(String(args.snapshotId))}/restore`, {
                 method: "POST",
                 accessToken,
               })
-            : await growdeskFetch<any>(`/api/v1/babies/${babyId}/record-snapshots/restore`, {
+            : await mcpGrowdeskFetch<any>(`/api/v1/babies/${babyId}/record-snapshots/restore`, {
                 method: "POST",
                 accessToken,
                 body: args.entityType ? { entityType: String(args.entityType) } : {},
@@ -2903,28 +2959,23 @@ export function createMcpServer(principal: UserPrincipal, options?: { accessToke
         if (!queryName) throw new Error("请输入食材名称");
 
         if (GROWDESK_CONFIG.enabled) {
-          const foods = getFoodsData();
           const q = queryName.toLowerCase();
-          const filtered = foods.filter((item: any) =>
-            item.name?.toLowerCase().includes(q) ||
-            item.foodGroup?.toLowerCase().includes(q) ||
-            item.category?.toLowerCase().includes(q)
-          ).slice(0, 5);
-          const rawList = filtered.map((item: any) => ({
-            name: item.name,
-            icon: item.icon,
-            category: item.category,
-            foodGroup: item.foodGroup,
-            recommendedFromMonth: item.recommendedFromMonth,
-            avoidBeforeMonths: item.avoidBeforeMonths,
-            chokingRisk: item.chokingRisk,
-            chokingNotes: item.chokingNotes,
-            isCommonAllergen: item.isCommonAllergen,
-            allergenIntroductionGuidance: item.allergenIntroductionGuidance,
-            guidance: item.guidance,
-            preparation: item.preparation || [],
-            nutrition: item.nutrition || [],
-          }));
+          const foods = await getMcpFoodLibrary(baby.familyId, accessToken);
+          const filtered = foods.filter((row: any) => {
+            const item = detailsOf(row);
+            return textMatches(item.name, q) || textMatches(item.category, q) || textMatches(item.allergenRisk, q);
+          }).slice(0, 5);
+          const rawList = filtered.map((row: any) => {
+            const item = detailsOf(row);
+            return {
+              id: item.id,
+              name: item.name,
+              category: item.category,
+              allergenRisk: item.allergenRisk,
+              recommendedAgeMonths: item.recommendedAgeMonths,
+              familyStatus: item.familyStatus,
+            };
+          });
           await logToolCall(name, "success", startTime);
           return { content: [{ type: "text", text: JSON.stringify(rawList, null, 2) }] };
         }
@@ -2974,22 +3025,22 @@ export function createMcpServer(principal: UserPrincipal, options?: { accessToke
         const targetMonth = typeof args.month === "number" && Number.isFinite(args.month) ? args.month : ageDetail?.months;
 
         if (GROWDESK_CONFIG.enabled) {
-          const books = getBooksData();
-          let filtered = books;
+          const rows = await getMcpBooks(baby.familyId, accessToken);
+          let filtered = rows.map((row: any) => fromGrowDeskBook(row));
           if (typeof targetMonth === "number") {
             filtered = filtered.filter((b: any) => (b.ageMinMonths == null || b.ageMinMonths <= targetMonth) && (b.ageMaxMonths == null || b.ageMaxMonths >= targetMonth));
           }
           if (query) {
             const q = query.toLowerCase();
             filtered = filtered.filter((b: any) =>
-              b.title?.toLowerCase().includes(q) ||
-              b.description?.toLowerCase().includes(q) ||
-              (Array.isArray(b.categories) && b.categories.some((c: any) => String(c).toLowerCase().includes(q)))
+              textMatches(b.title, q) ||
+              textMatches(b.description, q) ||
+              (Array.isArray(b.categories) && b.categories.some((c: any) => textMatches(c, q)))
             );
           }
           const rawList = filtered.slice(0, limit).map((b: any) => ({
             title: b.title,
-            authors: Array.isArray(b.authors) ? b.authors : safeJsonParse(b.authorJson, []),
+            authors: Array.isArray(b.authors) ? b.authors : safeJsonParse(b.authorJson, b.author ? [b.author] : []),
             ageMinMonths: b.ageMinMonths,
             ageMaxMonths: b.ageMaxMonths,
             ratingScore: b.ratingScore,
@@ -3039,23 +3090,21 @@ export function createMcpServer(principal: UserPrincipal, options?: { accessToke
         }
 
         const ageDetail = baby.birthDate ? calculateAgeDetail(baby.birthDate) : null;
-        const month = typeof args.month === "number" ? args.month : ageDetail?.months || 6;
+        const monthValue = typeof args.month === "number" && Number.isFinite(args.month) ? args.month : ageDetail?.months || 6;
+        const month = Math.max(0, Math.min(216, Math.floor(monthValue)));
         const query = typeof args.query === "string" ? args.query.trim() : "";
         const limit = typeof args.limit === "number" ? Math.min(10, Math.max(1, args.limit)) : 5;
 
         if (GROWDESK_CONFIG.enabled) {
-          const activities = getActivitiesData();
-          let filtered = activities.filter((a: any) =>
-            (a.targetMonthMin == null || a.targetMonthMin <= month) &&
-            (a.targetMonthMax == null || a.targetMonthMax >= month)
-          );
+          const activities = await getMcpActivities(month, accessToken);
+          let filtered = activities.map((row: any) => detailsOf(row));
           if (query) {
             const q = query.toLowerCase();
-            filtered = filtered.filter((a: any) => a.title?.toLowerCase().includes(q));
+            filtered = filtered.filter((a: any) => textMatches(a.title, q) || textMatches(a.content, q));
           }
           const rawList = filtered.slice(0, limit).map((a: any) => ({
             title: a.title,
-            goal: a.goal,
+            goal: a.goal || a.content,
             durationMinutes: a.durationMinutes,
             steps: Array.isArray(a.steps) ? a.steps : safeJsonParse(a.stepsJson, []),
             safety: Array.isArray(a.safety) ? a.safety : safeJsonParse(a.safetyJson, []),
@@ -3123,16 +3172,14 @@ export function createMcpServer(principal: UserPrincipal, options?: { accessToke
         const ageDetail = baby.birthDate ? calculateAgeDetail(baby.birthDate) : null;
 
         if (GROWDESK_CONFIG.enabled) {
-          const query = new URLSearchParams({ date: targetDate });
-          const [feedings, sleep, diapers, foods, tlRes] = await Promise.all([
-            fetchLegacyRecordList<GrowDeskFeedingRecord>(growdeskFetch, accessToken || "", babyId, query, "feeding"),
-            fetchLegacyRecordList<GrowDeskSleepRecord>(growdeskFetch, accessToken || "", babyId, query, "sleep"),
-            fetchLegacyRecordList<GrowDeskDiaperRecord>(growdeskFetch, accessToken || "", babyId, query, "diaper"),
-            fetchLegacyRecordList<GrowDeskFoodRecord>(growdeskFetch, accessToken || "", babyId, query, "food"),
-            growdeskFetch<any>(`/api/v1/babies/${babyId}/timeline?date=${targetDate}&limit=15`, {
-              method: "GET",
-              accessToken,
-            }),
+          if (!accessToken) throw new BridgeError(401, "MCP_TOKEN_REQUIRED", "缺少 MCP 授权令牌");
+          const query = new URLSearchParams({ date: targetDate, limit: "15" });
+          const [feedings, sleep, diapers, foods, timelineEntries] = await Promise.all([
+            fetchLegacyRecordList<GrowDeskFeedingRecord>(mcpGrowdeskFetch, accessToken || "", babyId, query, "feeding"),
+            fetchLegacyRecordList<GrowDeskSleepRecord>(mcpGrowdeskFetch, accessToken || "", babyId, query, "sleep"),
+            fetchLegacyRecordList<GrowDeskDiaperRecord>(mcpGrowdeskFetch, accessToken || "", babyId, query, "diaper"),
+            fetchLegacyRecordList<GrowDeskFoodRecord>(mcpGrowdeskFetch, accessToken || "", babyId, query, "food"),
+            fetchLegacyRecordList<any>(mcpGrowdeskFetch, accessToken, babyId, query, "timeline"),
           ]);
           let totalFeedingMl = 0;
           for (const f of feedings) {
@@ -3154,7 +3201,7 @@ export function createMcpServer(principal: UserPrincipal, options?: { accessToke
             diaperCount: diapers.length,
             foodCount: foods.length,
           };
-          const rawTimeline = (tlRes.ok && (tlRes.data?.data?.items || tlRes.data?.items || tlRes.data)) || [];
+          const rawTimeline = fromGrowDeskTimelineResponse(timelineEntries).slice(0, 15);
           const overview: Record<string, any> = {
             date: targetDate,
             currentUser: currentUserSummary,
@@ -3167,7 +3214,7 @@ export function createMcpServer(principal: UserPrincipal, options?: { accessToke
               age: ageDetail,
             },
             dailySummary,
-            recentTimeline: Array.isArray(rawTimeline) ? rawTimeline.slice(0, 15) : [],
+            recentTimeline: rawTimeline,
           };
           await logToolCall(name, "success", startTime);
           return { content: [{ type: "text", text: JSON.stringify(overview, null, 2) }] };
@@ -3205,6 +3252,21 @@ export function createMcpServer(principal: UserPrincipal, options?: { accessToke
         const savedItems: string[] = [];
 
         if (GROWDESK_CONFIG.enabled) {
+          const actionNames = ["feeding", "sleep", "diaper", "food", "supplement", "foodPlan"] as const;
+          const actions = actionNames.filter((key) => args[key] !== undefined && args[key] !== null);
+          if (actions.length === 0) {
+            throw new Error("未提供任何有效的事件数据 (feeding / sleep / diaper / food / supplement / foodPlan)");
+          }
+          for (const key of actions) {
+            if (!args[key] || typeof args[key] !== "object" || Array.isArray(args[key])) {
+              throw new Error(`${key} 必须是一个对象`);
+            }
+          }
+
+          const requests: Array<{ method: "POST" | "PUT"; path: string; body: Record<string, unknown> }> = [];
+          const labels: string[] = [];
+          const planIds: Array<string | null> = [];
+
           if (args.feeding) {
             const f = args.feeding;
             const feedingType = f.type || "formula";
@@ -3228,13 +3290,9 @@ export function createMcpServer(principal: UserPrincipal, options?: { accessToke
               source: "mcp",
               sourceAgent,
             });
-            const res = await growdeskFetch<GrowDeskFeedingRecord>(recordPath("feeding", babyId), {
-              method: "POST",
-              accessToken,
-              body: payload,
-            });
-            const created = requireWriteData(res, "Failed to create feeding record");
-            savedItems.push(`🍼 喂养记录 (ID: ${created.id})`);
+            requests.push({ method: "POST", path: recordPath("feeding", babyId), body: payload as Record<string, unknown> });
+            labels.push("🍼 喂养记录");
+            planIds.push(null);
           }
 
           if (args.sleep) {
@@ -3242,40 +3300,29 @@ export function createMcpServer(principal: UserPrincipal, options?: { accessToke
             const date = s.date && isValidDateStr(s.date) ? s.date : getLocalDateStr();
             const TIME_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
             let startIso = s.startTime;
-            if (typeof startIso === "string" && TIME_RE.test(startIso.trim())) {
-              startIso = localTimeToUtcIso(startIso.trim(), date);
-            }
+            if (typeof startIso === "string" && TIME_RE.test(startIso.trim())) startIso = localTimeToUtcIso(startIso.trim(), date);
             let endIso = s.endTime;
-            if (typeof endIso === "string" && TIME_RE.test(endIso.trim())) {
-              endIso = localTimeToUtcIso(endIso.trim(), date);
-            }
-            const sleepType = s.type === "day" ? "nap" : (s.type || "nap");
+            if (typeof endIso === "string" && TIME_RE.test(endIso.trim())) endIso = localTimeToUtcIso(endIso.trim(), date);
             const payload = toGrowDeskSleepCreatePayload({
               babyId,
               startedAt: startIso,
               endedAt: endIso,
-              sleepType,
+              sleepType: s.type === "day" ? "nap" : (s.type || "nap"),
               nightWakingCount: s.nightWakingCount,
               notes: s.notes,
               source: "mcp",
               sourceAgent,
             });
-            const res = await growdeskFetch<GrowDeskSleepRecord>(recordPath("sleep", babyId), {
-              method: "POST",
-              accessToken,
-              body: payload,
-            });
-            const created = requireWriteData(res, "Failed to create sleep record");
-            savedItems.push(`💤 睡眠记录 (ID: ${created.id})`);
+            requests.push({ method: "POST", path: recordPath("sleep", babyId), body: payload as Record<string, unknown> });
+            labels.push("💤 睡眠记录");
+            planIds.push(null);
           }
 
           if (args.diaper) {
             const d = args.diaper;
-            let ts = d.timestamp;
-            if (!ts) {
-              ts = new Date().toISOString();
-            } else if (/^([01]\d|2[0-3]):([0-5]\d)$/.test(String(ts).trim())) {
-              ts = localTimeToUtcIso(String(ts).trim(), getLocalDateStr());
+            let timestamp = d.timestamp || new Date().toISOString();
+            if (typeof timestamp === "string" && /^([01]\d|2[0-3]):([0-5]\d)$/.test(timestamp.trim())) {
+              timestamp = localTimeToUtcIso(timestamp.trim(), getLocalDateStr());
             }
             const payload = toGrowDeskDiaperCreatePayload({
               babyId,
@@ -3283,113 +3330,119 @@ export function createMcpServer(principal: UserPrincipal, options?: { accessToke
               poopColor: d.poopColor,
               poopConsistency: d.poopConsistency,
               notes: d.notes,
-              timestamp: ts,
+              timestamp,
               source: "mcp",
               sourceAgent,
             });
-            const res = await growdeskFetch<GrowDeskDiaperRecord>(recordPath("diaper", babyId), {
-              method: "POST",
-              accessToken,
-              body: payload,
-            });
-            const created = requireWriteData(res, "Failed to create diaper record");
-            savedItems.push(`🧷 换尿布/排便记录 (ID: ${created.id})`);
+            requests.push({ method: "POST", path: recordPath("diaper", babyId), body: payload as Record<string, unknown> });
+            labels.push("🧷 换尿布/排便记录");
+            planIds.push(null);
           }
 
           if (args.food) {
-            const fd = args.food;
+            const f = args.food;
             const payload = toGrowDeskFoodCreatePayload({
               babyId,
-              foods: fd.foods,
-              date: fd.date,
-              time: fd.time,
-              portion: fd.portion,
-              acceptance: fd.acceptance,
-              babyState: fd.babyState,
-              hasAbnormal: fd.hasAbnormal,
-              abnormalNotes: fd.abnormalNotes,
+              foods: f.foods,
+              date: f.date,
+              time: f.time,
+              portion: f.portion,
+              acceptance: f.acceptance,
+              babyState: f.babyState,
+              hasAbnormal: f.hasAbnormal,
+              abnormalNotes: f.abnormalNotes,
               source: "mcp",
               sourceAgent,
             });
-            const res = await growdeskFetch<GrowDeskFoodRecord>(recordPath("food", babyId), {
-              method: "POST",
-              accessToken,
-              body: payload,
-            });
-            const created = requireWriteData(res, "Failed to create food record");
-            savedItems.push(`🥣 辅食打卡 (ID: ${created.id})`);
+            requests.push({ method: "POST", path: recordPath("food", babyId), body: payload as Record<string, unknown> });
+            labels.push("🥣 辅食打卡");
+            planIds.push(null);
           }
 
           if (args.supplement) {
             const sp = args.supplement;
-            const suppName = String(sp.name || "").trim();
-            if (suppName) {
-              const dose = typeof sp.dose === "number" && Number.isFinite(sp.dose) && sp.dose > 0 && sp.dose <= 100 ? sp.dose : 1.0;
-              const unitName = sp.unitName ? String(sp.unitName).trim() : "粒";
-              const recordDate = sp.date && isValidDateStr(sp.date) ? sp.date : getLocalDateStr();
-              const recordTime = sp.time && /^([01]\d|2[0-3]):([0-5]\d)$/.test(sp.time) ? sp.time : getLocalTimeStr();
-              const occurredAt = localTimeToUtcIso(recordTime, recordDate);
-              const formattedAmount = formatSupplementAmount(dose, unitName);
-              const res = await growdeskFetch<GrowDeskSupplementRecord>(`/api/v1/babies/${babyId}/records/supplement`, {
-                method: "POST",
-                accessToken,
-                body: {
-                  supplementName: suppName,
-                  occurredAt,
-                  amount: formattedAmount,
-                  notes: sp.notes ? String(sp.notes).trim() : null,
-                },
-              });
-              const created = requireWriteData(res, "Failed to record supplement");
-              savedItems.push(`💊 补剂记录 (ID: ${created.id})`);
-            }
+            const supplementName = String(sp.name || "").trim();
+            if (!supplementName) throw new Error("补剂事件必须提供补剂名称");
+            const dose = typeof sp.dose === "number" && Number.isFinite(sp.dose) && sp.dose > 0 && sp.dose <= 100 ? sp.dose : 1;
+            const unitName = sp.unitName ? String(sp.unitName).trim() : "粒";
+            const date = sp.date && isValidDateStr(sp.date) ? sp.date : getLocalDateStr();
+            const time = sp.time && /^([01]\d|2[0-3]):([0-5]\d)$/.test(sp.time) ? sp.time : getLocalTimeStr();
+            requests.push({
+              method: "POST",
+              path: `/api/v1/babies/${encodeURIComponent(babyId)}/records/supplement`,
+              body: {
+                supplementName,
+                occurredAt: localTimeToUtcIso(time, date),
+                amount: formatSupplementAmount(dose, unitName),
+                notes: sp.notes ? String(sp.notes).trim() : null,
+              },
+            });
+            labels.push("💊 补剂记录");
+            planIds.push(null);
           }
 
           if (args.foodPlan) {
             const fp = args.foodPlan;
-            const existingRes = await growdeskFetch<any>(`/api/v1/babies/${babyId}/food-plan`, {
+            const existingRes = await mcpGrowdeskFetch<any>(`/api/v1/babies/${encodeURIComponent(babyId)}/food-plan`, {
               method: "GET",
               accessToken,
             });
-            const existingData = (existingRes.ok && (existingRes.data?.data?.planData || existingRes.data?.planData)) || {};
+            const state = readGrowDeskFoodPlan(existingRes, babyId);
             const newPlan = {
               id: crypto.randomUUID(),
-              name: String(fp.name || "辅食食谱"),
+              name: String(fp.name || "辅食食谱").trim().slice(0, 100),
               date: fp.date && isValidDateStr(fp.date) ? fp.date : getLocalDateStr(),
               ingredients: Array.isArray(fp.ingredients) ? fp.ingredients : [],
               steps: Array.isArray(fp.steps) ? fp.steps : [],
-              nutrition: String(fp.nutrition || ""),
+              nutrition: String(fp.nutrition || "").slice(0, 500),
               tags: Array.isArray(fp.tags) ? fp.tags : ["营养辅食"],
               recordedBy: currentUserSummary,
               createdAt: new Date().toISOString(),
             };
-            const plans = Array.isArray(existingData.plans) ? existingData.plans : [];
+            const existingPlans = state.planData.plans;
+            if (existingPlans !== undefined && !Array.isArray(existingPlans)) {
+              throw new BridgeError(502, "UPSTREAM_INVALID_RESPONSE", "GrowDesk 辅食计划列表格式错误");
+            }
+            const plans = Array.isArray(existingPlans) ? [...existingPlans] : [];
             plans.unshift(newPlan);
-            await growdeskFetch(`/api/v1/babies/${babyId}/food-plan`, {
+            requests.push({
               method: "PUT",
-              accessToken,
-              body: {
-                planData: {
-                  ...existingData,
-                  plans,
-                },
-              },
+              path: `/api/v1/babies/${encodeURIComponent(babyId)}/food-plan`,
+              body: foodPlanWriteBody(state, { ...state.planData, plans }),
             });
-            savedItems.push(`📋 辅食食谱计划 (ID: ${newPlan.id})`);
+            labels.push("📋 辅食食谱计划");
+            planIds.push(newPlan.id);
           }
 
-          if (savedItems.length === 0) {
-            throw new Error("未提供任何有效的事件数据 (feeding / sleep / diaper / food / supplement / foodPlan)");
+          if (requests.length === 0 || requests.length > 20) {
+            throw new Error("复合事件数量无效，未提交任何修改");
           }
+          const batchResult = requireWriteData(
+            await mcpGrowdeskFetch<{ results?: any[] }>("/api/v1/mcp/atomic-records", {
+              method: "BATCH",
+              accessToken,
+              body: { requests },
+            }),
+            "复合事件批量提交失败"
+          );
+          if (!Array.isArray(batchResult.results) || batchResult.results.length !== requests.length) {
+            throw new BridgeError(502, "UPSTREAM_INVALID_RESPONSE", "GrowDesk 批量响应与提交项目不匹配");
+          }
+          const savedItems = batchResult.results.map((item, index) => {
+            if (!item || item.path !== requests[index]!.path || !["applied", "replayed"].includes(item.status)) {
+              throw new BridgeError(502, "UPSTREAM_INVALID_RESPONSE", "GrowDesk 批量响应顺序或状态无效");
+            }
+            const result = item.result;
+            const id = result?.id || result?.record?.id || planIds[index];
+            if (typeof id !== "string" || !id) {
+              throw new BridgeError(502, "UPSTREAM_INVALID_RESPONSE", "GrowDesk 批量结果缺少新记录 ID");
+            }
+            return `${labels[index]} (ID: ${id})`;
+          });
 
           await logToolCall(name, "success", startTime);
           return {
-            content: [
-              {
-                type: "text",
-                text: `✅ 复合作息事件已成功保存：\n${savedItems.join("\n")}`,
-              },
-            ],
+            content: [{ type: "text", text: `✅ 复合作息事件已成功保存：\n${savedItems.join("\n")}` }],
           };
         }
 
@@ -3541,6 +3594,13 @@ export function createMcpServer(principal: UserPrincipal, options?: { accessToke
         const resolvedVaccine = args.vaccine ? resolveMcpVaccineRecordInput(args.vaccine) : null;
 
         if (GROWDESK_CONFIG.enabled) {
+          if (countHealthMeasurementMutations(args) > 1) {
+            throw new McpError(
+              ErrorCode.InvalidRequest,
+              "record_health_measurement can perform one write action per request in shared mode; submit growth, vaccine, medical report, delete, and restore actions separately",
+            );
+          }
+
           if (args.growth) {
             const g = args.growth;
             const payload = toGrowDeskGrowthCreatePayload({
@@ -3551,7 +3611,7 @@ export function createMcpServer(principal: UserPrincipal, options?: { accessToke
               headCircumferenceCm: g.headCircumferenceCm,
               imageUrl: g.imageUrl,
             });
-            const res = await growdeskFetch<GrowDeskGrowthRecord>(`/api/v1/babies/${babyId}/growth-measurements`, {
+            const res = await mcpGrowdeskFetch<GrowDeskGrowthRecord>(`/api/v1/babies/${babyId}/growth-measurements`, {
               method: "POST",
               accessToken,
               body: payload,
@@ -3566,7 +3626,7 @@ export function createMcpServer(principal: UserPrincipal, options?: { accessToke
               ...input,
               vaccineCode: matchedCode || input.vaccineId || undefined,
             });
-            const res = await growdeskFetch<GrowDeskVaccineRecord>(`/api/v1/babies/${babyId}/vaccines/records`, {
+            const res = await mcpGrowdeskFetch<GrowDeskVaccineRecord>(`/api/v1/babies/${babyId}/vaccines/records`, {
               method: "POST",
               accessToken,
               headers: { "x-growdesk-representation": "ledger" },
@@ -3604,7 +3664,7 @@ export function createMcpServer(principal: UserPrincipal, options?: { accessToke
               source: "mcp",
               sourceAgent,
             });
-            const res = await growdeskFetch<GrowDeskMedicalReport>(`/api/v1/babies/${babyId}/medical/reports`, {
+            const res = await mcpGrowdeskFetch<GrowDeskMedicalReport>(`/api/v1/babies/${babyId}/medical-reports`, {
               method: "POST",
               accessToken,
               body: payload,
@@ -3622,34 +3682,32 @@ export function createMcpServer(principal: UserPrincipal, options?: { accessToke
 
             if (!targetId && date) {
               if (type === "growth") {
-                const res = await growdeskFetch<any[]>(`/api/v1/babies/${babyId}/growth-measurements`, { accessToken });
-                const list = Array.isArray(res.data) ? res.data : (res.data as any)?.data || [];
+                const res = await mcpGrowdeskFetch<any[]>(`/api/v1/babies/${babyId}/growth-measurements`, { accessToken });
+                const list = requireList<any>(res, "MCP 数据");
                 const found = list.find((r: any) => r.measurementDate?.slice(0, 10) === date || r.date === date);
                 if (found) {
                   targetId = found.id;
                   if (Number.isInteger(found.version)) baseVersion = found.version;
                 }
               } else if (type === "medical_report") {
-                const res = await growdeskFetch<any[]>(`/api/v1/babies/${babyId}/medical/reports`, { accessToken });
-                const list = Array.isArray(res.data) ? res.data : (res.data as any)?.data || [];
+                const res = await mcpGrowdeskFetch<any[]>(`/api/v1/babies/${babyId}/medical-reports`, { accessToken });
+                const list = requireList<any>(res, "MCP 数据");
                 const found = list.find((r: any) => r.reportDate?.slice(0, 10) === date || r.date === date);
                 if (found) {
                   targetId = found.id;
                   if (Number.isInteger(found.version)) baseVersion = found.version;
                 }
               } else if (type === "vaccine") {
-                const res = await growdeskFetch<any[]>(`/api/v1/babies/${babyId}/vaccines/records?limit=50`, {
-                  accessToken, headers: { "x-growdesk-representation": "ledger" },
-                });
-                const list = Array.isArray(res.data) ? res.data : (res.data as any)?.data || [];
+                const res = await mcpGrowdeskFetch<any[]>(`/api/v1/babies/${babyId}/vaccines/records?limit=50`, { accessToken, headers: { "x-growdesk-representation": "ledger" } });
+                const list = requireList<any>(res, "MCP 数据");
                 const found = list.find((r: any) => (r.completedDate || r.administeredDate || r.scheduledDate || r.date)?.slice(0, 10) === date);
                 if (found) {
                   targetId = found.id;
                   if (Number.isInteger(found.version)) baseVersion = found.version;
                 }
               } else if (type === "feeding" || type === "sleep" || type === "diaper" || type === "food" || type === "supplement") {
-                const res = await growdeskFetch<any[]>(`/api/v1/babies/${babyId}/records/${type}?limit=50`, { accessToken });
-                const list = Array.isArray(res.data) ? res.data : (res.data as any)?.data || [];
+                const res = await mcpGrowdeskFetch<any[]>(`/api/v1/babies/${babyId}/records/${type}?limit=50`, { accessToken });
+                const list = requireList<any>(res, "MCP 数据");
                 const found = list.find((r: any) => (r.occurredAt || r.startTime || r.date)?.slice(0, 10) === date);
                 if (found) {
                   targetId = found.id;
@@ -3661,7 +3719,7 @@ export function createMcpServer(principal: UserPrincipal, options?: { accessToke
             if (!targetId) throw new Error(`未找到指定的 ${type} 记录`);
 
             const clientId = typeof del.clientId === "string" && del.clientId.trim() ? del.clientId.trim() : undefined;
-            const deleteRes = await growdeskFetch<any>(`/api/v1/babies/${babyId}/record-snapshots/${encodeURIComponent(type)}/${encodeURIComponent(targetId)}`, {
+            const deleteRes = await mcpGrowdeskFetch<any>(`/api/v1/babies/${babyId}/record-snapshots/${encodeURIComponent(type)}/${encodeURIComponent(targetId)}`, {
               method: "DELETE",
               accessToken,
               idempotencyKey: clientId,
@@ -3674,11 +3732,11 @@ export function createMcpServer(principal: UserPrincipal, options?: { accessToke
           if (args.undoAction) {
             const undo = args.undoAction;
             const restoreRes = undo.snapshotId
-              ? await growdeskFetch<any>(`/api/v1/babies/${babyId}/record-snapshots/${encodeURIComponent(String(undo.snapshotId))}/restore`, {
+              ? await mcpGrowdeskFetch<any>(`/api/v1/babies/${babyId}/record-snapshots/${encodeURIComponent(String(undo.snapshotId))}/restore`, {
                   method: "POST",
                   accessToken,
                 })
-              : await growdeskFetch<any>(`/api/v1/babies/${babyId}/record-snapshots/restore`, {
+              : await mcpGrowdeskFetch<any>(`/api/v1/babies/${babyId}/record-snapshots/restore`, {
                   method: "POST",
                   accessToken,
                   body: undo.entityType ? { entityType: String(undo.entityType) } : {},
@@ -3833,66 +3891,88 @@ export function createMcpServer(principal: UserPrincipal, options?: { accessToke
         const category = args.category || "all";
         const query = typeof args.query === "string" ? args.query.trim() : "";
         const ageDetail = baby.birthDate ? calculateAgeDetail(baby.birthDate) : null;
-        const month = typeof args.month === "number" ? args.month : ageDetail?.months || 6;
+        const monthValue = typeof args.month === "number" && Number.isFinite(args.month) ? args.month : ageDetail?.months || 6;
+        const month = Math.max(0, Math.min(216, Math.floor(monthValue)));
         const limit = typeof args.limit === "number" ? Math.min(10, Math.max(1, args.limit)) : 5;
 
         if (GROWDESK_CONFIG.enabled) {
           const results: Record<string, any> = {};
 
           if (category === "all" || category === "food") {
-            const allFoods = getFoodsData();
-            let foods = allFoods;
+            let foods = await getMcpFoodLibrary(baby.familyId, accessToken);
             if (query) {
               const q = query.toLowerCase();
-              foods = foods.filter((f: any) =>
-                f.name?.toLowerCase().includes(q) ||
-                f.foodGroup?.toLowerCase().includes(q) ||
-                f.category?.toLowerCase().includes(q)
-              );
+              foods = foods.filter((row: any) => {
+                const food = detailsOf(row);
+                return textMatches(food.name, q) || textMatches(food.category, q) || textMatches(food.allergenRisk, q);
+              });
             }
-            results.foods = foods.slice(0, limit).map((f: any) => ({
-              name: f.name,
-              icon: f.icon,
-              category: f.category,
-              recommendedFromMonth: f.recommendedFromMonth,
-              avoidBeforeMonths: f.avoidBeforeMonths,
-              chokingRisk: f.chokingRisk,
-              isCommonAllergen: f.isCommonAllergen,
-            }));
+            results.foods = foods.slice(0, limit).map((row: any) => {
+              const food = detailsOf(row);
+              return {
+                id: food.id,
+                name: food.name,
+                category: food.category,
+                allergenRisk: food.allergenRisk,
+                recommendedAgeMonths: food.recommendedAgeMonths,
+                familyStatus: food.familyStatus,
+              };
+            });
           }
 
           if (category === "all" || category === "book") {
-            const allBooks = getBooksData();
-            let books = allBooks;
+            let books = (await getMcpBooks(baby.familyId, accessToken)).map((row: any) => fromGrowDeskBook(row));
+            books = books.filter((book: any) =>
+              (book.ageMinMonths == null || book.ageMinMonths <= month) &&
+              (book.ageMaxMonths == null || book.ageMaxMonths >= month)
+            );
             if (query) {
               const q = query.toLowerCase();
-              books = books.filter((b: any) =>
-                b.title?.toLowerCase().includes(q) ||
-                b.description?.toLowerCase().includes(q)
+              books = books.filter((book: any) =>
+                textMatches(book.title, q) || textMatches(book.description, q)
               );
             }
-            results.books = books.slice(0, limit).map((b: any) => ({
-              title: b.title,
-              ratingScore: b.ratingScore,
-              ageRange: `${b.ageMinMonths || 0}-${b.ageMaxMonths || 36}月`,
-              description: b.description,
+            results.books = books.slice(0, limit).map((book: any) => ({
+              title: book.title,
+              ratingScore: book.ratingScore,
+              ageRange: `${book.ageMinMonths ?? 0}-${book.ageMaxMonths ?? 36}月`,
+              description: book.description,
             }));
           }
 
           if (category === "all" || category === "activity") {
-            const allActivities = getActivitiesData();
-            let activities = allActivities.filter((a: any) =>
-              (a.targetMonthMin == null || a.targetMonthMin <= month) &&
-              (a.targetMonthMax == null || a.targetMonthMax >= month)
-            );
+            let activities = (await getMcpActivities(month, accessToken)).map((row: any) => detailsOf(row));
             if (query) {
               const q = query.toLowerCase();
-              activities = activities.filter((a: any) => a.title?.toLowerCase().includes(q));
+              activities = activities.filter((activity: any) => textMatches(activity.title, q) || textMatches(activity.content, q));
             }
-            results.activities = activities.slice(0, limit).map((a: any) => ({
-              title: a.title,
-              goal: a.goal,
-              durationMinutes: a.durationMinutes,
+            results.activities = activities.slice(0, limit).map((activity: any) => ({
+              title: activity.title,
+              goal: activity.goal || activity.content,
+              durationMinutes: activity.durationMinutes,
+            }));
+          }
+
+          if (category === "all" || category === "nutrition_product") {
+            const path = `/api/v1/families/${encodeURIComponent(baby.familyId)}/nutrition/supplement-products?includeArchived=false`;
+            const products = requireList<GrowDeskSupplementProduct>(
+              await mcpGrowdeskFetch<GrowDeskSupplementProduct[]>(path, { accessToken }),
+              "补剂产品知识",
+            );
+            const normalized = products.map(fromGrowDeskSupplementProduct);
+            const q = query.toLowerCase();
+            results.nutritionProducts = normalized.filter((product) =>
+              !q || textMatches(product.name, q) || textMatches(product.brand, q)
+            ).slice(0, limit).map((product) => ({
+              id: product.id,
+              name: product.name,
+              brand: product.brand,
+              dosageForm: product.dosageForm,
+              unitName: product.unitName,
+              defaultDose: product.defaultDose,
+              nutrients: product.nutrients,
+              notes: product.notes,
+              isActive: product.isActive,
             }));
           }
 
@@ -3966,7 +4046,7 @@ export function createMcpServer(principal: UserPrincipal, options?: { accessToke
         content: [{ type: "text", text: JSON.stringify({ error: true, message: err?.message || "Internal error" }, null, 2) }],
       };
     }
-  });
+  }));
 
   async function logToolCall(toolName: string, status: "success" | "error", startTime: number, errorMsg?: string) {
     const duration = Date.now() - startTime;

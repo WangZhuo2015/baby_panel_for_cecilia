@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { LlmFeaturePreferences } from "@/components/ui/LlmFeaturePreferences";
+import { GptEffortPreferences, type EffortModelChoices } from "@/components/ui/GptEffortPreferences";
+import { defaultLlmFeatureProfileId, matchesLlmSelection } from "@/lib/llm-feature-model";
 import { useBabyStore } from "@/stores/useBabyStore";
 import {
   cacheLlmPreferenceSelection,
@@ -58,6 +60,14 @@ function readChatSelection(snapshot: LlmPreferenceSnapshot): SavedSelection | un
   return snapshot.preferences.find(item => item.feature === "chat");
 }
 
+function defaultChatSelection(snapshot: LlmPreferenceSnapshot | null) {
+  const profile = snapshot?.profiles.find(item => item.id === defaultLlmFeatureProfileId("chat"));
+  return {
+    profileId: profile?.id || snapshot?.activeProfileId || snapshot?.defaultModelInfo?.profileId || "",
+    modelId: profile?.textModel || snapshot?.defaultModelInfo?.model || "",
+  };
+}
+
 async function api<T>(path = "", body?: unknown, signal?: AbortSignal): Promise<T> {
   const response = await fetch("/api/ai/chatgpt" + path, {
     method: body === undefined ? "GET" : "POST", credentials: "same-origin", cache: "no-store",
@@ -75,6 +85,8 @@ type ChatGPTPlanControlsProps = {
   onReadinessChange?: (state: ChatControlReadiness) => void;
   onClose?: () => void;
 };
+
+const EMPTY_CHATGPT_MODELS: ChatGPTModel[] = [];
 
 export function ChatGPTPlanControls({ presentation = "settings", ...props }: ChatGPTPlanControlsProps) {
   const userId = useBabyStore(state => typeof state.user?.id === "string" ? state.user.id : null);
@@ -95,7 +107,7 @@ function ChatGPTPlanControlsForUser({ disabled, onReadinessChange, onClose, pres
   const pendingModelRequests = useRef(new Map<string, Promise<ChatGPTModel[]>>());
   const completedModelRequests = useRef(new Set<string>());
   const currentCatalog = modelCatalogs[profileId]?.ownerId === userId ? modelCatalogs[profileId] : undefined;
-  const models = currentCatalog?.models || [];
+  const models = currentCatalog?.models ?? EMPTY_CHATGPT_MODELS;
   const loadingModels = Boolean(currentCatalog?.loading);
   const [modelId, setModelId] = useState("");
   const modelIdRef = useRef(modelId); modelIdRef.current = modelId;
@@ -104,12 +116,13 @@ function ChatGPTPlanControlsForUser({ disabled, onReadinessChange, onClose, pres
   const [busy, setBusy] = useState(false);
   const [catalogVersion, setCatalogVersion] = useState(0);
   const [apiProfiles, setApiProfiles] = useState<ApiProfile[]>(initialSnapshot?.profiles || []);
-  const [apiProfileId, setApiProfileId] = useState(initialSnapshot?.activeProfileId || initialSnapshot?.defaultModelInfo?.profileId || "");
-  const [defaultApiProfileId, setDefaultApiProfileId] = useState(initialSnapshot?.activeProfileId || initialSnapshot?.defaultModelInfo?.profileId || "");
-  const [defaultApiModel, setDefaultApiModel] = useState(initialSnapshot?.defaultModelInfo?.model || "");
+  const [apiProfileId, setApiProfileId] = useState(defaultChatSelection(initialSnapshot).profileId);
+  const [defaultApiProfileId, setDefaultApiProfileId] = useState(defaultChatSelection(initialSnapshot).profileId);
+  const [defaultApiModel, setDefaultApiModel] = useState(defaultChatSelection(initialSnapshot).modelId);
   const [selectedSource, setSelectedSource] = useState<"api" | "chatgpt">("api");
   const [preferenceLoaded, setPreferenceLoaded] = useState(Boolean(initialSnapshot));
   const [preferenceSnapshot, setPreferenceSnapshot] = useState<LlmPreferenceSnapshot | null>(initialSnapshot);
+  const [effortChoices, setEffortChoices] = useState<EffortModelChoices>({});
   const [preferenceSelection, setPreferenceSelection] = useState<SavedSelection>();
   const [preferenceError, setPreferenceError] = useState("");
   const [savingPreference, setSavingPreference] = useState(false);
@@ -207,9 +220,9 @@ function ChatGPTPlanControlsForUser({ disabled, onReadinessChange, onClose, pres
       setPreferenceSnapshot(prefs);
       setApiProfiles(prefs.profiles || []);
       const saved = readChatSelection(prefs);
-      const defaultProfileId = prefs.activeProfileId || prefs.defaultModelInfo?.profileId || "";
-      setDefaultApiProfileId(defaultProfileId);
-      setDefaultApiModel(prefs.defaultModelInfo?.model || "");
+      const chatDefault = defaultChatSelection(prefs);
+      setDefaultApiProfileId(chatDefault.profileId);
+      setDefaultApiModel(chatDefault.modelId);
       if (!applySelection) return;
       setPreferenceSelection(saved);
       if (saved?.source === "chatgpt") {
@@ -218,8 +231,8 @@ function ChatGPTPlanControlsForUser({ disabled, onReadinessChange, onClose, pres
         setModelId(saved.modelId); modelIdRef.current = saved.modelId;
       } else {
         setSelectedSource("api"); selectedSourceRef.current = "api";
-        setApiProfileId(saved?.profileId || defaultProfileId);
-        const nextModelId = saved?.modelId || prefs.defaultModelInfo?.model || "";
+        setApiProfileId(saved?.profileId || chatDefault.profileId);
+        const nextModelId = saved?.modelId || chatDefault.modelId;
         setModelId(nextModelId); modelIdRef.current = nextModelId;
       }
     };
@@ -350,6 +363,7 @@ function ChatGPTPlanControlsForUser({ disabled, onReadinessChange, onClose, pres
           persistedRevision.current += 1;
           setPreferenceSelection(savedSelection);
           cacheLlmPreferenceSelection(userId, savedSelection);
+          syncSavedSelection(savedSelection);
           const pending = queue.pending;
           if (pending && !sameSelection(pending, savedSelection)) {
             requested = pending;
@@ -379,6 +393,13 @@ function ChatGPTPlanControlsForUser({ disabled, onReadinessChange, onClose, pres
       queue.pending = undefined;
       if (userId === useBabyStore.getState().user?.id && !lifecycle.current?.signal.aborted) setSavingPreference(false);
     }
+  }
+
+  function syncSavedSelection(selection: SavedSelection) {
+    setPreferenceSnapshot(current => current && {
+      ...current,
+      preferences: [...current.preferences.filter(item => item.feature !== selection.feature), selection],
+    });
   }
 
   useEffect(() => {
@@ -413,7 +434,7 @@ function ChatGPTPlanControlsForUser({ disabled, onReadinessChange, onClose, pres
       return;
     }
     changeRef.current?.({ ready: true });
-  }, [preferenceLoaded, preferenceError, savingPreference, selectedSource, apiProfiles, apiProfileId, modelId, preferenceSelection, defaultApiProfileId, defaultApiModel, profiles, profileId, chatStatusLoaded, loadingModels, models]);
+  }, [preferenceLoaded, preferenceError, savingPreference, selectedSource, apiProfiles, apiProfileId, modelId, preferenceSelection, defaultApiProfileId, defaultApiModel, profiles, profileId, chatStatusLoaded]);
 
   useEffect(() => {
     if (!attempt) return;
@@ -625,6 +646,33 @@ function ChatGPTPlanControlsForUser({ disabled, onReadinessChange, onClose, pres
       chatGPTStatusError={chatStatusError}
       chatGPTModelCatalogs={modelCatalogs}
       onLoadChatGPTModels={requestChatGPTModels}
+      onModelChoice={selection => setEffortChoices(current => ({ ...current, [selection.feature]: selection }))}
+      onModelSaved={selection => {
+        syncSavedSelection(selection);
+        setEffortChoices(current => {
+          if (!matchesLlmSelection(current[selection.feature], selection)) return current;
+          const next = { ...current };
+          delete next[selection.feature];
+          return next;
+        });
+      }}
+    />
+    <GptEffortPreferences
+      userId={userId} disabled={disabled} snapshot={preferenceSnapshot} loading={!preferenceLoaded} loadError={preferenceLoadError}
+      choices={{
+        ...effortChoices,
+        chat: { feature: "chat", source: selectedSource, profileId: selectedSource === "api" ? apiProfileId : profileId, modelId },
+      }}
+      onConfirmed={(refreshed, feature) => {
+        const selection = refreshed.preferences.find(item => item.feature === feature);
+        const selections = selection ? [selection] : [];
+        setApiProfiles(refreshed.profiles);
+        setPreferenceSnapshot(current => ({
+          ...refreshed,
+          preferences: [...(current || refreshed).preferences.filter(item => item.feature !== feature), ...selections],
+        }));
+        if (userId && selection) cacheLlmPreferenceSelection(userId, selection);
+      }}
     />
   </div>;
 }

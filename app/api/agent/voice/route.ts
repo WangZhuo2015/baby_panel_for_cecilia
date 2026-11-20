@@ -1,3 +1,7 @@
+import { withLlmFeature, getCurrentLlmModelInfo, getCurrentLlmFeatureScope } from "@/lib/llm-context";
+import { LlmPreferenceError } from "@/lib/llm-preferences";
+import { createChatGPTBackend, ChatGPTPlanError, planErrorMessage } from "@/lib/chatgpt-plan";
+import { actualLlmModel, recordLlmModel, withLlmProvenance } from "@/lib/llm-provenance";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthSession } from "@/lib/auth";
@@ -51,13 +55,15 @@ async function logVoiceInteraction(data: {
   accessToken?: string;
   baby?: any;
 }): Promise<string | null> {
+  const usedModel = actualLlmModel();
+  const storedReply = usedModel ? `${data.reply}\n\n模型：${usedModel.provider} · ${usedModel.model}` : data.reply;
   if (GROWDESK_CONFIG.enabled) {
     if (!data.accessToken) return null;
     try {
       const log = await createGrowDeskVoiceLog(growdeskFetch, data.accessToken, {
         babyId: data.babyId,
         prompt: data.prompt,
-        reply: data.reply,
+        reply: storedReply,
         isAsync: data.isAsync,
         isFastPath: data.isFastPath,
         acknowledged: data.acknowledged,
@@ -74,7 +80,7 @@ async function logVoiceInteraction(data: {
         userId: data.userId,
         babyId: data.babyId,
         prompt: data.prompt,
-        reply: data.reply,
+        reply: storedReply,
         isAsync: data.isAsync,
         isFastPath: data.isFastPath,
         acknowledged: data.acknowledged,
@@ -292,9 +298,11 @@ export async function POST(request: Request) {
         async: false,
         fastPath: true,
         reply,
+        llm: null,
       });
     }
 
+    return await withLlmFeature(user.id, "voice", principal.accessToken, () => withLlmProvenance(async () => {
     // Timeout configuration:
     // - Default: 13500ms (13.5s, allowing a safety buffer before iOS Shortcuts 15s client timeout)
     // - Can be configured globally via process.env.VOICE_TIMEOUT_MS (e.g. 15000)
@@ -313,7 +321,13 @@ export async function POST(request: Request) {
         ? Boolean(body.asyncPush)
         : process.env.VOICE_ASYNC_PUSH !== "false";
 
-    if (!getTestMockStreamFn() && !createLlmBackend().getApiKey()) {
+    const selection = getCurrentLlmFeatureScope()?.selection;
+    const mockStream = getTestMockStreamFn();
+    const subscriptionBackend = !mockStream && selection?.source === "chatgpt"
+      ? await createChatGPTBackend(user.id, selection.profileId, selection.modelId)
+      : undefined;
+    const configured = subscriptionBackend || mockStream ? undefined : createLlmBackend(selection?.source === "api" ? "opencode" : undefined);
+    if (!subscriptionBackend && !mockStream && !configured?.getApiKey()) {
       return NextResponse.json(
         {
           success: false,
@@ -338,6 +352,11 @@ export async function POST(request: Request) {
       familyId: principal.familyId || baby.familyId,
     });
 
+    const backendSession = subscriptionBackend ?? (configured && {
+      model: configured.model,
+      streamFn: configured.models.streamSimple.bind(configured.models),
+      getApiKey: async () => configured.getApiKey() || "",
+    });
     // Helper for query fallback
     const isLikelyQuery = /(?:查|看|几|多少|多久|多长|什么时候|情况|记录|作息|汇总|总结|概况|吗|呢)/.test(rawText);
 
@@ -345,6 +364,9 @@ export async function POST(request: Request) {
     if (timeoutMs <= 0) {
       let assistantFull = "";
       await runBabyAgent({
+        backendSession,
+        llmInfo: getCurrentLlmModelInfo(),
+        onModelUsed: recordLlmModel,
         systemPrompt,
         history: [],
         prompt: rawText,
@@ -368,6 +390,7 @@ export async function POST(request: Request) {
         success: true,
         async: false,
         reply,
+        llm: actualLlmModel(),
       });
     }
 
@@ -380,6 +403,9 @@ export async function POST(request: Request) {
     const agentPromise = (async () => {
       let assistantFull = "";
       await runBabyAgent({
+        backendSession,
+        llmInfo: getCurrentLlmModelInfo(),
+        onModelUsed: recordLlmModel,
         systemPrompt,
         history: [],
         prompt: rawText,
@@ -479,8 +505,21 @@ export async function POST(request: Request) {
       success: true,
       async: false,
       reply,
+      llm: actualLlmModel(),
     });
+    }));
   } catch (error: any) {
+    if (error instanceof LlmPreferenceError && error.code === "llm_profile_unavailable") {
+      return NextResponse.json({
+        success: false,
+        error: "所选 AI 服务配置不可用",
+        code: error.code,
+        reply: "抱歉，当前 AI 助手服务不可用，请检查系统设置。",
+      }, { status: 503 });
+    }
+    if (error instanceof ChatGPTPlanError) {
+      return NextResponse.json({ success: false, error: planErrorMessage(error), code: error.code }, { status: 503 });
+    }
     console.error("POST /api/agent/voice error:", error);
     return NextResponse.json(
       {

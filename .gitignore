@@ -28,6 +28,7 @@ node_modules/
 .next/
 generated/
 .env
+.env.bak*
 llm-profiles.json
 prisma/*.db*
 .playwright-mcp/
@@ -63,3 +64,6 @@ database_backup_full.*
 data/archive/
 .data/
 scripts/diff_output.md
+
+# Private ChatGPT subscription credentials
+data/chatgpt-plan.json*

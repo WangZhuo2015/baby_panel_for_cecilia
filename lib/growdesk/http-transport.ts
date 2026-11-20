@@ -218,6 +218,13 @@ export async function fetchGrowDeskTransport<T>(
               details: error.details,
               requestId: typeof error.requestId === "string" ? error.requestId : requestId,
             };
+          } else if (record(json) && typeof json.error === "string") {
+            // OAuth endpoints use RFC error bodies rather than the domain API envelope.
+            payload = {
+              code: json.error,
+              message: typeof json.error_description === "string" ? json.error_description : json.error,
+              requestId,
+            };
           }
         } catch (error) { if (controller.signal.aborted) throw error; }
       } else void response.body?.cancel().catch(() => undefined);
